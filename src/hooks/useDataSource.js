@@ -1,0 +1,67 @@
+/**
+ * useDataSource - Universal "try API → fallback" hook
+ *
+ * Usage:
+ *   const { data, isLoading, isFallback } = useDataSource(api.getClients, CLIENTS_FALLBACK);
+ *
+ * Behavior:
+ *   - Calls fetchFn() on mount
+ *   - On success → uses live data, isFallback = false
+ *   - On error / timeout → silently uses fallbackData, isFallback = true
+ *
+ * To wire in a real API later:
+ *   1. Replace the stub in src/services/api.js with a real fetch/axios call.
+ *   2. No changes needed in components — the hook handles the rest.
+ */
+import { useState, useEffect, useRef } from 'react';
+
+const FETCH_TIMEOUT_MS = 8000; // 8 seconds before giving up and using fallback
+
+const useDataSource = (fetchFn, fallbackData, options = {}) => {
+  const { pollingInterval = null } = options; // optional polling in ms
+  const [data, setData] = useState(fallbackData);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFallback, setIsFallback] = useState(false);
+  const [error, setError] = useState(null);
+  const intervalRef = useRef(null);
+
+  const load = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    // Race the fetch against a timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), FETCH_TIMEOUT_MS)
+    );
+
+    try {
+      const result = await Promise.race([fetchFn(), timeoutPromise]);
+      setData(result);
+      setIsFallback(false);
+    } catch (err) {
+      console.warn('[useDataSource] API call failed, using fallback data:', err.message);
+      setData(fallbackData);
+      setIsFallback(true);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+
+    if (pollingInterval && pollingInterval > 0) {
+      intervalRef.current = setInterval(load, pollingInterval);
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { data, isLoading, isFallback, error, reload: load };
+};
+
+export default useDataSource;
