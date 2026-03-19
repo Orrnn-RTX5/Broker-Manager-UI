@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
+import Login from './features/auth/Login';
 
 import Dashboard from './features/dashboard/Dashboard';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
@@ -13,6 +14,8 @@ import ClientsDashboard from './features/clients/ClientsDashboard';
 import OnlineUsersPage from './features/clients/OnlineUsersPage';
 import TradingAccountsPage from './features/clients/TradingAccountsPage';
 import PositionsPage from './features/clients/PositionsPage';
+import GroupsPage from './features/groups/GroupsPage';
+import GroupDetailsPage from './features/groups/GroupDetailsPage';
 
 
 const PlaceholderPage = ({ title }) => (
@@ -53,8 +56,12 @@ function App() {
 
   return (
     <Router>
-      <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
-        {isAuthenticated ? (
+      {!isAuthenticated ? (
+        <Routes>
+          <Route path="*" element={<Login onLoginSuccess={handleLogin} />} />
+        </Routes>
+      ) : (
+        <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
@@ -67,25 +74,15 @@ function App() {
             <Route path="/clients/online-users" element={<OnlineUsersPage />} />
             <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
             <Route path="/clients/positions" element={<PositionsPage />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
             <Route path="/positions" element={<PlaceholderPage title="Live Positions Grid (Ag-Grid)" />} />
             <Route path="/orders" element={<PlaceholderPage title="Order Management System" />} />
             <Route path="/settings" element={<PlaceholderPage title="Global Server Configuration" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full w-full opacity-60 pointer-events-none select-none">
-             <div className="w-24 h-24 mb-6 opacity-30 invert dark:invert-0 filter grayscale">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                   <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                   <line x1="8" y1="21" x2="16" y2="21"></line>
-                   <line x1="12" y1="17" x2="12" y2="21"></line>
-                </svg>
-             </div>
-             <h2 className="text-2xl font-light text-gray-500 tracking-wide">Not Connected to Server</h2>
-             <p className="text-gray-600 mt-2 text-sm">Please go to File {'>'} Connect to log in.</p>
-          </div>
-        )}
-      </AdminLayout>
+        </AdminLayout>
+      )}
     </Router>
   );
 }

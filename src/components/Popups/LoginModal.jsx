@@ -4,6 +4,7 @@ import { X, CheckCircle, AlertCircle, Loader, Link2 } from 'lucide-react';
 const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+  const [server, setServer] = useState('10.20');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -11,8 +12,8 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!user || !password) {
-      setError('Please enter both User ID and password.');
+    if (!user || !password || !server) {
+      setError('Please enter User ID, password, and server.');
       return;
     }
     
@@ -20,7 +21,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}`, {
+      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
         method: 'GET',
         headers: {
           'accept': 'text/plain',
@@ -65,7 +66,6 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
             <Link2 size={16} className="text-blue-400" />
             <div>
               <span className="text-[14px] font-semibold text-gray-100">Connect to Server</span>
-              <span className="ml-2 text-[11px] text-gray-500 bg-gray-700 px-1.5 py-0.5 rounded">Step 1 of 2</span>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-200 hover:bg-red-500/20 p-1 rounded transition-colors">
@@ -106,6 +106,19 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClass}
                     placeholder="Enter password"
+                    required
+                 />
+              </div>
+
+              <div>
+                 <label className="block text-[12px] text-gray-400 mb-1" htmlFor="server">Server</label>
+                 <input
+                    id="server"
+                    type="text"
+                    value={server}
+                    onChange={(e) => setServer(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 10.20"
                     required
                  />
               </div>

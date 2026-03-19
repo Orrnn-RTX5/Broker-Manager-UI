@@ -3,13 +3,14 @@ import { useState } from 'react';
 const Login = ({ onLoginSuccess }) => {
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+  const [server, setServer] = useState('10.20');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!user || !password) {
-      setError('Please enter both username and password.');
+    if (!user || !password || !server) {
+      setError('Please enter username, password, and server.');
       return;
     }
     
@@ -17,7 +18,7 @@ const Login = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}`, {
+      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
         method: 'GET',
         headers: {
           'accept': 'text/plain',
@@ -105,6 +106,25 @@ const Login = ({ onLoginSuccess }) => {
                        onChange={(e) => setPassword(e.target.value)}
                        className="block w-full pl-10 pr-3 py-3 border border-gray-700 rounded-xl bg-[#14151a] text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                        placeholder="Enter your password"
+                    />
+                 </div>
+              </div>
+
+              <div>
+                 <label className="block text-sm font-medium text-gray-300 mb-2" htmlFor="server">Server IP / Address</label>
+                 <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                       <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                       </svg>
+                    </div>
+                    <input
+                       id="server"
+                       type="text"
+                       value={server}
+                       onChange={(e) => setServer(e.target.value)}
+                       className="block w-full pl-10 pr-3 py-3 border border-gray-700 rounded-xl bg-[#14151a] text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                       placeholder="e.g. 10.20"
                     />
                  </div>
               </div>

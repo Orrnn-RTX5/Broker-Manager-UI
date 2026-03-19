@@ -29,6 +29,8 @@ const AdminLayout = ({ children, isAuthenticated, onLogin, onLogout }) => {
       <ToolBar 
         toggleSidebar={() => setIsNavigatorOpen(!isNavigatorOpen)} 
         isSidebarOpen={isNavigatorOpen}
+        toggleRightSidebar={() => setIsMarginCallsOpen(!isMarginCallsOpen)}
+        isRightSidebarOpen={isMarginCallsOpen}
         onLogout={onLogout}
       />
       

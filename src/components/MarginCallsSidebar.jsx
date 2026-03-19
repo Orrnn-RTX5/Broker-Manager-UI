@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, X, RefreshCw, AlertTriangle, Loader, WifiOff } from 'lucide-react';
+import AccountDetailsModal from './Popups/AccountDetailsModal';
 
 const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
 
   const fetchAccounts = useCallback(async () => {
     const id = localStorage.getItem('authToken');
@@ -146,12 +148,17 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
                 </tr>
               ) : (
                 accounts.map((acc, idx) => {
-                  const mcl = acc.MarginCallLevel;
+                  const isPrimitive = typeof acc === 'number' || typeof acc === 'string';
+                  const login = isPrimitive ? acc : acc.login;
+                  const name = isPrimitive ? '—' : fullName(acc);
+                  const bal = isPrimitive ? '—' : balanceDisplay(acc);
+                  const mcl = isPrimitive ? undefined : acc.MarginCallLevel;
                   const isUrgent = mcl !== undefined && Number(mcl) < 100;
                   return (
                     <tr
-                      key={acc.login ?? idx}
-                      className={`border-b border-[#e0e0e0] dark:border-[#333333] h-6 transition-colors ${
+                      key={login ?? idx}
+                      onDoubleClick={() => setSelectedAccountDetails(acc)}
+                      className={`border-b border-[#e0e0e0] dark:border-[#333333] h-6 transition-colors cursor-pointer ${
                         isUrgent
                           ? 'bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-900 dark:text-red-300'
                           : 'hover:bg-blue-50/50 dark:hover:bg-[#2d2d30]'
@@ -160,14 +167,14 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
                       <td className="px-2 py-0.5 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <User size={11} className={isUrgent ? 'text-red-500 dark:text-red-400' : 'text-blue-500 dark:text-blue-400'} />
-                          <span className="font-mono text-[11px]">{acc.login}</span>
+                          <span className="font-mono text-[11px]">{login}</span>
                         </div>
                       </td>
                       <td className="px-2 py-0.5 whitespace-nowrap border-l border-[#e0e0e0] dark:border-[#333333] text-[11px]" style={{ maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {fullName(acc)}
+                        {name}
                       </td>
                       <td className="px-2 py-0.5 whitespace-nowrap border-l border-[#e0e0e0] dark:border-[#333333] text-right font-mono text-[11px]">
-                        {balanceDisplay(acc)}
+                        {bal}
                       </td>
                     </tr>
                   );
@@ -183,6 +190,14 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
         <div className="h-5 bg-[#f0f0f0] dark:bg-[#252526] border-t border-[#cccccc] dark:border-[#333333] flex items-center px-2 select-none">
           <span className="text-[10px] text-gray-500 dark:text-gray-400">{accounts.length} account(s)</span>
         </div>
+      )}
+
+      {/* Popups */}
+      {selectedAccountDetails && (
+        <AccountDetailsModal 
+          account={selectedAccountDetails} 
+          onClose={() => setSelectedAccountDetails(null)} 
+        />
       )}
     </div>
   );

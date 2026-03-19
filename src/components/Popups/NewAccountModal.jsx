@@ -131,7 +131,6 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
             <UserPlus size={16} className="text-blue-400" />
             <div>
               <span className="text-[14px] font-semibold text-gray-100">New Trading Account</span>
-              <span className="ml-2 text-[11px] text-gray-500 bg-gray-700 px-1.5 py-0.5 rounded">Step 2 of 2</span>
             </div>
           </div>
           <button onClick={handleClose} className="text-gray-500 hover:text-gray-200 hover:bg-red-500/20 p-1 rounded transition-colors">

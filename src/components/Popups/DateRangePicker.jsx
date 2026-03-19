@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays, ChevronDown } from 'lucide-react';
 
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 
 function isSameDay(a, b) {
   return a && b && a.toDateString() === b.toDateString();
@@ -12,36 +12,40 @@ function isSameDay(a, b) {
 
 function fmt(d) {
   if (!d) return '—';
-  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
 const PRESETS = [
-  { label: 'Today',        range: () => { const d = today(); return [d, d]; } },
-  { label: 'Yesterday',    range: () => { const d = new Date(today()); d.setDate(d.getDate()-1); return [d, d]; } },
-  { label: 'Last 7 Days',  range: () => { const e = today(); const s = new Date(e); s.setDate(s.getDate()-6); return [s, e]; } },
-  { label: 'Last Week',    range: () => {
-    const now = today();
-    const dow = now.getDay();
-    const s = new Date(now); s.setDate(now.getDate() - dow - 7);
-    const e = new Date(s);   e.setDate(s.getDate() + 6);
-    return [s, e];
-  }},
-  { label: 'Last 30 Days', range: () => { const e = today(); const s = new Date(e); s.setDate(s.getDate()-29); return [s, e]; } },
-  { label: 'This Month',   range: () => { const now = today(); const s = new Date(now.getFullYear(), now.getMonth(), 1); return [s, now]; } },
-  { label: 'Last Month',   range: () => {
-    const now = today();
-    const s = new Date(now.getFullYear(), now.getMonth()-1, 1);
-    const e = new Date(now.getFullYear(), now.getMonth(), 0);
-    return [s, e];
-  }},
-  { label: 'This Year',    range: () => { const now = today(); return [new Date(now.getFullYear(),0,1), now]; } },
-  { label: 'All Time',     range: () => [new Date(1970,0,1), today()] },
+  { label: 'Today', range: () => { const d = today(); return [d, d]; } },
+  { label: 'Yesterday', range: () => { const d = new Date(today()); d.setDate(d.getDate() - 1); return [d, d]; } },
+  { label: 'Last 7 Days', range: () => { const e = today(); const s = new Date(e); s.setDate(s.getDate() - 6); return [s, e]; } },
+  {
+    label: 'Last Week', range: () => {
+      const now = today();
+      const dow = now.getDay();
+      const s = new Date(now); s.setDate(now.getDate() - dow - 7);
+      const e = new Date(s); e.setDate(s.getDate() + 6);
+      return [s, e];
+    }
+  },
+  { label: 'Last 30 Days', range: () => { const e = today(); const s = new Date(e); s.setDate(s.getDate() - 29); return [s, e]; } },
+  { label: 'This Month', range: () => { const now = today(); const s = new Date(now.getFullYear(), now.getMonth(), 1); return [s, now]; } },
+  {
+    label: 'Last Month', range: () => {
+      const now = today();
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0);
+      return [s, e];
+    }
+  },
+  { label: 'This Year', range: () => { const now = today(); return [new Date(now.getFullYear(), 0, 1), now]; } },
+  { label: 'All Time', range: () => [new Date(1970, 0, 1), today()] },
 ];
 
 /* one month grid */
 function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDayHover }) {
   const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
@@ -55,7 +59,7 @@ function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDay
       <div className="text-center text-[11px] text-gray-700 dark:text-gray-200 py-1">{MONTHS[month]} {year}</div>
       <div className="grid grid-cols-7 mb-0.5">
 
-        
+
         {DAYS.map(d => (
           <div key={d} className="text-center text-[10px] text-gray-400 dark:text-gray-500 py-0.5">{d}</div>
         ))}
@@ -63,16 +67,16 @@ function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDay
       <div className="grid grid-cols-7 gap-y-px">
         {cells.map((date, i) => {
           if (!date) return <div key={`e-${i}`} />;
-          const cur = new Date(date); cur.setHours(0,0,0,0);
+          const cur = new Date(date); cur.setHours(0, 0, 0, 0);
           const isStart = lo && isSameDay(cur, lo);
-          const isEnd   = hi && isSameDay(cur, hi);
+          const isEnd = hi && isSameDay(cur, hi);
           const inRange = lo && hi && cur > lo && cur < hi;
-          const isTod   = isSameDay(cur, today());
+          const isTod = isSameDay(cur, today());
 
           let cls = 'text-gray-700 dark:text-gray-300';
           if (isStart || isEnd) cls = 'bg-blue-600 text-white rounded';
-          else if (inRange)     cls = 'bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100';
-          else if (isTod)       cls += ' text-blue-500';
+          else if (inRange) cls = 'bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100';
+          else if (isTod) cls += ' text-blue-500';
 
           return (
             <div
@@ -92,29 +96,29 @@ function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDay
 }
 
 const DateRangePicker = ({ onChange }) => {
-  const [open,      setOpen]      = useState(false);
-  const [startDate, setStart]     = useState(null);
-  const [endDate,   setEnd]       = useState(null);
-  const [hovered,   setHovered]   = useState(null);
-  const [picking,   setPicking]   = useState(false);
+  const [open, setOpen] = useState(false);
+  const [startDate, setStart] = useState(null);
+  const [endDate, setEnd] = useState(null);
+  const [hovered, setHovered] = useState(null);
+  const [picking, setPicking] = useState(false);
   const [activePreset, setActivePreset] = useState(null);
   const t = today();
-  const [leftYear,  setLeftYear]  = useState(t.getMonth() === 0 ? t.getFullYear()-1 : t.getFullYear());
-  const [leftMonth, setLeftMonth] = useState(t.getMonth() === 0 ? 11 : t.getMonth()-1);
+  const [leftYear, setLeftYear] = useState(t.getMonth() === 0 ? t.getFullYear() - 1 : t.getFullYear());
+  const [leftMonth, setLeftMonth] = useState(t.getMonth() === 0 ? 11 : t.getMonth() - 1);
   const ref = useRef(null);
 
-  const rightMonth = leftMonth === 11 ? 0   : leftMonth + 1;
-  const rightYear  = leftMonth === 11 ? leftYear+1 : leftYear;
+  const rightMonth = leftMonth === 11 ? 0 : leftMonth + 1;
+  const rightYear = leftMonth === 11 ? leftYear + 1 : leftYear;
 
   const prevMonth = () => {
-    if (leftMonth === 0) { setLeftMonth(11); setLeftYear(y => y-1); }
-    else setLeftMonth(m => m-1);
+    if (leftMonth === 0) { setLeftMonth(11); setLeftYear(y => y - 1); }
+    else setLeftMonth(m => m - 1);
   };
   const nextMonth = () => {
     if (leftMonth >= 10) {
       setLeftMonth(m => m === 11 ? 1 : 0);
-      if (leftMonth === 11) setLeftYear(y => y+1);
-    } else setLeftMonth(m => m+2);
+      if (leftMonth === 11) setLeftYear(y => y + 1);
+    } else setLeftMonth(m => m + 2);
   };
 
   const applyPreset = (preset) => {

@@ -69,6 +69,16 @@ const ClientsContextMenu = ({ x, y, onClose }) => {
     left: Math.min(x, window.innerWidth - 400), // roughly menu + submenu width
   };
 
+  const handleCopyMock = (type) => {
+    const mockData = `Mock ${type} Data:\nLogin\tName\tGroup\n1001\tJohn Doe\treal\n1002\tJane Smith\tdemo`;
+    navigator.clipboard.writeText(mockData);
+    alert(`${type} data copied to clipboard!`);
+  };
+
+  const handleExport = () => {
+    alert("Exporting mock data to CSV...\nIn a real scenario, this would trigger a file download.");
+  };
+
   const selectBySubmenu = [
     { text: "All" },
     { text: "None" },
@@ -83,9 +93,9 @@ const ClientsContextMenu = ({ x, y, onClose }) => {
   ];
 
   const copyAsSubmenu = [
-    { text: "Text" },
-    { text: "CSV" },
-    { text: "JSON" }
+    { text: "Text", onClick: () => handleCopyMock("Text") },
+    { text: "CSV", onClick: () => handleCopyMock("CSV") },
+    { text: "JSON", onClick: () => handleCopyMock("JSON") }
   ];
 
   const columnsSubmenu = [
@@ -116,7 +126,7 @@ const ClientsContextMenu = ({ x, y, onClose }) => {
       <MenuItem text="Select By" rightIcon={ChevronRight} submenu={selectBySubmenu} />
       <MenuItem text="Filter" rightIcon={ChevronRight} submenu={filterSubmenu} />
       <MenuItem text="Copy As" rightIcon={ChevronRight} submenu={copyAsSubmenu} />
-      <MenuItem text="Export" icon={RefreshCw} iconColor="text-green-500" />
+      <MenuItem text="Export" icon={RefreshCw} iconColor="text-green-500" onClick={handleExport} />
       <MenuItem text="Find" icon={Search} iconColor="text-gray-500" rightText="Ctrl+F" disabled={true} />
       
       <MenuDivider />

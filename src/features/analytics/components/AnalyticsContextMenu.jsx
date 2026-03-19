@@ -70,6 +70,10 @@ const AnalyticsContextMenu = ({ x, y, onClose }) => {
     left: Math.min(x, window.innerWidth - 450), // menu width + submenu width roughly
   };
 
+  const handleSaveMock = () => {
+    alert("Layout and settings have been saved locally.");
+  };
+
   const onlineUserMetricsSubmenu = [
     { text: "Online Users by Country" },
     { text: "Online Users by Group" },
@@ -117,8 +121,8 @@ const AnalyticsContextMenu = ({ x, y, onClose }) => {
       <MenuDivider />
       
       <MenuItem text="Edit" icon={Settings} iconColor="text-blue-500" rightText="Ctrl+E" />
-      <MenuItem text="Save" icon={Save} iconColor="text-blue-500" rightText="Ctrl+S" />
-      <MenuItem text="Save as" rightIcon={ChevronRight} />
+      <MenuItem text="Save" icon={Save} iconColor="text-blue-500" rightText="Ctrl+S" onClick={handleSaveMock} />
+      <MenuItem text="Save as" rightIcon={ChevronRight} onClick={handleSaveMock} />
       <MenuItem text="Delete" icon={X} iconColor="text-red-500" />
       
       <MenuDivider />

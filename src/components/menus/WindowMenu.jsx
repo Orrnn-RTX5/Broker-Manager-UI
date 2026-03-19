@@ -31,8 +31,16 @@ import {
   Check
 } from 'lucide-react';
 import { MenuItem, MenuDivider } from './MenuItem';
+import { useNavigate } from 'react-router-dom';
 
-const WindowMenu = () => {
+const WindowMenu = ({ onClose }) => {
+  const navigate = useNavigate();
+
+  const handleMenuClick = (path) => {
+    navigate(path);
+    if (onClose) onClose();
+  };
+
   return (
     <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[260px] z-[60] max-h-[90vh] overflow-y-auto transition-colors">
       <MenuItem icon={LayoutGrid} text="Tile Windows" shortcut="Alt+R" iconColor="text-blue-500" />
@@ -45,13 +53,13 @@ const WindowMenu = () => {
       <MenuItem text="Window Layouts" hasSubmenu />
       <MenuDivider />
       {/* List corresponding to MT5 manager sidebar/sections */}
-      <MenuItem icon={BarChart} text="Analytics" iconColor="text-blue-400" />
+      <MenuItem icon={BarChart} text="Analytics" iconColor="text-blue-400" onClick={() => handleMenuClick('/analytics/trading-accounts')} />
       <MenuItem icon={FileText} text="Server Reports" iconColor="text-blue-500" />
-      <MenuItem icon={Users} text="Online Users" iconColor="text-blue-600" />
-      <MenuItem icon={User} text="Accounts" iconColor="text-blue-500" />
-      <MenuItem icon={Building2} text="Clients" iconColor="text-blue-500" />
-      <MenuItem icon={ListOrdered} text="Positions" iconColor="text-yellow-500" />
-      <MenuItem icon={ShoppingCart} text="Orders" iconColor="text-yellow-500" />
+      <MenuItem icon={Users} text="Online Users" iconColor="text-blue-600" onClick={() => handleMenuClick('/clients/online-users')} />
+      <MenuItem icon={User} text="Accounts" iconColor="text-blue-500" onClick={() => handleMenuClick('/clients/trading-accounts')} />
+      <MenuItem icon={Building2} text="Clients" iconColor="text-blue-500" onClick={() => handleMenuClick('/clients')} />
+      <MenuItem icon={ListOrdered} text="Positions" iconColor="text-yellow-500" onClick={() => handleMenuClick('/clients/positions')} />
+      <MenuItem icon={ShoppingCart} text="Orders" iconColor="text-yellow-500" onClick={() => handleMenuClick('/orders')} />
       <MenuItem icon={CreditCard} text="Payments Processing" iconColor="text-blue-400" />
       <MenuItem icon={Banknote} text="Active Payments" iconColor="text-blue-500" />
       <MenuItem icon={History} text="Payments History" iconColor="text-blue-600" />
@@ -61,8 +69,8 @@ const WindowMenu = () => {
       <MenuItem icon={FileSpreadsheet} text="Ultency Reporting" iconColor="text-blue-500" />
       <MenuItem icon={Activity} text="Active Subscriptions" iconColor="text-green-500" />
       <MenuItem icon={HistoryIcon} text="Subscriptions History" iconColor="text-green-600" />
-      <MenuItem icon={Settings} text="Subscriptions Configuration" iconColor="text-green-500" />
-      <MenuItem icon={UserCog} text="Dealer" iconColor="text-red-500" />
+      <MenuItem icon={Settings} text="Subscriptions Configuration" iconColor="text-green-500" onClick={() => handleMenuClick('/settings')} />
+      <MenuItem icon={UserCog} text="Dealer" iconColor="text-red-500" onClick={() => handleMenuClick('/settings')} />
       <MenuItem icon={Percent} text="Leverages" iconColor="text-green-500" />
       <MenuItem icon={Users2} text="Groups" iconColor="text-blue-500" />
       <MenuItem icon={Blocks} text="Plugins" iconColor="text-blue-500" />

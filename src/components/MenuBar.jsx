@@ -15,10 +15,10 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   const menuRef = useRef(null);
   const menuItems = ['File', 'Edit', 'View', 'Tools', 'Window', 'Help'];
 
-  // After manager login succeeds, automatically open the Account Creation step
+  // After manager login succeeds, close the modal
   const handleLoginSuccess = (token) => {
     setIsLoginOpen(false);
-    setIsNewAccountOpen(true);
+    if (onLogin) onLogin(token);
   };
 
   // Handle clicking outside to close the menu
@@ -56,11 +56,16 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
         onConnectClick={handleConnectClick} 
         onDisconnectClick={handleDisconnectClick}
         onNewAccountClick={handleNewAccountClick} 
+        onPrintClick={() => {
+          setActiveMenu(null);
+          window.print();
+        }}
+        onClose={() => setActiveMenu(null)}
       />;
-      case 'View': return <ViewMenu />;
-      case 'Tools': return <ToolsMenu />;
-      case 'Window': return <WindowMenu />;
-      case 'Help': return <HelpMenu />;
+      case 'View': return <ViewMenu onClose={() => setActiveMenu(null)} />;
+      case 'Tools': return <ToolsMenu onClose={() => setActiveMenu(null)} />;
+      case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} />;
+      case 'Help': return <HelpMenu onClose={() => setActiveMenu(null)} />;
       default: return (
         <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[200px] z-50">
           <div className="px-6 py-1.5 text-[13px] text-gray-500 dark:text-gray-400 italic">Menu not implemented yet</div>
@@ -103,6 +108,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
       {/* Right side status */}
       <div className="flex items-center h-full text-xs text-gray-500 dark:text-gray-400 space-x-3 px-2">
         <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
+           <select className="bg-transparent hover:bg-gray-200 dark:hover:bg-[#2d2d30] border-none text-gray-600 dark:text-gray-300 focus:outline-none rounded-sm px-1.5 py-0.5 font-medium cursor-pointer appearance-none text-[11px]">
+              {['English (EN)', 'Arabic (AR)', 'Chinese (ZH)', 'French (FR)', 'German (DE)', 'Hindi (HI)', 'Japanese (JA)', 'Russian (RU)', 'Spanish (ES)', 'Turkish (TR)'].map(code => (
+                <option key={code} className="bg-white dark:bg-[#252526]">{code}</option>
+              ))}
+           </select>
+        </div>
+        <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
+        <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
           <Activity size={14} className="text-green-500 dark:text-green-400" />
           <span>232 / 13 KB</span>
         </div>
@@ -112,8 +125,8 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
           <span>{isAuthenticated ? 'Connected' : 'Disconnected'}</span>
         </div>
       </div>
-      {/* Modals: Step 1 = Manager Login, Step 2 = Account Creation, then Dashboard shows */}
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} onSuccess={onLogin} />
+      {/* Modals */}
+      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={handleLoginSuccess} />
     </div>
   );

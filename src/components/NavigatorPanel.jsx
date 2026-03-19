@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGroupList } from '../hooks/useGroupList';
+import NewGroupModal from '../features/groups/components/NewGroupModal';
+import { Plus } from 'lucide-react';
 import {
   X,
   Server,
@@ -81,6 +84,8 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 
 const NavigatorPanel = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
+  const { groups, loading: groupsLoading } = useGroupList();
+  const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   if (!isOpen) return null;
 
   return (
@@ -173,7 +178,12 @@ const NavigatorPanel = ({ isOpen, onClose }) => {
               <TreeNode label="Subscriptions" icon={RefreshCw} iconColor="text-green-500" />
               <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" />
               <TreeNode label="Leverages" icon={Percent} iconColor="text-green-500" />
-              <TreeNode label="Groups" count="62" icon={Users2} iconColor="text-blue-500" />
+              <TreeNode label="Groups" count={groupsLoading ? '...' : (groups?.length || 0).toString()} icon={Users2} iconColor="text-blue-500" onClickNode={() => navigate('/groups')}>
+                {groups?.map(g => (
+                   <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={(e) => { navigate(`/groups/${g.name}`); }} />
+                ))}
+                <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={(e) => { e?.stopPropagation(); setIsNewGroupOpen(true); }} />
+              </TreeNode>
               <TreeNode label="Plugins" icon={Blocks} iconColor="text-blue-600" />
               <TreeNode label="Mailbox" icon={Mail} iconColor="text-yellow-600" />
             </TreeNode>
@@ -188,6 +198,7 @@ const NavigatorPanel = ({ isOpen, onClose }) => {
         </TreeNode>
 
       </div>
+      {isNewGroupOpen && <NewGroupModal onClose={() => setIsNewGroupOpen(false)} onSuccess={() => alert('Group Created!')} />}
     </div>
   );
 };
