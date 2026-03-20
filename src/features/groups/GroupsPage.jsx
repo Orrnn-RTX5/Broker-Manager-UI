@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
-import { Search, Users2, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Search, Users2, Plus, Trash2, Edit2, Filter, Loader } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
 
 const GroupsPage = () => {
@@ -9,11 +9,13 @@ const GroupsPage = () => {
   const { groups, loading } = useGroupList();
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeGroupsData, setActiveGroupsData] = useState(null);
   
   const filteredGroups = useMemo(() => {
-    if (!search) return groups;
-    return groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
-  }, [groups, search]);
+    let source = activeGroupsData || groups;
+    if (!search) return source;
+    return source.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+  }, [groups, search, activeGroupsData]);
 
   const handleDelete = async (e, groupName) => {
     e.stopPropagation();
@@ -39,6 +41,46 @@ const GroupsPage = () => {
     setIsModalOpen(true);
   };
 
+  const [isFiltering, setIsFiltering] = useState(false);
+  const handleActiveGroupsFilter = async () => {
+    if (activeGroupsData) {
+      setActiveGroupsData(null); // Toggle off
+      return;
+    }
+
+    setIsFiltering(true);
+    try {
+      const id = localStorage.getItem('authToken');
+      const res = await fetch(`http://69.197.178.27/manager/UserGroups?id=${id}`, {
+        method: 'GET',
+        headers: { 'accept': 'application/json' }
+      });
+      const data = await res.json();
+      
+      if (Array.isArray(data)) {
+        // Handle array of strings or array of objects with .Group or .name
+        const formatted = data.map(item => {
+          if (typeof item === 'string') return { name: item, description: '' };
+          return { 
+            name: item.Group || item.name || 'Unnamed', 
+            description: item.Currency || item.description || '' 
+          };
+        });
+        setActiveGroupsData(formatted);
+      } else if (data && Array.isArray(data.groups)) {
+        setActiveGroupsData(data.groups);
+      } else if (data && data.error) {
+        throw new Error(data.error);
+      } else {
+        alert("Unexpected response:\n" + JSON.stringify(data, null, 2));
+      }
+    } catch (err) {
+      alert("Error fetching active groups: " + err.message);
+    } finally {
+      setIsFiltering(false);
+    }
+  };
+
   return (
     <div className="p-4 w-full h-full flex flex-col gap-4 bg-[#f8f9fa] dark:bg-[#1e1e1e]">
       
@@ -56,15 +98,30 @@ const GroupsPage = () => {
         </button>
       </div>
       
-      <div className="relative w-full max-w-xs">
-        <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search group names..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-7 pr-3 py-0.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252526] text-gray-800 dark:text-gray-200 text-[11px] rounded-sm focus:outline-none focus:border-blue-400 h-[24px] transition-colors"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search group names..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-7 pr-3 py-0.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252526] text-gray-800 dark:text-gray-200 text-[11px] rounded-sm focus:outline-none focus:border-blue-400 h-[24px] transition-colors"
+          />
+        </div>
+        
+        <button
+          onClick={handleActiveGroupsFilter}
+          disabled={isFiltering}
+          className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium rounded-sm transition-colors h-[24px] disabled:opacity-50 ${
+            activeGroupsData 
+              ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+              : 'bg-gray-200 dark:bg-[#2d2d30] hover:bg-gray-300 dark:hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200'
+          }`}
+        >
+          {isFiltering ? <Loader size={12} className="animate-spin" /> : <Filter size={12} />}
+          {activeGroupsData ? 'Show All' : 'Active Only'}
+        </button>
       </div>
 
       <div className="flex-1 bg-white dark:bg-[#252526] border border-gray-200 dark:border-[#333] rounded-sm shadow-sm overflow-hidden flex flex-col">

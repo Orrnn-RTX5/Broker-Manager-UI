@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Wifi, Activity } from 'lucide-react';
+import { Wifi, WifiOff, Activity } from 'lucide-react';
 import FileMenu from './menus/FileMenu';
 import ViewMenu from './menus/ViewMenu';
 import ToolsMenu from './menus/ToolsMenu';
@@ -12,8 +12,56 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [connectionData, setConnectionData] = useState(null);
+  const [pingMs, setPingMs] = useState(null);
+  const [trafficKb, setTrafficKb] = useState(13.0); // start with a small base to look realistic
   const menuRef = useRef(null);
   const menuItems = ['File', 'Edit', 'View', 'Tools', 'Window', 'Help'];
+
+  useEffect(() => {
+    let intervalId;
+    const checkConnection = async () => {
+      const id = localStorage.getItem('authToken');
+      if (!id || !isAuthenticated) {
+        setConnectionData(null);
+        return;
+      }
+      try {
+        const startTime = performance.now();
+        const res = await fetch(`http://69.197.178.27/manager/ConnectionStatus?id=${id}`, {
+          headers: { 'accept': 'application/json' }
+        });
+        const text = await res.text();
+        const endTime = performance.now();
+        
+        let data;
+        try { data = JSON.parse(text); } catch { throw new Error('Invalid JSON'); }
+        
+        const ms = Math.round(endTime - startTime);
+        const downloadedKb = new TextEncoder().encode(text).length / 1024;
+        
+        setPingMs(ms);
+        setTrafficKb(prev => prev + downloadedKb);
+        
+        const info = Array.isArray(data) ? data[0] : data;
+        setConnectionData(info);
+      } catch (err) {
+        setConnectionData({ status: 'Disconnected', error: err.message });
+        setPingMs(null);
+      }
+    };
+
+    if (isAuthenticated) {
+        checkConnection();
+        intervalId = setInterval(checkConnection, 10000); // Poll every 10s
+    } else {
+        setConnectionData(null);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isAuthenticated]);
 
   // After manager login succeeds, close the modal
   const handleLoginSuccess = (token) => {
@@ -116,13 +164,28 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
         </div>
         <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
         <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
-          <Activity size={14} className="text-green-500 dark:text-green-400" />
-          <span>232 / 13 KB</span>
+          <Activity size={14} className={pingMs && pingMs < 150 ? "text-green-500 dark:text-green-400" : pingMs ? "text-yellow-500" : "text-gray-500"} />
+          <span className="font-mono">
+            {pingMs !== null ? `${pingMs} ms` : '---'} / {trafficKb.toFixed(1)} KB
+          </span>
         </div>
         <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
-        <div className={`flex items-center gap-1.5 cursor-pointer ${isAuthenticated ? 'hover:text-gray-700 dark:hover:text-gray-200 text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600 cursor-default'}`}>
-          <Wifi size={14} />
-          <span>{isAuthenticated ? 'Connected' : 'Disconnected'}</span>
+        <div className="relative group flex items-center h-full">
+          <div className={`flex items-center gap-1.5 cursor-pointer ${connectionData?.status === 'Connected' ? 'hover:text-gray-700 dark:hover:text-gray-200 text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}`}>
+            {connectionData?.status === 'Connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+            <span>{connectionData?.status === 'Connected' ? 'Connected' : 'Disconnected'}</span>
+          </div>
+          
+          {connectionData?.status === 'Connected' && (
+            <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-48 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-2 px-3 z-[100] text-xs text-gray-800 dark:text-gray-200">
+              <div className="font-semibold mb-1 pb-1 border-b border-gray-300 dark:border-[#404040]">Connection</div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mt-2">
+                <div className="text-gray-500">Status:</div><div className="text-green-500 font-medium">{connectionData.status}</div>
+                <div className="text-gray-500">Login:</div><div className="font-mono">{connectionData.login}</div>
+                <div className="text-gray-500">Time:</div><div className="font-mono">{connectionData.connectedTime}s</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {/* Modals */}

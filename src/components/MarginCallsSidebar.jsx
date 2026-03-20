@@ -1,12 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, X, RefreshCw, AlertTriangle, Loader, WifiOff } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
+import AccountsSummaryModal from './Popups/AccountsSummaryModal';
+import SidebarContextMenu from './menus/SidebarContextMenu';
 
 const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
+  const [summaryAccount, setSummaryAccount] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [blockedUsers, setBlockedUsers] = useState({});
 
   const fetchAccounts = useCallback(async () => {
     const id = localStorage.getItem('authToken');
@@ -71,6 +76,86 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
     acc.balance !== undefined
       ? Number(acc.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '—';
+
+  const handleContextMenu = (e, acc) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, account: acc });
+  };
+
+  const handleMenuAction = async (action, acc) => {
+    const login = typeof acc === 'object' ? acc.login : acc;
+    
+    if (action === 'summary') {
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`http://69.197.178.27/manager/AccountsSummary?id=${token}&login%5B%5D=${login}`, {
+          method: 'GET',
+          headers: { 'accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setSummaryAccount({ login, data });
+      } catch (err) {
+        alert("Error fetching summary: " + err.message);
+      }
+    } else if (action === 'details') {
+      setSelectedAccountDetails(acc);
+    } else if (action === 'block') {
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`http://69.197.178.27/manager/UserArchive?id=${token}&login=${login}`, {
+          method: 'GET',
+          headers: { 'accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // Assuming success
+        setBlockedUsers(prev => ({ ...prev, [login]: true }));
+        alert(`User ${login} blocked successfully.`);
+      } catch (err) {
+        alert("Error blocking user: " + err.message);
+      }
+    } else if (action === 'unblock') {
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`http://69.197.178.27/manager/UserRestore?id=${token}&login=${login}`, {
+          method: 'GET',
+          headers: { 'accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // Assuming success
+        setBlockedUsers(prev => ({ ...prev, [login]: false }));
+        alert(`User ${login} unblocked successfully.`);
+      } catch (err) {
+        alert("Error unblocking user: " + err.message);
+      }
+    } else if (action === 'delete') {
+      if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`http://69.197.178.27/manager/AccountDelete?id=${token}&login=${login}`, {
+          method: 'GET',
+          headers: { 'accept': 'application/json' }
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { throw new Error(`Unexpected response: ${text.slice(0, 80)}`); }
+        
+        if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+        
+        if (data.error || (typeof data === 'string' && data.toLowerCase().includes('error'))) {
+          throw new Error(data.error || data);
+        }
+        
+        alert(`Account ${login} deleted successfully.`);
+        fetchAccounts();
+      } catch (err) {
+        alert("Error deleting account: " + err.message);
+      }
+    }
+  };
 
   return (
     <div className="w-[260px] bg-white dark:bg-[#1e1e1e] h-full flex flex-col border-l border-[#cccccc] dark:border-[#333333] shadow-xl shrink-0 transition-colors">
@@ -158,6 +243,7 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
                     <tr
                       key={login ?? idx}
                       onDoubleClick={() => setSelectedAccountDetails(acc)}
+                      onContextMenu={(e) => handleContextMenu(e, acc)}
                       className={`border-b border-[#e0e0e0] dark:border-[#333333] h-6 transition-colors cursor-pointer ${
                         isUrgent
                           ? 'bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-900 dark:text-red-300'
@@ -197,6 +283,24 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
         <AccountDetailsModal 
           account={selectedAccountDetails} 
           onClose={() => setSelectedAccountDetails(null)} 
+        />
+      )}
+
+      {summaryAccount && (
+        <AccountsSummaryModal 
+          account={summaryAccount} 
+          onClose={() => setSummaryAccount(null)} 
+        />
+      )}
+
+      {contextMenu && (
+        <SidebarContextMenu 
+          x={contextMenu.x} 
+          y={contextMenu.y} 
+          account={contextMenu.account} 
+          onClose={() => setContextMenu(null)}
+          onAction={handleMenuAction}
+          isBlocked={blockedUsers[typeof contextMenu.account === 'object' ? contextMenu.account.login : contextMenu.account]}
         />
       )}
     </div>

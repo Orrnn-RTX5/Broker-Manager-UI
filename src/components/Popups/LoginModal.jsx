@@ -54,21 +54,21 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     }
   };
 
-  const inputClass = "h-7 px-2 text-[13px] bg-[#1a1b1f] border border-gray-700 text-gray-200 rounded-[3px] focus:outline-none focus:border-blue-500 focus:bg-[#1e2030] transition-colors w-full";
+  const inputClass = "h-7 px-2 text-[13px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-[3px] focus:outline-none focus:border-blue-500 focus:bg-[#1e2030] transition-colors w-full";
 
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-[400px] bg-[#1e2025] border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden font-sans">
+      <div className="w-[400px] bg-[#1e2025] border border-gray-300 dark:border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden font-sans">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 bg-[#252830] border-b border-gray-700 select-none flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 bg-[#252830] border-b border-gray-300 dark:border-gray-700 select-none flex-shrink-0">
           <div className="flex items-center gap-2">
             <Link2 size={16} className="text-blue-400" />
             <div>
-              <span className="text-[14px] font-semibold text-gray-100">Connect to Server</span>
+              <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100">Connect to Server</span>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-200 hover:bg-red-500/20 p-1 rounded transition-colors">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-200 hover:bg-red-500/20 p-1 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -84,7 +84,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
 
            <form id="connect-form" onSubmit={handleLogin} className="space-y-4">
               <div>
-                 <label className="block text-[12px] text-gray-400 mb-1" htmlFor="user">User ID</label>
+                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="user">User ID</label>
                  <input
                     id="user"
                     type="text"
@@ -98,7 +98,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
               </div>
 
               <div>
-                 <label className="block text-[12px] text-gray-400 mb-1" htmlFor="password">Password</label>
+                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="password">Password</label>
                  <input
                     id="password"
                     type="password"
@@ -111,7 +111,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
               </div>
 
               <div>
-                 <label className="block text-[12px] text-gray-400 mb-1" htmlFor="server">Server</label>
+                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="server">Server</label>
                  <input
                     id="server"
                     type="text"
@@ -126,11 +126,11 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-700 flex justify-end gap-2 bg-[#252830] flex-shrink-0">
+        <div className="px-5 py-3 border-t border-gray-300 dark:border-gray-700 flex justify-end gap-2 bg-[#252830] flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-[13px] transition-colors"
+            className="px-4 py-1.5 rounded-md bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-[13px] transition-colors"
           >
             Cancel
           </button>
@@ -138,7 +138,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
             type="submit"
             form="connect-form"
             disabled={loading}
-            className="px-5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors flex items-center gap-2"
+            className="px-5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white text-[13px] font-semibold transition-colors flex items-center gap-2"
           >
             {loading ? (
               <>

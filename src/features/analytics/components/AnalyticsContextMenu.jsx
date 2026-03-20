@@ -20,7 +20,7 @@ const MenuItem = ({ text, icon: Icon, iconColor = "", rightText = "", rightIcon:
 
   return (
     <div 
-      className={`relative flex items-center justify-between px-6 py-1 text-[12px] cursor-pointer hover:bg-[#3f3f46] select-none ${disabled ? 'text-gray-500 cursor-default' : 'text-gray-200'} ${isHovered && submenu ? 'bg-[#3f3f46]' : ''}`}
+      className={`relative flex items-center justify-between px-6 py-1 text-[12px] cursor-pointer hover:bg-[#3f3f46] select-none ${disabled ? 'text-gray-500 cursor-default' : 'text-gray-800 dark:text-gray-200'} ${isHovered && submenu ? 'bg-[#3f3f46]' : ''}`}
       onClick={disabled ? undefined : onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -28,7 +28,7 @@ const MenuItem = ({ text, icon: Icon, iconColor = "", rightText = "", rightIcon:
       <div className="flex items-center gap-2">
         <div className="w-4 h-4 flex items-center justify-center">
           {hasCheck ? (
-             <Check size={12} className="text-white" strokeWidth={2.5} />
+             <Check size={12} className="text-black dark:text-white" strokeWidth={2.5} />
           ) : Icon ? (
              <Icon size={14} className={iconColor} strokeWidth={1.5} />
           ) : null}

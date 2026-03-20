@@ -7,7 +7,7 @@ import {
   FolderOpen, ArrowUpRight, Copy, ChevronDown, LayoutGrid,
   ClipboardList, Settings, UserCog, Contact, Network,
   BookOpen, FileText, FileBadge, FileTerminal, PanelLeft,
-  ArrowRightToLine, Cpu, HelpCircle, MoreVertical, LogOut, Users
+  ArrowRightToLine, Cpu, HelpCircle, MoreVertical, LogOut, Users, Info
 } from 'lucide-react';
 
 const ToolButton = ({ icon: Icon, text, colorClass = "text-[#666666]", disabled, hasDropdown, onClick }) => {
@@ -30,6 +30,8 @@ const ToolButton = ({ icon: Icon, text, colorClass = "text-[#666666]", disabled,
 };
 
 import CustomizeToolbarModal from './Popups/CustomizeToolbarModal';
+import NewAccountModal from './Popups/NewAccountModal';
+import AccountLimitModal from './Popups/AccountLimitModal';
 
 const ToolSeparator = () => (
   <div className="h-5 w-px bg-[#cccccc] dark:bg-[#404040] mx-[3px] transition-colors"></div>
@@ -37,6 +39,8 @@ const ToolSeparator = () => (
 
 const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSidebarOpen, onLogout }) => {
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+  const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
+  const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleReload = () => window.location.reload();
@@ -51,7 +55,8 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
   };
 
   return (
-    <div className="h-9 bg-[#f0f0f0] dark:bg-[#252526] border-b border-[#d4d4d4] dark:border-[#333333] flex items-center px-1 overflow-x-auto transition-colors">
+    <>
+      <div className="h-9 bg-[#f0f0f0] dark:bg-[#252526] border-b border-[#d4d4d4] dark:border-[#333333] flex items-center px-1 overflow-x-auto transition-colors">
       <div className="flex items-center w-full h-full space-x-[1px] whitespace-nowrap min-w-max">
 
         {/* View/Charting Group */}
@@ -92,7 +97,8 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
         <ToolSeparator />
 
         {/* CRUD Group */}
-        <ToolButton icon={Plus} colorClass="text-green-500" />
+        <ToolButton icon={Plus} colorClass="text-green-500" onClick={() => setIsNewAccountModalOpen(true)} />
+        <ToolButton icon={Info} colorClass="text-blue-400" onClick={() => setIsAccountLimitModalOpen(true)} />
         <ToolButton icon={ClipboardList} colorClass="text-gray-500" />
         <ToolButton icon={Settings} colorClass="text-gray-500" onClick={() => navigate('/settings')} />
         <ToolButton icon={X} colorClass="text-gray-400" />
@@ -168,12 +174,23 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
         </div>
 
       </div>
+      </div>
 
-      <CustomizeToolbarModal 
-        isOpen={isCustomizeModalOpen} 
-        onClose={() => setIsCustomizeModalOpen(false)} 
+      <CustomizeToolbarModal
+        isOpen={isCustomizeModalOpen}
+        onClose={() => setIsCustomizeModalOpen(false)}
       />
-    </div>
+
+      <NewAccountModal 
+        isOpen={isNewAccountModalOpen} 
+        onClose={() => setIsNewAccountModalOpen(false)} 
+      />
+
+      <AccountLimitModal
+        isOpen={isAccountLimitModalOpen}
+        onClose={() => setIsAccountLimitModalOpen(false)}
+      />
+    </>
   );
 };
 

@@ -21,7 +21,7 @@ const defaultPayload = {
   demo: false,
   accountType: "",
   lotDivisor: 0,
-  symbolsAllowed: [],
+  symbolsAllowed: [],       
   symbolsBlocked: []
 };
 
@@ -47,7 +47,12 @@ const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]"
 );
 
 const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState(initialData || defaultPayload);
+  const [formData, setFormData] = useState(() => {
+    const data = { ...(initialData || defaultPayload) };
+    if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
+    if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
+    return data;
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -56,8 +61,7 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
   };
 
   const handleArrayChange = (key, csvString) => {
-    const arr = csvString.split(',').map(s => s.trim()).filter(Boolean);
-    setFormData(prev => ({ ...prev, [key]: arr }));
+    setFormData(prev => ({ ...prev, [key]: csvString }));
   };
 
   const handleSubmit = async () => {
@@ -74,13 +78,21 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
         ? `http://69.197.178.27/manager/GroupUpdate?id=${token}&group=${initialData.name}`
         : `http://69.197.178.27/manager/GroupCreate?id=${token}`;
 
+      const payload = { ...formData };
+      if (typeof payload.symbolsAllowed === 'string') {
+        payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (typeof payload.symbolsBlocked === 'string') {
+        payload.symbolsBlocked = payload.symbolsBlocked.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           'accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const responseText = await res.text();
@@ -178,13 +190,13 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Symbols</h3>
               <InputGroup 
                  label="Allowed Symbols (comma-separated)" 
-                 value={formData.symbolsAllowed.join(', ')} 
+                 value={formData.symbolsAllowed} 
                  onChange={(v) => handleArrayChange('symbolsAllowed', v)} 
                  width="w-full" 
               />
               <InputGroup 
                  label="Blocked Symbols (comma-separated)" 
-                 value={formData.symbolsBlocked.join(', ')} 
+                 value={formData.symbolsBlocked} 
                  onChange={(v) => handleArrayChange('symbolsBlocked', v)} 
                  width="w-full" 
               />
