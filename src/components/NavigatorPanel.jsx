@@ -204,3 +204,4 @@ const NavigatorPanel = ({ isOpen, onClose }) => {
 };
 
 export default NavigatorPanel;
+

@@ -57,7 +57,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons' }) => {
-  const { data: rawData, isLoading, isFallback } = useDataSource(getPositions, POSITIONS_FALLBACK);
+  const { data: rawData, isLoading, isFallback, error } = useDataSource(getPositions, POSITIONS_FALLBACK);
   const [sortCol, setSortCol] = useState('position');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -92,10 +92,10 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
         : String(bv).localeCompare(String(av));
     });
     return rows;
-  }, [search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
+  }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
-  const pageRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
   const TH = ({ col, label, align = 'left' }) => (
     <th
@@ -108,6 +108,11 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
 
   return (
     <div className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#333333] shadow-sm rounded-sm flex flex-col w-full overflow-hidden transition-colors">
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 p-2 text-xs border-b border-red-200 dark:border-red-800 break-all w-full max-w-full">
+          <strong>API Fallback Detected. Developer Error Details:</strong> {error}
+        </div>
+      )}
       <div className="w-full overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-max">
           <thead>
@@ -170,34 +175,35 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
       </div>
 
       {/* Footer */}
-      <div className="h-7 border-t border-gray-200 dark:border-[#333333] bg-gray-50 dark:bg-[#252526] flex items-center justify-between px-3 text-[11px] text-gray-500 dark:text-gray-400 transition-colors">
-        <span className="flex items-center gap-2">
-          Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length} positions
-          &nbsp;|&nbsp;
-          Buy: <span className="text-blue-600 dark:text-blue-400">{filtered.filter(r => r.type === 'buy').length}</span>
-          &nbsp;
-          Sell: <span className="text-red-600 dark:text-red-400">{filtered.filter(r => r.type === 'sell').length}</span>
-          {isFallback && (
-            <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-sm">
-              <AlertTriangle size={9} />
-              DEMO DATA
-            </span>
-          )}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-[11px] hover:bg-gray-100 dark:hover:bg-[#333333] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >Prev</button>
-          <span className="px-2">{page + 1} / {Math.max(1, totalPages)}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-[11px] hover:bg-gray-100 dark:hover:bg-[#333333] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >Next</button>
+      {filtered.length > 50 && (
+        <div className="h-7 border-t border-gray-200 dark:border-[#333333] bg-gray-50 dark:bg-[#252526] flex items-center justify-between px-3 text-[11px] text-gray-500 dark:text-gray-400 transition-colors">
+          <span className="flex items-center gap-2">
+            Showing 1–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length} positions
+            &nbsp;|&nbsp;
+            Buy: <span className="text-blue-600 dark:text-blue-400">{filtered.filter(r => r.type === 'buy').length}</span>
+            &nbsp;
+            Sell: <span className="text-red-600 dark:text-red-400">{filtered.filter(r => r.type === 'sell').length}</span>
+            {isFallback && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-sm">
+                <AlertTriangle size={9} />
+                DEMO DATA
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-1">
+            { (page + 1) * pageSize < filtered.length ? (
+              <button
+                onClick={() => setPage(p => p + 1)}
+                className="px-3 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded-sm text-[10px] transition-colors font-medium h-[20px] flex items-center"
+              >
+                Show More
+              </button>
+            ) : (
+              <span className="text-[10px] text-gray-400 italic">No more positions to load</span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

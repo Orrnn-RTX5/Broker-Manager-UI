@@ -1,10 +1,114 @@
-import { useState, useEffect, useCallback } from 'react';
-import { User, X, RefreshCw, AlertTriangle, Loader, WifiOff } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { User, X, RefreshCw, AlertTriangle, Loader, WifiOff, Maximize2, Minimize2 } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 
 const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
+  const sidebarRef = useRef(null);
+  const [isFloating, setIsFloating] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [size, setSize] = useState({ width: 260, height: 600 });
+
+  useEffect(() => {
+    // Initial floating positions just in case
+    setSize(prev => ({ ...prev, height: window.innerHeight * 0.8 }));
+    setPosition({ x: window.innerWidth - 300, y: window.innerHeight * 0.1 });
+  }, []);
+
+  const handleHeaderMouseDown = (e) => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    let startX = e.clientX;
+    let startY = e.clientY;
+    
+    let currentFloating = isFloating;
+    let startPosX = position.x;
+    let startPosY = position.y;
+
+    let rect = sidebarRef.current?.getBoundingClientRect();
+
+    const handleMouseMove = (moveEvent) => {
+      if (!currentFloating) {
+        if (Math.abs(moveEvent.clientX - startX) > 5 || Math.abs(moveEvent.clientY - startY) > 5) {
+          setIsFloating(true);
+          currentFloating = true;
+          startPosX = moveEvent.clientX - (startX - (rect ? rect.left : 0));
+          startPosY = moveEvent.clientY - (startY - (rect ? rect.top : 0));
+          setPosition({ x: startPosX, y: startPosY });
+          if (rect) setSize(prev => ({ ...prev, height: rect.height }));
+          startX = moveEvent.clientX;
+          startY = moveEvent.clientY;
+        }
+      } else {
+        setPosition({
+          x: startPosX + (moveEvent.clientX - startX),
+          y: startPosY + (moveEvent.clientY - startY),
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleResizeMouseDown = (e, edge) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let startX = e.clientX;
+    let startY = e.clientY;
+    let startWidth = size.width;
+    let startHeight = size.height;
+    let startPosX = position.x;
+
+    const handleMouseMove = (moveEvent) => {
+      let dx = moveEvent.clientX - startX;
+      let dy = moveEvent.clientY - startY;
+
+      if (edge === 'left') {
+        if (isFloating) {
+          let newWidth = Math.max(200, startWidth - dx);
+          let actualDx = startWidth - newWidth;
+          setSize(prev => ({ ...prev, width: newWidth }));
+          setPosition(prev => ({ ...prev, x: startPosX - actualDx }));
+        } else {
+          setSize(prev => ({ ...prev, width: Math.max(200, startWidth - dx) }));
+        }
+      } else if (edge === 'right' && isFloating) {
+        setSize(prev => ({ ...prev, width: Math.max(200, startWidth + dx) }));
+      } else if (edge === 'bottom' && isFloating) {
+        setSize(prev => ({ ...prev, height: Math.max(200, startHeight + dy) }));
+      } else if (edge === 'bottom-right' && isFloating) {
+        setSize(prev => ({ 
+          width: Math.max(200, startWidth + dx),
+          height: Math.max(200, startHeight + dy)
+        }));
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (edge === 'left' || edge === 'right') document.body.style.cursor = 'ew-resize';
+    else if (edge === 'bottom') document.body.style.cursor = 'ns-resize';
+    else if (edge === 'bottom-right') document.body.style.cursor = 'nwse-resize';
+    document.body.style.userSelect = 'none';
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -158,13 +262,60 @@ const MarginCallsSidebar = ({ onClose, isAuthenticated }) => {
   };
 
   return (
-    <div className="w-[260px] bg-white dark:bg-[#1e1e1e] h-full flex flex-col border-l border-[#cccccc] dark:border-[#333333] shadow-xl shrink-0 transition-colors">
+    <div 
+      ref={sidebarRef}
+      style={isFloating ? {
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+        zIndex: 50
+      } : {
+        width: size.width,
+      }}
+      className={`bg-white dark:bg-[#1e1e1e] flex flex-col shadow-xl transition-colors relative ${
+        isFloating ? 'border border-[#cccccc] dark:border-[#333333] rounded-sm' : 'h-full border-l border-[#cccccc] dark:border-[#333333] shrink-0'
+      }`}
+    >
+      {/* Resizing Handles */}
+      <div 
+        onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
+        className={`absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10 ${!isFloating ? '-ml-0.5' : ''}`}
+      />
+      {isFloating && (
+        <>
+          <div onMouseDown={(e) => handleResizeMouseDown(e, 'right')} className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10" />
+          <div onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')} className="absolute left-0 right-0 bottom-0 h-1 cursor-ns-resize hover:bg-blue-500/50 z-10" />
+          <div onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')} className="absolute right-0 bottom-0 w-3 h-3 cursor-nwse-resize hover:bg-blue-500/50 z-20" />
+        </>
+      )}
 
       {/* Header */}
-      <div className="h-6 bg-[#f0f0f0] dark:bg-[#252526] border-b border-[#cccccc] dark:border-[#333333] flex flex-col justify-end px-2 select-none transition-colors">
+      <div 
+        onMouseDown={handleHeaderMouseDown}
+        className={`h-6 bg-[#f0f0f0] dark:bg-[#252526] border-b border-[#cccccc] dark:border-[#333333] flex flex-col justify-end px-2 select-none transition-colors ${isFloating ? 'cursor-move' : ''}`}
+      >
         <div className="flex justify-between items-center text-black dark:text-gray-200 font-semibold text-[11px] pb-0.5">
           <span>Accounts {!loading && `(${accounts.length})`}</span>
           <div className="flex gap-1 items-center">
+            {/* Dock/Undock toggle button */}
+            <button
+               onClick={() => {
+                 if (!isFloating) {
+                   const rect = sidebarRef.current?.getBoundingClientRect();
+                   if (rect) {
+                     setPosition({ x: rect.left - 20, y: rect.top });
+                     setSize(prev => ({ ...prev, height: rect.height }));
+                   }
+                 }
+                 setIsFloating(!isFloating);
+               }}
+               title={isFloating ? "Dock to Right Sidebar" : "Undock to Floating Panel"}
+               className="hover:bg-blue-500 hover:text-white text-gray-600 dark:text-gray-400 p-0.5 rounded-sm transition-colors cursor-pointer border border-transparent"
+             >
+               {isFloating ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+            </button>
             {isAuthenticated && (
               <button
                 onClick={fetchAccounts}
