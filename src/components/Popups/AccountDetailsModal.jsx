@@ -6,8 +6,8 @@ const TABS = [
   'Profile', 'Subscriptions', 'Balance', 'Trade', 'History', 'Security'
 ];
 
-const AccountDetailsModal = ({ account, onClose }) => {
-  const [activeTab, setActiveTab] = useState('Overview');
+const AccountDetailsModal = ({ account, onClose, initialTab = 'Overview' }) => {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [accountData, setAccountData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

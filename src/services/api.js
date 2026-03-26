@@ -105,30 +105,30 @@ export const getPositions = async () => {
 
   return records.map(p => {
     let type = 'unknown';
-    if (p.Action === 0 || p.action === 0) type = 'buy';
+    if (typeof p.action === 'string') type = p.action.toLowerCase();
+    else if (p.Action === 0 || p.action === 0) type = 'buy';
     else if (p.Action === 1 || p.action === 1) type = 'sell';
-    else if (typeof p.Type === 'string') type = p.Type.toLowerCase();
-    else if (typeof p.type === 'string') type = p.type.toLowerCase();
 
-    let volume = p.Volume !== undefined ? p.Volume : (p.volume !== undefined ? p.volume : 0);
+    let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : 0));
     if (volume >= 100) volume = volume / 10000;
 
-    let reason = p.Reason !== undefined ? p.Reason : (p.reason !== undefined ? p.reason : 'Unknown');
-    if (reason === 1) reason = 'Client';
-    else if (reason === 2) reason = 'Expert';
-    else if (reason === 4) reason = 'Mobile';
-    else if (typeof reason === 'number') reason = `Reason ${reason}`;
+    let comment = p.comment !== undefined ? p.comment : (p.reason !== undefined ? p.reason : 'Unknown');
 
     return {
-      login: String(p.Login || p.login || ''),
-      position: p.Position || p.ticket || p.position || 0,
-      symbol: p.Symbol || p.symbol || '',
+      position: p.positionTicket || p.Position || p.ticket || p.position || 0,
+      login: String(p.login || p.Login || ''),
+      name: p.accountName || p.AccountName || '',
+      email: p.username || p.Username || '',
+      symbol: p.symbol || p.Symbol || '',
       type,
       volume,
-      priceOpen: p.PriceOpen || p.priceOpen || p.Price || p.price || 0,
-      priceCurrent: p.PriceCurrent || p.priceCurrent || 0,
-      reason: String(reason),
-      swap: p.Storage || p.swap || p.Swap || 0,
+      priceOpen: p.priceOpen || p.PriceOpen || p.Price || p.price || 0,
+      priceCurrent: p.priceCurrent || p.PriceCurrent || 0,
+      priceSl: p.priceSl || 0,
+      priceTp: p.priceTp || 0,
+      profit: p.profit || 0,
+      comment: String(comment),
+      swap: p.storage || p.Storage || p.swap || p.Swap || 0,
     };
   });
 };

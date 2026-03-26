@@ -32,6 +32,7 @@ const ToolButton = ({ icon: Icon, text, colorClass = "text-[#666666]", disabled,
 import CustomizeToolbarModal from './Popups/CustomizeToolbarModal';
 import NewAccountModal from './Popups/NewAccountModal';
 import AccountLimitModal from './Popups/AccountLimitModal';
+import MarketData from './Popups/MarketData';
 
 const ToolSeparator = () => (
   <div className="h-5 w-px bg-[#cccccc] dark:bg-[#404040] mx-[3px] transition-colors"></div>
@@ -41,6 +42,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
   const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
+  const [isMarketDataOpen, setIsMarketDataOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleReload = () => window.location.reload();
@@ -82,7 +84,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
           <Users size={16} className="text-blue-500" strokeWidth={1.5} fill="currentColor" />
         </button>
 
-        <ToolButton icon={ArrowUpDown} colorClass="text-green-600" />
+        <ToolButton icon={ArrowUpDown} colorClass="text-green-600" onClick={() => setIsMarketDataOpen(!isMarketDataOpen)} />
         <ToolButton icon={BarChart2} colorClass="text-blue-500" onClick={() => navigate('/analytics/trading-accounts')} />
         <ToolButton icon={AppWindow} colorClass="text-blue-500" onClick={handleFullscreen} />
         <ToolButton icon={ArrowUpRight} colorClass="text-blue-500" />
@@ -189,6 +191,11 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
       <AccountLimitModal
         isOpen={isAccountLimitModalOpen}
         onClose={() => setIsAccountLimitModalOpen(false)}
+      />
+
+      <MarketData
+        isOpen={isMarketDataOpen}
+        onClose={() => setIsMarketDataOpen(false)}
       />
     </>
   );
