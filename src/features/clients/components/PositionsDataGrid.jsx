@@ -31,6 +31,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
+  const [activeAccountTicket, setActiveAccountTicket] = useState(null);
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
@@ -123,7 +124,10 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                 <tr
                   key={rowKey}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
-                  onDoubleClick={() => setActiveAccountDetailsId(row.login)}
+                  onDoubleClick={() => {
+                    setActiveAccountDetailsId(row.login);
+                    setActiveAccountTicket(row.position);
+                  }}
                   className={`border-b border-gray-100 dark:border-[#333333] h-7 cursor-pointer transition-colors
                     ${selectedRow === rowKey
                       ? 'bg-blue-100 dark:bg-blue-900/30'
@@ -194,8 +198,12 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
       {activeAccountDetailsId && (
         <AccountDetailsModal
           account={activeAccountDetailsId}
+          targetTicket={activeAccountTicket}
           initialTab="Trade"
-          onClose={() => setActiveAccountDetailsId(null)}
+          onClose={() => {
+            setActiveAccountDetailsId(null);
+            setActiveAccountTicket(null);
+          }}
         />
       )}
     </div>

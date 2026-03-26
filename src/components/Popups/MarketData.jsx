@@ -3,8 +3,14 @@ import { X, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 
 const MarketData = ({ isOpen, onClose }) => {
   const popupRef = useRef(null);
-  const [position, setPosition] = useState({ x: 100, y: 100 });
-  const [size, setSize] = useState({ width: 600, height: 500 });
+  const initialWidth = Math.min(600, window.innerWidth - 40);
+  const initialHeight = Math.min(500, window.innerHeight - 40);
+
+  const [position, setPosition] = useState({
+    x: Math.max(0, (window.innerWidth - initialWidth) / 2),
+    y: Math.max(0, (window.innerHeight - initialHeight) / 2)
+  });
+  const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
   const [activeTab, setActiveTab] = useState('Symbols');
   const [liveQuotes, setLiveQuotes] = useState([]);
 
@@ -116,16 +122,24 @@ const MarketData = ({ isOpen, onClose }) => {
       clearTimeout(reconnectTimeout);
       if (ws) {
         ws.onclose = null;
-        ws.close();
+        ws.onerror = null;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          ws.onopen = () => ws.close();
+        }
       }
     };
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
+      const iw = Math.min(600, window.innerWidth - 40);
+      const ih = Math.min(500, window.innerHeight - 40);
+      setSize({ width: iw, height: ih });
       setPosition({
-        x: Math.max(0, (window.innerWidth - 600) / 2),
-        y: Math.max(0, (window.innerHeight - 500) / 2)
+        x: Math.max(0, (window.innerWidth - iw) / 2),
+        y: Math.max(0, (window.innerHeight - ih) / 2)
       });
     }
   }, [isOpen]);

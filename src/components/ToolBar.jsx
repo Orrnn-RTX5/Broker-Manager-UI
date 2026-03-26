@@ -33,6 +33,7 @@ import CustomizeToolbarModal from './Popups/CustomizeToolbarModal';
 import NewAccountModal from './Popups/NewAccountModal';
 import AccountLimitModal from './Popups/AccountLimitModal';
 import MarketData from './Popups/MarketData';
+import AccountDetailsModal from './Popups/AccountDetailsModal';
 
 const ToolSeparator = () => (
   <div className="h-5 w-px bg-[#cccccc] dark:bg-[#404040] mx-[3px] transition-colors"></div>
@@ -43,9 +44,17 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
   const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
   const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
   const [isMarketDataOpen, setIsMarketDataOpen] = useState(false);
+  const [searchLoginId, setSearchLoginId] = useState('');
+  const [activeSearchedAccount, setActiveSearchedAccount] = useState(null);
   const navigate = useNavigate();
 
   const handleReload = () => window.location.reload();
+  const handleSearchAccount = () => {
+    if (searchLoginId.trim()) {
+      setActiveSearchedAccount(searchLoginId.trim());
+      setSearchLoginId('');
+    }
+  };
   const handleCopy = () => navigator.clipboard.writeText(window.location.href);
   const handlePrint = () => window.print();
   const handleFullscreen = () => {
@@ -167,9 +176,13 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
           <div className="flex items-center ml-1 bg-white dark:bg-[#1e1e1e] border border-[#cccccc] dark:border-[#404040] h-[22px] w-48 focus-within:border-blue-500 rounded-sm transition-colors">
             <input
               type="text"
+              value={searchLoginId}
+              onChange={(e) => setSearchLoginId(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearchAccount()}
+              placeholder="Search login id..."
               className="h-full w-full px-1.5 text-[12px] text-black dark:text-gray-200 focus:outline-none bg-transparent"
             />
-            <div className="px-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2d2d30] h-full flex items-center transition-colors">
+            <div onClick={handleSearchAccount} className="px-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2d2d30] h-full flex items-center transition-colors hover:text-blue-500">
               <Search size={13} className="text-gray-500 dark:text-gray-400" />
             </div>
           </div>
@@ -197,6 +210,14 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
         isOpen={isMarketDataOpen}
         onClose={() => setIsMarketDataOpen(false)}
       />
+
+      {activeSearchedAccount && (
+        <AccountDetailsModal
+          account={activeSearchedAccount}
+          onClose={() => setActiveSearchedAccount(null)}
+          initialTab="Overview"
+        />
+      )}
     </>
   );
 };
