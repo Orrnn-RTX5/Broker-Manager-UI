@@ -329,15 +329,17 @@ const MarketData = ({ isOpen, onClose }) => {
                  isChangeUp = changeCalc >= 0;
                }
 
+               const formatVal = (val) => (!isNaN(val) && val !== null && val !== undefined && val !== '') ? Number(val).toFixed(2) : '-';
+
                const detailsData = [
-                 { label: 'Bid', value: quote.bid || '-', isUp: quote.dir === 'up' },
-                 { label: 'Ask', value: quote.ask || '-', isUp: quote.dir === 'up' },
-                 { label: 'Bid High', value: session.high_bid || '-' },
-                 { label: 'Bid Low', value: session.low_bid || '-' },
-                 { label: 'Ask High', value: session.high_ask || '-' },
-                 { label: 'Ask Low', value: session.low_ask || '-' },
-                 { label: 'Open Price', value: quote.daily_open || '-' },
-                 { label: 'Close Price', value: quote.previous_close || '-' },
+                 { label: 'Bid', value: formatVal(quote.bid), isUp: quote.dir === 'up' },
+                 { label: 'Ask', value: formatVal(quote.ask), isUp: quote.dir === 'up' },
+                 { label: 'Bid High', value: formatVal(session.high_bid) },
+                 { label: 'Bid Low', value: formatVal(session.low_bid) },
+                 { label: 'Ask High', value: formatVal(session.high_ask) },
+                 { label: 'Ask Low', value: formatVal(session.low_ask) },
+                 { label: 'Open Price', value: formatVal(quote.daily_open) },
+                 { label: 'Previous Close', value: formatVal(quote.previous_close) },
                  { label: 'Daily Change', value: dailyChange, isUp: isChangeUp }
                ];
 

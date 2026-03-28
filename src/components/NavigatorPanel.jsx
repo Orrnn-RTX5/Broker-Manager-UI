@@ -165,7 +165,7 @@ const NavigatorPanel = ({ isOpen, onClose }) => {
                 <TreeNode label="Clients" count="339" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients'); }} />
                 <TreeNode label="Trading Accounts" count="9 740" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/trading-accounts'); }} />
                 <TreeNode label="Positions" count="1 763" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/positions'); }} />
-                <TreeNode label="Orders" count="130" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/analytics/open-orders'); }} />
+                <TreeNode label="Orders" count="130" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/orders'); }} />
               </TreeNode>
 
               <TreeNode label="Payments" icon={CreditCard} iconColor="text-blue-500" defaultExpanded>

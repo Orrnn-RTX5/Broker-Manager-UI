@@ -174,8 +174,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [liveMetrics, setLiveMetrics] = useState(null);
 
+  // Since the user is passing either an Account Object or just an integer Login ID, we handle both.
+  const loginId = typeof account === 'object' ? account.login : account;
+
   useEffect(() => {
-    if (!account) return;
+    if (!loginId) return;
 
     let ws;
     let reconnectTimeout;
@@ -184,8 +187,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const token = localStorage.getItem('authToken');
       if (!token) return;
 
-      console.log(`[Metrics WS] Connecting to: ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${account}`);
-      ws = new WebSocket(`ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${account}`);
+      console.log(`[Metrics WS] Connecting to: ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${loginId}`);
+      ws = new WebSocket(`ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${loginId}`);
 
       ws.onopen = () => {
         console.log(`[Metrics WS] Connected successfully for account ${account}`);
@@ -207,12 +210,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           }
 
           if (Array.isArray(payload)) {
-            updateObj = payload.find(m => m.login == account || m.login === undefined);
+            updateObj = payload.find(m => m.login == loginId || m.login === undefined);
           } else {
             updateObj = payload;
           }
 
-          if (updateObj && (updateObj.login == account || updateObj.login === undefined)) {
+          if (updateObj && (updateObj.login == loginId || updateObj.login === undefined)) {
             if (updateObj.balance !== undefined || updateObj.equity !== undefined || updateObj.floating_pnl !== undefined || updateObj.total_swap !== undefined) {
               setLiveMetrics(prev => prev ? { ...prev, ...updateObj } : updateObj);
             }
@@ -240,7 +243,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         }
       }
     };
-  }, [account]);
+  }, [loginId]);
 
   useEffect(() => {
     tradeSymbolRef.current = modalTradeSymbol;
@@ -307,7 +310,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   useEffect(() => {
     if (liveMetrics) {
-      console.log(`[AccountDetailsModal ${account}] NEW LIVE METRICS TICK:`, {
+      console.log(`[AccountDetailsModal ${loginId}] NEW LIVE METRICS TICK:`, {
         balance: liveMetrics.balance,
         equity: liveMetrics.equity,
         margin: liveMetrics.used_margin,
@@ -317,7 +320,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         swap: liveMetrics.total_swap
       });
     }
-  }, [liveMetrics, account]);
+  }, [liveMetrics, loginId]);
 
   const handleModifySLTP = (pos) => {
     setSelectedTicketRow(pos);
@@ -368,9 +371,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   if (!account) return null;
-
-  // Since the user is passing either an Account Object or just an integer Login ID, we handle both.
-  const loginId = typeof account === 'object' ? account.login : account;
 
   useEffect(() => {
     if (!loginId) return;
@@ -806,9 +806,17 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
                   {/* Summary Footer */}
                   <div className="bg-[#3e3e42] mt-auto">
-                    <div className="p-1 px-2 flex items-center gap-1.5 text-gray-900 dark:text-white text-[12px] font-bold font-sans border-b border-[#333]">
-                      <PlusSquare size={10} className="text-gray-700 dark:text-gray-300" />
-                      Balance: {balanceVal} {currencyValue} <span className="font-normal opacity-80 mx-1">Equity:</span> {equityVal} <span className="font-normal opacity-80 mx-1">Margin:</span> {marginVal} <span className="font-normal opacity-80 mx-1">Free Margin:</span> {freeMarginVal}
+                    <div className="flex border-b border-[#333] text-[12px] font-bold font-sans">
+                      <div className="flex-1 p-1 px-2 flex items-center gap-1.5 text-gray-900 dark:text-white">
+                        <PlusSquare size={10} className="text-gray-700 dark:text-gray-300" />
+                        Balance: {balanceVal} {currencyValue} <span className="font-normal opacity-80 mx-1">Equity:</span> {equityVal} <span className="font-normal opacity-80 mx-1">Margin:</span> {marginVal} <span className="font-normal opacity-80 mx-1">Free Margin:</span> {freeMarginVal}
+                      </div>
+                      <div className="w-[80px] p-1 px-2 text-right">
+                        {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
+                      </div>
+                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(liveMetrics?.floating_pnl ?? activeData.profit ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : (activeData.profit !== undefined ? formatNumber(activeData.profit) : '0.00')}
+                      </div>
                     </div>
                     <div className="p-1 px-6 text-[12px] font-bold font-sans text-gray-900 dark:text-white">
                       <span className="font-normal opacity-80 mr-1">Margin Level:</span> {marginLevelVal} %

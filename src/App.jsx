@@ -14,6 +14,7 @@ import ClientsDashboard from './features/clients/ClientsDashboard';
 import OnlineUsersPage from './features/clients/OnlineUsersPage';
 import TradingAccountsPage from './features/clients/TradingAccountsPage';
 import PositionsPage from './features/clients/PositionsPage';
+import OrdersPage from './features/clients/OrdersPage';
 import GroupsPage from './features/groups/GroupsPage';
 import GroupDetailsPage from './features/groups/GroupDetailsPage';
 
@@ -74,10 +75,9 @@ function App() {
             <Route path="/clients/online-users" element={<OnlineUsersPage />} />
             <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
             <Route path="/clients/positions" element={<PositionsPage />} />
+            <Route path="/clients/orders" element={<OrdersPage />} />
             <Route path="/groups" element={<GroupsPage />} />
-            <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
             <Route path="/positions" element={<PlaceholderPage title="Live Positions Grid (Ag-Grid)" />} />
-            <Route path="/orders" element={<PlaceholderPage title="Order Management System" />} />
             <Route path="/settings" element={<PlaceholderPage title="Global Server Configuration" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

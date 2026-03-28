@@ -142,6 +142,57 @@ export const getOpenOrders = async () => {
   throw new Error('API not yet integrated');
 };
 
+export const getOrders = async () => {
+  const token = localStorage.getItem('authToken');
+  if (!token) throw new Error('No authentication token found');
+
+  const url = `http://69.197.178.27/manager/BrokerOrders?limit=100&offset=0&id=${token}`;
+  const res = await fetch(url, {
+    headers: { 'accept': 'application/json' }
+  });
+
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
+  }
+
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+
+  const records = Array.isArray(data) ? data : data.answer || [];
+
+  return records.map(p => {
+    let type = 'unknown';
+    if (typeof p.type === 'string') type = p.type.toLowerCase();
+    else if (p.type === 0) type = 'buy';
+    else if (p.type === 1) type = 'sell';
+
+    let volume = p.volume !== undefined ? p.volume : 0;
+    if (volume >= 100) volume = volume / 10000;
+
+    return {
+      ticket: p.ticket || 0,
+      login: String(p.login || ''),
+      name: p.accountName || p.username || '', // Map name to schema appropriately
+      email: p.username || '',
+      group: p.accountGroup || '',
+      symbol: p.symbol || '',
+      type,
+      side: p.side || '',
+      volume,
+      priceOpen: p.priceOpen || 0,
+      priceSl: p.priceSl || 0,
+      priceTp: p.priceTp || 0,
+      status: p.status || '',
+      timeSetup: p.timeSetup || 0,
+      timeDone: p.timeDone || 0,
+      comment: String(p.comment || ''),
+    };
+  });
+};
+
 export const getOpenPositions = async () => {
   throw new Error('API not yet integrated');
 };
@@ -157,6 +208,7 @@ export default {
   getPositions,
   getTradingAccountsAnalytics,
   getOpenOrders,
+  getOrders,
   getOpenPositions,
   getAdvertisingCampaigns,
 };
