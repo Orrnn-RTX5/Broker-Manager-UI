@@ -1,16 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 
-const MarketData = ({ isOpen, onClose }) => {
-  const popupRef = useRef(null);
-  const initialWidth = Math.min(600, window.innerWidth - 40);
-  const initialHeight = Math.min(500, window.innerHeight - 40);
-
-  const [position, setPosition] = useState({
-    x: Math.max(0, (window.innerWidth - initialWidth) / 2),
-    y: Math.max(0, (window.innerHeight - initialHeight) / 2)
-  });
-  const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
+const MarketData = () => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [liveQuotes, setLiveQuotes] = useState([]);
 
@@ -25,8 +16,6 @@ const MarketData = ({ isOpen, onClose }) => {
   }, [selectedSymbol]);
 
   useEffect(() => {
-    if (!isOpen) return;
-
     let ws;
     let reconnectTimeout;
 
@@ -130,108 +119,10 @@ const MarketData = ({ isOpen, onClose }) => {
         }
       }
     };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen) {
-      const iw = Math.min(600, window.innerWidth - 40);
-      const ih = Math.min(500, window.innerHeight - 40);
-      setSize({ width: iw, height: ih });
-      setPosition({
-        x: Math.max(0, (window.innerWidth - iw) / 2),
-        y: Math.max(0, (window.innerHeight - ih) / 2)
-      });
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  const handleHeaderMouseDown = (e) => {
-    if (e.target.closest('button')) return;
-    e.preventDefault();
-    let startX = e.clientX;
-    let startY = e.clientY;
-    let startPosX = position.x;
-    let startPosY = position.y;
-
-    const handleMouseMove = (moveEvent) => {
-      setPosition({
-        x: startPosX + (moveEvent.clientX - startX),
-        y: startPosY + (moveEvent.clientY - startY),
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = '';
-    };
-
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-
-  const handleResizeMouseDown = (e, edge) => {
-    e.preventDefault();
-    e.stopPropagation();
-    let startX = e.clientX;
-    let startY = e.clientY;
-    let startWidth = size.width;
-    let startHeight = size.height;
-    let startPosX = position.x;
-    let startPosY = position.y;
-
-    const handleMouseMove = (moveEvent) => {
-      let dx = moveEvent.clientX - startX;
-      let dy = moveEvent.clientY - startY;
-
-      if (edge === 'right') {
-        setSize(prev => ({ ...prev, width: Math.max(300, startWidth + dx) }));
-      } else if (edge === 'bottom') {
-        setSize(prev => ({ ...prev, height: Math.max(200, startHeight + dy) }));
-      } else if (edge === 'bottom-right') {
-        setSize(prev => ({ 
-          width: Math.max(300, startWidth + dx),
-          height: Math.max(200, startHeight + dy)
-        }));
-      } else if (edge === 'left') {
-        let newWidth = Math.max(300, startWidth - dx);
-        let actualDx = startWidth - newWidth;
-        setSize(prev => ({ ...prev, width: newWidth }));
-        setPosition(prev => ({ ...prev, x: startPosX - actualDx }));
-      }
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    if (edge === 'left' || edge === 'right') document.body.style.cursor = 'ew-resize';
-    else if (edge === 'bottom') document.body.style.cursor = 'ns-resize';
-    else if (edge === 'bottom-right') document.body.style.cursor = 'nwse-resize';
-    document.body.style.userSelect = 'none';
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
+  }, []);
 
   return (
-    <div 
-      ref={popupRef}
-      style={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        width: size.width,
-        height: size.height,
-        zIndex: 1000
-      }}
-      className="bg-[#1e1e1e] flex flex-col shadow-2xl border border-[#333333] rounded-sm text-gray-200 font-mono"
-    >
+    <div className="bg-[#1e1e1e] flex flex-col h-full w-full text-gray-200 font-mono">
       <style>{`
         @keyframes flashTextUp {
           0% { color: #ffffff; text-shadow: 0 0 8px rgba(59, 130, 246, 0.8); }
@@ -244,21 +135,6 @@ const MarketData = ({ isOpen, onClose }) => {
         .flash-up { animation: flashTextUp 0.8s ease-out forwards; }
         .flash-down { animation: flashTextDown 0.8s ease-out forwards; }
       `}</style>
-      <div onMouseDown={(e) => handleResizeMouseDown(e, 'left')} className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10 -ml-0.5" />
-      <div onMouseDown={(e) => handleResizeMouseDown(e, 'right')} className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10" />
-      <div onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')} className="absolute left-0 right-0 bottom-0 h-1 cursor-ns-resize hover:bg-blue-500/50 z-10" />
-      <div onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')} className="absolute right-0 bottom-0 w-3 h-3 cursor-nwse-resize hover:bg-blue-500/50 z-20" />
-
-      {/* Header */}
-      <div 
-        onMouseDown={handleHeaderMouseDown}
-        className="h-7 bg-[#252526] border-b border-[#333333] flex items-center justify-between px-2 cursor-move select-none"
-      >
-        <span className="text-[12px] font-semibold text-gray-200">Market Watch: {new Date().toLocaleTimeString([], {hour12:false})}</span>
-        <button onClick={onClose} className="hover:bg-red-500 hover:text-white text-gray-400 p-0.5 rounded-sm transition-colors cursor-pointer">
-          <X size={14} />
-        </button>
-      </div>
 
       {/* Body */}
       <div className="flex-1 overflow-hidden flex flex-col bg-[#1e1e1e]">

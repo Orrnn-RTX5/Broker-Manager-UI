@@ -22,7 +22,9 @@ export default function DockLayout({ panelContents = {} }) {
 
   const visiblePanels = Object.values(panels).filter(p => p.visible);
 
-  const get = (pos) => visiblePanels.filter(p => p.position === pos);
+  const get = (pos) => visiblePanels
+    .filter(p => p.position === pos)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const topPanels    = get(DOCK_POSITIONS.TOP);
   const bottomPanels = get(DOCK_POSITIONS.BOTTOM);
@@ -42,11 +44,20 @@ export default function DockLayout({ panelContents = {} }) {
 
       {/* Middle row */}
       <div className={styles.middle}>
-        {leftPanels.map(p => (
-          <DockPanel key={p.id} id={p.id}>
-            {panelContents[p.id]}
-          </DockPanel>
-        ))}
+        {leftPanels.length > 0 && (
+          <div className={styles.sideColumn}>
+            {leftPanels.map((p, index) => (
+              <DockPanel 
+                key={p.id} 
+                id={p.id}
+                canMoveUp={index > 0}
+                canMoveDown={index < leftPanels.length - 1}
+              >
+                {panelContents[p.id]}
+              </DockPanel>
+            ))}
+          </div>
+        )}
 
         <div className={styles.centerArea}>
           {centerPanels.map(p => (
@@ -56,11 +67,20 @@ export default function DockLayout({ panelContents = {} }) {
           ))}
         </div>
 
-        {rightPanels.map(p => (
-          <DockPanel key={p.id} id={p.id}>
-            {panelContents[p.id]}
-          </DockPanel>
-        ))}
+        {rightPanels.length > 0 && (
+          <div className={styles.sideColumn}>
+            {rightPanels.map((p, index) => (
+              <DockPanel 
+                key={p.id} 
+                id={p.id}
+                canMoveUp={index > 0}
+                canMoveDown={index < rightPanels.length - 1}
+              >
+                {panelContents[p.id]}
+              </DockPanel>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bottom strip */}

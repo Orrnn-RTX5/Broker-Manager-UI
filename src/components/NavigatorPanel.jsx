@@ -158,7 +158,7 @@ const NavigatorPanel = () => {
 
               <TreeNode label="Ultency Matching Engine" icon={Target} iconColor="text-purple-500" />
               <TreeNode label="Subscriptions" icon={RefreshCw} iconColor="text-green-500" />
-              <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" />
+              <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigate('/dealing')} />
               <TreeNode label="Leverages" icon={Percent} iconColor="text-green-500" />
               <TreeNode label="Groups" count={groupsLoading ? '...' : (groups?.length || 0).toString()} icon={Users2} iconColor="text-blue-500" onClickNode={() => navigate('/groups')}>
                 {groups?.map(g => (

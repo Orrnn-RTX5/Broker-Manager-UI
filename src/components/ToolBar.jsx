@@ -10,10 +10,11 @@ import {
   ArrowRightToLine, Cpu, HelpCircle, MoreVertical, LogOut, Users, Info
 } from 'lucide-react';
 
-const ToolButton = ({ icon: Icon, text, colorClass = "text-[#666666]", disabled, hasDropdown, onClick }) => {
+const ToolButton = ({ icon: Icon, text, colorClass = "text-[#666666]", disabled, hasDropdown, onClick, title }) => {
   return (
     <button
       onClick={disabled ? undefined : onClick}
+      title={title}
       className={`
         flex items-center gap-1 p-1 h-[26px] rounded-[2px] border border-transparent select-none transition-colors
         ${disabled
@@ -39,11 +40,10 @@ const ToolSeparator = () => (
   <div className="h-5 w-px bg-[#cccccc] dark:bg-[#404040] mx-[3px] transition-colors"></div>
 );
 
-const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSidebarOpen, onLogout }) => {
+const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSidebarOpen, toggleMarketData, resetLayout, onLogout }) => {
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
   const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
-  const [isMarketDataOpen, setIsMarketDataOpen] = useState(false);
   const [searchLoginId, setSearchLoginId] = useState('');
   const [activeSearchedAccount, setActiveSearchedAccount] = useState(null);
   const navigate = useNavigate();
@@ -93,7 +93,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
           <Users size={16} className="text-blue-500" strokeWidth={1.5} fill="currentColor" />
         </button>
 
-        <ToolButton icon={ArrowUpDown} colorClass="text-green-600" onClick={() => setIsMarketDataOpen(!isMarketDataOpen)} />
+        <ToolButton icon={ArrowUpDown} colorClass="text-green-600" onClick={toggleMarketData} />
         <ToolButton icon={BarChart2} colorClass="text-blue-500" onClick={() => navigate('/analytics/trading-accounts')} />
         <ToolButton icon={AppWindow} colorClass="text-blue-500" onClick={handleFullscreen} />
         <ToolButton icon={ArrowUpRight} colorClass="text-blue-500" />
@@ -146,7 +146,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
         <ToolSeparator />
 
         {/* Grid/Layout Group */}
-        <ToolButton icon={LayoutGrid} colorClass="text-blue-500" />
+        <ToolButton icon={LayoutGrid} colorClass="text-blue-500" onClick={resetLayout} title="Reset Default Layout" />
 
         <ToolSeparator />
 
@@ -204,11 +204,6 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
       <AccountLimitModal
         isOpen={isAccountLimitModalOpen}
         onClose={() => setIsAccountLimitModalOpen(false)}
-      />
-
-      <MarketData
-        isOpen={isMarketDataOpen}
-        onClose={() => setIsMarketDataOpen(false)}
       />
 
       {activeSearchedAccount && (

@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
 import styles from './DockPanel.module.css';
@@ -8,10 +9,11 @@ const RESIZE_HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 // Minimum drag distance (px) before a drag is considered intentional
 const DRAG_THRESHOLD = 8;
 
-export default function DockPanel({ id, children }) {
+export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
   const {
     panels, updatePanel, dockPanel, bringToFront,
     closePanel, floatPanel, draggingId, setDraggingId,
+    movePanelInZone,
   } = useDockingContext();
   const panel = panels[id];
 
@@ -175,6 +177,24 @@ export default function DockPanel({ id, children }) {
         <span className={styles.panelIcon}>{panel.icon}</span>
         <span className={styles.titleText}>{panel.title}</span>
         <div className={styles.titleActions}>
+          {canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+            <button
+              className={styles.titleBtn}
+              title="Move Up"
+              onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, -1); }}
+            >
+              <ChevronUp size={14} />
+            </button>
+          )}
+          {canMoveDown && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+            <button
+              className={styles.titleBtn}
+              title="Move Down"
+              onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, 1); }}
+            >
+              <ChevronDown size={14} />
+            </button>
+          )}
           {!isFloat && (
             <button
               className={styles.titleBtn}

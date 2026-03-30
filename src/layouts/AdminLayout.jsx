@@ -3,6 +3,7 @@ import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
 import MarginCallsSidebar from '../components/MarginCallsSidebar';
+import MarketData from '../components/Popups/MarketData';
 import useThemeStore from '../store/themeStore';
 
 import { DockingProvider } from '../components/docking/index.js';
@@ -13,6 +14,7 @@ import { useDockingContext } from '../components/docking/DockingContext';
 const PANEL_NAVIGATOR  = 'navigator';
 const PANEL_WORKSPACE  = 'workspace';
 const PANEL_ACCOUNTS   = 'accounts';
+const PANEL_MARKET_DATA= 'market_data';
 
 // ─── Initial panel configuration ─────────────────────────────────────────────
 const INITIAL_PANELS = {
@@ -36,12 +38,19 @@ const INITIAL_PANELS = {
     visible: true,
     size: { width: 280, height: '100%' },
   },
+  [PANEL_MARKET_DATA]: {
+    title: 'Market Watch',
+    icon: '📈',
+    defaultPosition: 'float',
+    visible: false,
+    size: { width: 600, height: 500 },
+  },
 };
 
 // ─── Inner layout (needs docking context) ────────────────────────────────────
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
-  const { togglePanel, panels } = useDockingContext();
+  const { togglePanel, panels, resetLayout } = useDockingContext();
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
@@ -59,6 +68,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     ),
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
     [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
+    [PANEL_MARKET_DATA]: <MarketData />,
   };
 
   return (
@@ -74,6 +84,8 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         isSidebarOpen={isNavigatorOpen}
         toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
         isRightSidebarOpen={isAccountsOpen}
+        toggleMarketData={() => togglePanel(PANEL_MARKET_DATA)}
+        resetLayout={resetLayout}
         onLogout={onLogout}
       />
 

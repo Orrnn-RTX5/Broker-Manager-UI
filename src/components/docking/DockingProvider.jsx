@@ -18,12 +18,10 @@ import { useDocking } from './useDocking';
  *   }
  */
 export default function DockingProvider({ children, initialPanels = {} }) {
-  const docking = useDocking();
+  const docking = useDocking(initialPanels);
 
   useEffect(() => {
-    Object.entries(initialPanels).forEach(([id, config]) => {
-      docking.registerPanel(id, config);
-    });
+    docking.resetLayout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

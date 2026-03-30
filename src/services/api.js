@@ -193,6 +193,50 @@ export const getOrders = async () => {
   });
 };
 
+export const getBrokerDeals = async () => {
+  const token = localStorage.getItem('authToken');
+  if (!token) throw new Error('No authentication token found');
+
+  const url = `http://69.197.178.27/manager/BrokerDeals?limit=100&offset=0&id=${token}`;
+  const res = await fetch(url, {
+    headers: { 'accept': 'application/json' }
+  });
+
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
+  }
+
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+
+  const records = Array.isArray(data) ? data : data.answer || [];
+
+  return records.map(p => {
+    return {
+      ticket: p.ticket || 0,
+      orderTicket: p.orderTicket || 0,
+      login: String(p.login || ''),
+      username: p.username || '',
+      accountName: p.accountName || '',
+      accountGroup: p.accountGroup || '',
+      symbol: p.symbol || '',
+      action: p.action || '',
+      entry: p.entry || '',
+      volume: p.volume !== undefined ? p.volume : 0,
+      price: p.price || 0,
+      profit: p.profit || 0,
+      commission: p.commission || 0,
+      swap: p.swap || 0,
+      fee: p.fee || 0,
+      time: p.time || 0,
+      comment: String(p.comment || ''),
+    };
+  });
+};
+
 export const getOpenPositions = async () => {
   throw new Error('API not yet integrated');
 };
@@ -209,6 +253,7 @@ export default {
   getTradingAccountsAnalytics,
   getOpenOrders,
   getOrders,
+  getBrokerDeals,
   getOpenPositions,
   getAdvertisingCampaigns,
 };

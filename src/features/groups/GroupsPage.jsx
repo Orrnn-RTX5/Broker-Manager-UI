@@ -114,8 +114,8 @@ const GroupsPage = () => {
           onClick={handleActiveGroupsFilter}
           disabled={isFiltering}
           className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium rounded-sm transition-colors h-[24px] disabled:opacity-50 ${activeGroupsData
-              ? 'bg-blue-600 hover:bg-blue-700 text-white'
-              : 'bg-gray-200 dark:bg-[#2d2d30] hover:bg-gray-300 dark:hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200'
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-gray-200 dark:bg-[#2d2d30] hover:bg-gray-300 dark:hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200'
             }`}
         >
           {isFiltering ? <Loader size={12} className="animate-spin" /> : <Filter size={12} />}

@@ -99,10 +99,10 @@ const GroupDetailsPage = () => {
     <div className={`flex items-center px-2 py-0.5 transition-colors ${highlight ? 'bg-blue-50 dark:bg-[#003366]' : 'hover:bg-[#e6e6e6] dark:hover:bg-[#2a2a2b]'}`}>
       <span className="text-[11px] text-gray-600 dark:text-gray-400 w-[160px] shrink-0">{label}</span>
       <span className={`text-[11px] font-sans truncate ${highlight ? 'text-blue-700 dark:text-blue-300 font-bold' : 'text-gray-900 dark:text-gray-200'}`}>
-        {type === 'boolean' ? (value ? 'Enabled' : 'Disabled') : 
-         type === 'array' ? (value && value.length > 0 ? value.join(', ') : 'None') : 
-         type === 'date' ? new Date(value * 1000).toLocaleString() :
-         value}
+        {type === 'boolean' ? (value ? 'Enabled' : 'Disabled') :
+          type === 'array' ? (value && value.length > 0 ? value.join(', ') : 'None') :
+            type === 'date' ? new Date(value * 1000).toLocaleString() :
+              value}
       </span>
     </div>
   );
@@ -124,10 +124,10 @@ const GroupDetailsPage = () => {
 
   return (
     <div className="p-4 w-full h-full flex flex-col overflow-y-auto bg-[#f8f9fa] dark:bg-[#1e1e1e]">
-      
+
       {/* Header Overlay */}
       <div className="flex items-center gap-3 pb-2 mb-3 border-b border-[#a0a0a0] dark:border-[#333333]">
-        <button 
+        <button
           onClick={() => navigate('/groups')}
           className="p-1 hover:bg-[#d4d0c8] dark:hover:bg-[#2d2d30] text-gray-600 dark:text-gray-300 border border-transparent hover:border-[#a0a0a0] dark:hover:border-[#555]"
         >
@@ -181,11 +181,11 @@ const GroupDetailsPage = () => {
         </GroupBox>
 
         {/* Group Statistics */}
-        <GroupBox 
-          title="Group Statistics" 
+        <GroupBox
+          title="Group Statistics"
           icon={BarChart}
           extra={
-            <button 
+            <button
               onClick={() => setShowMoveInput(!showMoveInput)}
               className="p-0.5 hover:bg-[#a0a0a0] dark:hover:bg-[#3e3e42] text-gray-700 dark:text-gray-300 transition-colors cursor-pointer border border-transparent hover:border-[#555]"
               title="Shift Accounts to Another Group"
@@ -198,14 +198,14 @@ const GroupDetailsPage = () => {
             <div className="mb-2 flex flex-col gap-1.5 bg-[#f0f0f0] dark:bg-[#252526] p-2 border border-[#a0a0a0] dark:border-[#333333]">
               <span className="text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-widest">Move accounts to:</span>
               <div className="flex items-center gap-1.5">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Target Group"
                   value={toGroupInput}
                   onChange={(e) => setToGroupInput(e.target.value)}
                   className="flex-1 bg-white dark:bg-[#1e1e1e] border border-[#a0a0a0] dark:border-[#555] px-1.5 h-[20px] text-[11px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 rounded-none"
                 />
-                <button 
+                <button
                   onClick={handleMoveAccounts}
                   disabled={isMoving || !toGroupInput}
                   className="bg-[#d4d0c8] dark:bg-[#333333] hover:bg-[#e6e6e6] dark:hover:bg-[#3e3e42] border border-[#a0a0a0] dark:border-[#555] text-[11px] text-gray-900 dark:text-gray-200 px-3 h-[20px] disabled:opacity-50 transition-colors rounded-none"
@@ -215,7 +215,7 @@ const GroupDetailsPage = () => {
               </div>
             </div>
           )}
-          
+
           {statsLoading ? (
             <div className="text-[11px] text-gray-500 py-3 flex items-center gap-2 px-2">
               <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -236,7 +236,7 @@ const GroupDetailsPage = () => {
           )}
         </GroupBox>
       </div>
-      
+
     </div>
   );
 };

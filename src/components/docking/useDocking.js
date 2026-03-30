@@ -20,10 +20,32 @@ const DEFAULT_SIZES = {
 
 let idCounter = 0;
 
-export function useDocking() {
+export function useDocking(initialPanels = {}) {
   const [panels, setPanels] = useState({});
-  // Global drag state: which panel is being dragged right now
   const [draggingId, setDraggingId] = useState(null);
+
+  const resetLayout = useCallback(() => {
+    let freshPanels = {};
+    let tempCounter = 0;
+    Object.entries(initialPanels).forEach(([id, config]) => {
+      freshPanels[id] = {
+        id,
+        title: config.title || id,
+        position: config.defaultPosition || DOCK_POSITIONS.FLOAT,
+        floatPos: config.floatPos || { x: 100 + tempCounter * 30, y: 100 + tempCounter * 30 },
+        size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
+        visible: config.visible !== false,
+        minimized: false,
+        zIndex: 100 + tempCounter,
+        order: config.order !== undefined ? config.order : tempCounter,
+        icon: config.icon || '▣',
+        ...config,
+      };
+      tempCounter++;
+    });
+    setPanels(freshPanels);
+    idCounter = tempCounter;
+  }, [initialPanels]);
 
   const registerPanel = useCallback((id, config) => {
     setPanels(prev => ({
@@ -37,6 +59,7 @@ export function useDocking() {
         visible: config.visible !== false,
         minimized: false,
         zIndex: 100 + idCounter,
+        order: config.order !== undefined ? config.order : idCounter,
         icon: config.icon || '▣',
         ...config,
       },
@@ -54,6 +77,7 @@ export function useDocking() {
   const dockPanel = useCallback((id, position) => {
     setPanels(prev => {
       if (!prev[id]) return prev;
+      const maxOrder = Math.max(0, ...Object.values(prev).map(p => p.order || 0));
       return {
         ...prev,
         [id]: {
@@ -61,6 +85,7 @@ export function useDocking() {
           position,
           size: DEFAULT_SIZES[position],
           minimized: false,
+          order: maxOrder + 1,
         },
       };
     });
@@ -103,6 +128,33 @@ export function useDocking() {
     });
   }, []);
 
+  const movePanelInZone = useCallback((id, direction) => {
+    setPanels(prev => {
+      const panel = prev[id];
+      if (!panel) return prev;
+      
+      const siblings = Object.values(prev)
+        .filter(p => p.position === panel.position && p.visible)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+      const currentIndex = siblings.findIndex(p => p.id === id);
+      if (currentIndex === -1) return prev;
+      
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= siblings.length) return prev;
+      
+      const targetPanel = siblings[targetIndex];
+      const currentOrder = panel.order || currentIndex;
+      const targetOrder = targetPanel.order || targetIndex;
+      
+      return {
+        ...prev,
+        [id]: { ...panel, order: targetOrder },
+        [targetPanel.id]: { ...targetPanel, order: currentOrder }
+      };
+    });
+  }, []);
+
   return {
     panels,
     draggingId,
@@ -114,5 +166,7 @@ export function useDocking() {
     togglePanel,
     closePanel,
     floatPanel,
+    resetLayout,
+    movePanelInZone,
   };
 }

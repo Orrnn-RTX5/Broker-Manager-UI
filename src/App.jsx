@@ -15,6 +15,7 @@ import OnlineUsersPage from './features/clients/OnlineUsersPage';
 import TradingAccountsPage from './features/clients/TradingAccountsPage';
 import PositionsPage from './features/clients/PositionsPage';
 import OrdersPage from './features/clients/OrdersPage';
+import DealsPage from './features/clients/DealsPage';
 import GroupsPage from './features/groups/GroupsPage';
 import GroupDetailsPage from './features/groups/GroupDetailsPage';
 
@@ -76,6 +77,7 @@ function App() {
             <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
             <Route path="/clients/positions" element={<PositionsPage />} />
             <Route path="/clients/orders" element={<OrdersPage />} />
+            <Route path="/dealing" element={<DealsPage />} />
             <Route path="/groups" element={<GroupsPage />} />
               <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
             <Route path="/positions" element={<PlaceholderPage title="Live Positions Grid (Ag-Grid)" />} />
