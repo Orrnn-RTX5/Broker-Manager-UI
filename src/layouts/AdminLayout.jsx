@@ -1,60 +1,101 @@
-import { useState, useEffect } from 'react';
-import Sidebar from '../components/Sidebar';
-import NavigatorPanel from '../components/NavigatorPanel';
-import MarginCallsSidebar from '../components/MarginCallsSidebar';
+import { useEffect, useCallback } from 'react';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
+import NavigatorPanel from '../components/NavigatorPanel';
+import MarginCallsSidebar from '../components/MarginCallsSidebar';
 import useThemeStore from '../store/themeStore';
 
-const AdminLayout = ({ children, isAuthenticated, onLogin, onLogout }) => {
-  // Navigator starts closed to show the toggle functionality clearly
-  const [isNavigatorOpen, setIsNavigatorOpen] = useState(false);
-  const [isMarginCallsOpen, setIsMarginCallsOpen] = useState(true);
+import { DockingProvider } from '../components/docking/index.js';
+import DockLayout from '../components/docking/DockLayout';
+import { useDockingContext } from '../components/docking/DockingContext';
 
+// ─── Panel IDs ───────────────────────────────────────────────────────────────
+const PANEL_NAVIGATOR  = 'navigator';
+const PANEL_WORKSPACE  = 'workspace';
+const PANEL_ACCOUNTS   = 'accounts';
+
+// ─── Initial panel configuration ─────────────────────────────────────────────
+const INITIAL_PANELS = {
+  [PANEL_WORKSPACE]: {
+    title: 'Workspace',
+    icon: '⬛',
+    defaultPosition: 'center',
+    visible: true,
+  },
+  [PANEL_NAVIGATOR]: {
+    title: 'Navigator',
+    icon: '📂',
+    defaultPosition: 'left',
+    visible: false,        // starts hidden; toolbar button toggles it
+    size: { width: 280, height: '100%' },
+  },
+  [PANEL_ACCOUNTS]: {
+    title: 'Accounts',
+    icon: '👥',
+    defaultPosition: 'right',
+    visible: true,
+    size: { width: 280, height: '100%' },
+  },
+};
+
+// ─── Inner layout (needs docking context) ────────────────────────────────────
+function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
+  const { togglePanel, panels } = useDockingContext();
 
-  // Apply dark class to html document globally
+  const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
+  const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
+
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
 
+  // ── panel content map ──────────────────────────────────────────────────────
+  const panelContents = {
+    [PANEL_WORKSPACE]: (
+      <div className={`h-full w-full overflow-auto relative ${isDarkMode ? 'bg-[#121212]' : 'bg-[#e8eaf6]'}`}>
+        {children}
+      </div>
+    ),
+    [PANEL_NAVIGATOR]: <NavigatorPanel />,
+    [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
+  };
+
   return (
-    <div className={`flex flex-col h-screen overflow-hidden font-sans selection:bg-blue-200 ${isDarkMode ? 'bg-[#1e1e1e] text-gray-200' : 'bg-gray-300'}`}>
-      {/* Top Level Navbars spanning full width (Desktop App Style) */}
+    <div
+      className={`flex flex-col h-screen overflow-hidden font-sans selection:bg-blue-200 ${
+        isDarkMode ? 'bg-[#1e1e1e] text-gray-200' : 'bg-gray-100'
+      }`}
+    >
+      {/* ── Top bars ── */}
       <MenuBar isAuthenticated={isAuthenticated} onLogin={onLogin} onLogout={onLogout} />
       <ToolBar
-        toggleSidebar={() => setIsNavigatorOpen(!isNavigatorOpen)}
+        toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
         isSidebarOpen={isNavigatorOpen}
-        toggleRightSidebar={() => setIsMarginCallsOpen(!isMarginCallsOpen)}
-        isRightSidebarOpen={isMarginCallsOpen}
+        toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
+        isRightSidebarOpen={isAccountsOpen}
         onLogout={onLogout}
       />
 
-      {/* Main Workspace Area */}
-      <div className="flex-1 flex overflow-hidden border-t border-[#a0a0a0]">
-
-        {/* Toggleable Navigator Tree Panel */}
-        <NavigatorPanel
-          isOpen={isNavigatorOpen}
-          onClose={() => setIsNavigatorOpen(false)}
-        />
-
-        {/* Scrollable Content Workspace */}
-        <main className={`flex-1 overflow-auto shadow-inner relative ${isDarkMode ? 'bg-[#121212]' : 'bg-[#e8eaf6]'}`}>
-          {children}
-        </main>
-
-        {/* Fixed Right Sidebar (Margin Calls) */}
-        {isMarginCallsOpen && (
-          <MarginCallsSidebar isAuthenticated={isAuthenticated} onClose={() => setIsMarginCallsOpen(false)} />
-        )}
+      {/* ── Main dockable workspace ── */}
+      <div className="flex-1 overflow-hidden border-t border-[#a0a0a0]">
+        <DockLayout panelContents={panelContents} />
       </div>
     </div>
   );
-};
+}
+
+// ─── Public layout wrapper ────────────────────────────────────────────────────
+const AdminLayout = ({ children, isAuthenticated, onLogin, onLogout }) => (
+  <DockingProvider initialPanels={INITIAL_PANELS}>
+    <WorkspaceInner
+      isAuthenticated={isAuthenticated}
+      onLogin={onLogin}
+      onLogout={onLogout}
+    >
+      {children}
+    </WorkspaceInner>
+  </DockingProvider>
+);
 
 export default AdminLayout;

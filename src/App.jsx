@@ -77,6 +77,7 @@ function App() {
             <Route path="/clients/positions" element={<PositionsPage />} />
             <Route path="/clients/orders" element={<OrdersPage />} />
             <Route path="/groups" element={<GroupsPage />} />
+              <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
             <Route path="/positions" element={<PlaceholderPage title="Live Positions Grid (Ag-Grid)" />} />
             <Route path="/settings" element={<PlaceholderPage title="Global Server Configuration" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

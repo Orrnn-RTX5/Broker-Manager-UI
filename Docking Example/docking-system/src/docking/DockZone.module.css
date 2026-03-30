@@ -1,0 +1,66 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.zoneTop, .zoneBottom, .zoneLeft, .zoneRight, .zoneCenter {
+  position: absolute;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 140, 255, 0.12);
+  border: 2px dashed rgba(30, 140, 255, 0.5);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  cursor: crosshair;
+}
+
+.zoneTop {
+  top: 0; left: 8%; right: 8%;
+  height: 80px;
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+}
+
+.zoneBottom {
+  bottom: 0; left: 8%; right: 8%;
+  height: 80px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+}
+
+.zoneLeft {
+  left: 0; top: 8%; bottom: 8%;
+  width: 80px;
+  border-radius: 0 8px 8px 0;
+  border-left: none;
+}
+
+.zoneRight {
+  right: 0; top: 8%; bottom: 8%;
+  width: 80px;
+  border-radius: 8px 0 0 8px;
+  border-right: none;
+}
+
+.zoneCenter {
+  top: 30%; bottom: 30%; left: 30%; right: 30%;
+  border-radius: 8px;
+}
+
+.zoneActive {
+  background: rgba(30, 140, 255, 0.3) !important;
+  border-color: rgba(30, 140, 255, 0.9) !important;
+  transform: scale(1.02);
+}
+
+.zoneLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(30, 140, 255, 0.9);
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+}

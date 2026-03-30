@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
-import { Plus } from 'lucide-react';
 import {
-  X,
   Server,
   FolderOpen,
   Folder,
@@ -82,33 +80,17 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
   );
 };
 
-const NavigatorPanel = ({ isOpen, onClose }) => {
+const NavigatorPanel = () => {
   const navigate = useNavigate();
   const { groups, loading: groupsLoading } = useGroupList();
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
-  if (!isOpen) return null;
 
   return (
-    <div className="w-[280px] bg-white dark:bg-[#1e1e1e] h-full flex flex-col border-r border-[#cccccc] dark:border-[#333333] shadow-xl shrink-0 transition-colors">
-
-      {/* Header */}
-      <div className="h-6 bg-[#f0f0f0] dark:bg-[#252526] border-b border-[#cccccc] dark:border-[#333333] flex flex-col justify-end px-2 select-none transition-colors">
-        <div className="flex justify-between items-center text-black dark:text-gray-200 font-semibold text-[11px] pb-0.5">
-          <span>Navigator</span>
-          <div className="flex gap-1 items-center">
-            <button className="hover:bg-[#e6f0fa] dark:hover:bg-[#3f3f46] p-0.5 rounded-sm group cursor-pointer border border-transparent hover:border-[#99c9ef] dark:hover:border-[#52525b]">
-              <div className="w-2 h-2 border border-gray-600 dark:border-gray-400"></div>
-            </button>
-            <button onClick={onClose} className="hover:bg-red-500 hover:text-white text-gray-600 dark:text-gray-400 p-0.5 rounded-sm transition-colors cursor-pointer border border-transparent">
-              <X size={12} />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="bg-white dark:bg-[#1e1e1e] h-full w-full flex flex-col transition-colors">
 
       {/* Toolbar inside Navigator */}
       <div className="h-6 flex items-center bg-[#f8f8f8] dark:bg-[#1e1e24] border-b border-[#e0e0e0] dark:border-[#333333] transition-colors">
-        {/* Icons can go here if needed in future, matching standard MT5 layout */}
+        {/* Icons can go here if needed in future */}
       </div>
 
       {/* Tree Content */}
@@ -180,7 +162,7 @@ const NavigatorPanel = ({ isOpen, onClose }) => {
               <TreeNode label="Leverages" icon={Percent} iconColor="text-green-500" />
               <TreeNode label="Groups" count={groupsLoading ? '...' : (groups?.length || 0).toString()} icon={Users2} iconColor="text-blue-500" onClickNode={() => navigate('/groups')}>
                 {groups?.map(g => (
-                   <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={(e) => { navigate(`/groups/${g.name}`); }} />
+                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={(e) => { navigate(`/groups/${g.name}`); }} />
                 ))}
                 <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={(e) => { e?.stopPropagation(); setIsNewGroupOpen(true); }} />
               </TreeNode>
