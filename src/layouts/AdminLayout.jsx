@@ -12,18 +12,11 @@ import { useDockingContext } from '../components/docking/DockingContext';
 
 // ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
-const PANEL_WORKSPACE  = 'workspace';
 const PANEL_ACCOUNTS   = 'accounts';
 const PANEL_MARKET_DATA= 'market_data';
 
 // ─── Initial panel configuration ─────────────────────────────────────────────
 const INITIAL_PANELS = {
-  [PANEL_WORKSPACE]: {
-    title: 'Workspace',
-    icon: '⬛',
-    defaultPosition: 'center',
-    visible: true,
-  },
   [PANEL_NAVIGATOR]: {
     title: 'Navigator',
     icon: '📂',
@@ -61,11 +54,6 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
   // ── panel content map ──────────────────────────────────────────────────────
   const panelContents = {
-    [PANEL_WORKSPACE]: (
-      <div className={`h-full w-full overflow-auto relative ${isDarkMode ? 'bg-[#121212]' : 'bg-[#e8eaf6]'}`}>
-        {children}
-      </div>
-    ),
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
     [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
     [PANEL_MARKET_DATA]: <MarketData />,
@@ -91,7 +79,11 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
       {/* ── Main dockable workspace ── */}
       <div className="flex-1 overflow-hidden border-t border-[#a0a0a0]">
-        <DockLayout panelContents={panelContents} />
+        <DockLayout panelContents={panelContents}>
+          <div className={`h-full w-full overflow-auto relative ${isDarkMode ? 'bg-[#1e1e1e]' : 'bg-[#e8eaf6]'}`}>
+            {children}
+          </div>
+        </DockLayout>
       </div>
     </div>
   );

@@ -15,9 +15,11 @@ import styles from './DockLayout.module.css';
  * Float panels render in a fixed overlay (handled by DockPanel itself).
  *
  * Usage:
- *   <DockLayout panelContents={{ myPanel: <MyContent /> }} />
+ *   <DockLayout panelContents={{ myPanel: <MyContent /> }}>
+ *     <MainStaticWorkspace />
+ *   </DockLayout>
  */
-export default function DockLayout({ panelContents = {} }) {
+export default function DockLayout({ panelContents = {}, children }) {
   const { panels, draggingId, dockPanel } = useDockingContext();
 
   const visiblePanels = Object.values(panels).filter(p => p.visible);
@@ -60,6 +62,7 @@ export default function DockLayout({ panelContents = {} }) {
         )}
 
         <div className={styles.centerArea}>
+          {children}
           {centerPanels.map(p => (
             <DockPanel key={p.id} id={p.id}>
               {panelContents[p.id]}

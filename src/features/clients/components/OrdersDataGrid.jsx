@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import useDataSource from '../../../hooks/useDataSource';
 import { getOrders } from '../../../services/api';
-import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
+import OrdersPopup from '../../../components/Popups/OrdersPopup';
 
 const ORDERS_FALLBACK = []; // No sample data available for orders
 
@@ -191,7 +191,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
       )}
 
       {activeAccountDetailsId && (
-        <AccountDetailsModal
+        <OrdersPopup
           account={activeAccountDetailsId}
           targetTicket={activeAccountTicket}
           initialTab="Trade"
