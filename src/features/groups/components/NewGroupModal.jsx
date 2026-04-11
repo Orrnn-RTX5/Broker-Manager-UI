@@ -75,8 +75,8 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
       setError(null);
       const token = localStorage.getItem('authToken');
       const url = initialData 
-        ? `http://69.197.178.27/manager/GroupUpdate?id=${token}&group=${initialData.name}`
-        : `http://69.197.178.27/manager/GroupCreate?id=${token}`;
+        ? `/api/manager/GroupUpdate?id=${token}&group=${initialData.name}`
+        : `/api/manager/GroupCreate?id=${token}`;
 
       const payload = { ...formData };
       if (typeof payload.symbolsAllowed === 'string') {

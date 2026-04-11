@@ -28,7 +28,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
       }
       try {
         const startTime = performance.now();
-        const res = await fetch(`http://69.197.178.27/manager/ConnectionStatus?id=${id}`, {
+        const res = await fetch(`/api/manager/ConnectionStatus?id=${id}`, {
           headers: { 'accept': 'application/json' }
         });
         const text = await res.text();

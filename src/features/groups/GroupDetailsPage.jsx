@@ -28,7 +28,7 @@ const GroupDetailsPage = () => {
         return;
       }
       try {
-        const res = await fetch(`http://69.197.178.27/manager/GroupStats?id=${token}&group=${groupName}`, {
+        const res = await fetch(`/api/manager/GroupStats?id=${token}&group=${groupName}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -49,7 +49,7 @@ const GroupDetailsPage = () => {
     setIsMoving(true);
     const token = localStorage.getItem('authToken');
     try {
-      const res = await fetch(`http://69.197.178.27/manager/GroupMoveAccounts?id=${token}&from_group=${groupName}&to_group=${toGroupInput}`, {
+      const res = await fetch(`/api/manager/GroupMoveAccounts?id=${token}&from_group=${groupName}&to_group=${toGroupInput}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });

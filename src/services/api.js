@@ -49,7 +49,7 @@ export const getTradingAccounts = async () => {
   console.log("Token from localStorage:", token);
   if (!token) throw new Error('No authentication token found');
 
-  const url = `http://69.197.178.27/manager/AccountDetailsMany?id=${token}`;
+  const url = `/api/manager/AccountDetailsMany?id=${token}`;
   console.log("Fetching URL:", url);
   const res = await fetch(url, {
     headers: { 'accept': 'application/json' }
@@ -87,7 +87,7 @@ export const getPositions = async () => {
   const token = localStorage.getItem('authToken');
   if (!token) throw new Error('No authentication token found');
 
-  const res = await fetch(`http://69.197.178.27/manager/PositionsAll?id=${token}`, {
+  const res = await fetch(`/api/manager/PositionsAll?id=${token}`, {
     headers: { 'accept': 'application/json' }
   });
 
@@ -146,7 +146,7 @@ export const getOrders = async () => {
   const token = localStorage.getItem('authToken');
   if (!token) throw new Error('No authentication token found');
 
-  const url = `http://69.197.178.27/manager/BrokerOrders?limit=100&offset=0&id=${token}`;
+  const url = `/api/manager/BrokerOrders?limit=100&offset=0&id=${token}`;
   const res = await fetch(url, {
     headers: { 'accept': 'application/json' }
   });
@@ -197,7 +197,7 @@ export const getBrokerDeals = async () => {
   const token = localStorage.getItem('authToken');
   if (!token) throw new Error('No authentication token found');
 
-  const url = `http://69.197.178.27/manager/BrokerDeals?limit=100&offset=0&id=${token}`;
+  const url = `/api/manager/BrokerDeals?limit=100&offset=0&id=${token}`;
   const res = await fetch(url, {
     headers: { 'accept': 'application/json' }
   });

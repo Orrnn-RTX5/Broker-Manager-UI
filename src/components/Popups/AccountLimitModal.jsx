@@ -38,7 +38,7 @@ const AccountLimitModal = ({ isOpen, onClose }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://69.197.178.27/manager/AccountLimitStatus?id=${id}`, {
+      const response = await fetch(`/api/manager/AccountLimitStatus?id=${id}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' },
       });

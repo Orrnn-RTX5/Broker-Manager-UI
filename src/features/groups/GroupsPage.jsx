@@ -22,7 +22,7 @@ const GroupsPage = () => {
     if (window.confirm(`Are you sure you want to delete group '${groupName}'?`)) {
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`http://69.197.178.27/manager/GroupDelete?id=${token}&group=${groupName}`);
+        const res = await fetch(`/api/manager/GroupDelete?id=${token}&group=${groupName}`);
         if (!res.ok) throw new Error("Delete failed");
         alert(`Group '${groupName}' deleted successfully!`);
         // Ideally trigger a refresh of groups here via context or reload
@@ -51,7 +51,7 @@ const GroupsPage = () => {
     setIsFiltering(true);
     try {
       const id = localStorage.getItem('authToken');
-      const res = await fetch(`http://69.197.178.27/manager/UserGroups?id=${id}`, {
+      const res = await fetch(`/api/manager/UserGroups?id=${id}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });

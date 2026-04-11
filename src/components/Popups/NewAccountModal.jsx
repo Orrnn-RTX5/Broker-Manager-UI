@@ -79,7 +79,7 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
     });
 
     try {
-      const response = await fetch(`http://69.197.178.27/manager/AccountCreate?${params.toString()}`, {
+      const response = await fetch(`/api/manager/AccountCreate?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' },
       });

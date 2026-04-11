@@ -157,7 +157,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setIsDeleting(true);
     try {
       const token = localStorage.getItem('authToken');
-      const res = await fetch(`http://69.197.178.27/manager/OrderClose?id=${token}&ticket=${ticket}`, {
+      const res = await fetch(`/api/manager/OrderClose?id=${token}&ticket=${ticket}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });
@@ -342,7 +342,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         stoploss: tradeSL,
         takeprofit: tradeTP
       });
-      const res = await fetch(`http://69.197.178.27/manager/DealModify?${params.toString()}`, {
+      const res = await fetch(`/api/manager/DealModify?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });
@@ -386,7 +386,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       }
 
       try {
-        const res = await fetch(`http://69.197.178.27/manager/AccountDetails?id=${token}&login=${loginId}`, {
+        const res = await fetch(`/api/manager/AccountDetails?id=${token}&login=${loginId}`, {
           headers: { 'accept': 'application/json' }
         });
         const text = await res.text();
@@ -442,7 +442,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         ...formData
       });
 
-      const res = await fetch(`http://69.197.178.27/manager/UserUpdate?${params.toString()}`, {
+      const res = await fetch(`/api/manager/UserUpdate?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });
@@ -473,7 +473,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         type: type,
         password: password
       });
-      const res = await fetch(`http://69.197.178.27/manager/UserPasswordCheck?${params.toString()}`, {
+      const res = await fetch(`/api/manager/UserPasswordCheck?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'text/plain' }
       });
@@ -501,7 +501,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         type: type,
         password: password
       });
-      const res = await fetch(`http://69.197.178.27/manager/UserPasswordChange?${params.toString()}`, {
+      const res = await fetch(`/api/manager/UserPasswordChange?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'text/plain' }
       });
@@ -535,7 +535,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       if (depositComment) params.append('comment', depositComment);
       if (depositCredit) params.append('credit', depositCredit);
 
-      const res = await fetch(`http://69.197.178.27/manager/Deposit?${params.toString()}`, {
+      const res = await fetch(`/api/manager/Deposit?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });

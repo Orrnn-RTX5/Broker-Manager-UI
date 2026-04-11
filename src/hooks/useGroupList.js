@@ -16,7 +16,7 @@ export const useGroupList = () => {
 
       try {
         setLoading(true);
-        const res = await fetch(`http://69.197.178.27/manager/GroupList?id=${token}`, {
+        const res = await fetch(`/api/manager/GroupList?id=${token}`, {
           headers: { 'accept': 'application/json' }
         });
         

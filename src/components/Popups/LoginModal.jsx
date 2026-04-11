@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle, AlertCircle, Loader, Link2 } from 'lucide-react';
+import { X, AlertCircle, Loader, Link2 } from 'lucide-react';
 
 const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
   const [user, setUser] = useState('');
@@ -21,10 +21,10 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
+      const response = await fetch(`/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
         method: 'GET',
         headers: {
-          'accept': 'text/plain',
+          'accept': 'application/json',
         },
       });
 
@@ -32,19 +32,19 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
         throw new Error('Connection failed. Please check your credentials.');
       }
 
-      const token = await response.text();
-      const trimmedToken = token.trim();
+      const data = await response.json();
+      const finalToken = data.token;
 
-      // The real session token is a UUID (e.g. e2787a41-d8ce-a17c-c538-f863c9d8a966).
-      // If the API returns anything else (error string, empty, etc.) we reject the login.
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!trimmedToken || !uuidRegex.test(trimmedToken)) {
+      if (!finalToken) {
         throw new Error('Invalid credentials. Server rejected the connection.');
       }
 
-      localStorage.setItem('authToken', trimmedToken);
+      localStorage.setItem('authToken', finalToken);
+      localStorage.setItem('refreshToken', data.refresh_token || '');
+      localStorage.setItem('brokerLogin', String(data.login || ''));
+      localStorage.setItem('brokerId', data.broker_id || '');
       if (onLoginSuccess) {
-        onLoginSuccess(trimmedToken);
+        onLoginSuccess(finalToken);
       }
       onClose();
     } catch (err) {

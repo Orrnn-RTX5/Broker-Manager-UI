@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 const Login = ({ onLoginSuccess }) => {
-  const [user, setUser] = useState('');
-  const [password, setPassword] = useState('');
-  const [server, setServer] = useState('10.20');
+  const [user, setUser] = useState('9003');
+  const [password, setPassword] = useState('Manager@123');
+  const [server, setServer] = useState('69.197.178.27');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,10 +18,10 @@ const Login = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(`http://69.197.178.27/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
+      const response = await fetch(`/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
         method: 'GET',
         headers: {
-          'accept': 'text/plain',
+          'accept': 'application/json',
         },
       });
 
@@ -29,19 +29,19 @@ const Login = ({ onLoginSuccess }) => {
         throw new Error('Login failed. Please check your credentials.');
       }
 
-      const token = await response.text();
-      const trimmedToken = token.trim();
+      const data = await response.json();
+      const finalToken = data.token;
 
-      // The real session token is a UUID (e.g. e2787a41-d8ce-a17c-c538-f863c9d8a966).
-      // If the API returns anything else (error string, empty, etc.) we reject the login.
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!trimmedToken || !uuidRegex.test(trimmedToken)) {
+      if (!finalToken) {
         throw new Error('Invalid credentials. Please check your User ID and password.');
       }
 
-      localStorage.setItem('authToken', trimmedToken);
+      localStorage.setItem('authToken', finalToken);
+      localStorage.setItem('refreshToken', data.refresh_token || '');
+      localStorage.setItem('brokerLogin', String(data.login || ''));
+      localStorage.setItem('brokerId', data.broker_id || '');
       if (onLoginSuccess) {
-        onLoginSuccess(trimmedToken);
+        onLoginSuccess(finalToken);
       }
     } catch (err) {
       setError(err.message || 'An error occurred during login.');
