@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { DEFAULT_MT5_SERVER } from '../../config/endpoints';
 
 const Login = ({ onLoginSuccess }) => {
   const [user, setUser] = useState('9003');
   const [password, setPassword] = useState('Manager@123');
-  const [server, setServer] = useState('69.197.178.27');
+  const [server, setServer] = useState(DEFAULT_MT5_SERVER);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 

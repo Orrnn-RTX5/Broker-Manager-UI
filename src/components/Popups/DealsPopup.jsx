@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon } from 'lucide-react';
 import { getPositions } from '../../services/api';
+import { buildFeedWsUrl, buildMetricsWsUrl } from '../../config/endpoints';
 
 const TABS = [
   'Overview', 'Exposure', 'Personal', 'Account', 'Limits',
@@ -187,8 +188,9 @@ const DealsPopup = ({ account, targetTicket, onClose, initialTab = 'Overview' })
       const token = localStorage.getItem('authToken');
       if (!token) return;
 
-      console.log(`[Metrics WS] Connecting to: ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${loginId}`);
-      ws = new WebSocket(`ws://69.197.178.27/manager/OnAccountMetrics?id=${token}&login=${loginId}`);
+      const metricsUrl = buildMetricsWsUrl(token, loginId);
+      console.log(`[Metrics WS] Connecting to: ${metricsUrl}`);
+      ws = new WebSocket(metricsUrl);
 
       ws.onopen = () => {
         console.log(`[Metrics WS] Connected successfully for account ${account}`);
@@ -256,7 +258,7 @@ const DealsPopup = ({ account, targetTicket, onClose, initialTab = 'Overview' })
     let reconnectTimeout;
 
     const connectWebSocket = () => {
-      ws = new WebSocket('ws://69.197.178.27/ws/feed');
+      ws = new WebSocket(buildFeedWsUrl());
       ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
       ws.onmessage = (e) => {
         try {
