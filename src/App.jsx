@@ -20,13 +20,6 @@ import GroupsPage from './features/groups/GroupsPage';
 import GroupDetailsPage from './features/groups/GroupDetailsPage';
 
 
-const PlaceholderPage = ({ title }) => (
-  <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-    <h2 className="text-2xl font-bold text-gray-400 mb-2">{title}</h2>
-    <p className="text-gray-500">Feature modular structure loading...</p>
-  </div>
-);
-
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,8 +73,6 @@ function App() {
             <Route path="/dealing" element={<DealsPage />} />
             <Route path="/groups" element={<GroupsPage />} />
               <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
-            <Route path="/positions" element={<PlaceholderPage title="Live Positions Grid (Ag-Grid)" />} />
-            <Route path="/settings" element={<PlaceholderPage title="Global Server Configuration" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AdminLayout>
