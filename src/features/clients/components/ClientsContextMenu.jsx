@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Check, ChevronRight, UserPlus, UserSquare, Mail, BookOpen, Search, RefreshCw } from 'lucide-react';
+import {
+  Check, ChevronRight, UserPlus, UserSquare, Mail, Copy,
+  FileText, Filter, Download, Grid3x3, Columns3, CheckSquare, Square, MinusSquare
+} from 'lucide-react';
+
+/**
+ * Data-grid context menu — props-driven. Callers supply:
+ *   - grid     : useGridController() return value
+ *   - rows     : visible (filtered) rows of the grid
+ *   - allRows  : unfiltered rows
+ *   - selectedRow : the row the user right-clicked on (primary target)
+ *   - onNewClient : () => void   (opens NewAccountModal)
+ *   - onOpenDetails : (row) => void  (opens ClientDetailsModal)
+ *   - entityLabel : "client" | "account" | "position" | "order" | "deal"
+ */
 
 const Sep = () => <div className="ui-ctxmenu-sep" />;
 
@@ -7,11 +21,8 @@ const Item = ({ text, icon: Icon, iconTone, rightText, rightIcon: RightIcon, has
   const [isHovered, setIsHovered] = useState(false);
   const closeTimeout = useRef(null);
   const toneColor = {
-    ok:      'var(--ok-text)',
-    danger:  'var(--danger-text)',
-    warn:    'var(--warn-text)',
-    accent:  'var(--accent-text)',
-    info:    'var(--info-text)',
+    ok: 'var(--ok-text)', danger: 'var(--danger-text)', warn: 'var(--warn-text)',
+    accent: 'var(--accent-text)', info: 'var(--info-text)',
   }[iconTone] || 'var(--text-3)';
 
   const onEnter = () => { if (closeTimeout.current) clearTimeout(closeTimeout.current); setIsHovered(true); };
@@ -35,78 +46,142 @@ const Item = ({ text, icon: Icon, iconTone, rightText, rightIcon: RightIcon, has
       {submenu && isHovered && (
         <div
           className="ui-ctxmenu absolute top-0 left-full ml-1 z-[10000]"
-          style={{ minWidth: 200 }}
+          style={{ minWidth: 220 }}
           onMouseEnter={onEnter}
           onMouseLeave={onLeave}
         >
-          {submenu.map((it, idx) => <Item key={idx} {...it} />)}
+          {submenu.map((it, idx) => it.isSep ? <Sep key={`s-${idx}`} /> : <Item key={idx} {...it} />)}
         </div>
       )}
     </div>
   );
 };
 
-const ClientsContextMenu = ({ x, y, onClose }) => {
+const ClientsContextMenu = ({
+  x, y, onClose,
+  grid, rows = [], allRows = [], selectedRow,
+  entityLabel = 'row',
+  onNewClient,
+  onOpenDetails,
+  onCopyAs,       // (format: 'csv' | 'tsv' | 'json') => void
+  onExport,       // () => void
+}) => {
   useEffect(() => {
     const handleClick = () => onClose();
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
   }, [onClose]);
 
+  // Viewport-safe positioning.
   const style = {
-    top:  Math.min(y, window.innerHeight - 450),
-    left: Math.min(x, window.innerWidth - 400),
+    top:  Math.min(y, window.innerHeight - 520),
+    left: Math.min(x, window.innerWidth - 440),
   };
 
-  const handleCopyMock = (type) => {
-    const mockData = `Mock ${type} Data:\nLogin\tName\tGroup\n1001\tJohn Doe\treal\n1002\tJane Smith\tdemo`;
-    navigator.clipboard.writeText(mockData);
-    alert(`${type} data copied to clipboard!`);
-  };
+  const selectedCount = grid?.selectedIds?.size ?? 0;
+  const hasSelection = selectedCount > 0;
+  const rowKey = grid?.rowKey || 'id';
 
-  const handleExport = () => {
-    alert('Exporting mock data to CSV...\nIn a real scenario, this would trigger a file download.');
-  };
-
-  const selectBySubmenu = [{ text: 'All' }, { text: 'None' }, { text: 'Invert Selection' }];
-  const filterSubmenu   = [{ text: 'Contains' }, { text: 'Equals' }, { text: 'Starts with' }, { text: 'Clear Filter' }];
-  const copyAsSubmenu   = [
-    { text: 'Text', onClick: () => handleCopyMock('Text') },
-    { text: 'CSV',  onClick: () => handleCopyMock('CSV') },
-    { text: 'JSON', onClick: () => handleCopyMock('JSON') },
+  const selectByMenu = [
+    {
+      text: `All (${rows.length})`, icon: CheckSquare, iconTone: 'accent',
+      onClick: () => grid?.selectAll(rows.map(r => r[rowKey])),
+    },
+    {
+      text: 'None', icon: Square,
+      disabled: !hasSelection,
+      onClick: () => grid?.clear(),
+    },
+    {
+      text: 'Invert', icon: MinusSquare, iconTone: 'accent',
+      onClick: () => grid?.invert(rows.map(r => r[rowKey])),
+    },
   ];
-  const columnsSubmenu  = [
-    { text: 'Login', hasCheck: true }, { text: 'Name', hasCheck: true },
-    { text: 'Group', hasCheck: true }, { text: 'Country', hasCheck: true },
-    { text: 'City', hasCheck: true },
+
+  const copyAsMenu = [
+    { text: 'CSV',  onClick: () => onCopyAs && onCopyAs('csv') },
+    { text: 'TSV',  onClick: () => onCopyAs && onCopyAs('tsv') },
+    { text: 'JSON', onClick: () => onCopyAs && onCopyAs('json') },
   ];
+
+  const columnsMenu = (grid?.columns || []).map(c => ({
+    text: c.label || c.key,
+    hasCheck: !grid.hiddenColumns.has(c.key),
+    onClick: () => grid.toggleColumn(c.key),
+  }));
+
+  const selectionSuffix = hasSelection ? ` (${selectedCount} selected)` : '';
 
   return (
     <div
       className="ui-ctxmenu fixed z-[9999]"
-      style={{ ...style, width: 240 }}
+      style={{ ...style, width: 260 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <Item text="New Client"        icon={UserPlus}   iconTone="ok"     rightText="Ctrl+Shift+N" />
-      <Item text="Client Details"    icon={UserSquare} iconTone="accent" />
-      <Item text="Fix Personal Data" icon={UserSquare} iconTone="info" />
+      {/* Primary actions */}
+      {onNewClient && (
+        <Item text="New Account" icon={UserPlus} iconTone="ok" rightText="Ctrl+N" onClick={() => { onNewClient(); onClose(); }} />
+      )}
+
+      {selectedRow && onOpenDetails && (
+        <Item
+          text={`${entityLabel === 'client' ? 'Client' : 'Row'} Details`}
+          icon={UserSquare}
+          iconTone="accent"
+          onClick={() => { onOpenDetails(selectedRow); onClose(); }}
+        />
+      )}
+
+      {selectedRow?.email && (
+        <Item
+          text="Email"
+          icon={Mail}
+          iconTone="warn"
+          onClick={() => { window.location.href = `mailto:${selectedRow.email}`; onClose(); }}
+        />
+      )}
+
+      {(onNewClient || selectedRow) && <Sep />}
+
+      {/* Selection + data operations */}
+      <Item text="Select"       icon={CheckSquare} iconTone="accent" rightIcon={ChevronRight} submenu={selectByMenu} />
+      <Item
+        text={`Copy As${selectionSuffix}`}
+        icon={Copy}
+        iconTone="accent"
+        rightIcon={ChevronRight}
+        submenu={copyAsMenu}
+      />
+      <Item
+        text={`Export CSV${selectionSuffix}`}
+        icon={Download}
+        iconTone="ok"
+        onClick={() => { onExport && onExport(); onClose(); }}
+      />
+      {grid?.clearFilter && (
+        <Item
+          text="Clear Filter"
+          icon={Filter}
+          onClick={() => { grid.clearFilter(); onClose(); }}
+        />
+      )}
+
       <Sep />
-      <Item text="Email"   icon={Mail}     iconTone="warn" />
-      <Item text="Journal" icon={BookOpen} iconTone="warn" />
-      <Sep />
-      <Item text="Select By" rightIcon={ChevronRight} submenu={selectBySubmenu} />
-      <Item text="Filter"    rightIcon={ChevronRight} submenu={filterSubmenu} />
-      <Item text="Copy As"   rightIcon={ChevronRight} submenu={copyAsSubmenu} />
-      <Item text="Export"    icon={RefreshCw} iconTone="ok" onClick={handleExport} />
-      <Item text="Find"      icon={Search} rightText="Ctrl+F" disabled />
-      <Sep />
-      <Item text="Delete Clients" icon={X} iconTone="danger" rightText="Ctrl+D" />
-      <Sep />
-      <Item text="Auto Scroll" />
-      <Item text="Auto Arrange" hasCheck rightText="A" />
-      <Item text="Grid"         hasCheck rightText="G" />
-      <Sep />
-      <Item text="Columns" rightIcon={ChevronRight} submenu={columnsSubmenu} />
+
+      {/* View toggles */}
+      <Item
+        text="Gridlines"
+        icon={Grid3x3}
+        hasCheck={grid?.showGridlines}
+        onClick={() => grid?.toggleGridlines()}
+      />
+      <Item
+        text="Columns"
+        icon={Columns3}
+        iconTone="accent"
+        rightIcon={ChevronRight}
+        submenu={columnsMenu.length > 0 ? columnsMenu : [{ text: 'No columns configured', disabled: true }]}
+      />
     </div>
   );
 };

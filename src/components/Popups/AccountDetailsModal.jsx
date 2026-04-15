@@ -2,13 +2,20 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon } from 'lucide-react';
 import { getPositions } from '../../services/api';
 import { buildFeedWsUrl, buildMetricsWsUrl } from '../../config/endpoints';
+import positionAdapter from './adapters/position';
+import orderAdapter from './adapters/order';
+import dealAdapter from './adapters/deal';
+import { orderDelete } from '../../services/tradeApi';
+
+const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
 const TABS = [
   'Overview', 'Personal', 'Account', 'Limits',
   'Profile', 'Subscriptions', 'Balance', 'Trade', 'History', 'Security'
 ];
 
-const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview' }) => {
+const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position' }) => {
+  const adapter = ADAPTERS[entity] || positionAdapter;
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accountData, setAccountData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -153,21 +160,40 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setIsMinimized(!isMinimized);
   };
 
+  // Entity-aware close/cancel. For Position we cancel via OrderClose (legacy
+  // behaviour kept); Order cancels via adapter; Deals cannot be deleted.
   const handleDeleteTrade = async (ticket) => {
-    if (!window.confirm(`Are you sure you want to close position #${ticket}?`)) return;
+    if (entity === 'deal') {
+      alert('Deals are historical records and cannot be deleted from this view.');
+      return;
+    }
+    const verb = entity === 'order' ? 'cancel order' : 'close position';
+    if (!window.confirm(`Are you sure you want to ${verb} #${ticket}?`)) return;
     setIsDeleting(true);
+    const label = entity === 'order' ? `Cancel Order #${ticket}` : `Close Position #${ticket}`;
     try {
-      const token = localStorage.getItem('authToken');
-      const res = await fetch(`/api/manager/OrderClose?id=${token}&ticket=${ticket}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
-      });
-      if (!res.ok) throw new Error("Failed to close position");
-      alert(`Position #${ticket} successfully closed!`);
-      // Update local state to hide it without refreshing all
+      let result;
+      if (entity === 'order') {
+        result = await orderDelete(ticket);
+      } else {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch(`/api/manager/OrderClose?id=${token}&ticket=${ticket}`, {
+          method: 'GET',
+          headers: { 'accept': 'application/json' }
+        });
+        const text = await res.text();
+        try { result = JSON.parse(text); } catch { result = { message: text }; }
+        if (!res.ok) throw Object.assign(new Error(result?.message || 'Failed to close position'), { status: res.status });
+      }
+      console.log(`[${label}] response:`, result);
+      const status  = result?.retcode || result?.status || 'OK';
+      const message = result?.message || JSON.stringify(result);
+      alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
       setPositions(prev => prev.filter(p => p.position !== ticket));
     } catch (err) {
-      alert(err.message);
+      console.error(`[${label}] error:`, err);
+      const status  = err?.code || err?.status || 'ERROR';
+      alert(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
     } finally {
       setIsDeleting(false);
     }
@@ -333,27 +359,73 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setActiveTab('Trade');
   };
 
+  // Pretty-prints an API response into the alert body. Always logs the
+  // raw response + the originating call name to the console so devs can
+  // inspect headers/stack via devtools even if they dismiss the alert.
+  const showResult = (label, result) => {
+    console.log(`[${label}] response:`, result);
+    const status  = result?.retcode || result?.status || 'OK';
+    const message = result?.message || JSON.stringify(result);
+    alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
+  };
+
+  const showError = (label, err) => {
+    console.error(`[${label}] error:`, err);
+    const status  = err?.code || err?.status || 'ERROR';
+    const message = err?.message || String(err);
+    alert(`${label} failed\n\nstatus: ${status}\nmessage: ${message}`);
+  };
+
+  // Commits S/L + T/P (and, for deals, any adapter-editable field)
+  // through the entity-aware adapter.
   const handleUpdateTrade = async () => {
     if (!selectedTicketRow) return;
+    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
+    if (!ticket) { alert('No ticket selected.'); return; }
+
     setIsUpdatingTrade(true);
     try {
-      const token = localStorage.getItem('authToken');
-      const params = new URLSearchParams({
-        id: token,
-        ticket: selectedTicketRow.position,
-        stoploss: tradeSL,
-        takeprofit: tradeTP
-      });
-      const res = await fetch(`/api/manager/DealModify?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
-      });
-      if (!res.ok) throw new Error("Failed to modify trade");
-      alert(`Trade ${selectedTicketRow.position} correctly modified!`);
+      const sl = parseFloat(tradeSL);
+      const tp = parseFloat(tradeTP);
+      const results = [];
+      if (adapter.editableFields.stoploss && !Number.isNaN(sl)) {
+        results.push(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
+      }
+      if (adapter.editableFields.takeprofit && !Number.isNaN(tp)) {
+        results.push(await adapter.modifyField({ ticket, field: 'takeprofit', value: tp }));
+      }
+      showResult(`Modify ${adapter.label} #${ticket}`, results[results.length - 1] || { message: 'no changes' });
     } catch (err) {
-      alert(err.message);
+      showError(`Modify ${adapter.label}`, err);
     } finally {
       setIsUpdatingTrade(false);
+    }
+  };
+
+  // Runs a named adapter action (Flip, ForceClose, Cancel, etc.)
+  const runAdapterAction = async (action) => {
+    if (!selectedTicketRow) { alert('Select a row first.'); return; }
+    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
+    const login = loginId;
+    const ctx = { ticket, login };
+
+    if (action.confirm && !window.confirm(action.confirm)) return;
+
+    let formData = {};
+    if (action.prompt) {
+      for (const field of action.prompt) {
+        const raw = window.prompt(`${field.label}${field.required ? ' (required)' : ''}:`);
+        if (raw === null) return;
+        if (field.required && !raw.trim()) { alert(`${field.label} is required.`); return; }
+        formData[field.key] = field.type === 'number' ? parseFloat(raw) : raw;
+      }
+    }
+
+    try {
+      const result = await action.run(ctx, formData);
+      showResult(action.label, result);
+    } catch (err) {
+      showError(action.label, err);
     }
   };
 
@@ -410,15 +482,55 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     const fetchPositions = async () => {
       try {
         const data = await getPositions();
-        setPositions(data.filter(p => String(p.login) === String(loginId)));
+        const mine = data.filter(p => String(p.login) === String(loginId));
+        setPositions(mine);
+
+        // When the popup was opened via double-click on a row, `targetTicket`
+        // holds that row's ticket. Auto-select it so the Trade tab is pre-wired
+        // to that position (no more "Select a row" placeholder).
+        if (targetTicket) {
+          const hit = mine.find(p =>
+            p.position === targetTicket ||
+            p.ticket   === targetTicket ||
+            String(p.position) === String(targetTicket)
+          );
+          if (hit) {
+            setSelectedTicketRow(hit);
+            setModalTradeSymbol(hit.symbol || 'EURUSD');
+            setTradeSL(hit.priceSl ? Number(hit.priceSl).toFixed(5) : '0.00000');
+            setTradeTP(hit.priceTp ? Number(hit.priceTp).toFixed(5) : '0.00000');
+            setTradeTickHistory([]);
+          } else {
+            // Fallback: synthesize a minimal row so buttons still work for
+            // Orders / Deals where the popup doesn't fetch its own list.
+            setSelectedTicketRow({
+              position: targetTicket,
+              ticket:   targetTicket,
+              symbol:   'EURUSD',
+              type:     'buy',
+              priceSl:  0,
+              priceTp:  0,
+            });
+          }
+        }
       } catch (err) {
         console.error("Failed to fetch positions", err);
+        if (targetTicket) {
+          setSelectedTicketRow({
+            position: targetTicket,
+            ticket:   targetTicket,
+            symbol:   'EURUSD',
+            type:     'buy',
+            priceSl:  0,
+            priceTp:  0,
+          });
+        }
       }
     };
 
     fetchDetails();
     fetchPositions();
-  }, [loginId]);
+  }, [loginId, targetTicket]);
 
   const activeData = accountData || (typeof account === 'object' ? account : {});
 
@@ -1251,23 +1363,48 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
 
                   {selectedTicketRow ? (
-                    <div className="grid grid-cols-2 gap-5 px-3 mb-2">
+                    <div className="px-3 mb-2 flex flex-col gap-2">
                       <button
                         onClick={handleUpdateTrade}
                         disabled={isUpdatingTrade}
-                        className="col-span-2 h-[30px] rounded-[3px] bg-gradient-to-b from-[#8c3232] to-[#551d1d] hover:from-[#a03939] hover:to-[#6b2424] border-t border-[#c65858] text-gray-900 dark:text-white text-[13px] font-medium shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center font-bold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="ui-btn ui-btn-primary"
+                        style={{ height: 34, fontWeight: 600 }}
                       >
-                        {isUpdatingTrade ? "Modifying..." : "Modify"}
+                        {isUpdatingTrade ? 'Modifying…' : `Modify ${adapter.label} S/L · T/P`}
                       </button>
+
+                      {adapter.actions.length > 0 && (
+                        <div className="flex flex-wrap gap-2 justify-center">
+                          {adapter.actions.map(act => (
+                            <button
+                              key={act.key}
+                              onClick={() => runAdapterAction(act)}
+                              title={act.title}
+                              className={
+                                act.tone === 'danger'         ? 'ui-btn ui-btn-danger ui-btn-sm' :
+                                act.tone === 'danger-outline' ? 'ui-btn ui-btn-secondary ui-btn-sm' :
+                                                                'ui-btn ui-btn-secondary ui-btn-sm'
+                              }
+                              style={act.tone === 'danger-outline' ? { color: 'var(--danger-text)', borderColor: 'var(--danger-border)' } : undefined}
+                            >
+                              {act.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-5 px-3 mb-2">
-                      <button className="h-[30px] rounded-[3px] bg-gradient-to-b from-[#8c3232] to-[#551d1d] hover:from-[#a03939] hover:to-[#6b2424] border-t border-[#c65858] text-gray-900 dark:text-white text-[13px] font-medium shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                        Sell by Market
-                      </button>
-                      <button className="h-[30px] rounded-[3px] bg-gradient-to-b from-[#3a4980] to-[#1a2345] hover:from-[#46589a] hover:to-[#263262] border-t border-[#657bc8] text-gray-900 dark:text-white text-[13px] font-medium shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                        Buy by Market
-                      </button>
+                    <div className="px-3 mb-2">
+                      <div
+                        className="text-center text-xs py-4 rounded-lg"
+                        style={{
+                          background: 'var(--surface-2)',
+                          border: '1px dashed var(--border)',
+                          color: 'var(--text-3)',
+                        }}
+                      >
+                        Select a {adapter.label.toLowerCase()} row to enable modifications.
+                      </div>
                     </div>
                   )}
 

@@ -1,20 +1,38 @@
 import { useState } from 'react';
-import { Settings, Power, ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, BarChart3 } from 'lucide-react';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
+import NewAccountModal from '../../components/Popups/NewAccountModal';
+import useGridPageController from '../../hooks/useGridPageController';
+
+const POSITION_COLUMNS = [
+  { key: 'position',     label: 'Ticket' },
+  { key: 'login',        label: 'Login' },
+  { key: 'name',         label: 'User Name' },
+  { key: 'email',        label: 'Email' },
+  { key: 'symbol',       label: 'Symbol' },
+  { key: 'type',         label: 'Action' },
+  { key: 'volume',       label: 'Lots' },
+  { key: 'priceOpen',    label: 'Open' },
+  { key: 'priceCurrent', label: 'Current' },
+  { key: 'priceSl',      label: 'S/L' },
+  { key: 'priceTp',      label: 'T/P' },
+  { key: 'swap',         label: 'Storage' },
+  { key: 'profit',       label: 'Profit' },
+  { key: 'comment',      label: 'Comment' },
+];
 
 const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
   <div className={`relative ${width}`}>
     <select
       onChange={onChange}
-      className="appearance-none bg-white dark:bg-[#1e1e1e] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10px] py-1 pl-2 pr-6 focus:outline-none focus:border-blue-400 w-full rounded-sm h-[22px] cursor-pointer"
+      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
     >
       <option>{value}</option>
-      {options.map((opt) => (
-        <option key={opt} value={opt}>{opt}</option>
-      ))}
+      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
     </select>
-    <ChevronDown size={10} className="absolute right-1.5 top-1.5 text-gray-500 pointer-events-none" />
+    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
   </div>
 );
 
@@ -23,74 +41,64 @@ const PositionsPage = () => {
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
-  const [contextMenu, setContextMenu] = useState(null);
+  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
 
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-    setContextMenu({
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-    });
-  };
+  const ctl = useGridPageController({
+    columns: POSITION_COLUMNS,
+    rowKey: 'position',
+    exportName: 'positions',
+    entityLabel: 'position',
+    onClearFilter: () => {
+      setSearch(''); setTypeFilter('All Types');
+      setSymbolFilter('All Symbols'); setReasonFilter('All Reasons');
+    },
+  });
 
   return (
-    <div 
-      className="p-4 w-full h-full flex flex-col gap-4 overflow-y-auto bg-white dark:bg-[#1e1e1e]"
-      onContextMenu={handleContextMenu}
-    >
-
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 text-blue-500">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
-            </svg>
+          <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
+          <div>
+            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Positions</h1>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to modify</p>
           </div>
-          <h1 className="text-[14px] text-gray-900 dark:text-gray-200 tracking-tight">Positions</h1>
         </div>
-
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Types" width="w-[100px]" options={['Buy', 'Sell']} onChange={(e) => setTypeFilter(e.target.value)} />
+          <Dropdown value="All Types"   width="w-[100px]" options={['Buy', 'Sell']}                onChange={(e) => setTypeFilter(e.target.value)} />
           <Dropdown value="All Symbols" width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
           <Dropdown value="All Reasons" width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
-
-          <button className="text-blue-500 hover:text-blue-400 ml-1 transition-colors">
-            <Settings size={14} />
-          </button>
-          <button className="text-blue-500 hover:text-blue-400 ml-1 transition-colors">
-            <Power size={14} />
-          </button>
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative w-full max-w-xs">
-        <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"
-          placeholder="Search login, position, symbol..."
+          placeholder="Search login, position, symbol…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-7 pr-3 py-0.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-gray-800 dark:text-gray-200 text-[10px] rounded-sm focus:outline-none focus:border-blue-400 h-[22px] transition-colors"
+          className="ui-input ui-input-sm"
+          style={{ paddingLeft: 32 }}
         />
       </div>
 
-      {/* Data Grid */}
       <PositionsDataGrid
         search={search}
         typeFilter={typeFilter}
         symbolFilter={symbolFilter}
         reasonFilter={reasonFilter}
+        {...ctl.gridProps}
       />
 
-      {contextMenu && (
+      {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
-          x={contextMenu.mouseX}
-          y={contextMenu.mouseY}
-          onClose={() => setContextMenu(null)}
+          {...ctl.contextMenuProps}
+          onNewClient={() => setIsNewAccountOpen(true)}
         />
       )}
+
+      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

@@ -13,7 +13,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
-const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', countryFilter = 'All Countries' }) => {
+const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', countryFilter = 'All Countries', onRowsChange, onRowContext }) => {
   const { data: rawData, isLoading, isFallback, error } = useDataSource(getTradingAccounts, TRADING_ACCOUNTS_FALLBACK);
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
@@ -49,6 +49,8 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
     });
     return rows;
   }, [rawData, search, groupFilter, countryFilter, sortCol, sortDir]);
+
+  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
 
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
@@ -98,6 +100,7 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
                 <tr
                   key={rowKey}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
+                  onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >

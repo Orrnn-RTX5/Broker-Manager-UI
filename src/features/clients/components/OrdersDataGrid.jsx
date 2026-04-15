@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import useDataSource from '../../../hooks/useDataSource';
 import { getOrders } from '../../../services/api';
-import OrdersPopup from '../../../components/Popups/OrdersPopup';
+import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 
 const ORDERS_FALLBACK = [];
 
@@ -24,7 +24,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
-const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons' }) => {
+const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
   const { data: rawData, isLoading, isFallback, error } = useDataSource(getOrders, ORDERS_FALLBACK);
   const [sortCol, setSortCol] = useState('ticket');
   const [sortDir, setSortDir] = useState('desc');
@@ -65,6 +65,8 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     });
     return rows;
   }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
+
+  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
 
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
@@ -125,6 +127,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                     setActiveAccountDetailsId(row.login);
                     setActiveAccountTicket(row.ticket);
                   }}
+                  onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
@@ -188,10 +191,11 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
       )}
 
       {activeAccountDetailsId && (
-        <OrdersPopup
+        <AccountDetailsModal
           account={activeAccountDetailsId}
           targetTicket={activeAccountTicket}
           initialTab="Trade"
+          entity="order"
           onClose={() => {
             setActiveAccountDetailsId(null);
             setActiveAccountTicket(null);

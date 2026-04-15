@@ -18,7 +18,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={10} className="text-blue-500 ml-0.5 inline" />;
 };
 
-const OnlineUsersDataGrid = () => {
+const OnlineUsersDataGrid = ({ onRowsChange, onRowContext } = {}) => {
   const { data: rawData, isLoading, isFallback } = useDataSource(getOnlineUsers, ONLINE_USERS_FALLBACK);
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
@@ -38,6 +38,8 @@ const OnlineUsersDataGrid = () => {
         : String(bv).localeCompare(String(av));
     });
   }, [sortCol, sortDir]);
+
+  useMemo(() => { if (onRowsChange) onRowsChange(sorted); /* eslint-disable-line */ }, [sorted]);
 
   const TH = ({ col, label, align = 'left', w = '' }) => (
     <th
@@ -103,6 +105,7 @@ const OnlineUsersDataGrid = () => {
                 <tr
                   key={rowKey}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
+                  onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={`border-b border-gray-100 dark:border-[#2a2a2a] h-7 cursor-pointer transition-colors
                     ${selectedRow === rowKey
                       ? 'bg-blue-100 dark:bg-blue-900/30'

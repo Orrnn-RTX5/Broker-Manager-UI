@@ -1,19 +1,8 @@
-import { useState } from 'react';
-import PositionsBySentimentChart from './components/PositionsBySentimentChart';
-import PositionsBySymbolPie from './components/PositionsBySymbolPie';
-import PositionsByReasonPie from './components/PositionsByReasonPie';
-import AnalyticsContextMenu from './components/AnalyticsContextMenu';
 import DashboardHeader, { FilterSelect } from './components/DashboardHeader';
+import ComingSoon from '../../components/ComingSoon';
 import { ALL_COUNTRIES } from '../../utils/countries';
 
 const OpenPositionsDashboard = () => {
-  const [contextMenu, setContextMenu] = useState(null);
-
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-    setContextMenu({ mouseX: e.clientX, mouseY: e.clientY });
-  };
-
   const filters = (
     <>
       <FilterSelect value="All Lead Campaign" />
@@ -23,29 +12,19 @@ const OpenPositionsDashboard = () => {
   );
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" onContextMenu={handleContextMenu}>
+    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
       <DashboardHeader
         title="Open Positions"
         subtitle="Live sentiment, symbol breakdown, and reason classification."
         filters={filters}
       />
 
-      <div className="w-full">
-        <PositionsBySentimentChart />
-      </div>
+      <ComingSoon title="Positions by Sentiment" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PositionsBySymbolPie />
-        <PositionsByReasonPie />
+        <ComingSoon title="Positions by Symbol" />
+        <ComingSoon title="Positions by Reason" />
       </div>
-
-      {contextMenu && (
-        <AnalyticsContextMenu
-          x={contextMenu.mouseX}
-          y={contextMenu.mouseY}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 };

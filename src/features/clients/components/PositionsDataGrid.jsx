@@ -14,7 +14,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
-const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons' }) => {
+const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
   const { data: rawData, isLoading, isFallback, error } = useDataSource(getPositions, POSITIONS_FALLBACK);
   const [sortCol, setSortCol] = useState('position');
   const [sortDir, setSortDir] = useState('asc');
@@ -55,6 +55,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     });
     return rows;
   }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
+
+  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
 
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
@@ -114,6 +116,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                     setActiveAccountDetailsId(row.login);
                     setActiveAccountTicket(row.position);
                   }}
+                  onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
@@ -180,6 +183,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           account={activeAccountDetailsId}
           targetTicket={activeAccountTicket}
           initialTab="Trade"
+          entity="position"
           onClose={() => {
             setActiveAccountDetailsId(null);
             setActiveAccountTicket(null);

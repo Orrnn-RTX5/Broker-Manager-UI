@@ -3,30 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import {
-  Server,
-  FolderOpen,
-  Folder,
-  BarChart2,
-  FileText,
-  Users,
-  User,
-  Building2,
-  ListOrdered,
-  ShoppingCart,
-  CreditCard,
-  Banknote,
-  History,
-  Target,
-  RefreshCw,
-  Activity,
-  Percent,
-  Users2,
-  Blocks,
-  Mail,
-  Headphones,
-  ShoppingBag,
-  ChevronRight,
-  ChevronDown
+  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown
 } from 'lucide-react';
 
 // Reusable Tree Node Component
@@ -93,83 +70,41 @@ const NavigatorPanel = () => {
             <TreeNode label="FlexyMarkets-Server" icon={Folder} iconColor="text-yellow-500" defaultExpanded>
 
               <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode
-                  label="Trading Accounts"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/trading-accounts'); }}
-                />
-                <TreeNode
-                  label="Online Users"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/online-users'); }}
-                />
-                <TreeNode
-                  label="Open Positions"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/open-positions'); }}
-                />
-                <TreeNode
-                  label="Open Orders"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/open-orders'); }}
-                />
-                <TreeNode
-                  label="Advertising Campaigns"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/advertising-campaigns'); }}
-                />
-                <TreeNode
-                  label="By Country"
-                  icon={BarChart2}
-                  iconColor="text-blue-400"
-                  onClickNode={() => { navigate('/analytics/by-country'); }}
-                />
+                <TreeNode label="Trading Accounts"    icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/trading-accounts')} />
+                <TreeNode label="Online Users"        icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/online-users')} />
+                <TreeNode label="Open Positions"      icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-positions')} />
+                <TreeNode label="Open Orders"         icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-orders')} />
+                <TreeNode label="Advertising Campaigns" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/advertising-campaigns')} />
+                <TreeNode label="By Country"          icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/by-country')} />
               </TreeNode>
-
-              <TreeNode label="Server Reports" icon={FileText} iconColor="text-blue-500" />
 
               <TreeNode label="Clients & Orders" icon={Users} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Online Users" count="19" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/online-users'); }} />
-                <TreeNode label="Clients" count="339" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients'); }} />
-                <TreeNode label="Trading Accounts" count="9 740" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/trading-accounts'); }} />
-                <TreeNode label="Positions" count="1 763" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/positions'); }} />
-                <TreeNode label="Orders" count="130" icon={User} iconColor="text-blue-400" onClickNode={() => { navigate('/clients/orders'); }} />
+                <TreeNode label="Online Users"     icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/online-users')} />
+                <TreeNode label="Clients"          icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients')} />
+                <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/trading-accounts')} />
+                <TreeNode label="Positions"        icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
+                <TreeNode label="Orders"           icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/orders')} />
               </TreeNode>
 
-              <TreeNode label="Payments" icon={CreditCard} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Processing" icon={Banknote} iconColor="text-blue-400" />
-                <TreeNode label="Active" icon={Banknote} iconColor="text-blue-400" />
-                <TreeNode label="History" icon={Banknote} iconColor="text-blue-400" />
-              </TreeNode>
-
-              <TreeNode label="Ultency Matching Engine" icon={Target} iconColor="text-purple-500" />
-              <TreeNode label="Subscriptions" icon={RefreshCw} iconColor="text-green-500" />
               <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigate('/dealing')} />
-              <TreeNode label="Leverages" icon={Percent} iconColor="text-green-500" />
-              <TreeNode label="Groups" count={groupsLoading ? '...' : (groups?.length || 0).toString()} icon={Users2} iconColor="text-blue-500" onClickNode={() => navigate('/groups')}>
+
+              <TreeNode
+                label="Groups"
+                count={groupsLoading ? '…' : (groups?.length || 0).toString()}
+                icon={Users2}
+                iconColor="text-blue-500"
+                onClickNode={() => navigate('/groups')}
+              >
                 {groups?.map(g => (
-                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={(e) => { navigate(`/groups/${g.name}`); }} />
+                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigate(`/groups/${g.name}`)} />
                 ))}
                 <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={(e) => { e?.stopPropagation(); setIsNewGroupOpen(true); }} />
               </TreeNode>
-              <TreeNode label="Plugins" icon={Blocks} iconColor="text-blue-600" />
-              <TreeNode label="Mailbox" icon={Mail} iconColor="text-yellow-600" />
+
             </TreeNode>
           </TreeNode>
 
-          <TreeNode label="Support Center" icon={Headphones} iconColor="text-blue-500">
-            {/* Keeping collapsed for now */}
-          </TreeNode>
-
-          <TreeNode label="App Store" icon={ShoppingBag} iconColor="text-yellow-600" />
-
         </TreeNode>
-
       </div>
       {isNewGroupOpen && <NewGroupModal onClose={() => setIsNewGroupOpen(false)} onSuccess={() => alert('Group Created!')} />}
     </div>
