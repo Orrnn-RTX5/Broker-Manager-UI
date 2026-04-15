@@ -62,18 +62,18 @@ const RAW_DATA = [
   { id: 1080, name: 'Sony Share', city: 'Nagpur', type: 'Individual', status: 'Unregistered', lead: 'Undefined', email: 'wlb@gmail.com', phone: '+911311166611', country: 'India' },
 ];
 
-const STATUS_COLORS = {
-  Active: 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20',
-  Inactive: 'text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800',
-  Unregistered: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20',
-  Pending: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20',
+const STATUS_BADGE = {
+  Active:       'ui-badge-success',
+  Inactive:     'ui-badge-neutral',
+  Unregistered: 'ui-badge-warn',
+  Pending:      'ui-badge-info',
 };
 
 const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={10} className="text-gray-400 ml-0.5 inline" />;
+  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
   return sortDir === 'asc'
-    ? <ChevronUp size={10} className="text-blue-500 ml-0.5 inline" />
-    : <ChevronDown size={10} className="text-blue-500 ml-0.5 inline" />;
+    ? <ChevronUp   size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
+    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const ClientsDataGrid = ({ search = '', typeFilter = 'All Types', statusFilter = 'All Statuses', countryFilter = 'All Countries' }) => {
@@ -124,29 +124,21 @@ const ClientsDataGrid = ({ search = '', typeFilter = 'All Types', statusFilter =
   const totalPages = Math.ceil(filtered.length / pageSize);
   const pageRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
-  const TH = ({ col, label, align = 'left', width = '' }) => (
-    <th
-      className={`px-2 py-1 font-normal border-l border-gray-200 dark:border-[#333333] cursor-pointer select-none whitespace-nowrap hover:bg-gray-200 dark:hover:bg-[#333333] transition-colors ${align === 'right' ? 'text-right' : 'text-left'} ${width}`}
-      onClick={() => handleSort(col)}
-    >
+  const TH = ({ col, label, align = 'left' }) => (
+    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
       {label}
       <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
 
   return (
-    <div className="flex flex-col w-full flex-1 bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#333333] rounded-sm shadow-sm overflow-hidden transition-colors">
+    <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
       {/* Table */}
       <div className="w-full overflow-x-auto flex-1">
-        <table className="w-full text-left border-collapse min-w-max">
+        <table className="ui-grid min-w-max">
           <thead>
-            <tr className="bg-[#f0f0f0] dark:bg-[#2d2d30] border-b border-gray-200 dark:border-[#333333] text-[11px] text-gray-700 dark:text-gray-300 font-semibold h-8 select-none transition-colors">
-              <th
-                className="px-2 py-1 font-normal text-left cursor-pointer whitespace-nowrap hover:bg-gray-200 dark:hover:bg-[#333333] transition-colors w-14"
-                onClick={() => handleSort('id')}
-              >
-                ID <SortIcon col="id" sortCol={sortCol} sortDir={sortDir} />
-              </th>
+            <tr>
+              <TH col="id" label="ID" />
               <TH col="name" label="Name" />
               <TH col="city" label="City" />
               <TH col="type" label="Type" />
@@ -157,11 +149,11 @@ const ClientsDataGrid = ({ search = '', typeFilter = 'All Types', statusFilter =
               <TH col="country" label="Country" />
             </tr>
           </thead>
-          <tbody className="text-[12px] text-gray-800 dark:text-gray-200">
+          <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-gray-400 dark:text-gray-500 text-[14px]">
-                  No clients match the current filters.
+                <td colSpan={9} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                  {isLoading ? 'Loading clients…' : 'No clients match the current filters.'}
                 </td>
               </tr>
             ) : (
@@ -169,30 +161,35 @@ const ClientsDataGrid = ({ search = '', typeFilter = 'All Types', statusFilter =
                 <tr
                   key={row.id}
                   onClick={() => setSelectedRow(selectedRow === row.id ? null : row.id)}
-                  className={`border-b border-gray-100 dark:border-[#2a2a2a] h-7 cursor-pointer transition-colors
-                    ${selectedRow === row.id
-                      ? 'bg-blue-100 dark:bg-blue-900/30'
-                      : 'hover:bg-blue-50 dark:hover:bg-[#252526]'
-                    }`}
+                  className={selectedRow === row.id ? 'is-selected' : ''}
+                  style={{ cursor: 'pointer' }}
                 >
-                  <td className="px-2 py-0.5 whitespace-nowrap flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                    <User size={11} className="text-blue-500 dark:text-blue-400 shrink-0" />
-                    {row.id}
+                  <td style={{ color: 'var(--text-3)' }}>
+                    <span className="inline-flex items-center gap-2">
+                      <User size={13} style={{ color: 'var(--accent)' }} />
+                      <span className="tabular">{row.id}</span>
+                    </span>
                   </td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a] font-medium">{row.name}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a] text-gray-600 dark:text-gray-400">{row.city}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a]">{row.type}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a]">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_COLORS[row.status] || ''}`}>
+                  <td style={{ fontWeight: 500 }}>{row.name}</td>
+                  <td style={{ color: 'var(--text-2)' }}>{row.city || '—'}</td>
+                  <td style={{ color: 'var(--text-2)' }}>{row.type}</td>
+                  <td>
+                    <span className={`ui-badge ${STATUS_BADGE[row.status] || 'ui-badge-neutral'}`}>
                       {row.status}
                     </span>
                   </td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a] text-gray-400 dark:text-gray-500">{row.lead}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a] text-blue-600 dark:text-blue-400">
-                    <a href={`mailto:${row.email}`} onClick={e => e.stopPropagation()}>{row.email}</a>
+                  <td style={{ color: 'var(--muted)' }}>{row.lead}</td>
+                  <td>
+                    <a
+                      href={`mailto:${row.email}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: 'var(--accent-text)' }}
+                    >
+                      {row.email}
+                    </a>
                   </td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a] font-mono text-[12px]">{row.phone}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#2a2a2a]">{row.country}</td>
+                  <td className="font-mono tabular" style={{ color: 'var(--text-2)' }}>{row.phone}</td>
+                  <td style={{ color: 'var(--text-2)' }}>{row.country}</td>
                 </tr>
               ))
             )}
@@ -201,29 +198,36 @@ const ClientsDataGrid = ({ search = '', typeFilter = 'All Types', statusFilter =
       </div>
 
       {/* Footer */}
-      <div className="h-7 border-t border-gray-200 dark:border-[#333333] bg-gray-50 dark:bg-[#252526] flex items-center justify-between px-3 text-[11px] text-gray-500 dark:text-gray-400 transition-colors shrink-0">
+      <div
+        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+      >
         <span className="flex items-center gap-2">
-          Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length} clients
+          <span>
+            Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)}</span>
+            {' '}of{' '}
+            <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span> clients
+          </span>
           {isFallback && (
-            <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-sm">
-              <AlertTriangle size={9} />
+            <span className="ui-badge ui-badge-warn">
+              <AlertTriangle size={10} />
               DEMO DATA
             </span>
           )}
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-[12px] hover:bg-gray-100 dark:hover:bg-[#333333] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="ui-btn ui-btn-secondary ui-btn-xs"
           >
             Prev
           </button>
-          <span className="px-2">{page + 1} / {Math.max(1, totalPages)}</span>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{page + 1} / {Math.max(1, totalPages)}</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
-            className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-[12px] hover:bg-gray-100 dark:hover:bg-[#333333] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="ui-btn ui-btn-secondary ui-btn-xs"
           >
             Next
           </button>

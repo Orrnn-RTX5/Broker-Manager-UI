@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, AlertCircle, Loader, Link2 } from 'lucide-react';
+import { X, AlertCircle, Loader2, Link2 } from 'lucide-react';
 
 const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
   const [user, setUser] = useState('');
@@ -16,17 +16,15 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
       setError('Please enter User ID, password, and server.');
       return;
     }
-    
+
     setLoading(true);
     setError('');
 
     try {
-      const response = await fetch(`/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`, {
-        method: 'GET',
-        headers: {
-          'accept': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
+        { method: 'GET', headers: { accept: 'application/json' } }
+      );
 
       if (!response.ok) {
         throw new Error('Connection failed. Please check your credentials.');
@@ -43,9 +41,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
       localStorage.setItem('refreshToken', data.refresh_token || '');
       localStorage.setItem('brokerLogin', String(data.login || ''));
       localStorage.setItem('brokerId', data.broker_id || '');
-      if (onLoginSuccess) {
-        onLoginSuccess(finalToken);
-      }
+      if (onLoginSuccess) onLoginSuccess(finalToken);
       onClose();
     } catch (err) {
       setError(err.message || 'An error occurred during connection.');
@@ -54,96 +50,51 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     }
   };
 
-  const inputClass = "h-7 px-2 text-[13px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-[3px] focus:outline-none focus:border-blue-500 focus:bg-[#1e2030] transition-colors w-full";
-
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-[400px] bg-[#1e2025] border border-gray-300 dark:border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden font-sans">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 bg-[#252830] border-b border-gray-300 dark:border-gray-700 select-none flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Link2 size={16} className="text-blue-400" />
-            <div>
-              <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100">Connect to Server</span>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-200 hover:bg-red-500/20 p-1 rounded transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-5">
-           {error && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center text-red-400 text-[13px]">
-                 <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
-                 <span>{error}</span>
-              </div>
-           )}
-
-           <form id="connect-form" onSubmit={handleLogin} className="space-y-4">
-              <div>
-                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="user">User ID</label>
-                 <input
-                    id="user"
-                    type="text"
-                    value={user}
-                    onChange={(e) => setUser(e.target.value)}
-                    className={inputClass}
-                    placeholder="Enter User ID"
-                    required
-                    autoFocus
-                 />
-              </div>
-
-              <div>
-                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="password">Password</label>
-                 <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className={inputClass}
-                    placeholder="Enter password"
-                    required
-                 />
-              </div>
-
-              <div>
-                 <label className="block text-[12px] text-gray-600 dark:text-gray-400 mb-1" htmlFor="server">Server</label>
-                 <input
-                    id="server"
-                    type="text"
-                    value={server}
-                    onChange={(e) => setServer(e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. 10.20"
-                    required
-                 />
-              </div>
-           </form>
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-300 dark:border-gray-700 flex justify-end gap-2 bg-[#252830] flex-shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-md bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-[13px] transition-colors"
+    <div className="ui-modal-backdrop" style={{ zIndex: 99999 }}>
+      <div className="ui-modal" style={{ width: 420 }}>
+        <div className="ui-modal-header">
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center mr-3"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
           >
+            <Link2 size={15} />
+          </span>
+          Connect to Server
+          <span className="x" onClick={onClose}><X size={16} /></span>
+        </div>
+
+        <div className="ui-modal-body">
+          {error && (
+            <div
+              className="mb-4 flex items-start gap-2.5 p-3 rounded-lg text-sm"
+              style={{
+                background: 'var(--danger-soft)',
+                border: '1px solid var(--danger-border)',
+                color: 'var(--danger-text)',
+              }}
+            >
+              <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form id="connect-form" onSubmit={handleLogin} className="space-y-3.5">
+            <Field id="user"     label="User ID"  value={user}     onChange={setUser}     placeholder="Enter User ID" autoFocus />
+            <Field id="password" label="Password" value={password} onChange={setPassword} placeholder="Enter password" type="password" />
+            <Field id="server"   label="Server"   value={server}   onChange={setServer}   placeholder="e.g. 10.20" />
+          </form>
+        </div>
+
+        <div className="ui-modal-footer">
+          <button type="button" onClick={onClose} className="ui-btn ui-btn-secondary ui-btn-sm">
             Cancel
           </button>
-          <button
-            type="submit"
-            form="connect-form"
-            disabled={loading}
-            className="px-5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white text-[13px] font-semibold transition-colors flex items-center gap-2"
-          >
+          <button type="submit" form="connect-form" disabled={loading} className="ui-btn ui-btn-primary ui-btn-sm">
             {loading ? (
               <>
-                <Loader size={13} className="animate-spin" />
-                Connecting...
+                <Loader2 size={13} className="animate-spin" />
+                Connecting…
               </>
             ) : (
               <>
@@ -153,10 +104,27 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
             )}
           </button>
         </div>
-
       </div>
     </div>
   );
 };
+
+const Field = ({ id, label, value, onChange, placeholder, type = 'text', autoFocus }) => (
+  <div>
+    <label htmlFor={id} className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+      {label}
+    </label>
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="ui-input"
+      autoFocus={autoFocus}
+      required
+    />
+  </div>
+);
 
 export default LoginModal;

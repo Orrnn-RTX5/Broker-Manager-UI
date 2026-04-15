@@ -1,124 +1,112 @@
-import React from 'react';
-import { X, HelpCircle, FolderOpen, Printer, Copy, CheckCircle, Settings, CheckSquare, Grid, LayoutGrid, ArrowRightToLine, Cpu, Layers, HelpCircle as HelpIcon, RefreshCw, MoreVertical } from 'lucide-react';
+import { X, Settings, FolderOpen, Printer, Copy, CheckCircle2, CheckSquare, Grid, LayoutGrid, ArrowRightToLine, Cpu, Layers, HelpCircle, RefreshCw, MoreVertical } from 'lucide-react';
 
 const availableButtons = [
-  { id: 'open_manager', icon: FolderOpen, label: 'Open Manager Data', colorClass: 'text-yellow-600' },
-  { id: 'print_preview', icon: Printer, label: 'Print Preview', colorClass: 'text-blue-500' },
-  { id: 'copy', icon: Copy, label: 'Copy', colorClass: 'text-blue-500' },
-  { id: 'check_balance', icon: CheckCircle, label: 'Check Balance', colorClass: 'text-green-500' },
-  { id: 'fix_balance', icon: Settings, label: 'Fix Balance', colorClass: 'text-blue-400' },
-  { id: 'bulk_closing', icon: CheckSquare, label: 'Bulk Closing', colorClass: 'text-teal-400' },
-  { id: 'grid', icon: Grid, label: 'Grid', colorClass: 'text-blue-500' },
-  { id: 'tile_windows', icon: LayoutGrid, label: 'Tile Windows', colorClass: 'text-blue-400' }
+  { id: 'open_manager',  icon: FolderOpen,   label: 'Open Manager Data', tone: 'warn' },
+  { id: 'print_preview', icon: Printer,      label: 'Print Preview',     tone: 'accent' },
+  { id: 'copy',          icon: Copy,         label: 'Copy',              tone: 'accent' },
+  { id: 'check_balance', icon: CheckCircle2, label: 'Check Balance',     tone: 'ok' },
+  { id: 'fix_balance',   icon: Settings,     label: 'Fix Balance',       tone: 'info' },
+  { id: 'bulk_closing',  icon: CheckSquare,  label: 'Bulk Closing',      tone: 'info' },
+  { id: 'grid',          icon: Grid,         label: 'Grid',              tone: 'accent' },
+  { id: 'tile_windows',  icon: LayoutGrid,   label: 'Tile Windows',      tone: 'info' },
 ];
 
 const selectedButtons = [
-  { id: 'connect', icon: ArrowRightToLine, label: 'Connect', colorClass: 'text-green-500' },
-  { id: 'automation', icon: Cpu, label: 'Automation', colorClass: 'text-green-500' },
-  { id: 'queue', icon: Layers, label: 'Queue', colorClass: 'text-blue-500' },
+  { id: 'connect',    icon: ArrowRightToLine, label: 'Connect',    tone: 'ok' },
+  { id: 'automation', icon: Cpu,              label: 'Automation', tone: 'ok' },
+  { id: 'queue',      icon: Layers,           label: 'Queue',      tone: 'accent' },
   { id: 'sep1', isSeparator: true },
-  { id: 'help', icon: HelpIcon, label: 'Help', colorClass: 'text-blue-500' },
+  { id: 'help',       icon: HelpCircle,       label: 'Help',       tone: 'accent' },
   { id: 'sep2', isSeparator: true },
-  { id: 'bulk_operations', icon: RefreshCw, label: 'Bulk Operations', colorClass: 'text-blue-500' },
+  { id: 'bulk_operations', icon: RefreshCw,   label: 'Bulk Operations', tone: 'accent' },
   { id: 'sep3', isSeparator: true },
-  { id: 'customize', icon: MoreVertical, label: 'Customize', colorClass: 'text-blue-500' }
+  { id: 'customize',  icon: MoreVertical,     label: 'Customize',  tone: 'accent' },
 ];
 
-const ListBox = ({ title, items, selectedIndex }) => {
-  return (
-    <div className="flex flex-col h-[320px] w-[200px]">
-      <span className="text-[12px] text-gray-200 mb-1">{title}</span>
-      <div className="flex-1 bg-[#1e1e1e] border border-gray-500 overflow-y-auto w-full">
-        {items.map((item, index) => {
-          if (item.isSeparator) {
-            return (
-              <div key={item.id} className="w-full flex justify-center py-[2px] cursor-pointer hover:bg-[#2b2b2b]">
-                <div className="h-px bg-gray-500 w-[90%]"></div>
-              </div>
-            );
-          }
-          
-          const isSelected = index === selectedIndex;
-          
-          return (
-            <div 
-              key={item.id} 
-              className={`flex items-center gap-3 px-2 py-1 cursor-pointer select-none ${isSelected ? 'bg-[#007acc] text-white' : 'hover:bg-[#2b2b2b] text-gray-300'}`}
-            >
-              <div className="w-4 flex justify-center">
-                <item.icon size={16} className={isSelected ? 'text-white' : item.colorClass} strokeWidth={1.5} />
-              </div>
-              <span className="text-[12px] whitespace-nowrap">{item.label}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+const toneColor = {
+  ok:     'var(--ok-text)',
+  danger: 'var(--danger-text)',
+  warn:   'var(--warn-text)',
+  accent: 'var(--accent-text)',
+  info:   'var(--info-text)',
 };
 
-const Button = ({ children, className = "" }) => (
-  <button className={`bg-[#2b2b2b] hover:bg-[#3f3f46] border border-gray-500 text-gray-200 text-[12px] rounded-[3px] py-[3px] px-3 w-[80px] transition-colors focus:outline-none focus:border-blue-400 ${className}`}>
-    {children}
-  </button>
+const ListBox = ({ title, items, selectedIndex }) => (
+  <div className="flex flex-col flex-1 min-w-0">
+    <span className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>{title}</span>
+    <div
+      className="flex-1 overflow-y-auto rounded-lg"
+      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+    >
+      {items.map((item, index) => {
+        if (item.isSeparator) {
+          return (
+            <div key={item.id} className="w-full flex justify-center py-1">
+              <div style={{ height: 1, background: 'var(--border)', width: '90%' }} />
+            </div>
+          );
+        }
+        const isSelected = index === selectedIndex;
+        return (
+          <div
+            key={item.id}
+            className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer select-none transition-colors"
+            style={{
+              background: isSelected ? 'var(--accent-soft)' : 'transparent',
+              color: isSelected ? 'var(--accent-text)' : 'var(--text-2)',
+            }}
+          >
+            <item.icon size={15} strokeWidth={1.75} style={{ color: isSelected ? 'var(--accent)' : toneColor[item.tone] }} />
+            <span className="text-xs">{item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
 );
 
 const CustomizeToolbarModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-      <div className="w-[580px] bg-[#1e1e1e] border border-gray-600 rounded-sm shadow-2xl flex flex-col font-sans">
-        
-        {/* Header directly matching standard Windows-style dark theme */}
-        <div className="flex justify-between items-center px-3 py-2 bg-[#2b2b2b] border-b border-gray-700 select-none">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-[2px]">
-              <Settings size={14} className="text-yellow-500" />
-              <Layers size={14} className="text-green-500 -ml-2" />
+    <div className="ui-modal-backdrop" style={{ zIndex: 99999 }}>
+      <div className="ui-modal" style={{ width: 640 }}>
+        <div className="ui-modal-header">
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center mr-3"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
+          >
+            <Settings size={15} />
+          </span>
+          Customize Toolbar
+          <span className="x" onClick={onClose}><X size={16} /></span>
+        </div>
+
+        <div className="ui-modal-body">
+          <div className="flex gap-4" style={{ height: 340 }}>
+            <ListBox title="Available buttons" items={availableButtons} selectedIndex={0} />
+
+            <div className="flex flex-col justify-center gap-2">
+              <button className="ui-btn ui-btn-secondary ui-btn-sm">Insert →</button>
+              <button className="ui-btn ui-btn-secondary ui-btn-sm">← Remove</button>
             </div>
-            <span className="text-[13px] text-gray-200 tracking-wide">Customizing Toolbar</span>
-          </div>
-          <div className="flex gap-2">
-            <button className="text-gray-400 hover:text-white hover:bg-white/10 p-0.5 rounded transition-colors focus:outline-none">
-              <HelpCircle size={14} />
-            </button>
-            <button 
-              onClick={onClose}
-              className="text-gray-400 hover:text-white hover:bg-red-500 p-0.5 rounded transition-colors focus:outline-none"
-            >
-              <X size={14} />
-            </button>
+
+            <ListBox title="Selected buttons" items={selectedButtons} selectedIndex={8} />
+
+            <div className="flex flex-col justify-between">
+              <div className="flex flex-col gap-2 mt-6">
+                <button className="ui-btn ui-btn-secondary ui-btn-sm">Up</button>
+                <button className="ui-btn ui-btn-secondary ui-btn-sm">Down</button>
+                <div className="h-1" />
+                <button className="ui-btn ui-btn-secondary ui-btn-sm">Reset</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Content Body */}
-        <div className="p-4 flex gap-4 h-[350px]">
-          
-          {/* Left Column (Available) */}
-          <ListBox title="Available buttons:" items={availableButtons} selectedIndex={0} />
-
-          {/* Middle Buttons */}
-          <div className="flex flex-col justify-center gap-2">
-            <Button>Insert -{'>'}</Button>
-            <Button>{'<-'} Remove</Button>
-          </div>
-
-          {/* Right Column (Selected) */}
-          <ListBox title="Selected buttons:" items={selectedButtons} selectedIndex={8} />
-
-          {/* Far Right Action Buttons */}
-          <div className="flex flex-col justify-between">
-            <div className="flex flex-col gap-2 mt-[20px]">
-              <Button>Up</Button>
-              <Button>Down</Button>
-              <div className="h-2"></div>
-              <Button>Reset</Button>
-            </div>
-            
-            <Button className="mt-auto" onClick={onClose}>Close</Button>
-          </div>
-
+        <div className="ui-modal-footer">
+          <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Close</button>
+          <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={onClose}>Apply</button>
         </div>
       </div>
     </div>

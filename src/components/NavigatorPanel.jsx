@@ -40,36 +40,35 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
   };
 
   return (
-    <div className="flex flex-col text-[#333333] dark:text-gray-300 font-sans text-[12px] select-none transition-colors">
+    <div className="flex flex-col text-[13px] select-none" style={{ color: 'var(--text-2)' }}>
       <div
-        className="flex items-center py-0.5 hover:bg-[#e6f0fa] dark:hover:bg-[#2d2d30] cursor-pointer"
+        className="flex items-center py-1 px-1 cursor-pointer rounded-md transition-colors"
         onClick={handleClick}
+        onMouseOver={(e) => e.currentTarget.style.background = 'var(--accent-soft)'}
+        onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
       >
-        {/* Indentation guide and expander */}
         <div className="w-4 h-full flex justify-center items-center shrink-0">
           {hasChildren && (
-            isExpanded ?
-              <ChevronDown size={14} className="text-gray-500 dark:text-gray-400" /> :
-              <ChevronRight size={14} className="text-gray-500 dark:text-gray-400" />
+            isExpanded
+              ? <ChevronDown size={13} style={{ color: 'var(--muted)' }} />
+              : <ChevronRight size={13} style={{ color: 'var(--muted)' }} />
           )}
         </div>
 
-        {/* Icon */}
         <div className="w-5 flex justify-center items-center shrink-0">
-          {Icon && <Icon size={14} className={iconColor} />}
+          {Icon && <Icon size={14} className={iconColor} strokeWidth={1.75} />}
         </div>
 
-        {/* Label */}
         <span className="whitespace-nowrap flex-1 truncate pr-2">
-          {label} {count && <span className="text-gray-500 dark:text-gray-400">({count})</span>}
+          {label}
+          {count && <span className="ml-1 tabular" style={{ color: 'var(--muted)' }}>({count})</span>}
         </span>
       </div>
 
-      {/* Children with tree line */}
       {hasChildren && isExpanded && (
         <div className="flex">
           <div className="w-4 flex justify-center">
-            <div className="w-px h-full bg-[#cccccc] dark:bg-[#404040] border-l border-dotted border-[#aaaaaa] dark:border-[#555555]"></div>
+            <div className="w-px h-full" style={{ background: 'var(--border)' }} />
           </div>
           <div className="flex-1 overflow-hidden">
             {children}
@@ -86,16 +85,8 @@ const NavigatorPanel = () => {
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
 
   return (
-    <div className="bg-white dark:bg-[#1e1e1e] h-full w-full flex flex-col transition-colors">
-
-      {/* Toolbar inside Navigator */}
-      <div className="h-6 flex items-center bg-[#f8f8f8] dark:bg-[#1e1e24] border-b border-[#e0e0e0] dark:border-[#333333] transition-colors">
-        {/* Icons can go here if needed in future */}
-      </div>
-
-      {/* Tree Content */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1 bg-white dark:bg-[#1e1e1e] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
-
+    <div className="h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         <TreeNode label="MetaTrader 5 Manager" icon={Server} iconColor="text-blue-400" defaultExpanded>
 
           <TreeNode label="Servers" icon={Server} iconColor="text-green-500" defaultExpanded>

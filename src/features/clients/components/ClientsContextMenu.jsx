@@ -1,55 +1,45 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Save, X, Check, ChevronRight, UserPlus, FileText, UserSquare, Mail, BookOpen, Search, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Check, ChevronRight, UserPlus, UserSquare, Mail, BookOpen, Search, RefreshCw } from 'lucide-react';
 
-const MenuDivider = () => <div className="h-px bg-[#404040] my-1 mx-1"></div>;
+const Sep = () => <div className="ui-ctxmenu-sep" />;
 
-const MenuItem = ({ text, icon: Icon, iconColor = "", rightText = "", rightIcon: RightIcon, hasCheck = false, disabled = false, submenu, onClick }) => {
+const Item = ({ text, icon: Icon, iconTone, rightText, rightIcon: RightIcon, hasCheck, disabled, submenu, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
-  let closeTimeout = useRef(null);
+  const closeTimeout = useRef(null);
+  const toneColor = {
+    ok:      'var(--ok-text)',
+    danger:  'var(--danger-text)',
+    warn:    'var(--warn-text)',
+    accent:  'var(--accent-text)',
+    info:    'var(--info-text)',
+  }[iconTone] || 'var(--text-3)';
 
-  const handleMouseEnter = () => {
-    if (closeTimeout.current) clearTimeout(closeTimeout.current);
-    setIsHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    closeTimeout.current = setTimeout(() => {
-      setIsHovered(false);
-    }, 150); // slight delay to make moving to submenu easier
-  };
+  const onEnter = () => { if (closeTimeout.current) clearTimeout(closeTimeout.current); setIsHovered(true); };
+  const onLeave = () => { closeTimeout.current = setTimeout(() => setIsHovered(false), 150); };
 
   return (
-    <div 
-      className={`relative flex items-center justify-between px-6 py-1 text-[12px] cursor-pointer hover:bg-[#3f3f46] select-none ${disabled ? 'text-gray-500 cursor-default' : 'text-gray-800 dark:text-gray-200'} ${isHovered && submenu ? 'bg-[#3f3f46]' : ''}`}
+    <div
+      className={`ui-ctxmenu-item relative ${disabled ? 'is-disabled' : ''} ${isHovered && submenu ? 'is-active' : ''}`}
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
-      <div className="flex items-center gap-2">
-        <div className="w-4 h-4 flex items-center justify-center">
-          {hasCheck ? (
-             <Check size={12} className="text-black dark:text-white" strokeWidth={2.5} />
-          ) : Icon ? (
-             <Icon size={14} className={iconColor} strokeWidth={1.5} />
-          ) : null}
-        </div>
-        <span>{text}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {rightText && <span className="text-gray-400 text-[11px]">{rightText}</span>}
-        {RightIcon && <RightIcon size={14} className="text-gray-400" />}
-      </div>
+      <span className="w-4 h-4 inline-flex items-center justify-center">
+        {hasCheck ? <Check size={12} strokeWidth={2.5} style={{ color: 'var(--accent)' }} />
+          : Icon ? <Icon size={14} strokeWidth={1.75} style={{ color: toneColor }} /> : null}
+      </span>
+      <span className="flex-1">{text}</span>
+      {rightText && <span className="kbd">{rightText}</span>}
+      {RightIcon && <RightIcon size={13} style={{ color: 'var(--muted)' }} />}
 
-      {/* Render Submenu if it exists and item is hovered */}
       {submenu && isHovered && (
-        <div 
-          className="absolute top-0 left-full ml-1 w-[180px] bg-[#2b2b2b] border border-[#404040] rounded-sm py-1 shadow-2xl font-sans z-[10000]"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+        <div
+          className="ui-ctxmenu absolute top-0 left-full ml-1 z-[10000]"
+          style={{ minWidth: 200 }}
+          onMouseEnter={onEnter}
+          onMouseLeave={onLeave}
         >
-          {submenu.map((item, idx) => (
-            <MenuItem key={idx} {...item} />
-          ))}
+          {submenu.map((it, idx) => <Item key={idx} {...it} />)}
         </div>
       )}
     </div>
@@ -59,14 +49,13 @@ const MenuItem = ({ text, icon: Icon, iconColor = "", rightText = "", rightIcon:
 const ClientsContextMenu = ({ x, y, onClose }) => {
   useEffect(() => {
     const handleClick = () => onClose();
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
   }, [onClose]);
 
-  // Ensure menu stays within viewport
   const style = {
-    top: Math.min(y, window.innerHeight - 450), // roughly menu height
-    left: Math.min(x, window.innerWidth - 400), // roughly menu + submenu width
+    top:  Math.min(y, window.innerHeight - 450),
+    left: Math.min(x, window.innerWidth - 400),
   };
 
   const handleCopyMock = (type) => {
@@ -76,72 +65,48 @@ const ClientsContextMenu = ({ x, y, onClose }) => {
   };
 
   const handleExport = () => {
-    alert("Exporting mock data to CSV...\nIn a real scenario, this would trigger a file download.");
+    alert('Exporting mock data to CSV...\nIn a real scenario, this would trigger a file download.');
   };
 
-  const selectBySubmenu = [
-    { text: "All" },
-    { text: "None" },
-    { text: "Invert Selection" }
+  const selectBySubmenu = [{ text: 'All' }, { text: 'None' }, { text: 'Invert Selection' }];
+  const filterSubmenu   = [{ text: 'Contains' }, { text: 'Equals' }, { text: 'Starts with' }, { text: 'Clear Filter' }];
+  const copyAsSubmenu   = [
+    { text: 'Text', onClick: () => handleCopyMock('Text') },
+    { text: 'CSV',  onClick: () => handleCopyMock('CSV') },
+    { text: 'JSON', onClick: () => handleCopyMock('JSON') },
   ];
-
-  const filterSubmenu = [
-    { text: "Contains" },
-    { text: "Equals" },
-    { text: "Starts with" },
-    { text: "Clear Filter" }
-  ];
-
-  const copyAsSubmenu = [
-    { text: "Text", onClick: () => handleCopyMock("Text") },
-    { text: "CSV", onClick: () => handleCopyMock("CSV") },
-    { text: "JSON", onClick: () => handleCopyMock("JSON") }
-  ];
-
-  const columnsSubmenu = [
-    { text: "Login", hasCheck: true },
-    { text: "Name", hasCheck: true },
-    { text: "Group", hasCheck: true },
-    { text: "Country", hasCheck: true },
-    { text: "City", hasCheck: true }
+  const columnsSubmenu  = [
+    { text: 'Login', hasCheck: true }, { text: 'Name', hasCheck: true },
+    { text: 'Group', hasCheck: true }, { text: 'Country', hasCheck: true },
+    { text: 'City', hasCheck: true },
   ];
 
   return (
-    <div 
-      className="fixed z-[9999] w-[240px] bg-[#2b2b2b] border border-[#404040] rounded-sm py-1 shadow-2xl font-sans"
-      style={style}
+    <div
+      className="ui-ctxmenu fixed z-[9999]"
+      style={{ ...style, width: 240 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <MenuItem text="New Client" icon={UserPlus} iconColor="text-green-500" rightText="Ctrl+Shift+N" />
-      <MenuItem text="Client Details" icon={UserSquare} iconColor="text-blue-400" />
-      <MenuItem text="Fix Personal Data" icon={UserSquare} iconColor="text-blue-500" />
-      
-      <MenuDivider />
-      
-      <MenuItem text="Email" icon={Mail} iconColor="text-yellow-600" />
-      <MenuItem text="Journal" icon={BookOpen} iconColor="text-yellow-600" />
-      
-      <MenuDivider />
-      
-      <MenuItem text="Select By" rightIcon={ChevronRight} submenu={selectBySubmenu} />
-      <MenuItem text="Filter" rightIcon={ChevronRight} submenu={filterSubmenu} />
-      <MenuItem text="Copy As" rightIcon={ChevronRight} submenu={copyAsSubmenu} />
-      <MenuItem text="Export" icon={RefreshCw} iconColor="text-green-500" onClick={handleExport} />
-      <MenuItem text="Find" icon={Search} iconColor="text-gray-500" rightText="Ctrl+F" disabled={true} />
-      
-      <MenuDivider />
-      
-      <MenuItem text="Delete Clients" icon={X} iconColor="text-red-500" rightText="Ctrl+D" />
-      
-      <MenuDivider />
-      
-      <MenuItem text="Auto Scroll" />
-      <MenuItem text="Auto Arrange" hasCheck={true} rightText="A" />
-      <MenuItem text="Grid" hasCheck={true} rightText="G" />
-      
-      <MenuDivider />
-      
-      <MenuItem text="Columns" rightIcon={ChevronRight} submenu={columnsSubmenu} />
+      <Item text="New Client"        icon={UserPlus}   iconTone="ok"     rightText="Ctrl+Shift+N" />
+      <Item text="Client Details"    icon={UserSquare} iconTone="accent" />
+      <Item text="Fix Personal Data" icon={UserSquare} iconTone="info" />
+      <Sep />
+      <Item text="Email"   icon={Mail}     iconTone="warn" />
+      <Item text="Journal" icon={BookOpen} iconTone="warn" />
+      <Sep />
+      <Item text="Select By" rightIcon={ChevronRight} submenu={selectBySubmenu} />
+      <Item text="Filter"    rightIcon={ChevronRight} submenu={filterSubmenu} />
+      <Item text="Copy As"   rightIcon={ChevronRight} submenu={copyAsSubmenu} />
+      <Item text="Export"    icon={RefreshCw} iconTone="ok" onClick={handleExport} />
+      <Item text="Find"      icon={Search} rightText="Ctrl+F" disabled />
+      <Sep />
+      <Item text="Delete Clients" icon={X} iconTone="danger" rightText="Ctrl+D" />
+      <Sep />
+      <Item text="Auto Scroll" />
+      <Item text="Auto Arrange" hasCheck rightText="A" />
+      <Item text="Grid"         hasCheck rightText="G" />
+      <Sep />
+      <Item text="Columns" rightIcon={ChevronRight} submenu={columnsSubmenu} />
     </div>
   );
 };

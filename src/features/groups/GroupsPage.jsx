@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
-import { Search, Users2, Plus, Trash2, Edit2, Filter, Loader } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Filter, Loader2 } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
 
 const GroupsPage = () => {
@@ -10,6 +10,8 @@ const GroupsPage = () => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeGroupsData, setActiveGroupsData] = useState(null);
+  const [editGroup, setEditGroup] = useState(null);
+  const [isFiltering, setIsFiltering] = useState(false);
 
   const filteredGroups = useMemo(() => {
     let source = activeGroupsData || groups;
@@ -23,17 +25,14 @@ const GroupsPage = () => {
       try {
         const token = localStorage.getItem('authToken');
         const res = await fetch(`/api/manager/GroupDelete?id=${token}&group=${groupName}`);
-        if (!res.ok) throw new Error("Delete failed");
+        if (!res.ok) throw new Error('Delete failed');
         alert(`Group '${groupName}' deleted successfully!`);
-        // Ideally trigger a refresh of groups here via context or reload
         window.location.reload();
       } catch (err) {
-        alert("Error deleting group: " + err.message);
+        alert('Error deleting group: ' + err.message);
       }
     }
   };
-
-  const [editGroup, setEditGroup] = useState(null);
 
   const handleEdit = (e, group) => {
     e.stopPropagation();
@@ -41,58 +40,44 @@ const GroupsPage = () => {
     setIsModalOpen(true);
   };
 
-  const [isFiltering, setIsFiltering] = useState(false);
   const handleActiveGroupsFilter = async () => {
-    if (activeGroupsData) {
-      setActiveGroupsData(null); // Toggle off
-      return;
-    }
-
+    if (activeGroupsData) { setActiveGroupsData(null); return; }
     setIsFiltering(true);
     try {
       const id = localStorage.getItem('authToken');
       const res = await fetch(`/api/manager/UserGroups?id=${id}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
+        method: 'GET', headers: { accept: 'application/json' },
       });
       const data = await res.json();
-
       if (Array.isArray(data)) {
-        // Handle array of strings or array of objects with .Group or .name
-        const formatted = data.map(item => {
-          if (typeof item === 'string') return { name: item, description: '' };
-          return {
-            name: item.Group || item.name || 'Unnamed',
-            description: item.Currency || item.description || ''
-          };
-        });
+        const formatted = data.map(item => typeof item === 'string'
+          ? { name: item, description: '' }
+          : { name: item.Group || item.name || 'Unnamed', description: item.Currency || item.description || '' });
         setActiveGroupsData(formatted);
       } else if (data && Array.isArray(data.groups)) {
         setActiveGroupsData(data.groups);
       } else if (data && data.error) {
         throw new Error(data.error);
       } else {
-        alert("Unexpected response:\n" + JSON.stringify(data, null, 2));
+        alert('Unexpected response:\n' + JSON.stringify(data, null, 2));
       }
     } catch (err) {
-      alert("Error fetching active groups: " + err.message);
+      alert('Error fetching active groups: ' + err.message);
     } finally {
       setIsFiltering(false);
     }
   };
 
   return (
-    <div className="p-4 w-full h-full flex flex-col gap-4 bg-[#f8f9fa] dark:bg-[#1e1e1e]">
-
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="text-blue-500"><Users2 size={16} /></div>
-          <h1 className="text-[14px] text-gray-900 dark:text-gray-200 tracking-tight font-medium">Configured Groups</h1>
+    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Groups</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+            Configured trading groups and their settings.
+          </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-sm transition-colors mt-2 md:mt-0"
-        >
+        <button onClick={() => setIsModalOpen(true)} className="ui-btn ui-btn-primary ui-btn-sm">
           <Plus size={14} />
           New Group
         </button>
@@ -100,69 +85,70 @@ const GroupsPage = () => {
 
       <div className="flex items-center gap-2">
         <div className="relative w-full max-w-xs">
-          <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"
-            placeholder="Search group names..."
+            placeholder="Search group names…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-7 pr-3 py-0.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252526] text-gray-800 dark:text-gray-200 text-[11px] rounded-sm focus:outline-none focus:border-blue-400 h-[24px] transition-colors"
+            className="ui-input ui-input-sm"
+            style={{ paddingLeft: 32 }}
           />
         </div>
 
         <button
           onClick={handleActiveGroupsFilter}
           disabled={isFiltering}
-          className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium rounded-sm transition-colors h-[24px] disabled:opacity-50 ${activeGroupsData
-            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-            : 'bg-gray-200 dark:bg-[#2d2d30] hover:bg-gray-300 dark:hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200'
-            }`}
+          className={`ui-btn ${activeGroupsData ? 'ui-btn-primary' : 'ui-btn-secondary'} ui-btn-sm`}
         >
-          {isFiltering ? <Loader size={12} className="animate-spin" /> : <Filter size={12} />}
+          {isFiltering ? <Loader2 size={13} className="animate-spin" /> : <Filter size={13} />}
           {activeGroupsData ? 'Show All' : 'Active Only'}
         </button>
       </div>
 
-      <div className="flex-1 bg-white dark:bg-[#252526] border border-gray-200 dark:border-[#333] rounded-sm shadow-sm overflow-hidden flex flex-col">
+      <div className="ui-card flex-1 overflow-hidden flex flex-col">
         {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400">Fetching groups...</div>
+          <div className="flex-1 flex items-center justify-center text-sm" style={{ color: 'var(--muted)' }}>
+            Fetching groups…
+          </div>
         ) : (
           <div className="w-full overflow-y-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="ui-grid">
               <thead>
-                <tr className="bg-[#f0f0f0] dark:bg-[#2d2d30] border-b border-gray-200 dark:border-[#333] text-[11px] text-gray-700 dark:text-gray-300 h-8">
-                  <th className="px-4 py-1 font-medium w-64 border-r border-gray-200 dark:border-[#333]">Group Name</th>
-                  <th className="px-4 py-1 font-medium">Description</th>
-                  <th className="px-4 py-1 font-medium w-24 text-right">Actions</th>
+                <tr>
+                  <th>Group Name</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="text-[12px] text-gray-800 dark:text-gray-200">
+              <tbody>
                 {filteredGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="text-center py-10 text-gray-400">No groups found mapping your search.</td>
+                    <td colSpan={3} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
+                      No groups match your search.
+                    </td>
                   </tr>
                 ) : filteredGroups.map(group => (
                   <tr
                     key={group.name}
                     onClick={() => navigate(`/groups/${group.name}`)}
-                    className="border-b border-gray-100 dark:border-[#333] h-8 cursor-pointer hover:bg-blue-50 dark:hover:bg-[#2a2d33] transition-colors"
+                    style={{ cursor: 'pointer' }}
                   >
-                    <td className="px-4 py-1 border-r border-gray-100 dark:border-[#333] text-blue-600 dark:text-blue-400 font-medium">
-                      {group.name}
-                    </td>
-                    <td className="px-4 py-1 text-gray-600 dark:text-gray-400">{group.description}</td>
-                    <td className="px-4 py-1 text-right">
+                    <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>
+                    <td style={{ color: 'var(--text-2)' }}>{group.description}</td>
+                    <td style={{ textAlign: 'right' }}>
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={(e) => handleEdit(e, group)}
-                          className="p-1 flex items-center justify-center rounded-sm text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                          className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
                           title="Edit Group"
                         >
                           <Edit2 size={13} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, group.name)}
-                          className="p-1 flex items-center justify-center rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
+                          style={{ color: 'var(--danger)' }}
                           title="Delete Group"
                         >
                           <Trash2 size={13} />
@@ -180,17 +166,13 @@ const GroupsPage = () => {
       {isModalOpen && (
         <NewGroupModal
           initialData={editGroup}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditGroup(null);
-          }}
-          onSuccess={(res) => {
-            alert(editGroup ? "Group Updated Successfully!" : "Group Created Successfully!");
+          onClose={() => { setIsModalOpen(false); setEditGroup(null); }}
+          onSuccess={() => {
+            alert(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
             window.location.reload();
           }}
         />
       )}
-
     </div>
   );
 };

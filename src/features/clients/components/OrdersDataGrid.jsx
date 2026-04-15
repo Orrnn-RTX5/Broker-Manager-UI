@@ -4,26 +4,24 @@ import useDataSource from '../../../hooks/useDataSource';
 import { getOrders } from '../../../services/api';
 import OrdersPopup from '../../../components/Popups/OrdersPopup';
 
-const ORDERS_FALLBACK = []; // No sample data available for orders
+const ORDERS_FALLBACK = [];
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtDate = (ts) => {
-  if (!ts) return '-';
-  // Attempt to parse if it's a timestamp (assuming seconds or ms)
-  // Broker APIs sometimes return Unix timestamp in seconds
-  const dateObj = new Date(ts > 1e11 ? ts : ts * 1000); 
+  if (!ts) return '—';
+  const dateObj = new Date(ts > 1e11 ? ts : ts * 1000);
   if (isNaN(dateObj.getTime())) return String(ts);
-  return dateObj.toLocaleString('en-US', { 
-    year: 'numeric', month: '2-digit', day: '2-digit', 
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  return dateObj.toLocaleString('en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
 };
 
 const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={9} className="text-gray-400 ml-0.5 inline" />;
+  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
   return sortDir === 'asc'
-    ? <ChevronUp size={9} className="text-blue-500 ml-0.5 inline" />
-    : <ChevronDown size={9} className="text-blue-500 ml-0.5 inline" />;
+    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
+    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons' }) => {
@@ -68,29 +66,28 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     return rows;
   }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
   const TH = ({ col, label, align = 'left' }) => (
-    <th
-      className={`px-2 py-1 font-normal border-l border-gray-200 dark:border-[#333333] cursor-pointer select-none whitespace-nowrap hover:bg-gray-200 dark:hover:bg-[#333333] transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
-      onClick={() => handleSort(col)}
-    >
+    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
 
   return (
-    <div className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#333333] shadow-sm rounded-sm flex flex-col w-full overflow-hidden transition-colors">
+    <div className="ui-card flex flex-col w-full overflow-hidden">
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 p-2 text-xs border-b border-red-200 dark:border-red-800 break-all w-full max-w-full">
-          <strong>API Error Detected. Developer Error Details:</strong> {error}
+        <div
+          className="px-4 py-2 text-xs break-all"
+          style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
+        >
+          <strong>API Error Detected.</strong> {error}
         </div>
       )}
       <div className="w-full overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-max">
+        <table className="ui-grid min-w-max">
           <thead>
-            <tr className="bg-[#f0f0f0] dark:bg-[#2d2d30] border-b border-gray-200 dark:border-[#333333] text-[11px] text-gray-700 dark:text-gray-300 h-8 select-none transition-colors">
+            <tr>
               <TH col="ticket" label="Ticket" />
               <TH col="login" label="Login" />
               <TH col="name" label="User Name" />
@@ -99,7 +96,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               <TH col="type" label="Type" />
               <TH col="side" label="Side" />
               <TH col="volume" label="Lots" align="right" />
-              <TH col="priceOpen" label="Open Price" align="right" />
+              <TH col="priceOpen" label="Open" align="right" />
               <TH col="priceSl" label="S/L" align="right" />
               <TH col="priceTp" label="T/P" align="right" />
               <TH col="status" label="Status" />
@@ -108,14 +105,14 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               <TH col="comment" label="Comment" />
             </tr>
           </thead>
-          <tbody className="text-[12px] text-gray-800 dark:text-gray-200">
+          <tbody>
             {isLoading && pageRows.length === 0 ? (
               <tr>
-                <td colSpan={15} className="text-center py-12 text-gray-400 dark:text-gray-500">Loading orders...</td>
+                <td colSpan={15} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading orders…</td>
               </tr>
             ) : pageRows.length === 0 ? (
               <tr>
-                <td colSpan={15} className="text-center py-12 text-gray-400 dark:text-gray-500">No orders match the current filters.</td>
+                <td colSpan={15} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>No orders match the current filters.</td>
               </tr>
             ) : pageRows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
@@ -128,30 +125,28 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                     setActiveAccountDetailsId(row.login);
                     setActiveAccountTicket(row.ticket);
                   }}
-                  className={`border-b border-gray-100 dark:border-[#333333] h-7 cursor-pointer transition-colors
-                    ${selectedRow === rowKey
-                      ? 'bg-blue-100 dark:bg-blue-900/30'
-                      : 'hover:bg-blue-50/50 dark:hover:bg-[#252526]'}`}
+                  className={selectedRow === rowKey ? 'is-selected' : ''}
+                  style={{ cursor: 'pointer' }}
                 >
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-800 dark:text-gray-200">{row.ticket}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{row.login}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-800 dark:text-gray-200 font-medium">{row.name}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{row.group}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] font-medium">{row.symbol}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] capitalize">
-                    <span className={isBuy ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}>
+                  <td className="tabular">{row.ticket}</td>
+                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
+                  <td style={{ fontWeight: 500 }}>{row.name}</td>
+                  <td style={{ color: 'var(--text-3)' }}>{row.group}</td>
+                  <td style={{ fontWeight: 500 }}>{row.symbol}</td>
+                  <td className="capitalize">
+                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
                       {row.type}
                     </span>
                   </td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333]">{row.side}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-right">{row.volume}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-right font-mono text-[11px]">{fmt(row.priceOpen, 5)}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-right font-mono text-[11px]">{fmt(row.priceSl, 5)}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-right font-mono text-[11px]">{fmt(row.priceTp, 5)}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{row.status}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{fmtDate(row.timeSetup)}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{fmtDate(row.timeDone)}</td>
-                  <td className="px-2 py-0.5 whitespace-nowrap border-l border-gray-100 dark:border-[#333333] text-gray-500 dark:text-gray-400">{row.comment}</td>
+                  <td>{row.side}</td>
+                  <td className="tabular" style={{ textAlign: 'right' }}>{row.volume}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceOpen, 5)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceSl, 5)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceTp, 5)}</td>
+                  <td style={{ color: 'var(--text-3)' }}>{row.status}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{fmtDate(row.timeSetup)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{fmtDate(row.timeDone)}</td>
+                  <td style={{ color: 'var(--text-3)' }}>{row.comment}</td>
                 </tr>
               );
             })}
@@ -159,32 +154,34 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
         </table>
       </div>
 
-      {/* Footer */}
       {filtered.length > 50 && (
-        <div className="h-7 border-t border-gray-200 dark:border-[#333333] bg-gray-50 dark:bg-[#252526] flex items-center justify-between px-3 text-[11px] text-gray-500 dark:text-gray-400 transition-colors">
-          <span className="flex items-center gap-2">
-            Showing 1–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length} orders
-            &nbsp;|&nbsp;
-            Buy: <span className="text-blue-600 dark:text-blue-400">{filtered.filter(r => (r.type||'').toLowerCase() === 'buy').length}</span>
-            &nbsp;
-            Sell: <span className="text-red-600 dark:text-red-400">{filtered.filter(r => (r.type||'').toLowerCase() === 'sell').length}</span>
+        <div
+          className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+        >
+          <span className="flex items-center gap-3">
+            <span>
+              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>1–{Math.min((page + 1) * pageSize, filtered.length)}</span>
+              {' '}of{' '}
+              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span>
+            </span>
+            <span style={{ color: 'var(--muted)' }}>·</span>
+            <span>Buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{filtered.filter(r => (r.type || '').toLowerCase() === 'buy').length}</span></span>
+            <span>Sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{filtered.filter(r => (r.type || '').toLowerCase() === 'sell').length}</span></span>
             {isFallback && (
-              <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-sm">
-                <AlertTriangle size={9} />
+              <span className="ui-badge ui-badge-warn">
+                <AlertTriangle size={10} />
                 DEMO DATA
               </span>
             )}
           </span>
-          <div className="flex items-center gap-1">
-            { (page + 1) * pageSize < filtered.length ? (
-              <button
-                onClick={() => setPage(p => p + 1)}
-                className="px-3 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded-sm text-[10px] transition-colors font-medium h-[20px] flex items-center"
-              >
+          <div className="flex items-center gap-2">
+            {(page + 1) * pageSize < filtered.length ? (
+              <button onClick={() => setPage(p => p + 1)} className="ui-btn ui-btn-primary ui-btn-xs">
                 Show More
               </button>
             ) : (
-              <span className="text-[10px] text-gray-400 italic">No more orders to load</span>
+              <span className="italic" style={{ color: 'var(--muted)' }}>All loaded</span>
             )}
           </div>
         </div>

@@ -11,15 +11,15 @@
 }
 
 .panelFloat {
-  border-radius: 4px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px -12px rgba(16, 24, 40, 0.25), 0 8px 16px -4px rgba(16, 24, 40, 0.08);
   resize: none;
   min-width: 200px;
   min-height: 120px;
 }
 
 .panelFloat:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 24px 56px -12px rgba(16, 24, 40, 0.32), 0 12px 20px -4px rgba(16, 24, 40, 0.10);
 }
 
 /* ─── Docked variants ────────────────────────────────────────────────────── */
@@ -71,8 +71,8 @@
 
 /* ─── Dragging state ─────────────────────────────────────────────────────── */
 .dragging {
-  opacity: 0.9;
-  box-shadow: 0 0 0 2px #1e8cff, 0 12px 40px rgba(0, 0, 0, 0.6) !important;
+  opacity: 0.95;
+  box-shadow: 0 0 0 2px var(--accent, #7f56d9), 0 20px 48px -8px rgba(16, 24, 40, 0.35) !important;
   cursor: grabbing !important;
 }
 
@@ -81,10 +81,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
-  height: 26px;
-  background: var(--dock-titlebar-bg, #f0f0f0);
-  border-bottom: 1px solid var(--dock-border, #cccccc);
+  padding: 0 10px;
+  height: 34px;
+  background: var(--dock-titlebar-bg, #f9fafb);
+  border-bottom: 1px solid var(--dock-border, #e4e7ec);
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
@@ -95,17 +95,16 @@
 }
 
 .panelIcon {
-  font-size: 13px;
-  color: var(--dock-icon-color, #1e8cff);
+  font-size: 14px;
+  color: var(--dock-icon-color, #7f56d9);
   flex-shrink: 0;
 }
 
 .titleText {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--dock-title-text, #333333);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  color: var(--dock-title-text, #101828);
+  letter-spacing: -0.01em;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,27 +118,27 @@
 }
 
 .titleBtn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: none;
   background: transparent;
-  color: var(--dock-btn-color, #888888);
+  color: var(--dock-btn-color, #475467);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
-  font-size: 11px;
+  border-radius: 6px;
+  font-size: 12px;
   transition: background 0.12s, color 0.12s;
 }
 
 .titleBtn:hover {
-  background: var(--dock-btn-hover-bg, #e0e0e0);
-  color: var(--dock-btn-hover-text, #333333);
+  background: var(--dock-btn-hover-bg, #f2f4f7);
+  color: var(--dock-btn-hover-text, #101828);
 }
 
 .closeBtn:hover {
-  background: #c0392b !important;
+  background: var(--danger, #f04438) !important;
   color: #fff !important;
 }
 

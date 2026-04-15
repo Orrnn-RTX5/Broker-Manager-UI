@@ -157,69 +157,66 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-[#1e1e1e] flex flex-col h-full w-full transition-colors">
-
-      {/* Mini toolbar: refresh button */}
-      <div className="h-6 bg-[#f8f8f8] dark:bg-[#1e1e1e] border-b border-[#e0e0e0] dark:border-[#333333] flex items-center justify-between px-2 shrink-0">
-        <span className="text-[11px] text-gray-500 dark:text-gray-400 select-none">
-          {!loading && `${accounts.length} account(s)`}
+    <div className="flex flex-col h-full w-full" style={{ background: 'var(--surface)' }}>
+      {/* Mini toolbar */}
+      <div
+        className="h-8 flex items-center justify-between px-3 shrink-0"
+        style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
+      >
+        <span className="text-xs font-medium tabular" style={{ color: 'var(--text-3)' }}>
+          {!loading && `${accounts.length} accounts`}
         </span>
         {isAuthenticated && (
           <button
             onClick={fetchAccounts}
             disabled={loading}
             title="Refresh accounts"
-            className="hover:bg-blue-500 hover:text-white text-gray-500 dark:text-gray-400 p-0.5 rounded-sm transition-colors cursor-pointer border border-transparent disabled:opacity-40"
+            className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
           >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           </button>
         )}
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-[#1e1e1e]">
-
-        {/* Not connected */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {!isAuthenticated && (
-          <div className="flex flex-col items-center justify-center h-32 gap-2 text-gray-400">
-            <WifiOff size={16} className="text-gray-400" />
-            <span className="text-[11px]">Not connected</span>
+          <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: 'var(--muted)' }}>
+            <WifiOff size={18} />
+            <span className="text-xs">Not connected</span>
           </div>
         )}
 
-        {/* Loading */}
         {isAuthenticated && loading && (
-          <div className="flex flex-col items-center justify-center h-32 gap-2 text-gray-400">
-            <Loader size={18} className="animate-spin text-blue-400" />
-            <span className="text-[11px]">Loading accounts...</span>
+          <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: 'var(--text-3)' }}>
+            <Loader size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <span className="text-xs">Loading accounts…</span>
           </div>
         )}
 
-        {/* Error */}
         {isAuthenticated && !loading && error && (
-          <div className="p-3 flex flex-col items-center gap-2 text-center">
-            <AlertTriangle size={16} className="text-red-400" />
-            <span className="text-[11px] text-red-400">{error}</span>
-            <button onClick={fetchAccounts} className="text-[11px] text-blue-400 hover:underline">
+          <div className="p-4 flex flex-col items-center gap-2 text-center">
+            <AlertTriangle size={18} style={{ color: 'var(--danger)' }} />
+            <span className="text-xs" style={{ color: 'var(--danger-text)' }}>{error}</span>
+            <button onClick={fetchAccounts} className="ui-btn ui-btn-ghost ui-btn-xs" style={{ color: 'var(--accent-text)' }}>
               Retry
             </button>
           </div>
         )}
 
-        {/* Table */}
         {isAuthenticated && !loading && !error && (
-          <table className="w-full text-left border-collapse">
+          <table className="ui-grid">
             <thead>
-              <tr className="bg-[#f8f8f8] dark:bg-[#252526] border-b border-[#cccccc] dark:border-[#333333] text-[11px] text-gray-700 dark:text-gray-300 h-6 select-none transition-colors sticky top-0">
-                <th className="px-2 py-0.5 font-normal">Login</th>
-                <th className="px-2 py-0.5 font-normal border-l border-[#cccccc] dark:border-[#333333]">Name</th>
-                <th className="px-2 py-0.5 font-normal border-l border-[#cccccc] dark:border-[#333333] text-right">Balance</th>
+              <tr>
+                <th>Login</th>
+                <th>Name</th>
+                <th style={{ textAlign: 'right' }}>Balance</th>
               </tr>
             </thead>
-            <tbody className="text-[12px] text-gray-800 dark:text-gray-200 font-sans">
+            <tbody>
               {accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-6 text-[11px] text-gray-400">
+                  <td colSpan={3} className="text-center py-6 text-xs" style={{ color: 'var(--muted)' }}>
                     No accounts found
                   </td>
                 </tr>
@@ -236,22 +233,21 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                       key={login ?? idx}
                       onDoubleClick={() => setSelectedAccountDetails(acc)}
                       onContextMenu={(e) => handleContextMenu(e, acc)}
-                      className={`border-b border-[#e0e0e0] dark:border-[#333333] h-6 transition-colors cursor-pointer ${
-                        isUrgent
-                          ? 'bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-900 dark:text-red-300'
-                          : 'hover:bg-blue-50/50 dark:hover:bg-[#2d2d30]'
-                      }`}
+                      style={{
+                        cursor: 'pointer',
+                        background: isUrgent ? 'var(--danger-soft)' : undefined,
+                      }}
                     >
-                      <td className="px-2 py-0.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <User size={11} className={isUrgent ? 'text-red-500 dark:text-red-400' : 'text-blue-500 dark:text-blue-400'} />
-                          <span className="font-mono text-[11px]">{login}</span>
-                        </div>
+                      <td style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
+                        <span className="inline-flex items-center gap-2">
+                          <User size={12} style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }} />
+                          <span className="tabular font-mono">{login}</span>
+                        </span>
                       </td>
-                      <td className="px-2 py-0.5 whitespace-nowrap border-l border-[#e0e0e0] dark:border-[#333333] text-[11px]" style={{ maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <td className="text-xs truncate" style={{ maxWidth: 100, color: isUrgent ? 'var(--danger-text)' : 'var(--text-2)' }}>
                         {name}
                       </td>
-                      <td className="px-2 py-0.5 whitespace-nowrap border-l border-[#e0e0e0] dark:border-[#333333] text-right font-mono text-[11px]">
+                      <td className="tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
                         {bal}
                       </td>
                     </tr>

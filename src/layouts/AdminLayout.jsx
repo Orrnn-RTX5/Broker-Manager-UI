@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
@@ -61,9 +61,8 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
   return (
     <div
-      className={`flex flex-col h-screen overflow-hidden font-sans selection:bg-blue-200 ${
-        isDarkMode ? 'bg-[#1e1e1e] text-gray-200' : 'bg-gray-100'
-      }`}
+      className="flex flex-col h-screen overflow-hidden"
+      style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
       {/* ── Top bars ── */}
       <MenuBar isAuthenticated={isAuthenticated} onLogin={onLogin} onLogout={onLogout} />
@@ -78,9 +77,9 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       />
 
       {/* ── Main dockable workspace ── */}
-      <div className="flex-1 overflow-hidden border-t border-[#a0a0a0]">
+      <div className="flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout panelContents={panelContents}>
-          <div className={`h-full w-full overflow-auto relative ${isDarkMode ? 'bg-[#1e1e1e]' : 'bg-[#e8eaf6]'}`}>
+          <div className="h-full w-full overflow-auto relative" style={{ background: 'var(--bg)' }}>
             {children}
           </div>
         </DockLayout>

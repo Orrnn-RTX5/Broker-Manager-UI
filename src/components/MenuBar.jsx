@@ -122,67 +122,110 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
     }
   };
 
+  const isConnected = connectionData?.status === 'Connected';
+  const pingTone = pingMs == null ? 'var(--muted)' : pingMs < 150 ? 'var(--ok)' : 'var(--warn)';
+
   return (
-    <div className="h-8 bg-[#f3f4f6] dark:bg-[#1e1e24] border-b border-gray-300 dark:border-[#333333] flex items-center justify-between px-2 text-[13px] select-none text-gray-700 dark:text-gray-300 relative z-50 transition-colors">
+    <div
+      className="h-9 flex items-center justify-between px-2 text-[13px] select-none relative z-50"
+      style={{
+        background: 'var(--surface)',
+        borderBottom: '1px solid var(--border)',
+        color: 'var(--text-2)',
+      }}
+    >
       <div className="flex items-center h-full" ref={menuRef}>
-        {/* Logo/Icon Area */}
-        <div className="px-2 flex items-center h-full cursor-pointer hover:bg-gray-200 dark:hover:bg-[#2d2d30] transition-colors">
-          <div className="w-4 h-4 bg-gradient-to-tr from-blue-500 to-purple-500 rounded-sm"></div>
+        {/* Logo */}
+        <div
+          className="px-2.5 flex items-center h-full cursor-pointer"
+          style={{ color: 'var(--text)' }}
+        >
+          <div
+            className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
+            style={{ background: 'var(--accent)', color: '#fff', letterSpacing: '-0.02em' }}
+          >
+            R5
+          </div>
         </div>
 
         {/* Menu Items */}
-        <div className="flex items-center h-full ml-1 space-x-0.5">
-          {menuItems.map((item) => (
-            <div
-              key={item}
-              className="relative flex items-center h-full"
-            >
-              <div
-                onClick={() => setActiveMenu(activeMenu === item ? null : item)}
-                onMouseEnter={() => activeMenu && setActiveMenu(item)}
-                className={`
-                  px-2.5 py-1 flex items-center h-full cursor-pointer rounded-sm transition-colors
-                  ${activeMenu === item ? 'bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-[#2d2d30] hover:text-gray-900 dark:hover:text-gray-100'}
-                `}
-              >
-                {item}
+        <div className="flex items-center h-full ml-1 gap-0.5">
+          {menuItems.map((item) => {
+            const active = activeMenu === item;
+            return (
+              <div key={item} className="relative flex items-center h-full">
+                <div
+                  onClick={() => setActiveMenu(active ? null : item)}
+                  onMouseEnter={() => activeMenu && setActiveMenu(item)}
+                  className="px-2.5 h-[26px] flex items-center cursor-pointer rounded-md transition-colors"
+                  style={{
+                    background: active ? 'var(--surface-3)' : 'transparent',
+                    color: active ? 'var(--text)' : 'var(--text-2)',
+                    fontWeight: active ? 500 : 400,
+                  }}
+                  onMouseOver={(e) => { if (!active) e.currentTarget.style.background = 'var(--surface-2)'; }}
+                  onMouseOut={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {item}
+                </div>
+                {renderDropdown(item)}
               </div>
-              {renderDropdown(item)}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Right side status */}
-      <div className="flex items-center h-full text-xs text-gray-500 dark:text-gray-400 space-x-3 px-2">
-        <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
-           <select className="bg-transparent hover:bg-gray-200 dark:hover:bg-[#2d2d30] border-none text-gray-600 dark:text-gray-300 focus:outline-none rounded-sm px-1.5 py-0.5 font-medium cursor-pointer appearance-none text-[11px]">
-              {['English (EN)', 'Arabic (AR)', 'Chinese (ZH)', 'French (FR)', 'German (DE)', 'Hindi (HI)', 'Japanese (JA)', 'Russian (RU)', 'Spanish (ES)', 'Turkish (TR)'].map(code => (
-                <option key={code} className="bg-white dark:bg-[#252526]">{code}</option>
-              ))}
-           </select>
-        </div>
-        <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
-        <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
-          <Activity size={14} className={pingMs && pingMs < 150 ? "text-green-500 dark:text-green-400" : pingMs ? "text-yellow-500" : "text-gray-500"} />
-          <span className="font-mono">
-            {pingMs !== null ? `${pingMs} ms` : '---'} / {trafficKb.toFixed(1)} KB
+      <div className="flex items-center h-full gap-3 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
+        <select
+          className="border-none focus:outline-none rounded-md px-2 py-1 cursor-pointer appearance-none text-[11px]"
+          style={{ background: 'transparent', color: 'var(--text-2)' }}
+        >
+          {['English (EN)', 'Arabic (AR)', 'Chinese (ZH)', 'French (FR)', 'German (DE)', 'Hindi (HI)', 'Japanese (JA)', 'Russian (RU)', 'Spanish (ES)', 'Turkish (TR)'].map(code => (
+            <option key={code}>{code}</option>
+          ))}
+        </select>
+
+        <span className="h-4 w-px" style={{ background: 'var(--border)' }} />
+
+        <div className="flex items-center gap-1.5">
+          <Activity size={13} style={{ color: pingTone }} />
+          <span className="font-mono text-[11px] tabular">
+            {pingMs !== null ? `${pingMs} ms` : '---'} · {trafficKb.toFixed(1)} KB
           </span>
         </div>
-        <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
+
+        <span className="h-4 w-px" style={{ background: 'var(--border)' }} />
+
         <div className="relative group flex items-center h-full">
-          <div className={`flex items-center gap-1.5 cursor-pointer ${connectionData?.status === 'Connected' ? 'hover:text-gray-700 dark:hover:text-gray-200 text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}`}>
-            {connectionData?.status === 'Connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
-            <span>{connectionData?.status === 'Connected' ? 'Connected' : 'Disconnected'}</span>
+          <div
+            className="flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded-md"
+            style={{
+              background: isConnected ? 'var(--ok-soft)' : 'var(--surface-3)',
+              color: isConnected ? 'var(--ok-text)' : 'var(--muted)',
+              border: `1px solid ${isConnected ? 'var(--ok-border)' : 'var(--border)'}`,
+              fontWeight: 500,
+            }}
+          >
+            {isConnected ? <Wifi size={13} /> : <WifiOff size={13} />}
+            <span className="text-[11px]">{isConnected ? 'Connected' : 'Disconnected'}</span>
           </div>
-          
-          {connectionData?.status === 'Connected' && (
-            <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-48 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-2 px-3 z-[100] text-xs text-gray-800 dark:text-gray-200">
-              <div className="font-semibold mb-1 pb-1 border-b border-gray-300 dark:border-[#404040]">Connection</div>
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mt-2">
-                <div className="text-gray-500">Status:</div><div className="text-green-500 font-medium">{connectionData.status}</div>
-                <div className="text-gray-500">Login:</div><div className="font-mono">{connectionData.login}</div>
-                <div className="text-gray-500">Time:</div><div className="font-mono">{connectionData.connectedTime}s</div>
+
+          {isConnected && (
+            <div
+              className="absolute top-full right-0 mt-2 hidden group-hover:block w-56 py-3 px-4 z-[100] text-xs ui-card"
+              style={{ boxShadow: 'var(--shadow-lg)' }}
+            >
+              <div className="font-semibold pb-2 mb-2" style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
+                Connection
+              </div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                <div style={{ color: 'var(--text-3)' }}>Status</div>
+                <div style={{ color: 'var(--ok-text)', fontWeight: 500 }}>{connectionData.status}</div>
+                <div style={{ color: 'var(--text-3)' }}>Login</div>
+                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{connectionData.login}</div>
+                <div style={{ color: 'var(--text-3)' }}>Uptime</div>
+                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{connectionData.connectedTime}s</div>
               </div>
             </div>
           )}

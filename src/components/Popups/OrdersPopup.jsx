@@ -4,7 +4,7 @@ import { getOrders } from '../../services/api';
 import { buildFeedWsUrl, buildMetricsWsUrl } from '../../config/endpoints';
 
 const TABS = [
-  'Overview', 'Exposure', 'Personal', 'Account', 'Limits',
+  'Overview', 'Personal', 'Account', 'Limits',
   'Profile', 'Subscriptions', 'Balance', 'Trade', 'History', 'Security'
 ];
 
@@ -616,7 +616,7 @@ const OrdersPopup = ({ account, targetTicket, onClose, initialTab = 'Overview' }
         height: isMaximized ? '100vh' : (isMinimized ? 32 : size.height),
         zIndex: 100000
       }}
-      className="bg-[#1a1a1a] flex flex-col shadow-2xl border border-[#333] rounded-sm text-gray-800 dark:text-gray-200 font-sans select-none overflow-hidden"
+      className="legacy-popup flex flex-col shadow-2xl rounded-xl font-sans select-none overflow-hidden"
     >
       {!isMaximized && !isMinimized && (
         <>
