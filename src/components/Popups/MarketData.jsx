@@ -122,33 +122,36 @@ const MarketData = () => {
   }, []);
 
   return (
-    <div className="bg-[#1e1e1e] flex flex-col h-full w-full text-gray-200 font-mono">
+    <div className="flex flex-col h-full w-full overflow-hidden text-sm" style={{ background: 'var(--surface)', color: 'var(--text)' }}>
       <style>{`
         @keyframes flashTextUp {
-          0% { color: #ffffff; text-shadow: 0 0 8px rgba(59, 130, 246, 0.8); }
-          100% { color: #3b82f6; text-shadow: none; }
+          0% { color: var(--ok-text); text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+          100% { color: var(--ok-text); text-shadow: none; }
         }
         @keyframes flashTextDown {
-          0% { color: #ffffff; text-shadow: 0 0 8px rgba(239, 68, 68, 0.8); }
-          100% { color: #ef4444; text-shadow: none; }
+          0% { color: var(--danger-text); text-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+          100% { color: var(--danger-text); text-shadow: none; }
         }
         .flash-up { animation: flashTextUp 0.8s ease-out forwards; }
         .flash-down { animation: flashTextDown 0.8s ease-out forwards; }
+        .market-row { transition: background-color 0.1s ease; border-bottom: 1px solid var(--border); }
+        .market-row:hover { background: var(--surface-hover, rgba(120, 120, 120, 0.05)); }
+        .market-row.is-selected { background: var(--surface-hover, rgba(120, 120, 120, 0.1)); }
       `}</style>
 
       {/* Body */}
-      <div className="flex-1 overflow-hidden flex flex-col bg-[#1e1e1e]">
+      <div className="flex-1 overflow-hidden flex flex-col">
         {activeTab === 'Symbols' && (
           <div className="flex-1 overflow-auto">
             <table className="w-full text-left border-collapse table-fixed">
               <thead>
-                <tr className="bg-[#252526] text-[11px] text-gray-300 h-6 select-none sticky top-0 z-10 border-b border-[#333333]">
-                  <th className="px-1.5 py-0.5 font-normal w-1/3 border-r border-[#333333]">Symbol</th>
-                  <th className="px-1.5 py-0.5 font-normal w-1/3 border-r border-[#333333] text-right">Bid</th>
-                  <th className="px-1.5 py-0.5 font-normal w-1/3 text-right">Ask</th>
+                <tr className="select-none sticky top-0 z-10 text-xs" style={{ background: 'var(--surface-2)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+                  <th className="px-3 py-2 font-medium w-1/3" style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
+                  <th className="px-3 py-2 font-medium w-1/3 text-right" style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
+                  <th className="px-3 py-2 font-medium w-1/3 text-right">Ask</th>
                 </tr>
               </thead>
-              <tbody className="text-[12px]">
+              <tbody className="text-sm">
                 {liveQuotes.map((item) => (
                   <tr 
                     key={item.symbol} 
@@ -157,22 +160,22 @@ const MarketData = () => {
                       setTickHistory([{ bid: parseFloat(item.bid), ask: parseFloat(item.ask), time: Date.now() }]);
                       setActiveTab('Ticks');
                     }}
-                    className={`h-5 border-b border-[#333333] hover:bg-[#2d2d30] cursor-pointer ${selectedSymbol === item.symbol ? 'bg-[#2a2d3e]' : ''}`}
+                    className={`market-row cursor-pointer ${selectedSymbol === item.symbol ? 'is-selected' : ''}`}
                   >
-                    <td className="px-1.5 py-0.5 border-r border-[#333333] flex items-center gap-1">
+                    <td className="px-3 py-2 flex items-center gap-1.5 font-medium" style={{ borderRight: '1px solid var(--border)' }}>
                       {item.dir === 'up' ? (
-                        <ArrowUpRight size={10} className="text-[#3b82f6]" strokeWidth={2.5} />
+                        <ArrowUpRight size={14} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
                       ) : (
-                        <ArrowDownRight size={10} className="text-[#ef4444]" strokeWidth={2.5} />
+                        <ArrowDownRight size={14} style={{ color: 'var(--danger-text)' }} strokeWidth={2.5} />
                       )}
                       <span>{item.symbol}</span>
                     </td>
-                    <td className={`px-1.5 py-0.5 border-r border-[#333333] text-right ${item.dir === 'up' ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums" style={{ borderRight: '1px solid var(--border)', color: item.dir === 'up' ? 'var(--ok-text)' : 'var(--danger-text)' }}>
                       <span key={`${item.symbol}-bid-${item.bid}`} className={item.dir === 'up' ? 'flash-up' : 'flash-down'}>
                         {item.bid}
                       </span>
                     </td>
-                    <td className={`px-1.5 py-0.5 text-right ${item.dir === 'up' ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums" style={{ color: item.dir === 'up' ? 'var(--ok-text)' : 'var(--danger-text)' }}>
                       <span key={`${item.symbol}-ask-${item.ask}`} className={item.dir === 'up' ? 'flash-up' : 'flash-down'}>
                         {item.ask}
                       </span>
@@ -185,9 +188,9 @@ const MarketData = () => {
         )}
 
         {activeTab === 'Details' && (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto p-4 md:p-6 bg-[var(--surface-2)]">
             {!selectedSymbol ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500 text-[11px] h-full">
+              <div className="flex-1 flex items-center justify-center h-full text-sm" style={{ color: 'var(--muted)' }}>
                 Double-click a symbol in the Symbols tab to view its details.
               </div>
             ) : (() => {
@@ -205,7 +208,7 @@ const MarketData = () => {
                  isChangeUp = changeCalc >= 0;
                }
 
-               const formatVal = (val) => (!isNaN(val) && val !== null && val !== undefined && val !== '') ? Number(val).toFixed(2) : '-';
+               const formatVal = (val) => (!isNaN(val) && val !== null && val !== undefined && val !== '') ? Number(val).toFixed(5) : '-';
 
                const detailsData = [
                  { label: 'Bid', value: formatVal(quote.bid), isUp: quote.dir === 'up' },
@@ -220,55 +223,57 @@ const MarketData = () => {
                ];
 
                return (
-                 <>
-                   <div className="p-1 px-2 text-[#3b82f6] text-[12px] tracking-wide">{selectedSymbol}</div>
-                   <table className="w-full text-left border-collapse mt-1">
-                     <tbody className="text-[12px]">
+                 <div className="ui-card p-5 mx-auto max-w-sm bg-[var(--surface)] shadow-md border" style={{ borderColor: 'var(--border)' }}>
+                   <div className="font-semibold text-lg pb-3 mb-3 border-b flex justify-between items-center" style={{ color: 'var(--accent)', borderColor: 'var(--border)' }}>
+                     <span>{selectedSymbol}</span>
+                     <span className="text-xs px-2 py-1 bg-[var(--surface-2)] rounded font-mono font-normal tracking-wide text-[var(--text-2)]">Details</span>
+                   </div>
+                   <table className="w-full text-left border-collapse text-sm">
+                     <tbody className="tabular-nums">
                        {detailsData.map((item, idx) => (
-                         <tr key={idx} className="h-5 border-b border-[#333333] hover:bg-[#2d2d30]">
-                           <td className="px-2 py-0.5 border-r border-[#333333] text-gray-300 w-1/2 flex items-center gap-1.5">
-                             {item.isUp === true ? (
-                               <ArrowUpRight size={10} className="text-[#3b82f6]" strokeWidth={2.5} />
-                             ) : item.isUp === false ? (
-                               <ArrowDownRight size={10} className="text-[#ef4444]" strokeWidth={2.5} />
-                             ) : (
-                               <div className="w-2.5 h-2.5 flex items-center justify-center"><div className="w-1 h-1 bg-gray-500 rounded-full"></div></div>
-                             )}
+                         <tr key={idx} className="market-row" style={{ borderBottom: idx !== detailsData.length - 1 ? '1px solid var(--border-3)' : 'none' }}>
+                           <td className="py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
                              {item.label}
                            </td>
-                           <td className={`px-2 py-0.5 text-right w-1/2 ${item.isUp === true ? 'text-[#3b82f6]' : (item.isUp === false ? 'text-[#ef4444]' : 'text-gray-300')}`}>
-                             {item.value}
+                           <td className="py-2.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--ok-text)' : (item.isUp === false ? 'var(--danger-text)' : 'var(--text)') }}>
+                             {item.isUp === true ? (
+                               <ArrowUpRight size={14} strokeWidth={2.5} />
+                             ) : item.isUp === false ? (
+                               <ArrowDownRight size={14} strokeWidth={2.5} />
+                             ) : null}
+                             <span className="font-mono text-[13px]">{item.value}</span>
                            </td>
                          </tr>
                        ))}
                      </tbody>
                    </table>
-                 </>
+                 </div>
                );
             })()}
           </div>
         )}
 
         {activeTab === 'Ticks' && (
-          <div className="flex-1 overflow-hidden relative bg-[#1e1e1e] flex flex-col p-1">
+          <div className="flex-1 overflow-hidden relative flex flex-col p-3 bg-[var(--surface-2)]">
             {!selectedSymbol ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500 text-[11px]">
+              <div className="flex-1 flex items-center justify-center text-sm" style={{ color: 'var(--muted)' }}>
                 Double-click a symbol in the Symbols tab to view its live tick chart.
               </div>
             ) : (
               <>
-                 <div className="absolute top-1 left-1 bg-[#2d2d30] px-1 text-[11px] text-gray-300 border border-[#404040] z-10 hover:bg-[#333] transition-colors shadow-sm">
+                 <div className="absolute top-5 left-5 px-3 py-1.5 text-xs rounded shadow-sm z-10 ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
                    {tickHistory.length > 0 ? `${tickHistory[tickHistory.length-1].bid.toFixed(5)} / ${tickHistory[tickHistory.length-1].ask.toFixed(5)}` : 'Waiting for ticks...'}
                  </div>
-                 <div className="text-[11px] text-gray-300 absolute top-1 left-32 font-bold tracking-wide">{selectedSymbol}</div>
+                 <div className="absolute top-5 left-48 font-bold tracking-wide text-sm z-10" style={{ color: 'var(--accent)' }}>{selectedSymbol}</div>
                  
-                 {/* MT5 Chart Style */}
                  <div 
                    ref={chartRef}
-                   className="flex-1 relative mt-8 mb-5 ml-1 mr-[52px] border border-[#333] bg-[#0a0a0a]" 
+                   className="flex-1 relative mt-[50px] mb-[30px] ml-1 mr-[60px] rounded-lg shadow-inner ui-card" 
                    style={{
-                     backgroundImage: `radial-gradient(circle, #333333 1px, transparent 1px)`,
-                     backgroundSize: '15px 15px'
+                     border: '1px solid var(--border)',
+                     background: 'var(--surface)',
+                     backgroundImage: `radial-gradient(circle, var(--border-3) 1px, transparent 1px)`,
+                     backgroundSize: '20px 20px'
                  }}>
                    {(() => {
                      if (tickHistory.length < 2) return null;
@@ -295,7 +300,7 @@ const MarketData = () => {
                      };
 
                      const isUp = tickHistory[tickHistory.length - 1].bid >= tickHistory[0].bid;
-                     const mainColor = isUp ? "#22c55e" : "#ef4444"; 
+                     const mainColor = isUp ? "var(--ok-text)" : "var(--danger-text)"; 
 
                      const currentBid = tickHistory[tickHistory.length - 1].bid;
                      const currentY = Math.max(0, Math.min(100, 100 - (((currentBid - minP) / finalRange) * 100)));
@@ -304,7 +309,7 @@ const MarketData = () => {
                        const y = 100 - (percent * 100);
                        const val = minP + (finalRange * percent);
                        return (
-                         <div key={percent} className="absolute right-[-50px] w-[45px] text-[#777] text-[10px] text-left select-none" style={{ top: `${y}%`, transform: 'translateY(-50%)' }}>
+                         <div key={percent} className="absolute right-[-58px] w-[50px] text-[10px] text-left select-none font-mono" style={{ color: 'var(--text-3)', top: `${y}%`, transform: 'translateY(-50%)' }}>
                            {val.toFixed(2)}
                          </div>
                        );
@@ -316,7 +321,7 @@ const MarketData = () => {
                        const time = startTime + (endTime - startTime) * percent;
                        const dateObj = new Date(time);
                        return (
-                         <div key={percent} className="absolute bottom-[-18px] text-[#777] text-[10px] whitespace-nowrap select-none" style={{ left: `${percent * 100}%`, transform: 'translateX(-50%)' }}>
+                         <div key={percent} className="absolute bottom-[-24px] text-[10px] whitespace-nowrap select-none font-mono" style={{ color: 'var(--text-3)', left: `${percent * 100}%`, transform: 'translateX(-50%)' }}>
                            {dateObj.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
                          </div>
                        );
@@ -342,8 +347,9 @@ const MarketData = () => {
                          {yAxisLabels}
                          {xTimeLabels}
 
-                         <div className="absolute right-[-52px] w-[52px] text-[11px] font-semibold text-white text-center px-0.5 rounded-[2px] z-20 select-none bg-blue-600 shadow-sm"
+                         <div className="absolute right-[-64px] w-[58px] text-[11px] font-semibold text-white text-center py-0.5 rounded shadow-sm z-20 select-none font-mono"
                            style={{
+                             backgroundColor: 'var(--accent)',
                              top: `${currentY}%`,
                              transform: 'translateY(-50%)'
                            }}>
@@ -360,22 +366,27 @@ const MarketData = () => {
       </div>
 
       {/* Tabs */}
-      <div className="h-6 bg-[#252526] flex items-end">
-        {['Symbols', 'Details', 'Ticks'].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`
-              px-3 h-[23px] flex items-center justify-center text-[11px] select-none border-t border-r border-[#333333] relative top-[1px]
-              ${activeTab === tab 
-                ? 'bg-[#1e1e1e] text-gray-200 border-t-blue-500 border-t-[2px] border-b-[#1e1e1e] border-b-[1px] z-10' 
-                : 'bg-[#2d2d30] text-gray-400 hover:bg-[#333333] hover:text-gray-300 border-[#333333] border-b-[1px]'}
-            `}
-          >
-            {tab}
-          </button>
-        ))}
-        <div className="flex-1 h-[23px] border-b border-[#333333]"></div>
+      <div className="flex items-end px-3 pt-3" style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
+        <div className="flex gap-1 w-full border-b" style={{ borderColor: 'var(--border)' }}>
+          {['Symbols', 'Details', 'Ticks'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`
+                px-4 py-2 font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
+                ${activeTab === tab 
+                  ? 'bg-[var(--surface)] text-[var(--accent)] z-10' 
+                  : 'bg-transparent text-[var(--text-3)] border-transparent hover:text-[var(--text-2)] hover:bg-[var(--surface-hover)]'}
+              `}
+              style={{
+                borderColor: activeTab === tab ? 'var(--border)' : 'transparent',
+                borderBottom: activeTab === tab ? '2px solid var(--surface)' : 'none'
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
