@@ -75,14 +75,14 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
           <thead>
             <tr>
               <TH col="login" label="Login" />
+              <TH col="status" label="Status" />
               <TH col="name" label="Name" />
               <TH col="group" label="Group" />
-              <TH col="country" label="Country" />
-              <TH col="client" label="Client" />
+              <TH col="leverage" label="Lev." />
               <TH col="balance" label="Balance" align="right" />
-              <th style={{ textAlign: 'right' }}>Balance / Checked</th>
               <TH col="equity" label="Equity" align="right" />
-              <TH col="profit" label="Profit / Credit" align="right" />
+              <TH col="credit" label="Credit" align="right" />
+              <TH col="profit" label="Profit" align="right" />
               <TH col="currency" label="Cu." />
             </tr>
           </thead>
@@ -96,6 +96,7 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
             ) : pageRows.map((row, idx) => {
               const rowKey = `${row.login}-${idx}`;
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : row.profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
+              const status = (row.status || 'active').toLowerCase();
               return (
                 <tr
                   key={rowKey}
@@ -110,13 +111,19 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
                       <span className="tabular">{row.login}</span>
                     </span>
                   </td>
-                  <td style={{ fontWeight: 500 }}>{row.name}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.group}</td>
-                  <td style={{ color: 'var(--text-2)' }}>{row.country}</td>
-                  <td style={{ color: 'var(--muted)', textAlign: 'center' }}>{row.client || '—'}</td>
+                  <td>
+                    <span className={`ui-badge text-[9px] px-1 py-0 ${
+                      status === 'active' ? 'ui-badge-success' : status === 'disabled' ? 'ui-badge-danger' : 'ui-badge-warn'
+                    }`}>
+                      {status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 500 }} className="truncate max-w-[150px]">{row.name}</td>
+                  <td style={{ color: 'var(--text-3)' }} className="truncate max-w-[150px]">{row.group}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>1:{row.leverage}</td>
                   <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.balance)}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}></td>
                   <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.equity)}</td>
+                  <td className="tabular" style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmt(row.credit || 0)}</td>
                   <td className="tabular" style={{ textAlign: 'right', color: profitTone, fontWeight: 500 }}>{fmt(row.profit)}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.currency}</td>
                 </tr>

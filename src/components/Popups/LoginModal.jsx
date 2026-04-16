@@ -37,10 +37,9 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
         throw new Error('Invalid credentials. Server rejected the connection.');
       }
 
-      localStorage.setItem('authToken', finalToken);
-      localStorage.setItem('refreshToken', data.refresh_token || '');
-      localStorage.setItem('brokerLogin', String(data.login || ''));
-      localStorage.setItem('brokerId', data.broker_id || '');
+      const auth = await import('../../services/authService');
+      auth.setSession(data);
+      
       if (onLoginSuccess) onLoginSuccess(finalToken);
       onClose();
     } catch (err) {

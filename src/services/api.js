@@ -1,74 +1,19 @@
-/**
- * API Service Layer
- *
- * All functions here are STUBS. They intentionally throw errors so the
- * useDataSource hook falls back to dummy data gracefully.
- *
- * To wire in a real backend:
- *   1. Replace the throw lines with real fetch/axios calls.
- *   2. Return the response data.
- *   3. No changes needed in components — the hook handles the rest.
- *
- * Example of real implementation:
- *   export const getOnlineUsers = async () => {
- *     const res = await fetch(`${BASE_URL}/api/online-users`, { headers: authHeaders() });
- *     if (!res.ok) throw new Error(`HTTP ${res.status}`);
- *     return res.json();
- *   };
- */
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-const authHeaders = () => ({
-  'Content-Type': 'application/json',
-  // 'Authorization': `Bearer ${localStorage.getItem('token')}`,
-});
+import apiClient from './apiClient';
 
 // ─── Online Users ──────────────────────────────────────────────────────────────
 export const getOnlineUsers = async () => {
-  // TODO: Replace with real API call
-  // const res = await fetch(`${BASE_URL}/api/online-users`, { headers: authHeaders() });
-  // if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // return res.json();
-  throw new Error('API not yet integrated');
+  return apiClient.get('/OnlineUsers');
 };
 
 // ─── Clients ───────────────────────────────────────────────────────────────────
 export const getClients = async () => {
-  // TODO: Replace with real API call
-  // const res = await fetch(`${BASE_URL}/api/clients`, { headers: authHeaders() });
-  // if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // return res.json();
-  throw new Error('API not yet integrated');
+  return apiClient.get('/Accounts'); 
 };
 
 // ─── Trading Accounts ──────────────────────────────────────────────────────────
 export const getTradingAccounts = async () => {
-  console.log("=== getTradingAccounts CALLED ===");
-  const token = localStorage.getItem('authToken');
-  console.log("Token from localStorage:", token);
-  if (!token) throw new Error('No authentication token found');
-
-  const url = `/api/manager/AccountDetailsMany?id=${token}`;
-  console.log("Fetching URL:", url);
-  const res = await fetch(url, {
-    headers: { 'accept': 'application/json' }
-  });
-  console.log("Fetch response status:", res.status);
-
-  const text = await res.text();
-  console.log("Raw response (first 200 chars):", text.substring(0, 200));
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
-  }
-
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
-
+  const data = await apiClient.get('/AccountDetailsMany');
   const records = Array.isArray(data) ? data : data.answer || [];
-  console.log("Parsed records count:", records.length);
 
   return records.map(p => ({
     login: String(p.login || p.Login || ''),
@@ -80,27 +25,22 @@ export const getTradingAccounts = async () => {
     equity: p.equity !== undefined ? p.equity : (p.Equity !== undefined ? p.Equity : 0),
     profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
     currency: p.Currency || p.currency || '',
+    
+    // NEW FIELDS FROM SWAGGER
+    leverage: p.leverage || p.Leverage || 100,
+    credit: p.credit || p.Credit || 0,
+    status: p.status || p.Status || 'active',
+    margin: p.margin || p.Margin || 0,
+    marginFree: p.marginFree || p.MarginFree || 0,
+    marginLevel: p.marginLevel || p.MarginLevel || 0,
+    email: p.email || p.Email || '',
+    firstName: p.firstName || p.FirstName || '',
+    lastName: p.lastName || p.LastName || '',
   }));
 };
 
 export const getPositions = async () => {
-  const token = localStorage.getItem('authToken');
-  if (!token) throw new Error('No authentication token found');
-
-  const res = await fetch(`/api/manager/PositionsAll?id=${token}`, {
-    headers: { 'accept': 'application/json' }
-  });
-
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
-  }
-
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
-
+  const data = await apiClient.get('/PositionsAll');
   const records = Array.isArray(data) ? data : data.answer || [];
 
   return records.map(p => {
@@ -112,13 +52,12 @@ export const getPositions = async () => {
     let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : 0));
     if (volume >= 100) volume = volume / 10000;
 
-    let comment = p.comment !== undefined ? p.comment : (p.reason !== undefined ? p.reason : 'Unknown');
-
     return {
       position: p.positionTicket || p.Position || p.ticket || p.position || 0,
       login: String(p.login || p.Login || ''),
       name: p.accountName || p.AccountName || '',
       email: p.username || p.Username || '',
+      group: p.accountGroup || p.AccountGroup || '',
       symbol: p.symbol || p.Symbol || '',
       type,
       volume,
@@ -127,40 +66,26 @@ export const getPositions = async () => {
       priceSl: p.priceSl || 0,
       priceTp: p.priceTp || 0,
       profit: p.profit || 0,
-      comment: String(comment),
+      comment: String(p.comment || p.Comment || ''),
       swap: p.storage || p.Storage || p.swap || p.Swap || 0,
+      // NEW FIELDS FROM SWAGGER
+      timeCreate: p.timeCreate || p.TimeCreate || 0,
+      timeUpdate: p.timeUpdate || p.TimeUpdate || 0,
     };
   });
 };
 
 // ─── Analytics ─────────────────────────────────────────────────────────────────
 export const getTradingAccountsAnalytics = async () => {
-  throw new Error('API not yet integrated');
+  return apiClient.get('/AccountAnalytics');
 };
 
 export const getOpenOrders = async () => {
-  throw new Error('API not yet integrated');
+  return apiClient.get('/OrdersAll');
 };
 
 export const getOrders = async () => {
-  const token = localStorage.getItem('authToken');
-  if (!token) throw new Error('No authentication token found');
-
-  const url = `/api/manager/BrokerOrders?limit=100&offset=0&id=${token}`;
-  const res = await fetch(url, {
-    headers: { 'accept': 'application/json' }
-  });
-
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
-  }
-
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
-
+  const data = await apiClient.get('/BrokerOrders?limit=100&offset=0');
   const records = Array.isArray(data) ? data : data.answer || [];
 
   return records.map(p => {
@@ -175,7 +100,7 @@ export const getOrders = async () => {
     return {
       ticket: p.ticket || 0,
       login: String(p.login || ''),
-      name: p.accountName || p.username || '', // Map name to schema appropriately
+      name: p.accountName || p.username || '',
       email: p.username || '',
       group: p.accountGroup || '',
       symbol: p.symbol || '',
@@ -194,55 +119,36 @@ export const getOrders = async () => {
 };
 
 export const getBrokerDeals = async () => {
-  const token = localStorage.getItem('authToken');
-  if (!token) throw new Error('No authentication token found');
-
-  const url = `/api/manager/BrokerDeals?limit=100&offset=0&id=${token}`;
-  const res = await fetch(url, {
-    headers: { 'accept': 'application/json' }
-  });
-
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(`JSON format error. Server returned: ${text.substring(0, 100)}...`);
-  }
-
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
-
+  const data = await apiClient.get('/BrokerDeals?limit=100&offset=0');
   const records = Array.isArray(data) ? data : data.answer || [];
 
-  return records.map(p => {
-    return {
-      ticket: p.ticket || 0,
-      orderTicket: p.orderTicket || 0,
-      login: String(p.login || ''),
-      username: p.username || '',
-      accountName: p.accountName || '',
-      accountGroup: p.accountGroup || '',
-      symbol: p.symbol || '',
-      action: p.action || '',
-      entry: p.entry || '',
-      volume: p.volume !== undefined ? p.volume : 0,
-      price: p.price || 0,
-      profit: p.profit || 0,
-      commission: p.commission || 0,
-      swap: p.swap || 0,
-      fee: p.fee || 0,
-      time: p.time || 0,
-      comment: String(p.comment || ''),
-    };
-  });
+  return records.map(p => ({
+    ticket: p.ticket || 0,
+    orderTicket: p.orderTicket || 0,
+    login: String(p.login || ''),
+    username: p.username || '',
+    accountName: p.accountName || '',
+    accountGroup: p.accountGroup || '',
+    symbol: p.symbol || '',
+    action: p.action || '',
+    entry: p.entry || '',
+    volume: p.volume !== undefined ? p.volume : 0,
+    price: p.price || 0,
+    profit: p.profit || 0,
+    commission: p.commission || 0,
+    swap: p.swap || 0,
+    fee: p.fee || 0,
+    time: p.time || 0,
+    comment: String(p.comment || ''),
+  }));
 };
 
 export const getOpenPositions = async () => {
-  throw new Error('API not yet integrated');
+  return apiClient.get('/PositionsAll');
 };
 
 export const getAdvertisingCampaigns = async () => {
-  throw new Error('API not yet integrated');
+  return apiClient.get('/AdvertisingCampaigns');
 };
 
 export default {

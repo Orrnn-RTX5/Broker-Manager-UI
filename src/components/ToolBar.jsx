@@ -35,7 +35,7 @@ const ToolButton = ({ icon: Icon, text, tone = 'default', active, disabled, hasD
         : 'transparent';
 
   const borderColor = active ? 'var(--accent-border)' : 'transparent';
-
+ 
   return (
     <button
       onClick={disabled ? undefined : onClick}
@@ -84,6 +84,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
       setSearchLoginId('');
     }
   };
+
   const handleCopy = () => navigator.clipboard.writeText(window.location.href);
   const handlePrint = () => window.print();
   const handleFullscreen = () => {

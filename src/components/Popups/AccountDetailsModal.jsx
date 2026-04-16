@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon } from 'lucide-react';
+import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings } from 'lucide-react';
 import { getPositions } from '../../services/api';
 import { buildFeedWsUrl, buildMetricsWsUrl } from '../../config/endpoints';
 import positionAdapter from './adapters/position';
@@ -12,6 +12,57 @@ const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAda
 const TABS = [
   'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
 ];
+
+const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade }) => {
+  const style = {
+    top: Math.min(y, window.innerHeight - 400),
+    left: Math.min(x, window.innerWidth - 240),
+  };
+
+  const Item = ({ icon: Icon, text, color, onClick, submenu, isHeader }) => (
+    <div
+      className={`flex items-center gap-3 px-3 py-2 text-[12px] cursor-pointer transition-colors group
+        ${isHeader ? 'bg-blue-600/10 text-blue-400 font-bold border-b border-blue-500/20' : 'hover:bg-white/5 text-gray-300'}`}
+      onClick={onClick}
+    >
+      <div className="w-4 h-4 flex items-center justify-center">
+        {Icon && <Icon size={14} style={{ color: color || 'currentColor' }} />}
+      </div>
+      <span className="flex-1">{text}</span>
+      {submenu && <ChevronRight size={12} className="text-gray-600" />}
+    </div>
+  );
+
+  const Sep = () => <div className="h-[1px] bg-[var(--border)] my-1 opacity-50" />;
+
+  return (
+    <div
+      className="fixed z-[100000] w-56 ui-card shadow-2xl border border-[var(--border)] rounded-lg py-1 overflow-hidden"
+      style={style}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <Item text={`TRADE #${data?.position || '---'}`} isHeader />
+      <Item icon={Plus} text="New Order" color="var(--ok-text)" />
+      <Item icon={CheckCircle2} text="Close Position" color="var(--danger-text)" onClick={() => { onCloseTrade(data.position); onClose(); }} />
+      <Item icon={Edit3} text="Modify or Cancel" color="var(--accent)" onClick={() => { onModify(data); onClose(); }} />
+      <Item icon={Play} text="Activate" />
+      <Sep />
+      <Item icon={Settings} text="Edit" color="var(--info-text)" />
+      <Item icon={Trash2} text="Delete" color="var(--danger-text)" />
+      <Sep />
+      <Item text="Volumes" icon={BarChart3} submenu />
+      <Item text="Profit" icon={BarChart3} submenu />
+      <Sep />
+      <Item text="Report" icon={FileText || BarChart3} submenu />
+      <Sep />
+      <Item text="Show Milliseconds" />
+      <Item text="Auto Arrange" hasCheck />
+      <Item text="Grid" hasCheck />
+      <Sep />
+      <Item text="Columns" submenu />
+    </div>
+  );
+};
 
 const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position' }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
@@ -55,6 +106,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setIsAutoPipTrack(false);
     setter(prev => (parseFloat(prev) + amount).toFixed(5));
   };
+
+  const [ctxMenu, setCtxMenu] = useState({ x: 0, y: 0, isOpen: false, data: null });
+
+  useEffect(() => {
+    const closeMenu = () => setCtxMenu(prev => prev.isOpen ? { ...prev, isOpen: false } : prev);
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, []);
 
   const initialWidth = Math.min(850, window.innerWidth - 40);
   const initialHeight = Math.min(600, window.innerHeight - 40);
@@ -767,115 +826,151 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 {/* Top Info Section */}
                 <div className="space-y-1.5 text-[13px] font-sans px-1">
                   <div className="flex gap-1.5 items-center">
-                    <span className="text-white font-medium">{name}, {loginId},</span>
-                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{groupValue}</a>
-                    <span className="text-gray-300">, {leverageValue}</span>
+                    <span className="text-white font-black text-sm">{name}</span>
+                    <span className="text-gray-400">({loginId})</span>
+                    <span className="mx-1 h-3 w-px bg-gray-700"></span>
+                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer font-bold">{groupValue}</a>
+                    <span className="mx-1 h-3 w-px bg-gray-700"></span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      (accountData?.status || activeData.status || 'active').toLowerCase() === 'active' 
+                      ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
+                      : 'bg-red-500/20 text-red-500 border border-red-500/30'
+                    }`}>
+                      {accountData?.status || activeData.status || 'active'}
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-[10px] font-bold">
+                      {leverageValue}
+                    </span>
                   </div>
 
                   <div className="text-gray-300">
-                    {[accountData ? accountData.Country : activeData.Country, accountData ? accountData.City : activeData.City].filter(Boolean).join(', ') || 'France, Sanaa'}
+                    {[accountData?.firstName, accountData?.lastName].filter(Boolean).join(' ') || name} 
+                    <span className="mx-2 text-gray-600">|</span> 
+                    {[accountData?.Country || activeData.Country, accountData?.City || activeData.City].filter(Boolean).join(', ') || 'France, Sanaa'}
                   </div>
 
                   <div className="flex gap-4">
-                    <span className="text-gray-300">{accountData ? accountData.Phone : (activeData.Phone || '+967775529929')}</span>
-                    <span className="text-gray-300">RTX5 ID: {accountData ? accountData.MQID : (activeData.MQID || '04BA44AF')}</span>
+                    <span className="text-gray-300">{accountData?.Phone || activeData.Phone || '+967775529929'}</span>
+                    <span className="text-gray-300 font-mono">RTX5 ID: {accountData?.MQID || activeData.MQID || '04BA44AF'}</span>
                   </div>
 
                   <div>
-                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{accountData ? accountData.Email : (activeData.Email || 'hassanbm801@gmail.com')}</a>
+                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{accountData?.Email || activeData.Email || 'hassanbm801@gmail.com'}</a>
                   </div>
 
-                  <div className="flex gap-4 text-gray-400 text-[11px] pt-2">
+                  <div className="flex gap-4 text-gray-500 text-[11px] pt-2 border-t border-white/5 mt-2">
                     <span>Registered: {accountData ? formatDate(accountData.Registration) : (activeData.Registration ? formatDate(activeData.Registration) : '2023.08.15 14:30')}</span>
                     <span>Last access: {accountData ? formatDate(accountData.LastAccess) : (activeData.LastAccess ? formatDate(activeData.LastAccess) : '2023.10.22 09:15')}</span>
-                    <span>Last Address: {accountData ? (accountData.LastIP ?? '') : (activeData.LastIP || '192.168.1.1')}</span>
+                    <span>Last IP: {accountData?.last_ip || accountData?.LastIP || activeData.LastIP || '127.0.0.1'}</span>
                   </div>
                 </div>
 
-                {/* Data Grid Section */}
-                <div className="border border-[#333] rounded-sm mt-2 flex flex-col flex-1 bg-[#1e1e1e]">
+                {/* Data Grid Section Modernized */}
+                <div className="flex-1 flex flex-col ui-card overflow-hidden shadow-xl" style={{ border: '1px solid var(--border)' }}>
                   {/* Header */}
-                  <div className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_50px] bg-[#252526] border-b border-[#333] text-[12px] text-gray-700 dark:text-gray-300 font-medium font-sans">
-                    <div className="p-1 px-2 border-r border-[#333]">Symbol</div>
-                    <div className="p-1 px-2 border-r border-[#333] flex justify-between">Type <span className="text-[10px]">▲</span></div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Volume</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Price</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">S / L</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">T / P</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Price</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Swap</div>
-                    <div className="p-1 px-2 text-right border-r border-[#333]">Profit</div>
-                    <div className="p-1 flex items-center justify-center"></div>
+                  <div className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_60px] bg-[var(--surface-3)] border-b border-[var(--border)] text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    <div className="p-3 border-r border-[var(--border)]">Symbol</div>
+                    <div className="p-3 border-r border-[var(--border)]">Type</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">Volume</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">Open</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">S / L</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">T / P</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">Current</div>
+                    <div className="p-3 border-r border-[var(--border)] text-right">Swap</div>
+                    <div className="p-3 text-right border-r border-[var(--border)]">Profit</div>
+                    <div className="p-3 text-center">Action</div>
                   </div>
 
                   {/* Rows */}
-                  <div className="flex flex-col text-[12px] font-sans overflow-y-auto">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {(() => {
                       const displayPositions = targetTicket ? positions.filter(p => p.position === targetTicket) : positions;
-                      return displayPositions.length > 0 ? displayPositions.map((pos) => (
-                        <div key={pos.position} className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_50px] border-b border-[#333] hover:bg-[#2d2d30] cursor-default">
-                          <div className="p-1 px-2 border-r border-[#333] flex items-center gap-1.5"><MinusSquare size={10} className="text-blue-500" /> {pos.symbol}</div>
-                          <div className="p-1 px-2 border-r border-[#333]">{pos.type}</div>
-                          <div className="p-1 px-2 border-r border-[#333] text-right">{pos.volume}</div>
-                          <div className="p-1 px-2 border-r border-[#333] text-right font-mono">{Number(pos.priceOpen).toFixed(2)}</div>
-
-                          {/* S/L */}
+                      return displayPositions.length > 0 ? displayPositions.map((pos) => {
+                        const isPos = pos.profit > 0;
+                        const isNeg = pos.profit < 0;
+                        return (
                           <div
-                            onDoubleClick={() => handleModifySLTP(pos)}
-                            className="p-1 px-2 border-r border-[#333] text-right font-mono cursor-pointer hover:bg-blue-900/40"
-                            title="Double-click to modify S/L"
+                            key={pos.position}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
+                            }}
+                            className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_60px] border-b border-[var(--border)] hover:bg-white/5 cursor-pointer transition-colors group"
                           >
-                            {Number(pos.priceSl || 0).toFixed(2)}
-                          </div>
+                            <div className="p-2 px-3 border-r border-[var(--border)] flex items-center gap-2 text-[var(--text)] font-medium">
+                              <MinusSquare size={12} className="text-blue-500" />
+                              {pos.symbol}
+                            </div>
+                            <div className={`p-2 px-3 border-r border-[var(--border)] text-[11px] uppercase font-bold ${pos.type === 'buy' ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
+                              {pos.type}
+                            </div>
+                            <div className="p-2 px-3 border-r border-[var(--border)] text-right text-[var(--text-2)]">{pos.volume}</div>
+                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{Number(pos.priceOpen).toFixed(5)}</div>
 
-                          {/* T/P */}
-                          <div
-                            onDoubleClick={() => handleModifySLTP(pos)}
-                            className="p-1 px-2 border-r border-[#333] text-right font-mono cursor-pointer hover:bg-blue-900/40"
-                            title="Double-click to modify T/P"
-                          >
-                            {Number(pos.priceTp || 0).toFixed(2)}
-                          </div>
-
-                          <div className="p-1 px-2 border-r border-[#333] text-right font-mono">{Number(pos.priceCurrent).toFixed(2)}</div>
-                          <div className="p-1 px-2 border-r border-[#333] text-right font-mono">{Number(pos.swap || 0).toFixed(2)}</div>
-                          <div className={`p-1 px-2 text-right border-r border-[#333] font-medium font-mono ${pos.profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {Number(pos.profit || 0).toFixed(2)}
-                          </div>
-                          <div className="p-1 flex items-center justify-center">
-                            <button
-                              onClick={() => handleDeleteTrade(pos.position)}
-                              disabled={isDeleting}
-                              className="text-red-500 bg-red-500/20 rounded p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Close Position"
+                            {/* S/L */}
+                            <div
+                              onDoubleClick={() => handleModifySLTP(pos)}
+                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-amber-500/80 cursor-pointer hover:bg-amber-500/10 transition-colors"
+                              title="Double-click to modify S/L"
                             >
-                              CLOSE
-                            </button>
+                              {Number(pos.priceSl || 0).toFixed(5)}
+                            </div>
+
+                            {/* T/P */}
+                            <div
+                              onDoubleClick={() => handleModifySLTP(pos)}
+                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-green-500/80 cursor-pointer hover:bg-green-500/10 transition-colors"
+                              title="Double-click to modify T/P"
+                            >
+                              {Number(pos.priceTp || 0).toFixed(5)}
+                            </div>
+
+                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{Number(pos.priceCurrent).toFixed(5)}</div>
+                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-3)]">{Number(pos.swap || 0).toFixed(2)}</div>
+                            <div className={`p-2 px-3 text-right border-r border-[var(--border)] font-bold font-mono ${isPos ? 'text-[var(--ok-text)]' : isNeg ? 'text-[var(--danger-text)]' : 'text-[var(--text-3)]'}`}>
+                              {Number(pos.profit || 0).toFixed(2)}
+                            </div>
+                            <div className="p-2 flex items-center justify-center">
+                              <button
+                                onClick={() => handleDeleteTrade(pos.position)}
+                                disabled={isDeleting}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white px-2 py-0.5 rounded text-[10px] font-bold"
+                              >
+                                CLOSE
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      )) : (
-                        <div className="p-4 text-center text-gray-500 italic">No open positions matching ticket</div>
+                        );
+                      }) : (
+                        <div className="p-10 text-center text-gray-500 italic text-sm">No open positions matching ticket</div>
                       );
                     })()}
                   </div>
 
-                  {/* Summary Row */}
-                  <div className="bg-[#3e3e42] mt-auto">
-                    <div className="flex border-b border-[#333] text-[12px] font-bold font-sans">
-                      <div className="flex-1 p-1 px-2 flex items-center gap-1.5 text-gray-900 dark:text-white">
-                        <PlusSquare size={10} className="text-gray-700 dark:text-gray-300" />
-                        Balance: {balanceVal} {currencyValue} <span className="font-normal opacity-80 mx-1">Equity:</span> {equityVal} <span className="font-normal opacity-80 mx-1">Margin:</span> {marginVal} <span className="font-normal opacity-80 mx-1">Free Margin:</span> {freeMarginVal}
+                  {/* Summary Footer Modernized */}
+                  <div className="bg-[var(--surface-3)] border-t border-[var(--border)] mt-auto">
+                    <div className="flex border-b border-[var(--border)] text-[12px] font-bold">
+                      <div className="flex-1 p-3 px-4 flex items-center gap-3 text-[var(--text-2)] overflow-x-auto custom-scrollbar no-scrollbar">
+                        <PlusSquare size={14} className="text-blue-500" />
+                        <span className="opacity-60 font-normal">Balance:</span> <span className="text-[var(--text)]">{balanceVal}</span>
+                        <span className="opacity-60 font-normal ml-3">Credit:</span> <span className="text-amber-500">{formatNumber(accountData?.credit || activeData.credit || 0)}</span>
+                        <span className="opacity-60 font-normal ml-3">Equity:</span> <span className="text-[var(--text)] font-black">{equityVal}</span>
+                        <span className="opacity-60 font-normal ml-3">Margin:</span> <span className="text-[var(--text)]">{marginVal}</span>
+                        <span className="opacity-60 font-normal ml-3 text-green-500">Free:</span> <span className="text-green-500">{freeMarginVal}</span>
+                        <span className="opacity-60 font-normal ml-3 text-gray-500">Level:</span> <span className="text-gray-300">{marginLevelVal}%</span>
                       </div>
-                      <div className="w-[80px] p-1 px-2 text-right">
+                      <div className="w-[100px] p-3 text-right text-[var(--text-3)] font-mono">
                         {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
                       </div>
-                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(liveMetrics?.floating_pnl ?? activeData.profit ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      <div className={`w-[120px] p-3 px-4 text-right font-black font-mono text-sm ${Number(liveMetrics?.floating_pnl ?? activeData.profit ?? 0) >= 0 ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
                         {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : (activeData.profit !== undefined ? formatNumber(activeData.profit) : '0.00')}
                       </div>
                     </div>
-                    <div className="p-1 px-6 text-[12px] font-bold font-sans text-gray-900 dark:text-white">
-                      <span className="font-normal opacity-80 mr-1">Margin Level:</span> {marginLevelVal} %
-                    </div>
+                    {Number(marginLevelVal) < 100 && (
+                      <div className="p-1 px-4 text-[10px] font-bold bg-red-500/10 text-red-500 border-b border-red-500/20 animate-pulse text-center uppercase tracking-widest">
+                        MARGIN CALL WARNING
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -953,25 +1048,25 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Name:</span>
-                  <input type="text" value={getValue('FirstName', 'Hassanbm')} onChange={(e) => handleInputChange('FirstName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('FirstName', accountData?.firstName || 'Hassanbm')} onChange={(e) => handleInputChange('FirstName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Last name:</span>
-                  <input type="text" value={getValue('LastName', 'Mukerd')} onChange={(e) => handleInputChange('LastName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('LastName', accountData?.lastName || 'Mukerd')} onChange={(e) => handleInputChange('LastName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                   <span className="text-gray-700 dark:text-gray-300 text-right">Middle name:</span>
                   <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Company:</span>
-                  <input type="text" value={getValue('Company')} onChange={(e) => handleInputChange('Company', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('Company', accountData?.Company || '')} onChange={(e) => handleInputChange('Company', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Registered:</span>
                   <div className="flex w-full">
-                    <input type="text" defaultValue={activeData.Registration ? formatDate(activeData.Registration) : '2026.02.06 19:12:35'} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-l-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none flex-1 border-r-0" />
+                    <input type="text" readOnly defaultValue={accountData?.Registration ? formatDate(accountData.Registration) : (activeData.Registration ? formatDate(activeData.Registration) : '2026.02.06 19:12:35')} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-l-sm px-2 text-gray-500 focus:outline-none flex-1 border-r-0 cursor-not-allowed" />
                     <button className="h-[22px] bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-r-sm px-1 flex items-center justify-center hover:bg-[#3e3e42]"><Square size={12} className="text-[#3794ff]" /></button>
                   </div>
 
@@ -986,8 +1081,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </select>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Status:</span>
-                  <select className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
-                    {activeData.Status && <option>{activeData.Status}</option>}
+                  <select 
+                    value={getValue('Status', accountData?.status || activeData.status || 'active')} 
+                    onChange={(e) => handleInputChange('Status', e.target.value)}
+                    className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none"
+                  >
+                    <option value="active">Active</option>
+                    <option value="disabled">Disabled</option>
+                    <option value="readonly">Read-only</option>
                   </select>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">ID number:</span>
@@ -998,7 +1099,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">MetaQuotes ID:</span>
                   <div className="flex gap-2 w-full">
-                    <input type="text" value={getValue('MQID', "04BA44AF")} onChange={(e) => handleInputChange('MQID', e.target.value)} className="h-[22px] flex-1 bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <input type="text" value={getValue('MQID', accountData?.MQID || activeData.MQID || "04BA44AF")} onChange={(e) => handleInputChange('MQID', e.target.value)} className="h-[22px] flex-1 bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
                     <button className="h-[22px] px-2 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-sm hover:bg-[#3e3e42] flex items-center justify-center text-[10px] whitespace-nowrap">&gt;&gt;</button>
                   </div>
 
@@ -1008,34 +1109,34 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Email:</span>
-                  <input type="text" value={getValue('Email', "hassanbm801@gmail.com")} onChange={(e) => handleInputChange('Email', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Email', accountData?.email || activeData.Email || "hassanbm801@gmail.com")} onChange={(e) => handleInputChange('Email', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Phone:</span>
-                  <input type="text" value={getValue('Phone', "+967775529929")} onChange={(e) => handleInputChange('Phone', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
+                  <input type="text" value={getValue('Phone', accountData?.phone || activeData.Phone || "+967775529929")} onChange={(e) => handleInputChange('Phone', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
                 </div>
 
                 <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Country:</span>
-                  <input type="text" value={getValue('Country', 'France')} onChange={(e) => handleInputChange('Country', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Country', accountData?.country || activeData.Country || 'France')} onChange={(e) => handleInputChange('Country', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">State:</span>
                   <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">City:</span>
-                  <input type="text" value={getValue('City', 'Sanaa')} onChange={(e) => handleInputChange('City', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('City', accountData?.city || activeData.City || 'Sanaa')} onChange={(e) => handleInputChange('City', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Zip code:</span>
-                  <input type="text" value={getValue('ZipCode')} onChange={(e) => handleInputChange('ZipCode', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('ZipCode', accountData?.zipCode || activeData.ZipCode || '')} onChange={(e) => handleInputChange('ZipCode', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Address:</span>
-                  <input type="text" value={getValue('Address')} onChange={(e) => handleInputChange('Address', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Address', accountData?.address || activeData.Address || '')} onChange={(e) => handleInputChange('Address', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Comment:</span>
-                  <input type="text" value={getValue('Comment', 'Android 11, samsung a50...')} onChange={(e) => handleInputChange('Comment', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Comment', accountData?.comment || activeData.Comment || 'Android 11, samsung a50...')} onChange={(e) => handleInputChange('Comment', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
               </div>
@@ -1158,17 +1259,29 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[180px_1fr] items-center gap-x-2 gap-y-3 mt-4 w-[380px] mx-auto ml-8">
+                <div className="grid grid-cols-[180px_1fr] items-center gap-x-2 gap-y-3 mt-4 w-[420px] mx-auto ml-8">
+                  <span className="text-gray-700 dark:text-gray-300 text-right">Margin call level:</span>
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={getValue('MarginCallLevel', accountData?.marginCallLevel || '100')} onChange={(e) => handleInputChange('MarginCallLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <span className="text-gray-700 dark:text-gray-300">%</span>
+                  </div>
+
+                  <span className="text-gray-700 dark:text-gray-300 text-right">Stop out level:</span>
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={getValue('StopOutLevel', accountData?.stopOutLevel || '50')} onChange={(e) => handleInputChange('StopOutLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <span className="text-gray-700 dark:text-gray-300">%</span>
+                  </div>
+
                   <span className="text-gray-700 dark:text-gray-300 text-right">Limit total value of positions:</span>
                   <div className="flex items-center gap-2">
-                    <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium">
+                    <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium text-center">
                       <option>Default</option>
                     </select>
                     <span className="text-gray-700 dark:text-gray-300">USD</span>
                   </div>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Limit number of active orders:</span>
-                  <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium">
+                  <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium text-center">
                     <option>Default</option>
                   </select>
                 </div>
@@ -1529,48 +1642,61 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
               </div>
             ) : activeTab === 'Balance' ? (
-              <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar text-[13px] font-sans">
-                <div className="max-w-[500px] mx-auto bg-[#f8f8f8] dark:bg-[#252526] border border-[#d3d3d3] dark:border-[#333333] shadow-sm rounded-none">
-                  <div className="h-7 bg-[#e5e5e5] dark:bg-[#2d2d30] border-b border-[#d3d3d3] dark:border-[#333333] flex items-center px-3 select-none">
-                    <h2 className="text-[11px] font-bold text-gray-800 dark:text-gray-200 tracking-wide uppercase">Deposit Funds</h2>
+              <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar text-[13px] font-['Inter',sans-serif]">
+                <div className="max-w-[500px] mx-auto bg-white/60 dark:bg-purple-900/10 backdrop-blur-xl border border-white/50 dark:border-purple-500/20 shadow-2xl shadow-purple-500/10 rounded-2xl overflow-hidden">
+                  <div className="h-10 bg-white/40 dark:bg-purple-800/30 border-b border-white/50 dark:border-purple-500/20 flex items-center px-4 select-none">
+                    <h2 className="text-[12px] font-bold text-purple-800 dark:text-purple-200 tracking-wide uppercase">
+                      Deposit Funds
+                    </h2>
                   </div>
 
-                  <div className="p-4 flex flex-col gap-3">
-                    {depositError && <div className="p-2 bg-[#ffdddd] dark:bg-red-900/30 border border-[#f5c2c2] dark:border-red-800 text-red-700 dark:text-red-400 rounded-none text-[11px]">{depositError}</div>}
-                    {depositSuccess && <div className="p-2 bg-[#d4edda] dark:bg-green-900/30 border border-[#c3e6cb] dark:border-green-800 text-green-800 dark:text-green-400 rounded-none text-[11px]">{depositSuccess}</div>}
+                  <div className="p-5 flex flex-col gap-4">
+                    {depositError && (
+                      <div className="p-3 bg-red-100/50 dark:bg-red-900/30 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl text-[12px]">
+                        {depositError}
+                      </div>
+                    )}
+                    {depositSuccess && (
+                      <div className="p-3 bg-green-100/50 dark:bg-green-900/30 backdrop-blur-sm border border-green-200/50 dark:border-green-800/50 text-green-800 dark:text-green-300 rounded-xl text-[12px]">
+                        {depositSuccess}
+                      </div>
+                    )}
 
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-gray-700 dark:text-gray-300">Amount *</label>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Amount *</label>
                       <input
                         type="number"
                         value={depositAmount}
                         onChange={(e) => setDepositAmount(e.target.value)}
                         placeholder="Max 1,000,000"
-                        className="w-full h-[22px] bg-white dark:bg-[#1a1b1f] border border-[#a0a0a0] dark:border-[#555] rounded-none px-2 text-[11px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all placeholder-purple-400/60"
                       />
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-gray-700 dark:text-gray-300">Comment</label>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Comment</label>
                       <input
                         type="text"
                         value={depositComment}
                         onChange={(e) => setDepositComment(e.target.value)}
-                        className="w-full h-[22px] bg-white dark:bg-[#1a1b1f] border border-[#a0a0a0] dark:border-[#555] rounded-none px-2 text-[11px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all"
                       />
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-gray-700 dark:text-gray-300">Credit</label>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Credit</label>
                       <input
                         type="text"
                         value={depositCredit}
                         onChange={(e) => setDepositCredit(e.target.value)}
-                        className="w-full h-[22px] bg-white dark:bg-[#1a1b1f] border border-[#a0a0a0] dark:border-[#555] rounded-none px-2 text-[11px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all"
                       />
                     </div>
+
                     <button
                       onClick={handleDeposit}
                       disabled={isDepositing || !depositAmount}
-                      className="mt-2 w-[100px] h-[24px] self-end bg-[#e1e1e1] dark:bg-[#333333] hover:bg-[#d4d4d4] dark:hover:bg-[#3e3e42] border border-[#adadad] dark:border-[#555555] text-gray-800 dark:text-gray-200 text-[11px] disabled:opacity-50 transition-colors rounded-none"
+                      className="mt-4 px-6 h-9 self-end bg-purple-600/80 hover:bg-purple-600 dark:bg-purple-500/80 dark:hover:bg-purple-500 backdrop-blur-md border border-purple-400/50 text-white text-[12px] font-medium rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center"
                     >
                       {isDepositing ? 'Working...' : 'Deposit'}
                     </button>
@@ -1605,6 +1731,15 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             </div>
           </div>
         </>
+      )}
+
+      {ctxMenu.isOpen && (
+        <TradeContextMenu
+          {...ctxMenu}
+          onClose={() => setCtxMenu(prev => ({ ...prev, isOpen: false }))}
+          onModify={handleModifySLTP}
+          onCloseTrade={handleDeleteTrade}
+        />
       )}
     </div>
   );

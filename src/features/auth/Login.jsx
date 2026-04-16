@@ -36,10 +36,10 @@ const Login = ({ onLoginSuccess }) => {
         throw new Error('Invalid credentials. Please check your User ID and password.');
       }
 
-      localStorage.setItem('authToken', finalToken);
-      localStorage.setItem('refreshToken', data.refresh_token || '');
-      localStorage.setItem('brokerLogin', String(data.login || ''));
-      localStorage.setItem('brokerId', data.broker_id || '');
+      import('../../../services/authService').then(auth => {
+        auth.setSession(data);
+      });
+      
       if (onLoginSuccess) onLoginSuccess(finalToken);
     } catch (err) {
       setError(err.message || 'An error occurred during login.');
