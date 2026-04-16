@@ -10,8 +10,7 @@ import { orderDelete } from '../../services/tradeApi';
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
 const TABS = [
-  'Overview', 'Personal', 'Account', 'Limits',
-  'Profile', 'Subscriptions', 'Balance', 'Trade', 'History', 'Security'
+  'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
 ];
 
 const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position' }) => {
@@ -186,13 +185,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         if (!res.ok) throw Object.assign(new Error(result?.message || 'Failed to close position'), { status: res.status });
       }
       console.log(`[${label}] response:`, result);
-      const status  = result?.retcode || result?.status || 'OK';
+      const status = result?.retcode || result?.status || 'OK';
       const message = result?.message || JSON.stringify(result);
       alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
       setPositions(prev => prev.filter(p => p.position !== ticket));
     } catch (err) {
       console.error(`[${label}] error:`, err);
-      const status  = err?.code || err?.status || 'ERROR';
+      const status = err?.code || err?.status || 'ERROR';
       alert(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
     } finally {
       setIsDeleting(false);
@@ -248,7 +247,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
               setLiveMetrics(prev => prev ? { ...prev, ...updateObj } : updateObj);
             }
           }
-        } catch (err) { }
+        } catch (err) {
+          console.error(`[Metrics WS] Error parsing message:`, err);
+        }
       };
 
       ws.onclose = (e) => {
@@ -342,6 +343,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         balance: liveMetrics.balance,
         equity: liveMetrics.equity,
         margin: liveMetrics.used_margin,
+
         free_margin: liveMetrics.free_margin,
         margin_level: liveMetrics.margin_level,
         pnl: liveMetrics.floating_pnl,
@@ -362,16 +364,17 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // Pretty-prints an API response into the alert body. Always logs the
   // raw response + the originating call name to the console so devs can
   // inspect headers/stack via devtools even if they dismiss the alert.
+
   const showResult = (label, result) => {
     console.log(`[${label}] response:`, result);
-    const status  = result?.retcode || result?.status || 'OK';
+    const status = result?.retcode || result?.status || 'OK';
     const message = result?.message || JSON.stringify(result);
     alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
   };
 
   const showError = (label, err) => {
     console.error(`[${label}] error:`, err);
-    const status  = err?.code || err?.status || 'ERROR';
+    const status = err?.code || err?.status || 'ERROR';
     const message = err?.message || String(err);
     alert(`${label} failed\n\nstatus: ${status}\nmessage: ${message}`);
   };
@@ -491,7 +494,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         if (targetTicket) {
           const hit = mine.find(p =>
             p.position === targetTicket ||
-            p.ticket   === targetTicket ||
+            p.ticket === targetTicket ||
             String(p.position) === String(targetTicket)
           );
           if (hit) {
@@ -505,11 +508,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             // Orders / Deals where the popup doesn't fetch its own list.
             setSelectedTicketRow({
               position: targetTicket,
-              ticket:   targetTicket,
-              symbol:   'EURUSD',
-              type:     'buy',
-              priceSl:  0,
-              priceTp:  0,
+              ticket: targetTicket,
+              symbol: 'EURUSD',
+              type: 'buy',
+              priceSl: 0,
+              priceTp: 0,
             });
           }
         }
@@ -518,11 +521,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         if (targetTicket) {
           setSelectedTicketRow({
             position: targetTicket,
-            ticket:   targetTicket,
-            symbol:   'EURUSD',
-            type:     'buy',
-            priceSl:  0,
-            priceTp:  0,
+            ticket: targetTicket,
+            symbol: 'EURUSD',
+            type: 'buy',
+            priceSl: 0,
+            priceTp: 0,
           });
         }
       }
@@ -775,7 +778,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                   <div className="flex gap-4">
                     <span className="text-gray-300">{accountData ? accountData.Phone : (activeData.Phone || '+967775529929')}</span>
-                    <span className="text-gray-300">MetaQuotes ID: {accountData ? accountData.MQID : (activeData.MQID || '04BA44AF')}</span>
+                    <span className="text-gray-300">RTX5 ID: {accountData ? accountData.MQID : (activeData.MQID || '04BA44AF')}</span>
                   </div>
 
                   <div>
@@ -1381,9 +1384,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                               onClick={() => runAdapterAction(act)}
                               title={act.title}
                               className={
-                                act.tone === 'danger'         ? 'ui-btn ui-btn-danger ui-btn-sm' :
-                                act.tone === 'danger-outline' ? 'ui-btn ui-btn-secondary ui-btn-sm' :
-                                                                'ui-btn ui-btn-secondary ui-btn-sm'
+                                act.tone === 'danger' ? 'ui-btn ui-btn-danger ui-btn-sm' :
+                                  act.tone === 'danger-outline' ? 'ui-btn ui-btn-secondary ui-btn-sm' :
+                                    'ui-btn ui-btn-secondary ui-btn-sm'
                               }
                               style={act.tone === 'danger-outline' ? { color: 'var(--danger-text)', borderColor: 'var(--danger-border)' } : undefined}
                             >

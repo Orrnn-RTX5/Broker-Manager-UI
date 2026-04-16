@@ -73,7 +73,7 @@ const PositionsBySentimentChart = () => {
         onMouseLeave={handleMouseLeave}
       >
 
-        {/* Tracking Crosshair Lines matching previous dark style */}
+      {/* Tra  cking Crosshair Lines matching previous dark style */}
         {mousePos.x !== null && mousePos.y !== null && (
           <>
             <div
