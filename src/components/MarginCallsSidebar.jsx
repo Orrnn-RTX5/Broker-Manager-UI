@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { User, RefreshCw, AlertTriangle, Loader, WifiOff } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
+import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 
 /**
@@ -17,6 +18,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const [summaryAccount, setSummaryAccount] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [blockedUsers, setBlockedUsers] = useState({});
+  const [restrictLogin, setRestrictLogin] = useState(null);
 
   const fetchAccounts = useCallback(async () => {
     const id = localStorage.getItem('authToken');
@@ -28,7 +30,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/manager/Accounts?id=${id}`, {
+      const response = await fetch(`/api/manager/AccountDetailsMany?id=${id}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' },
       });
@@ -45,13 +47,23 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         throw new Error(data?.error || data?.message || `API error ${response.status}`);
       }
 
-      const list = Array.isArray(data)
+      const raw = Array.isArray(data)
         ? data
-        : Array.isArray(data?.accounts)
-          ? data.accounts
-          : Array.isArray(data?.data)
-            ? data.data
-            : [];
+        : Array.isArray(data?.answer)
+          ? data.answer
+          : Array.isArray(data?.accounts)
+            ? data.accounts
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+
+      const list = raw.map(acc => ({
+        ...acc,
+        login: acc.login || acc.Login,
+        Name: acc.Name || acc.name || [acc.FirstName || acc.firstName, acc.LastName || acc.lastName].filter(Boolean).join(' ') || '',
+        balance: acc.balance !== undefined ? acc.balance : (acc.Balance !== undefined ? acc.Balance : undefined),
+        MarginCallLevel: acc.marginLevel || acc.MarginLevel || acc.MarginCallLevel,
+      }));
 
       setAccounts(list);
     } catch (err) {
@@ -102,6 +114,8 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       }
     } else if (action === 'details') {
       setSelectedAccountDetails(acc);
+    } else if (action === 'restrictions') {
+      setRestrictLogin(login);
     } else if (action === 'block') {
       try {
         const token = localStorage.getItem('authToken');
@@ -209,7 +223,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
             <thead>
               <tr>
                 <th>Login</th>
-                <th>Name</th>
+              
                 <th style={{ textAlign: 'right' }}>Balance</th>
               </tr>
             </thead>
@@ -239,14 +253,12 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                       }}
                     >
                       <td style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
-                        <span className="inline-flex items-center gap-2">
-                          <User size={12} style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }} />
-                          <span className="tabular font-mono">{login}</span>
+                        <span className="inline-flex items-center ">
+                          <User  style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }} />
+                          <span className="tabular font-mono ">{login}</span>
                         </span>
                       </td>
-                      <td className="text-xs truncate" style={{ maxWidth: 100, color: isUrgent ? 'var(--danger-text)' : 'var(--text-2)' }}>
-                        {name}
-                      </td>
+                     
                       <td className="tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
                         {bal}
                       </td>
@@ -272,6 +284,10 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           account={summaryAccount}
           onClose={() => setSummaryAccount(null)}
         />
+      )}
+
+      {restrictLogin && (
+        <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
 
       {contextMenu && (

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, Search, Activity } from 'lucide-react';
 import DealsDataGrid from './components/DealsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
+import DealerOrderMenu from '../../components/menus/DealerOrderMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 
@@ -45,6 +46,7 @@ const DealsPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [entryFilter, setEntryFilter] = useState('All Entries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [dealerMenu, setDealerMenu] = useState(null);
 
   const ctl = useGridPageController({
     columns: DEAL_COLUMNS,
@@ -92,12 +94,27 @@ const DealsPage = () => {
         symbolFilter={symbolFilter}
         entryFilter={entryFilter}
         {...ctl.gridProps}
+        onRowContext={(e, row) => {
+          ctl.gridProps.onRowContext(e, row);
+          setDealerMenu({ x: e.clientX + 265, y: e.clientY, order: row });
+        }}
       />
 
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           onNewClient={() => setIsNewAccountOpen(true)}
+        />
+      )}
+
+      {dealerMenu && (
+        <DealerOrderMenu
+          x={dealerMenu.x}
+          y={dealerMenu.y}
+          order={dealerMenu.order}
+          isDeal
+          onClose={() => setDealerMenu(null)}
+          onRefresh={() => {}}
         />
       )}
 

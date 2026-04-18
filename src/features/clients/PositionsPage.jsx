@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ChevronDown, Search, BarChart3 } from 'lucide-react';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
+import DealerPositionMenu from '../../components/menus/DealerPositionMenu';
+import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 
@@ -42,6 +44,8 @@ const PositionsPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [dealerMenu, setDealerMenu] = useState(null);
+  const [restrictLogin, setRestrictLogin] = useState(null);
 
   const ctl = useGridPageController({
     columns: POSITION_COLUMNS,
@@ -89,13 +93,32 @@ const PositionsPage = () => {
         symbolFilter={symbolFilter}
         reasonFilter={reasonFilter}
         {...ctl.gridProps}
+        onRowContext={(e, row) => {
+          ctl.gridProps.onRowContext(e, row);
+          setDealerMenu({ x: e.clientX + 265, y: e.clientY, position: row });
+        }}
       />
 
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           onNewClient={() => setIsNewAccountOpen(true)}
+          onOpenDetails={(row) => setRestrictLogin(row.login)}
         />
+      )}
+
+      {dealerMenu && (
+        <DealerPositionMenu
+          x={dealerMenu.x}
+          y={dealerMenu.y}
+          position={dealerMenu.position}
+          onClose={() => setDealerMenu(null)}
+          onRefresh={() => ctl.gridProps.onRowsChange?.([]) /* trigger reload */}
+        />
+      )}
+
+      {restrictLogin && (
+        <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
 
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />

@@ -27,38 +27,48 @@ export const clearSession = () => {
   localStorage.removeItem(TOKENS.BROKER_ID);
 };
 
+let isRefreshing = false;
+let refreshPromise = null;
+
 /**
  * Attempts to refresh the authentication token using the refresh token.
- * Returns the new auth token if successful, or null if failed.
+ * Uses a promise-lock to prevent multiple simultaneous refresh calls.
  */
 export const refreshSession = async () => {
+  if (isRefreshing) return refreshPromise;
+
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
-  try {
-    // Attempting refresh using the standard pattern predicted from Swagger
-    // Note: If /Refresh doesn't exist, we fallback to Connect logic if possible
-    const response = await fetch(`/api/manager/Refresh?token=${encodeURIComponent(refreshToken)}`, {
-      method: 'GET',
-      headers: { 'accept': 'application/json' }
-    });
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      // Attempting refresh using the standard pattern predicted from Swagger/JSON
+      const response = await fetch(`/api/manager/Refresh?token=${encodeURIComponent(refreshToken)}`, {
+        method: 'GET',
+        headers: { 'accept': 'application/json' }
+      });
 
-    if (!response.ok) {
-       // If /Refresh is not correct, the backend might use /Connect with the old token
-       // We'll throw here so the interceptor can handle the failure
-       throw new Error('Refresh failed');
-    }
+      if (!response.ok) {
+         throw new Error('Refresh failed');
+      }
 
-    const data = await response.json();
-    if (data.token) {
-      setSession(data);
-      return data.token;
+      const data = await response.json();
+      if (data.token) {
+        setSession(data);
+        return data.token;
+      }
+      return null;
+    } catch (err) {
+      console.error('Session refresh failed:', err);
+      return null;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
     }
-    return null;
-  } catch (err) {
-    console.error('Session refresh failed:', err);
-    return null;
-  }
+  })();
+
+  return refreshPromise;
 };
 
 export default {

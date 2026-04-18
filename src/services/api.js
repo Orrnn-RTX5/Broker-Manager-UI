@@ -7,7 +7,21 @@ export const getOnlineUsers = async () => {
 
 // ─── Clients ───────────────────────────────────────────────────────────────────
 export const getClients = async () => {
-  return apiClient.get('/Accounts'); 
+  const data = await apiClient.get('/AccountDetailsMany');
+  const records = Array.isArray(data) ? data : data.answer || [];
+
+  return records.map(p => ({
+    id: String(p.login || p.Login || ''),
+    name: p.Name || p.name || [p.FirstName || p.firstName, p.LastName || p.lastName].filter(Boolean).join(' ') || '',
+    city: p.City || p.city || '',
+    type: p.Type || p.type || 'Individual',
+    status: p.status || p.Status || 'Active',
+    lead: p.Lead || p.lead || '',
+    email: p.email || p.Email || '',
+    phone: p.phone || p.Phone || '',
+    country: p.Country || p.country || '',
+    balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
+  }));
 };
 
 // ─── Trading Accounts ──────────────────────────────────────────────────────────

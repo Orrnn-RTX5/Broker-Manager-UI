@@ -36,7 +36,7 @@ const Login = ({ onLoginSuccess }) => {
         throw new Error('Invalid credentials. Please check your User ID and password.');
       }
 
-      import('../../../services/authService').then(auth => {
+      import('../../services/authService').then(auth => {
         auth.setSession(data);
       });
       

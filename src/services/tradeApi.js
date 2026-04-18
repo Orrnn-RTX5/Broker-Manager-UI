@@ -67,3 +67,60 @@ export const dealUpdateBatch = (payload) => tradeClient.post('/DealUpdateBatch',
 export const dealPerform   = (payload) => tradeClient.post('/DealPerform', payload);
 
 export const positionModifyStops = orderModify;
+
+// ────────── ORDER (Dealer) ──────────
+export const orderPriceChange = (ticket, price) =>
+  tradeClient.get(`/OrderPriceChange?ticket=${ticket}&price=${price}`);
+
+export const orderReject = ({ ticket, comment }) => {
+  const qs = new URLSearchParams({ ticket: String(ticket) });
+  if (comment) qs.set('comment', comment);
+  return tradeClient.get(`/OrderReject?${qs.toString()}`);
+};
+
+export const orderApprove = ({ ticket, comment }) => {
+  const qs = new URLSearchParams({ ticket: String(ticket) });
+  if (comment) qs.set('comment', comment);
+  return tradeClient.get(`/OrderApprove?${qs.toString()}`);
+};
+
+// ────────── DEALER QUEUE ──────────
+export const getDealerQueue = () =>
+  tradeClient.get('/DealerQueueList');
+
+// ────────── DEAL (Dealer) ──────────
+export const dealRollback = ({ deal, comment }) => {
+  const qs = new URLSearchParams({ deal: String(deal) });
+  if (comment) qs.set('comment', comment);
+  return tradeClient.get(`/DealRollback?${qs.toString()}`);
+};
+
+// ────────── ACCOUNT RESTRICTIONS ──────────
+export const accountRestrictGet = (login) =>
+  tradeClient.get(`/AccountRestrictGet?login=${login}`);
+
+export const accountRestrictSet = (params) => {
+  const qs = new URLSearchParams();
+  qs.set('login', String(params.login));
+  const boolFields = ['no_trading', 'no_deposit', 'no_withdraw', 'close_only', 'a_book_override', 'b_book_override'];
+  const numFields = ['max_lot', 'max_total_lot', 'spread_markup', 'custom_leverage', 'execution_delay_ms'];
+  boolFields.forEach(f => { if (params[f] !== undefined) qs.set(f, String(params[f])); });
+  numFields.forEach(f => { if (params[f] !== undefined) qs.set(f, String(params[f])); });
+  if (params.comment) qs.set('comment', params.comment);
+  return tradeClient.get(`/AccountRestrictSet?${qs.toString()}`);
+};
+
+export const accountRestrictClear = (login) =>
+  tradeClient.get(`/AccountRestrictClear?login=${login}`);
+
+export const accountRestrictList = () =>
+  tradeClient.get('/AccountRestrictList');
+
+export const accountSpreadSet = ({ login, symbol, markup }) =>
+  tradeClient.get(`/AccountSpreadSet?login=${login}&symbol=${symbol}&markup=${markup}`);
+
+export const accountExecutionSet = ({ login, mode, delay_ms }) =>
+  tradeClient.get(`/AccountExecutionSet?login=${login}&mode=${mode}&delay_ms=${delay_ms}`);
+
+export const accountBookSet = ({ login, book }) =>
+  tradeClient.get(`/AccountBookSet?login=${login}&book=${book}`);

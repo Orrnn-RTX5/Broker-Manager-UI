@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, Search, User } from 'lucide-react';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
+import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { ALL_COUNTRIES } from '../../utils/countries';
@@ -39,6 +40,7 @@ const TradingAccountsPage = () => {
   const [groupFilter, setGroupFilter] = useState('All Groups');
   const [countryFilter, setCountryFilter] = useState('All Countries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [restrictLogin, setRestrictLogin] = useState(null);
 
   const ctl = useGridPageController({
     columns: ACCOUNT_COLUMNS,
@@ -89,7 +91,12 @@ const TradingAccountsPage = () => {
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           onNewClient={() => setIsNewAccountOpen(true)}
+          onOpenDetails={(row) => setRestrictLogin(row.login)}
         />
+      )}
+
+      {restrictLogin && (
+        <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
 
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />

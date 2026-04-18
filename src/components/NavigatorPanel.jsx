@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import {
-  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown
+  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield
 } from 'lucide-react';
 
 // Reusable Tree Node Component
@@ -87,6 +87,11 @@ const NavigatorPanel = () => {
               </TreeNode>
 
               <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigate('/dealing')} />
+
+              <TreeNode label="Dealer Operations" icon={Gavel} iconColor="text-orange-500" defaultExpanded>
+                <TreeNode label="Dealer Queue"         icon={Gavel}  iconColor="text-orange-400" onClickNode={() => navigate('/dealer/queue')} />
+                <TreeNode label="Restricted Accounts"  icon={Shield} iconColor="text-red-400"    onClickNode={() => navigate('/dealer/restrictions')} />
+              </TreeNode>
 
               <TreeNode
                 label="Groups"

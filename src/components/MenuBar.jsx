@@ -7,6 +7,7 @@ import WindowMenu from './menus/WindowMenu';
 import HelpMenu from './menus/HelpMenu';
 import NewAccountModal from './Popups/NewAccountModal';
 import LoginModal from './Popups/LoginModal';
+import apiClient from '../services/apiClient';
 
 const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   const [activeMenu, setActiveMenu] = useState(null);
@@ -21,24 +22,17 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   useEffect(() => {
     let intervalId;
     const checkConnection = async () => {
-      const id = localStorage.getItem('authToken');
-      if (!id || !isAuthenticated) {
+      if (!isAuthenticated) {
         setConnectionData(null);
         return;
       }
       try {
         const startTime = performance.now();
-        const res = await fetch(`/api/manager/ConnectionStatus?id=${id}`, {
-          headers: { 'accept': 'application/json' }
-        });
-        const text = await res.text();
+        const data = await apiClient.get('/ConnectionStatus');
         const endTime = performance.now();
         
-        let data;
-        try { data = JSON.parse(text); } catch { throw new Error('Invalid JSON'); }
-        
         const ms = Math.round(endTime - startTime);
-        const downloadedKb = new TextEncoder().encode(text).length / 1024;
+        const downloadedKb = 0.5; // Estimated heartbeat size
         
         setPingMs(ms);
         setTrafficKb(prev => prev + downloadedKb);

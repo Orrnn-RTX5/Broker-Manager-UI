@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Info, Ban, CheckCircle, FileText, Trash2 } from 'lucide-react';
+import { Info, Ban, CheckCircle, FileText, Trash2, Shield } from 'lucide-react';
 
 const SidebarContextMenu = ({ x, y, account, onClose, onAction, isBlocked }) => {
   const menuRef = useRef(null);
@@ -56,6 +56,11 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, isBlocked }) => 
       >
         <CheckCircle size={14} style={{ color: 'var(--ok-text)' }} strokeWidth={1.75} />
         <span className="flex-1">Unblock</span>
+      </div>
+
+      <div className="ui-ctxmenu-item" onClick={() => { onAction('restrictions', account); onClose(); }}>
+        <Shield size={14} style={{ color: 'var(--warn-text)' }} strokeWidth={1.75} />
+        <span className="flex-1">Restrictions</span>
       </div>
 
       <div className="ui-ctxmenu-sep" />

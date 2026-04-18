@@ -13,56 +13,41 @@ const apiClient = {
   async request(endpoint, options = {}) {
     let url = endpoint.startsWith('http') ? endpoint : `${DEFAULT_BASE_URL}${endpoint}`;
     
-    // Ensure 'id' parameter is present in the URL for MT5 compatibility
-    const token = authService.getAuthToken();
-    if (token) {
-      const urlObj = new URL(url, window.location.origin);
-      if (!urlObj.searchParams.has('id')) {
-        urlObj.searchParams.set('id', token);
-      }
-      url = urlObj.pathname + urlObj.search;
-    }
+    // Preparation function for headers and URL with current token
+    const prepareRequest = () => {
+      const token = authService.getAuthToken();
+      const headers = { 'accept': 'application/json', ...options.headers };
+      let finalUrl = url;
 
-    const headers = {
-      'accept': 'application/json',
-      ...options.headers,
+      if (token) {
+        const urlObj = new URL(url, window.location.origin);
+        urlObj.searchParams.set('id', token);
+        finalUrl = urlObj.pathname + urlObj.search;
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return { finalUrl, headers };
     };
 
-    // Also include Bearer token in headers as recommended by Swagger
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    const { finalUrl, headers } = prepareRequest();
 
     try {
-      let response = await fetch(url, { ...options, headers });
+      let response = await fetch(finalUrl, { ...options, headers });
 
-      // Handle 401 Unauthorized (Token Expired)
       if (response.status === 401) {
         console.warn('Authentication expired. Attempting silent refresh...');
         
+        // Wait for refreshSession (which has its own lock)
         const newToken = await authService.refreshSession();
         
         if (newToken) {
           console.log('Refresh successful. Retrying original request...');
-          
-          // Update URL with NEW token
-          const urlObj = new URL(url, window.location.origin);
-          urlObj.searchParams.set('id', newToken);
-          const retryUrl = urlObj.pathname + urlObj.search;
-          
-          // Update Headers with NEW token
-          const retryHeaders = {
-            ...headers,
-            'Authorization': `Bearer ${newToken}`
-          };
-          
-          // Retry the request
+          const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
           return await fetch(retryUrl, { ...options, headers: retryHeaders }).then(res => this.handleResponse(res));
         } else {
-          // Refresh failed, trigger logout
           console.error('Refresh failed. Redirecting to login.');
           authService.clearSession();
-          window.location.href = '/'; // Simple redirect for now
+          // We don't force a page reload here to avoid losing UI state if the user 
+          // can just re-open a login modal, but we throw to stop the request.
           throw new Error('Session expired. Please log in again.');
         }
       }
