@@ -1,6 +1,82 @@
 import { useState, useRef, useEffect } from 'react';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { buildFeedWsUrl } from '../../config/endpoints';
 
+// ─── MEASUREMENT ────────────────────────────────────────────────────────────
+// These counters are module-level so they survive re-renders and are shared
+// between QuoteRow and MarketData without prop drilling.
+const perf = {
+  rowRenders: 0,      // how many times any QuoteRow function body ran
+  ticks: 0,           // how many price tick messages were processed
+  messages: 0,        // how many onmessage events fired
+  windowStart: Date.now(),
+};
+
+// Flush stats to console every 5 seconds so you see REAL numbers.
+// Open DevTools → Console and watch this while the feed is live.
+let _statsTimer = null;
+const startPerfTimer = () => {
+  if (_statsTimer) return;
+  _statsTimer = setInterval(() => {
+    const elapsed = (Date.now() - perf.windowStart) / 1000;
+    const symbolCount = document.querySelectorAll('[data-quote-row]').length;
+    console.table({
+      'Symbols in table':       { value: symbolCount },
+      'WS messages / 5 s':      { value: perf.messages },
+      'Price ticks / 5 s':      { value: perf.ticks },
+      'Row renders / 5 s':      { value: perf.rowRenders },
+      'Row renders / tick':     { value: perf.ticks ? (perf.rowRenders / perf.ticks).toFixed(1) : '-' },
+      'Row renders / sec':      { value: (perf.rowRenders / elapsed).toFixed(1) },
+      // If memo is working: "Row renders / tick" should be ≈ 1
+      // Without memo it equals the symbol count (e.g. 150)
+    });
+    perf.rowRenders  = 0;
+    perf.ticks       = 0;
+    perf.messages    = 0;
+    perf.windowStart = Date.now();
+  }, 5000);
+};
+const stopPerfTimer = () => { clearInterval(_statsTimer); _statsTimer = null; };
+
+// ─── MEMOIZED ROW ────────────────────────────────────────────────────────────
+// Problem A fix: each row is its own isolated component.
+// React.memo means: "if item + selected + onSelect are the same as last render,
+// skip running this function entirely."
+// Because the parent only replaces the ONE changed slot in the quotes array,
+// all other rows get the same object reference → memo skips them → 0 work.
+const QuoteRow = memo(({ item, selected, onSelect }) => {
+  // Every time this line executes, the row actually ran (was not skipped by memo).
+  perf.rowRenders++;
+
+  return (
+    <tr
+      data-quote-row
+      onDoubleClick={() => onSelect(item)}
+      className={`h-5 border-b border-[#333333] hover:bg-[#2d2d30] cursor-pointer ${selected ? 'bg-[#2a2d3e]' : ''}`}
+    >
+      <td className="px-1.5 py-0.5 border-r border-[#333333] flex items-center gap-1">
+        {item.dir === 'up' ? (
+          <ArrowUpRight size={10} className="text-[#3b82f6]" strokeWidth={2.5} />
+        ) : (
+          <ArrowDownRight size={10} className="text-[#ef4444]" strokeWidth={2.5} />
+        )}
+        <span>{item.symbol}</span>
+      </td>
+      <td className={`px-1.5 py-0.5 border-r border-[#333333] text-right ${item.dir === 'up' ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>
+        <span key={`${item.symbol}-bid-${item.bid}`} className={item.dir === 'up' ? 'flash-up' : 'flash-down'}>
+          {item.bid}
+        </span>
+      </td>
+      <td className={`px-1.5 py-0.5 text-right ${item.dir === 'up' ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>
+        <span key={`${item.symbol}-ask-${item.ask}`} className={item.dir === 'up' ? 'flash-up' : 'flash-down'}>
+          {item.ask}
+        </span>
+      </td>
+    </tr>
+  );
+});
+
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 const MarketData = () => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [liveQuotes, setLiveQuotes] = useState([]);
