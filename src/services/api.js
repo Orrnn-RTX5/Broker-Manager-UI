@@ -165,6 +165,23 @@ export const getAdvertisingCampaigns = async () => {
   return apiClient.get('/AdvertisingCampaigns');
 };
 
+// ─── IB Management ───────────────────────────────────────────────────────────
+export const ibList            = ()       => apiClient.get('/IBList');
+export const ibGet             = (login)  => apiClient.get(`/IBGet?login=${login}`);
+export const ibCreate          = (body)   => apiClient.post('/IBCreate', body);
+export const ibUpdate          = (body)   => apiClient.post('/IBUpdate', body);
+export const ibDelete          = (login)  => apiClient.post('/IBDelete', { login });
+export const ibLinkClient      = (body)   => apiClient.post('/IBLinkClient', body);
+export const ibUnlinkClient    = (body)   => apiClient.post('/IBUnlinkClient', body);
+export const ibClientList      = (login)  => apiClient.get(`/IBClientList?login=${login}`);
+export const ibClientListAll   = (login)  => apiClient.get(`/IBClientListAll?login=${login}`);
+export const ibPlanCreate      = (body)   => apiClient.post('/IBPlanCreate', body);
+export const ibPlanList        = (login)  => apiClient.get(`/IBPlanList?login=${login}`);
+export const ibCommissions     = (params) => apiClient.get(`/IBCommissions?${new URLSearchParams(params).toString()}`);
+export const ibCommissionPay   = (body)   => apiClient.post('/IBCommissionPay', body);
+export const ibStats           = (params) => apiClient.get(`/IBStats?${new URLSearchParams(params).toString()}`);
+export const ibTree            = (login)  => apiClient.get(`/IBTree?login=${login}`);
+
 export default {
   getOnlineUsers,
   getClients,

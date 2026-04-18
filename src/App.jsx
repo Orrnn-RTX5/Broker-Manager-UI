@@ -20,6 +20,8 @@ import GroupsPage from './features/groups/GroupsPage';
 import GroupDetailsPage from './features/groups/GroupDetailsPage';
 import DealerQueuePage from './features/dealer/DealerQueuePage';
 import RestrictedAccountsPage from './features/dealer/RestrictedAccountsPage';
+import IBListPage from './features/ib/IBListPage';
+import IBTreePage from './features/ib/IBTreePage';
 
 
 function App() {
@@ -75,6 +77,8 @@ function App() {
             <Route path="/dealing" element={<DealsPage />} />
             <Route path="/dealer/queue" element={<DealerQueuePage />} />
             <Route path="/dealer/restrictions" element={<RestrictedAccountsPage />} />
+            <Route path="/ib" element={<IBListPage />} />
+            <Route path="/ib/tree" element={<IBTreePage />} />
             <Route path="/groups" element={<GroupsPage />} />
               <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { buildFeedWsUrl } from '../../config/endpoints';
 
