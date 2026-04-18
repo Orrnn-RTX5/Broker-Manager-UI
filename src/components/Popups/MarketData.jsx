@@ -284,7 +284,7 @@ const MarketData = () => {
                  isChangeUp = changeCalc >= 0;
                }
 
-               const formatVal = (val) => (!isNaN(val) && val !== null && val !== undefined && val !== '') ? Number(val).toFixed(5) : '-';
+               const formatVal = (val) => (!isNaN(val) && val !== null && val !== undefined && val !== '') ? Number(val).toFixed(2) : '-';
 
                const detailsData = [
                  { label: 'Bid', value: formatVal(quote.bid), isUp: quote.dir === 'up' },
@@ -338,9 +338,9 @@ const MarketData = () => {
             ) : (
               <>
                  <div className="absolute top-5 left-5 px-3 py-1.5 text-xs rounded shadow-sm z-10 ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
-                   {tickHistory.length > 0 ? `${tickHistory[tickHistory.length-1].bid.toFixed(5)} / ${tickHistory[tickHistory.length-1].ask.toFixed(5)}` : 'Waiting for ticks...'}
+                   {tickHistory.length > 0 ? `${tickHistory[tickHistory.length-1].bid.toFixed(2)} / ${tickHistory[tickHistory.length-1].ask.toFixed(2)}` : 'Waiting for ticks...'}
                  </div>
-                 <div className="absolute top-5 left-48 font-bold tracking-wide text-sm z-10" style={{ color: 'var(--accent)' }}>{selectedSymbol}</div>
+                 <div className="absolute top-5 left-72 font-bold tracking-wide text-sm z-10" style={{ color: 'var(--accent)' }}>{selectedSymbol}</div>
                  
                  <div 
                    ref={chartRef}

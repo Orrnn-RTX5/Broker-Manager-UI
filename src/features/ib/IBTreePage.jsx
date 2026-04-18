@@ -3,17 +3,17 @@ import { Search, GitBranch, ChevronRight, ChevronDown, User, AlertTriangle, Load
 import { ibTree } from '../../services/api';
 
 const STATUS_COLOR = {
-  active:   'var(--ok-text)',
+  active: 'var(--ok-text)',
   approved: 'var(--info-text)',
-  pending:  'var(--warn-text)',
-  removed:  'var(--danger-text)',
+  pending: 'var(--warn-text)',
+  removed: 'var(--danger-text)',
 };
 
 const STATUS_BADGE = {
-  active:   'ui-badge-success',
+  active: 'ui-badge-success',
   approved: 'ui-badge-info',
-  pending:  'ui-badge-warn',
-  removed:  'ui-badge-danger',
+  pending: 'ui-badge-warn',
+  removed: 'ui-badge-danger',
 };
 
 /** Renders one node and its children (safe up to 2 levels, warns beyond) */
@@ -73,9 +73,9 @@ const IBNode = ({ node, depth = 0, onSelect }) => {
 
 const IBTreePage = () => {
   const [loginInput, setLoginInput] = useState('');
-  const [tree, setTree]     = useState(null);
+  const [tree, setTree] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState(null);
+  const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
 
   const handleLoad = async () => {
@@ -150,11 +150,11 @@ const IBTreePage = () => {
           <div className="ui-card p-4 flex flex-col gap-3" style={{ width: 240, flexShrink: 0 }}>
             <div className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Selected</div>
             {[
-              ['Login',    selected.login],
-              ['Company',  selected.company_name],
-              ['Level',    selected.level],
-              ['Status',   <span key="s" className={`ui-badge text-[9px] ${STATUS_BADGE[selected.status] || 'ui-badge-neutral'}`}>{selected.status}</span>],
-              ['Clients',  selected.client_count],
+              ['Login', selected.login],
+              ['Company', selected.company_name],
+              ['Level', selected.level],
+              ['Status', <span key="s" className={`ui-badge text-[9px] ${STATUS_BADGE[selected.status] || 'ui-badge-neutral'}`}>{selected.status}</span>],
+              ['Clients', selected.client_count],
             ].map(([label, value]) => (
               <div key={label} className="flex flex-col gap-0.5">
                 <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{label}</span>
