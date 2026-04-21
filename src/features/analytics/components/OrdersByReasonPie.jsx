@@ -1,66 +1,57 @@
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import useThemeStore from '../../../store/themeStore';
+import React from 'react';
+import { Activity } from 'lucide-react';
 
 const data = [
-  { name: 'Mobile', value: 95.38, color: '#38bdf8' }, // Light Blue
-  { name: 'Expert', value: 3.0, color: '#fcd34d' }, // Yellow
-  { name: 'Terminal', value: 1.62, color: '#86efac' }, // Green
+  { name: 'Mobile', value: 124, percentage: 95.38, color: '#7f56d9' }, // Using brand purple
+  { name: 'Expert', value: 4, percentage: 3.0, color: '#f79009' }, // Using warn orange
+  { name: 'Terminal', value: 2, percentage: 1.62, color: '#12b76a' }, // Using ok green
 ];
 
-const OrdersByReasonPie = () => {
-  const isDarkMode = useThemeStore((state) => state.isDarkMode);
-
+const OrdersByReasonGrid = () => {
   return (
-    <div className="bg-transparent flex flex-col pt-4 h-[300px] relative transition-colors">
-      <div className="text-[12px] text-gray-800 dark:text-gray-200 ml-4 mb-2 font-semibold z-10">Orders by Reason</div>
-
-      {/* Central Label for Orders Count */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none mt-4">
-        <span className="text-[12px] font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-[#333333] px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 transition-colors">130</span>
+    <div className="ui-card flex flex-col overflow-hidden h-full">
+      <div className="flex items-center justify-between px-4 py-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+        <div className="flex items-center gap-2">
+          <Activity size={14} style={{ color: 'var(--accent)' }} />
+          <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-2)' }}>Orders by Reason</span>
+        </div>
       </div>
 
-      <div className="flex-1 w-full relative flex items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={90}
-              paddingAngle={1}
-              dataKey="value"
-              stroke={isDarkMode ? "#1e1e1e" : "#ffffff"}
-              strokeWidth={1}
-              isAnimationActive={false}
-              labelLine={{ stroke: isDarkMode ? '#6b7280' : '#d1d5db', strokeWidth: 1 }}
-              label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
-                if (data[index].name !== 'Mobile') return null; // Only show main label
-                const RADIAN = Math.PI / 180;
-                const radius = outerRadius + 30;
-                const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+      <div className="flex-1 overflow-auto">
+        <table className="ui-grid">
+          <thead>
+            <tr>
+              <th className="text-left">Reason</th>
+              <th className="text-right">Orders</th>
+              <th className="text-right">Breakdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item) => (
+              <tr key={item.name} className="group cursor-default">
+                <td className="relative pl-5">
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }}></div>
+                  <span className="font-medium text-[var(--text-2)]">{item.name}</span>
+                </td>
+                <td className="tabular text-right font-mono" style={{ color: 'var(--text)' }}>
+                  {item.value}
+                </td>
+                <td className="tabular text-right font-mono" style={{ color: 'var(--text-3)' }}>
+                  {item.percentage.toFixed(2)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-                return (
-                  <text x={x} y={y} fill={isDarkMode ? "#d1d5db" : "#4b5563"} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
-                    {data[index].name}: {value}%
-                  </text>
-                );
-              }}
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              itemStyle={{ fontSize: '11px', color: isDarkMode ? '#f3f4f6' : '#1f2937' }}
-              contentStyle={{ borderRadius: '4px', padding: '4px 8px', backgroundColor: isDarkMode ? '#374151' : '#ffffff', border: isDarkMode ? '1px solid #4b5563' : '1px solid #e5e7eb' }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+      <div className="px-4 py-2 bg-[var(--surface-2)] border-t border-[var(--border)] flex justify-between items-center">
+         <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>Total Orders</span>
+         <span className="text-sm font-bold tabular" style={{ color: 'var(--text)' }}>130</span>
       </div>
     </div>
   );
 };
 
-export default OrdersByReasonPie;
+export default OrdersByReasonGrid;

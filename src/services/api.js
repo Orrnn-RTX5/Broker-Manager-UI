@@ -39,7 +39,7 @@ export const getTradingAccounts = async () => {
     equity: p.equity !== undefined ? p.equity : (p.Equity !== undefined ? p.Equity : 0),
     profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
     currency: p.Currency || p.currency || '',
-    
+
     // NEW FIELDS FROM SWAGGER
     leverage: p.leverage || p.Leverage || 100,
     credit: p.credit || p.Credit || 0,
@@ -93,7 +93,7 @@ export const getOpenedOrders = async (login) => {
   if (!login) return [];
   const data = await apiClient.get(`/OpenedOrders?logins[]=${login}`);
   const records = Array.isArray(data) ? data : data.answer || [];
-  
+
   return records.map(p => ({
     ticket: p.ticket || 0,
     login: p.login || 0,
@@ -189,21 +189,21 @@ export const getAdvertisingCampaigns = async () => {
 };
 
 // ─── IB Management ───────────────────────────────────────────────────────────
-export const ibList            = ()       => apiClient.get('/IBList');
-export const ibGet             = (login)  => apiClient.get(`/IBGet?login=${login}`);
-export const ibCreate          = (body)   => apiClient.post('/IBCreate', body);
-export const ibUpdate          = (body)   => apiClient.post('/IBUpdate', body);
-export const ibDelete          = (login)  => apiClient.post('/IBDelete', { login });
-export const ibLinkClient      = (body)   => apiClient.post('/IBLinkClient', body);
-export const ibUnlinkClient    = (body)   => apiClient.post('/IBUnlinkClient', body);
-export const ibClientList      = (login)  => apiClient.get(`/IBClientList?login=${login}`);
-export const ibClientListAll   = (login)  => apiClient.get(`/IBClientListAll?login=${login}`);
-export const ibPlanCreate      = (body)   => apiClient.post('/IBPlanCreate', body);
-export const ibPlanList        = (login)  => apiClient.get(`/IBPlanList?login=${login}`);
-export const ibCommissions     = (params) => apiClient.get(`/IBCommissions?${new URLSearchParams(params).toString()}`);
-export const ibCommissionPay   = (body)   => apiClient.post('/IBCommissionPay', body);
-export const ibStats           = (params) => apiClient.get(`/IBStats?${new URLSearchParams(params).toString()}`);
-export const ibTree            = (login)  => apiClient.get(`/IBTree?login=${login}`);
+export const ibList = () => apiClient.get('/IBList');
+export const ibGet = (login) => apiClient.get(`/IBGet?login=${login}`);
+export const ibCreate = (body) => apiClient.post('/IBCreate', body);
+export const ibUpdate = (body) => apiClient.post('/IBUpdate', body);
+export const ibDelete = (login) => apiClient.post('/IBDelete', { login });
+export const ibLinkClient = (body) => apiClient.post('/IBLinkClient', body);
+export const ibUnlinkClient = (body) => apiClient.post('/IBUnlinkClient', body);
+export const ibClientList = (login) => apiClient.get(`/IBClientList?login=${login}`);
+export const ibClientListAll = (login) => apiClient.get(`/IBClientListAll?login=${login}`);
+export const ibPlanCreate = (body) => apiClient.post('/IBPlanCreate', body);
+export const ibPlanList = (login) => apiClient.get(`/IBPlanList?login=${login}`);
+export const ibCommissions = (params) => apiClient.get(`/IBCommissions?${new URLSearchParams(params).toString()}`);
+export const ibCommissionPay = (body) => apiClient.post('/IBCommissionPay', body);
+export const ibStats = (params) => apiClient.get(`/IBStats?${new URLSearchParams(params).toString()}`);
+export const ibTree = (login) => apiClient.get(`/IBTree?login=${login}`);
 
 export default {
   getOnlineUsers,

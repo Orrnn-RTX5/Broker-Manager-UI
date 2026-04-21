@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Loader2, AlertCircle, ShoppingBag } from 'lucide-react';
 import DashboardHeader from './components/DashboardHeader';
 import OpenedOrderCard from './components/OpenedOrderCard';
+import OrdersByReasonGrid from './components/OrdersByReasonPie';
 import { getOpenedOrders } from '../../services/api';
 
 const OpenOrdersDashboard = () => {
@@ -18,7 +19,7 @@ const OpenOrdersDashboard = () => {
     setLoading(true);
     setError(null);
     setHasSearched(true);
-    
+
     try {
       const data = await getOpenedOrders(loginId.trim());
       setOrders(data);
@@ -32,87 +33,36 @@ const OpenOrdersDashboard = () => {
   };
 
   return (
-    <div className="relative h-full w-full flex flex-col overflow-hidden bg-[#0f1115]">
+    <div className="relative h-full w-full flex flex-col overflow-hidden bg-[var(--bg)]">
       {/* Header Area */}
-      <div className="px-6 pt-6 pb-2 shrink-0">
+      <div className="px-6 pt-6 pb-4 shrink-0 border-b border-[var(--border)] bg-[var(--surface)]">
         <DashboardHeader
           title="Opened Orders"
           subtitle="Real-time order monitoring by Account ID."
         />
-      </div>
 
-      {/* Main Content Area (Scrollable) */}
-      <div className="flex-1 overflow-y-auto px-6 pb-32">
-        {loading ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4 py-20">
-            <Loader2 size={32} className="animate-spin text-blue-500" />
-            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>Fetching orders from backend...</p>
-          </div>
-        ) : error ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4 py-20 text-center max-w-md mx-auto">
-            <div className="p-4 rounded-full bg-rose-500/10 text-rose-500">
-              <AlertCircle size={40} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Search Failed</h3>
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>{error}</p>
-            </div>
-            <button 
-              onClick={handleFetchOrders}
-              className="mt-2 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-bold transition-all shadow-lg shadow-blue-600/20"
-            >
-              Retry Connection
-            </button>
-          </div>
-        ) : !hasSearched ? (
-          <div className="h-full flex flex-col items-center justify-center gap-6 py-20 opacity-60">
-            <div className="p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10">
-              <Search size={60} className="text-blue-500/40" />
-            </div>
-            <div className="text-center">
-              <h3 className="text-xl font-bold text-white mb-2">Ready to Search</h3>
-              <p className="text-sm max-w-xs mx-auto" style={{ color: 'var(--muted)' }}>
-                Enter a Login ID in the field below to monitor active and pending orders for that account.
-              </p>
-            </div>
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4 py-20">
-            <ShoppingBag size={48} className="text-gray-600" />
-            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>No opened orders found for Login ID: <span className="text-white font-bold">{loginId}</span></p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 max-w-4xl mx-auto py-2">
-            {orders.map((order) => (
-              <OpenedOrderCard key={order.ticket} order={order} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Search Bar (Fixed at bottom with glassmorphism) */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-none">
-        <div className="max-w-2xl mx-auto pointer-events-auto">
-          <form 
+        {/* Search Bar (Moved to top, square, smaller) */}
+        <div className="mt-4 max-w-md">
+          <form
             onSubmit={handleFetchOrders}
-            className="flex items-center gap-3 p-2 bg-[#1a1c23]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/50"
+            className="flex items-center"
           >
             <div className="flex-1 relative flex items-center">
-              <div className="absolute left-3.5 text-blue-400">
-                <Search size={18} />
+              <div className="absolute left-3 text-[var(--muted)]">
+                <Search size={16} />
               </div>
               <input
                 type="text"
-                placeholder="Enter Login ID to fetch orders..."
+                placeholder="Enter Login ID..."
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
-                className="w-full bg-white/5 border-none text-sm py-3 pl-11 pr-4 rounded-xl text-white placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                className="w-full bg-[var(--surface)] border border-[var(--border-3)] text-sm py-2 pl-10 pr-4 rounded-none text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] outline-none transition-all"
               />
             </div>
             <button
               type="submit"
               disabled={loading || !loginId.trim()}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center gap-2 whitespace-nowrap"
+              className="px-6 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-none transition-all flex items-center gap-2 whitespace-nowrap border border-[var(--accent)]"
             >
               {loading ? (
                 <>
@@ -125,6 +75,70 @@ const OpenOrdersDashboard = () => {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Main Content Area (Scrollable) */}
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        {loading ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4 py-20">
+            <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>Fetching orders from backend...</p>
+          </div>
+        ) : error ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4 py-20 text-center max-w-md mx-auto">
+            <div className="p-4 rounded-full" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
+              <AlertCircle size={40} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Search Failed</h3>
+              <p className="text-sm" style={{ color: 'var(--text-3)' }}>{error}</p>
+            </div>
+            <button
+              onClick={handleFetchOrders}
+              className="ui-btn ui-btn-primary"
+            >
+              Retry Connection
+            </button>
+          </div>
+        ) : !hasSearched ? (
+          <div className="h-full flex flex-col items-center justify-center gap-6 py-20 opacity-40">
+            <div className="p-6 rounded-full" style={{ background: 'var(--surface-3)' }}>
+              <Search size={60} style={{ color: 'var(--muted)' }} />
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-bold" style={{ color: 'var(--text)' }}>Ready to Search</h3>
+              <p className="text-sm max-w-xs mx-auto" style={{ color: 'var(--text-3)' }}>
+                Enter a Login ID in the field above to monitor active and pending orders for that account.
+              </p>
+            </div>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4 py-20">
+            <ShoppingBag size={48} style={{ color: 'var(--muted)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>No opened orders found for Login ID: <span className="font-bold" style={{ color: 'var(--text)' }}>{loginId}</span></p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-8 max-w-5xl mx-auto py-2">
+            {/* Analytics Summary Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <OrdersByReasonGrid />
+              {/* Future analytics components can go here */}
+            </div>
+
+            {/* Individual Records */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-4 w-1 bg-[var(--accent)] rounded-full"></div>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--text-2)' }}>Individual Order Records</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                {orders.map((order) => (
+                  <OpenedOrderCard key={order.ticket} order={order} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
