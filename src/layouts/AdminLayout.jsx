@@ -9,6 +9,8 @@ import useThemeStore from '../store/themeStore';
 import { DockingProvider } from '../components/docking/index.js';
 import DockLayout from '../components/docking/DockLayout';
 import { useDockingContext } from '../components/docking/DockingContext';
+import GlobalLoader from '../components/GlobalLoader';
+import ToastContainer from '../components/ToastContainer';
 
 // ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
@@ -21,7 +23,7 @@ const INITIAL_PANELS = {
     title: 'Navigator',
     icon: '📂',
     defaultPosition: 'left',
-    visible: false,        // starts hidden; toolbar button toggles it
+    visible: true,         // changed from false to true to be visible by default
     size: { width: 280, height: '100%' },
   },
   [PANEL_ACCOUNTS]: {
@@ -64,6 +66,8 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       className="flex flex-col h-screen overflow-hidden"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
+      <GlobalLoader />
+      <ToastContainer />
       {/* ── Top bars ── */}
       <MenuBar isAuthenticated={isAuthenticated} onLogin={onLogin} onLogout={onLogout} />
       <ToolBar

@@ -1,127 +1,108 @@
 import { useState } from 'react';
-import { ChevronDown, Search, BarChart3 } from 'lucide-react';
-import PositionsDataGrid from './components/PositionsDataGrid';
-import ClientsContextMenu from './components/ClientsContextMenu';
-import DealerPositionMenu from '../../components/menus/DealerPositionMenu';
-import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
-import useGridPageController from '../../hooks/useGridPageController';
-
-const POSITION_COLUMNS = [
-  { key: 'position',     label: 'Ticket' },
-  { key: 'login',        label: 'Login' },
-  { key: 'name',         label: 'User Name' },
-  { key: 'email',        label: 'Email' },
-  { key: 'symbol',       label: 'Symbol' },
-  { key: 'type',         label: 'Action' },
-  { key: 'volume',       label: 'Lots' },
-  { key: 'priceOpen',    label: 'Open' },
-  { key: 'priceCurrent', label: 'Current' },
-  { key: 'priceSl',      label: 'S/L' },
-  { key: 'priceTp',      label: 'T/P' },
-  { key: 'swap',         label: 'Storage' },
-  { key: 'profit',       label: 'Profit' },
-  { key: 'comment',      label: 'Comment' },
-];
-
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
+import { History, Search, RefreshCw, Send } from 'lucide-react';
+import PositionHistoryGrid from './components/PositionHistoryGrid';
+import { getPositionHistory } from '../../services/api';
 
 const PositionsPage = () => {
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All Types');
-  const [symbolFilter, setSymbolFilter] = useState('All Symbols');
-  const [reasonFilter, setReasonFilter] = useState('All Reasons');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
-  const [dealerMenu, setDealerMenu] = useState(null);
-  const [restrictLogin, setRestrictLogin] = useState(null);
+  const [loginInput, setLoginInput] = useState('');
+  const [currentLogin, setCurrentLogin] = useState('');
+  const [historyData, setHistoryData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const ctl = useGridPageController({
-    columns: POSITION_COLUMNS,
-    rowKey: 'position',
-    exportName: 'positions',
-    entityLabel: 'position',
-    onClearFilter: () => {
-      setSearch(''); setTypeFilter('All Types');
-      setSymbolFilter('All Symbols'); setReasonFilter('All Reasons');
-    },
-  });
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!loginInput.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+    setCurrentLogin(loginInput);
+
+    try {
+      const data = await getPositionHistory(loginInput);
+      setHistoryData(data);
+    } catch (err) {
+      console.error('History fetch error:', err);
+      setError(err.message || 'Failed to fetch history');
+      setHistoryData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
+    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-end justify-between">
         <div className="flex items-center gap-2">
-          <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <History size={20} style={{ color: 'var(--accent)' }} />
+          </div>
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Positions</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to modify</p>
+            <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Position History</h1>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Search historical records by account login ID</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Types"   width="w-[100px]" options={['Buy', 'Sell']}                onChange={(e) => setTypeFilter(e.target.value)} />
-          <Dropdown value="All Symbols" width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
-          <Dropdown value="All Reasons" width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
+        <div className="flex items-center gap-2">
+          <button 
+            className="ui-btn ui-btn-secondary ui-btn-sm h-9 px-3" 
+            onClick={handleSearch} 
+            disabled={isLoading || !loginInput}
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
-      <div className="relative w-full max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input
-          type="text"
-          placeholder="Search login, position, symbol…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
-        />
+      {/* IB Style Search Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2 w-full max-w-2xl">
+          <div className="relative max-w-xs w-full">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+            <input
+              type="text"
+              placeholder="Enter Login ID…"
+              value={loginInput}
+              onChange={(e) => setLoginInput(e.target.value)}
+              className="ui-input ui-input-sm"
+              style={{ paddingLeft: 32 }}
+            />
+          </div>
+          <button 
+            type="submit"
+            disabled={isLoading || !loginInput}
+            className="ui-btn ui-btn-primary ui-btn-sm flex items-center gap-1.5"
+          >
+            {isLoading ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Search History
+          </button>
+        </form>
       </div>
 
-      <PositionsDataGrid
-        search={search}
-        typeFilter={typeFilter}
-        symbolFilter={symbolFilter}
-        reasonFilter={reasonFilter}
-        {...ctl.gridProps}
-        onRowContext={(e, row) => {
-          ctl.gridProps.onRowContext(e, row);
-          setDealerMenu({ x: e.clientX + 265, y: e.clientY, position: row });
-        }}
-      />
-
-      {ctl.contextMenuProps.isOpen && (
-        <ClientsContextMenu
-          {...ctl.contextMenuProps}
-          onNewClient={() => setIsNewAccountOpen(true)}
-          onOpenDetails={(row) => setRestrictLogin(row.login)}
-        />
-      )}
-
-      {dealerMenu && (
-        <DealerPositionMenu
-          x={dealerMenu.x}
-          y={dealerMenu.y}
-          position={dealerMenu.position}
-          onClose={() => setDealerMenu(null)}
-          onRefresh={() => ctl.gridProps.onRowsChange?.([]) /* trigger reload */}
-        />
-      )}
-
-      {restrictLogin && (
-        <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
-      )}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
+      {/* Grid */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {currentLogin ? (
+          <PositionHistoryGrid 
+            data={historyData} 
+            isLoading={isLoading} 
+            error={error} 
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center ui-card bg-white/30 border-dashed border-2">
+            <div className="flex flex-col items-center gap-4 text-center max-w-sm px-6">
+              <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-gray-100">
+                <Search size={28} className="text-gray-300" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-700">Awaiting Input</h3>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                  Enter a Login ID above to retrieve the historical position records for that specific account.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

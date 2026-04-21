@@ -13,18 +13,7 @@ const OnlineUsersDashboard = () => {
 
   return (
     <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <DashboardHeader
-        title="Online Users"
-        subtitle="Currently connected users across groups, countries, and builds."
-        filters={filters}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ComingSoon title="Online Users by Country" />
-        <ComingSoon title="Online Users by Type" />
-        <ComingSoon title="Online Users by Group" />
-        <ComingSoon title="Online Users by Build" />
-      </div>
+    <p className='text-[#6366f1] text-2xl  ' contentEditable={true}> Analytics yet to come</p>
     </div>
   );
 };

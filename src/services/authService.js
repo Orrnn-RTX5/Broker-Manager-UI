@@ -43,8 +43,8 @@ export const refreshSession = async () => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      // Attempting refresh using the standard pattern predicted from Swagger/JSON
-      const response = await fetch(`/api/manager/Refresh?token=${encodeURIComponent(refreshToken)}`, {
+      // Attempting refresh using the standard 'id' parameter found across the API
+      const response = await fetch(`/api/manager/Refresh?id=${encodeURIComponent(refreshToken)}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });

@@ -19,6 +19,7 @@ const apiClient = {
       const headers = { 'accept': 'application/json', ...options.headers };
       let finalUrl = url;
 
+
       if (token) {
         const urlObj = new URL(url, window.location.origin);
         urlObj.searchParams.set('id', token);
@@ -40,14 +41,11 @@ const apiClient = {
         const newToken = await authService.refreshSession();
         
         if (newToken) {
-          console.log('Refresh successful. Retrying original request...');
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
           return await fetch(retryUrl, { ...options, headers: retryHeaders }).then(res => this.handleResponse(res));
         } else {
-          console.error('Refresh failed. Redirecting to login.');
           authService.clearSession();
-          // We don't force a page reload here to avoid losing UI state if the user 
-          // can just re-open a login modal, but we throw to stop the request.
+
           throw new Error('Session expired. Please log in again.');
         }
       }
@@ -65,7 +63,7 @@ const apiClient = {
       data = JSON.parse(text);
     } catch (e) {
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      return text; // Return raw text if not JSON but status is OK
+      return text; 
     }
 
     if (!response.ok) {

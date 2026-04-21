@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Check, ChevronRight, UserPlus, UserSquare, Mail, Copy,
-  FileText, Filter, Download, Grid3x3, Columns3, CheckSquare, Square, MinusSquare
+  FileText, Filter, Download, Grid3x3, Columns3, CheckSquare, Square, MinusSquare, BarChart3
 } from 'lucide-react';
 
 /**
@@ -142,6 +142,20 @@ const ClientsContextMenu = ({
       )}
 
       {(onNewClient || selectedRow) && <Sep />}
+
+      {/* Trading actions (if supplied) */}
+      {grid?.extraActions && grid.extraActions.length > 0 && (
+        <>
+          <Item 
+            text="Trading Actions" 
+            icon={BarChart3} 
+            iconTone="accent" 
+            rightIcon={ChevronRight} 
+            submenu={grid.extraActions} 
+          />
+          <Sep />
+        </>
+      )}
 
       {/* Selection + data operations */}
       <Item text="Select"       icon={CheckSquare} iconTone="accent" rightIcon={ChevronRight} submenu={selectByMenu} />

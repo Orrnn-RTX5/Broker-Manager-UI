@@ -1,45 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import useNotificationStore from '../store/notificationStore';
 
 export const useGroupList = () => {
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const addNotification = useNotificationStore((state) => state.addNotification);
 
-  useEffect(() => {
-    const fetchGroups = async () => {
+  const { data: groups = [], isLoading: loading, error, isError } = useQuery({
+    queryKey: ['groups'],
+    queryFn: async () => {
       const token = localStorage.getItem('authToken');
       if (!token) {
-        setError('No authentication token found');
-        setLoading(false);
-        return;
+        throw new Error('No authentication token found');
       }
 
+      const res = await fetch(`/api/manager/GroupList?id=${token}`, {
+        headers: { 'accept': 'application/json' }
+      });
+      
+      const text = await res.text();
+      let data;
       try {
-        setLoading(true);
-        const res = await fetch(`/api/manager/GroupList?id=${token}`, {
-          headers: { 'accept': 'application/json' }
-        });
-        
-        const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          throw new Error('Invalid JSON response');
-        }
-        
-        if (!res.ok) throw new Error(data.error || 'Failed to fetch groups');
-        
-        setGroups(Array.isArray(data) ? data : []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('Invalid JSON response');
       }
-    };
+      
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch groups');
+      
+      return Array.isArray(data) ? data : [];
+    },
+    // Show notification on error
+    meta: {
+      onError: (err) => {
+        addNotification(`Failed to load groups: ${err.message}`, 'error');
+      }
+    }
+  });
 
-    fetchGroups();
-  }, []);
-
-  return { groups, loading, error };
+  return { 
+    groups, 
+    loading, 
+    error: isError ? error.message : null 
+  };
 };

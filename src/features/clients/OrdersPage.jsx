@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronDown, Search, ClipboardList } from 'lucide-react';
 import OrdersDataGrid from './components/OrdersDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
-import DealerOrderMenu from '../../components/menus/DealerOrderMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
+import { useDealerMenu } from '../../hooks/useDealerMenu';
 
 const ORDER_COLUMNS = [
   { key: 'ticket',    label: 'Ticket' },
@@ -44,7 +44,6 @@ const OrdersPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
-  const [dealerMenu, setDealerMenu] = useState(null);
 
   const ctl = useGridPageController({
     columns: ORDER_COLUMNS,
@@ -56,6 +55,15 @@ const OrdersPage = () => {
       setSymbolFilter('All Symbols'); setReasonFilter('All Reasons');
     },
   });
+
+  const { getOrderActions, renderDialog } = useDealerMenu(() => {
+    ctl.gridProps.onRowsChange?.([]);
+  });
+
+  const dealerActions = useMemo(() => {
+    if (!ctl.contextMenuProps.selectedRow) return [];
+    return getOrderActions(ctl.contextMenuProps.selectedRow);
+  }, [ctl.contextMenuProps.selectedRow, getOrderActions]);
 
   return (
     <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
@@ -74,16 +82,31 @@ const OrdersPage = () => {
         </div>
       </div>
 
-      <div className="relative w-full max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input
-          type="text"
-          placeholder="Search login, ticket, symbol…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
-        />
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative max-w-xs w-full">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+          <input
+            type="text"
+            placeholder="Search login, ticket, symbol…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="ui-input ui-input-sm"
+            style={{ paddingLeft: 32 }}
+          />
+        </div>
+        {['All Types', 'Buy', 'Sell'].map(opt => (
+          <button
+            key={opt}
+            onClick={() => setTypeFilter(opt)}
+            className={`ui-btn ui-btn-sm ${typeFilter === opt ? 'ui-btn-primary' : 'ui-btn-secondary'}`}
+          >
+            {opt}
+          </button>
+        ))}
+        <div className="h-6 w-px mx-1" style={{ background: 'var(--border)' }} />
+        <Dropdown value={symbolFilter} width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
+        <Dropdown value={reasonFilter} width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
       </div>
 
       <OrdersDataGrid
@@ -92,28 +115,17 @@ const OrdersPage = () => {
         symbolFilter={symbolFilter}
         reasonFilter={reasonFilter}
         {...ctl.gridProps}
-        onRowContext={(e, row) => {
-          ctl.gridProps.onRowContext(e, row);
-          setDealerMenu({ x: e.clientX + 265, y: e.clientY, order: row });
-        }}
       />
 
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
+          grid={{ ...ctl.grid, extraActions: dealerActions }}
           onNewClient={() => setIsNewAccountOpen(true)}
         />
       )}
 
-      {dealerMenu && (
-        <DealerOrderMenu
-          x={dealerMenu.x}
-          y={dealerMenu.y}
-          order={dealerMenu.order}
-          onClose={() => setDealerMenu(null)}
-          onRefresh={() => {}}
-        />
-      )}
+      {renderDialog()}
 
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>

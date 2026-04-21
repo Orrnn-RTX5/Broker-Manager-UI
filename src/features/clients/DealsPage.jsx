@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronDown, Search, Activity } from 'lucide-react';
 import DealsDataGrid from './components/DealsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
-import DealerOrderMenu from '../../components/menus/DealerOrderMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
+import { useDealerMenu } from '../../hooks/useDealerMenu';
 
 const DEAL_COLUMNS = [
   { key: 'ticket',       label: 'Ticket' },
@@ -46,7 +46,6 @@ const DealsPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [entryFilter, setEntryFilter] = useState('All Entries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
-  const [dealerMenu, setDealerMenu] = useState(null);
 
   const ctl = useGridPageController({
     columns: DEAL_COLUMNS,
@@ -58,6 +57,15 @@ const DealsPage = () => {
       setSymbolFilter('All Symbols'); setEntryFilter('All Entries');
     },
   });
+
+  const { getDealActions, renderDialog } = useDealerMenu(() => {
+    ctl.gridProps.onRowsChange?.([]);
+  });
+
+  const dealerActions = useMemo(() => {
+    if (!ctl.contextMenuProps.selectedRow) return [];
+    return getDealActions(ctl.contextMenuProps.selectedRow);
+  }, [ctl.contextMenuProps.selectedRow, getDealActions]);
 
   return (
     <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
@@ -94,29 +102,17 @@ const DealsPage = () => {
         symbolFilter={symbolFilter}
         entryFilter={entryFilter}
         {...ctl.gridProps}
-        onRowContext={(e, row) => {
-          ctl.gridProps.onRowContext(e, row);
-          setDealerMenu({ x: e.clientX + 265, y: e.clientY, order: row });
-        }}
       />
 
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
+          grid={{ ...ctl.grid, extraActions: dealerActions }}
           onNewClient={() => setIsNewAccountOpen(true)}
         />
       )}
 
-      {dealerMenu && (
-        <DealerOrderMenu
-          x={dealerMenu.x}
-          y={dealerMenu.y}
-          order={dealerMenu.order}
-          isDeal
-          onClose={() => setDealerMenu(null)}
-          onRefresh={() => {}}
-        />
-      )}
+      {renderDialog()}
 
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>

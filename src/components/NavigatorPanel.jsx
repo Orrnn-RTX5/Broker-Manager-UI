@@ -82,7 +82,7 @@ const NavigatorPanel = () => {
                 <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/online-users')} />
                 <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients')} />
                 <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/trading-accounts')} />
-                <TreeNode label="Positions" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
+                <TreeNode label="Position History" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
                 <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/orders')} />
               </TreeNode>
 

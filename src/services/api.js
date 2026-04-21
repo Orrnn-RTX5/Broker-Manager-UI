@@ -5,6 +5,10 @@ export const getOnlineUsers = async () => {
   return apiClient.get('/OnlineUsers');
 };
 
+export const getAccountsOnline = async () => {
+  return apiClient.get('/AccountsOnline');
+};
+
 // ─── Clients ───────────────────────────────────────────────────────────────────
 export const getClients = async () => {
   const data = await apiClient.get('/AccountDetailsMany');
@@ -87,6 +91,30 @@ export const getPositions = async () => {
       timeUpdate: p.timeUpdate || p.TimeUpdate || 0,
     };
   });
+};
+
+export const getPositionHistory = async (loginId) => {
+  if (!loginId) return [];
+  const data = await apiClient.get(`/PositionHistoryMT4Format?logins[]=${loginId}`);
+  const records = Array.isArray(data) ? data : data.answer || [];
+
+  return records.map(p => ({
+    order: p.order || 0,
+    login: p.login || 0,
+    symbol: p.symbol || '',
+    type: p.cmd === 0 ? 'buy' : 'sell',
+    volume: p.volume || 0,
+    openTime: p.open_time || 0,
+    closeTime: p.close_time || 0,
+    openPrice: p.open_price || 0,
+    closePrice: p.close_price || 0,
+    sl: p.sl || 0,
+    tp: p.tp || 0,
+    profit: p.profit || 0,
+    swap: p.swap || 0,
+    commission: p.commission || 0,
+    comment: p.comment || '',
+  }));
 };
 
 export const getOpenedOrders = async (login) => {

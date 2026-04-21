@@ -41,37 +41,27 @@ const OpenOrdersDashboard = () => {
           subtitle="Real-time order monitoring by Account ID."
         />
 
-        {/* Search Bar (Moved to top, square, smaller) */}
-        <div className="mt-4 max-w-md">
-          <form
-            onSubmit={handleFetchOrders}
-            className="flex items-center"
-          >
-            <div className="flex-1 relative flex items-center">
-              <div className="absolute left-3 text-[var(--muted)]">
-                <Search size={16} />
-              </div>
+        {/* IB Style Search Bar */}
+        <div className="mt-4">
+          <form onSubmit={handleFetchOrders} className="flex items-center gap-2">
+            <div className="relative max-w-xs w-full">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
               <input
                 type="text"
-                placeholder="Enter Login ID..."
+                placeholder="Enter Login ID…"
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
-                className="w-full bg-[var(--surface)] border border-[var(--border-3)] text-sm py-2 pl-10 pr-4 rounded-none text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] outline-none transition-all"
+                className="ui-input ui-input-sm"
+                style={{ paddingLeft: 32 }}
               />
             </div>
             <button
               type="submit"
               disabled={loading || !loginId.trim()}
-              className="px-6 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-none transition-all flex items-center gap-2 whitespace-nowrap border border-[var(--accent)]"
+              className="ui-btn ui-btn-primary ui-btn-sm flex items-center gap-1.5"
             >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Fetching...
-                </>
-              ) : (
-                'Fetch Orders'
-              )}
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+              Fetch Orders
             </button>
           </form>
         </div>
