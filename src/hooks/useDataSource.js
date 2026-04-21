@@ -39,7 +39,7 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
       setData(result);
       setIsFallback(false);
     } catch (err) {
-      console.warn('[useDataSource] API call failed, using fallback data:', err.message);
+      console.warn(`[useDataSource] API call to backend failed: ${err.message}. FALLBACK: Disconnected state.`);
       setData(fallbackData);
       setIsFallback(true);
       setError(err.message);

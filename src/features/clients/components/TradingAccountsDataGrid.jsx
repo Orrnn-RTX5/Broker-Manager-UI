@@ -90,7 +90,7 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isLoading ? 'Loading accounts…' : 'No accounts match the current filters.'}
+                  {isLoading ? 'Loading accounts…' : (isFallback ? 'BACKEND DISCONNECTED' : 'No accounts match the current filters.')}
                 </td>
               </tr>
             ) : pageRows.map((row, idx) => {
@@ -145,9 +145,9 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
               <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span> accounts
             </span>
             {isFallback && (
-              <span className="ui-badge ui-badge-warn">
+              <span className="ui-badge ui-badge-danger">
                 <AlertTriangle size={10} />
-                DEMO DATA
+                BACKEND DISCONNECTED
               </span>
             )}
           </span>

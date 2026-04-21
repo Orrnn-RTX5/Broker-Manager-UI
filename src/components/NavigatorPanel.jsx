@@ -70,32 +70,32 @@ const NavigatorPanel = () => {
             <TreeNode label="FlexyMarkets-Server" icon={Folder} iconColor="text-yellow-500" defaultExpanded>
 
               <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Trading Accounts"    icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/trading-accounts')} />
-                <TreeNode label="Online Users"        icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/online-users')} />
-                <TreeNode label="Open Positions"      icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-positions')} />
-                <TreeNode label="Open Orders"         icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-orders')} />
-                <TreeNode label="Advertising Campaigns" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/advertising-campaigns')} />
-                <TreeNode label="By Country"          icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/by-country')} />
+
+                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/online-users')} />
+                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-positions')} />
+                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-orders')} />
+
+
               </TreeNode>
 
               <TreeNode label="Clients & Orders" icon={Users} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Online Users"     icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/online-users')} />
-                <TreeNode label="Clients"          icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients')} />
+                <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/online-users')} />
+                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients')} />
                 <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/trading-accounts')} />
-                <TreeNode label="Positions"        icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
-                <TreeNode label="Orders"           icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/orders')} />
+                <TreeNode label="Positions" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
+                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/orders')} />
               </TreeNode>
 
               <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigate('/dealing')} />
 
               <TreeNode label="Dealer Operations" icon={Gavel} iconColor="text-orange-500" defaultExpanded>
-                <TreeNode label="Dealer Queue"         icon={Gavel}  iconColor="text-orange-400" onClickNode={() => navigate('/dealer/queue')} />
-                <TreeNode label="Restricted Accounts"  icon={Shield} iconColor="text-red-400"    onClickNode={() => navigate('/dealer/restrictions')} />
+                <TreeNode label="Dealer Queue" icon={Gavel} iconColor="text-orange-400" onClickNode={() => navigate('/dealer/queue')} />
+                <TreeNode label="Restricted Accounts" icon={Shield} iconColor="text-red-400" onClickNode={() => navigate('/dealer/restrictions')} />
               </TreeNode>
 
               <TreeNode label="IB Management" icon={Handshake} iconColor="text-emerald-500" defaultExpanded>
                 <TreeNode label="IB Accounts" icon={Handshake} iconColor="text-emerald-400" onClickNode={() => navigate('/ib')} />
-                <TreeNode label="IB Tree"     icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigate('/ib/tree')} />
+                <TreeNode label="IB Tree" icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigate('/ib/tree')} />
               </TreeNode>
 
               <TreeNode

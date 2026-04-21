@@ -89,6 +89,29 @@ export const getPositions = async () => {
   });
 };
 
+export const getOpenedOrders = async (login) => {
+  if (!login) return [];
+  const data = await apiClient.get(`/OpenedOrders?logins[]=${login}`);
+  const records = Array.isArray(data) ? data : data.answer || [];
+  
+  return records.map(p => ({
+    ticket: p.ticket || 0,
+    login: p.login || 0,
+    symbol: p.symbol || '',
+    side: p.side || '',
+    volume: p.volume || 0,
+    lots: p.lots || 0,
+    openPrice: p.openPrice || 0,
+    closePrice: p.closePrice || 0,
+    openTime: p.openTime || 0,
+    closeTime: p.closeTime || 0,
+    profit: p.profit || 0,
+    swap: p.swap || 0,
+    commission: p.commission || 0,
+    state: p.state || ''
+  }));
+};
+
 // ─── Analytics ─────────────────────────────────────────────────────────────────
 export const getTradingAccountsAnalytics = async () => {
   return apiClient.get('/AccountAnalytics');

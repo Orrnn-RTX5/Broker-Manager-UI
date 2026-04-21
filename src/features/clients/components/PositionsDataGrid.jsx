@@ -100,7 +100,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={14} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isLoading ? 'Loading positions…' : 'No positions match the current filters.'}
+                  {isLoading ? 'Loading positions…' : (isFallback ? 'BACKEND DISCONNECTED' : 'No positions match the current filters.')}
                 </td>
               </tr>
             ) : pageRows.map((row, idx) => {
@@ -160,9 +160,9 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
             <span>Buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{filtered.filter(r => r.type === 'buy').length}</span></span>
             <span>Sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{filtered.filter(r => r.type === 'sell').length}</span></span>
             {isFallback && (
-              <span className="ui-badge ui-badge-warn">
+              <span className="ui-badge ui-badge-danger">
                 <AlertTriangle size={10} />
-                DEMO DATA
+                BACKEND DISCONNECTED
               </span>
             )}
           </span>

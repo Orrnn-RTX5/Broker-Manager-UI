@@ -106,7 +106,7 @@ const ClientsDataGrid = ({
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={12} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isLoading ? 'Loading clients…' : 'No clients match the current filters.'}
+                  {isLoading ? 'Loading clients…' : (isFallback ? 'BACKEND DISCONNECTED' : 'No clients match the current filters.')}
                 </td>
               </tr>
             ) : (
@@ -179,9 +179,9 @@ const ClientsDataGrid = ({
             </span>
           )}
           {isFallback && (
-            <span className="ui-badge ui-badge-warn">
+            <span className="ui-badge ui-badge-danger">
               <AlertTriangle size={10} />
-              DEMO DATA
+              BACKEND DISCONNECTED
             </span>
           )}
         </span>

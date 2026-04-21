@@ -114,7 +114,9 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
             {isLoading && pageRows.length === 0 ? (
               <tr><td colSpan={17} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading deals…</td></tr>
             ) : pageRows.length === 0 ? (
-              <tr><td colSpan={17} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>No deals match the current filters.</td></tr>
+              <tr><td colSpan={17} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                {isFallback ? 'BACKEND DISCONNECTED' : 'No deals match the current filters.'}
+              </td></tr>
             ) : pageRows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
               const isBuy = row.action === 'deal_buy';
@@ -171,9 +173,9 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
               <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span> deals
             </span>
             {isFallback && (
-              <span className="ui-badge ui-badge-warn">
+              <span className="ui-badge ui-badge-danger">
                 <AlertTriangle size={10} />
-                DEMO DATA
+                BACKEND DISCONNECTED
               </span>
             )}
           </span>
