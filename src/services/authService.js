@@ -43,14 +43,18 @@ export const refreshSession = async () => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      // Attempting refresh using the standard 'id' parameter found across the API
-      const response = await fetch(`/api/manager/Refresh?id=${encodeURIComponent(refreshToken)}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
+      // Switched to official POST /manager/api/v1/auth/refresh endpoint
+      const response = await fetch('/manager/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: refreshToken })
       });
 
       if (!response.ok) {
-         throw new Error('Refresh failed');
+        throw new Error('Refresh failed');
       }
 
       const data = await response.json();

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
@@ -46,6 +47,7 @@ const INITIAL_PANELS = {
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
   const { togglePanel, panels, resetLayout } = useDockingContext();
+  const navigate = useNavigate();
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
@@ -53,6 +55,49 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
+
+  // ── Keyboard Shortcuts ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if user is typing in an input-like element
+      const activeElement = document.activeElement;
+      const isInput = activeElement.tagName === 'INPUT' || 
+                      activeElement.tagName === 'TEXTAREA' || 
+                      activeElement.isContentEditable;
+      
+      if (isInput) return;
+
+      const key = e.key.toLowerCase();
+      const ctrlKey = e.ctrlKey || e.metaKey;
+
+      // Ctrl + O -> Toggle Market Data
+      if (ctrlKey && key === 'o') {
+        e.preventDefault();
+        togglePanel(PANEL_MARKET_DATA);
+        return;
+      }
+
+      // Single Key Shortcuts
+      if (!ctrlKey && !e.altKey && !e.shiftKey) {
+        switch (key) {
+          case 'c':
+            navigate('/clients');
+            break;
+          case 'o':
+            navigate('/clients/orders');
+            break;
+          case 'p':
+            navigate('/clients/positions');
+            break;
+          default:
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate, togglePanel]);
 
   // ── panel content map ──────────────────────────────────────────────────────
   const panelContents = {
