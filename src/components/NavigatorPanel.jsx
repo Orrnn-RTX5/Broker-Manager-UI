@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import {
-  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake
+  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
 } from 'lucide-react';
 
 // Reusable Tree Node Component
@@ -96,6 +96,11 @@ const NavigatorPanel = () => {
               <TreeNode label="IB Management" icon={Handshake} iconColor="text-emerald-500" defaultExpanded>
                 <TreeNode label="IB Accounts" icon={Handshake} iconColor="text-emerald-400" onClickNode={() => navigate('/ib')} />
                 <TreeNode label="IB Tree" icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigate('/ib/tree')} />
+              </TreeNode>
+
+              <TreeNode label="Market Overview" icon={TrendingUp} iconColor="text-indigo-500" defaultExpanded>
+                <TreeNode label="Symbols Browser" icon={BarChart2} iconColor="text-indigo-400" onClickNode={() => navigate('/symbols')} />
+                <TreeNode label="Symbol Management" icon={Settings2} iconColor="text-indigo-400" onClickNode={() => navigate('/symbol-management')} />
               </TreeNode>
 
               <TreeNode

@@ -24,6 +24,9 @@ import DealerQueuePage from './features/dealer/DealerQueuePage';
 import RestrictedAccountsPage from './features/dealer/RestrictedAccountsPage';
 import IBListPage from './features/ib/IBListPage';
 import IBTreePage from './features/ib/IBTreePage';
+import SymbolsOverviewPage from './features/symbols/SymbolsOverviewPage';
+import SymbolListPage from './features/symbols/SymbolListPage';
+import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 
 
 function App() {
@@ -83,7 +86,10 @@ function App() {
               <Route path="/ib" element={<IBListPage />} />
               <Route path="/ib/tree" element={<IBTreePage />} />
               <Route path="/groups" element={<GroupsPage />} />
-                <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
+              <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
+              <Route path="/symbols" element={<SymbolsOverviewPage />} />
+              <Route path="/symbols/:group" element={<SymbolListPage />} />
+              <Route path="/symbol-management" element={<SymbolManagementPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AdminLayout>

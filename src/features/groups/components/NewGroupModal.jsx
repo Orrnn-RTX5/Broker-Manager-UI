@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
+import SymbolSelector from './SymbolSelector';
 
 const defaultPayload = {
   name: "",
@@ -21,6 +22,7 @@ const defaultPayload = {
   demo: false,
   accountType: "",
   lotDivisor: 0,
+  routingMode: "b_book",
   symbolsAllowed: [],       
   symbolsBlocked: []
 };
@@ -37,12 +39,32 @@ const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]"
       />
     ) : (
       <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+        type={type === 'number' ? 'text' : type}
+        value={type === 'number' && value === 0 ? '' : value}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (type === 'number') {
+            onChange(val === '' ? 0 : Number(val));
+          } else {
+            onChange(val);
+          }
+        }}
         className={`${width} h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-2 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500`}
       />
     )}
+  </div>
+);
+
+const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
+  <div className="flex flex-col gap-1">
+    <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${width} h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-1.5 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 cursor-pointer`}
+    >
+      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
   </div>
 );
 
@@ -57,7 +79,14 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
   const [error, setError] = useState(null);
 
   const handleChange = (key, val) => {
-    setFormData(prev => ({ ...prev, [key]: val }));
+    setFormData(prev => {
+      const next = { ...prev, [key]: val };
+      // Sync bookType with routingMode if routingMode changed
+      if (key === 'routingMode') {
+        next.bookType = val === 'b_book' ? 'B-Book' : val === 'a_book' ? 'A-Book' : 'Hybrid';
+      }
+      return next;
+    });
   };
 
   const handleArrayChange = (key, csvString) => {
@@ -175,7 +204,16 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Execution & Commission</h3>
               <div className="grid grid-cols-2 gap-4">
                 <InputGroup label="Execution Mode" value={formData.executionMode} onChange={(v) => handleChange('executionMode', v)} width="w-full" />
-                <InputGroup label="Book Type" value={formData.bookType} onChange={(v) => handleChange('bookType', v)} width="w-full" />
+                <SelectGroup 
+                  label="Book Type / Routing" 
+                  value={formData.routingMode} 
+                  options={[
+                    { value: 'b_book', label: 'B-Book' },
+                    { value: 'a_book', label: 'A-Book' },
+                    { value: 'hybrid', label: 'Hybrid' }
+                  ]}
+                  onChange={(v) => handleChange('routingMode', v)} 
+                />
                 <InputGroup label="Commission Rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} width="w-full" />
                 <InputGroup label="Commission Type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} width="w-full" />
                 <InputGroup label="Max Lot Per Trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} width="w-full" />
@@ -188,17 +226,15 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
             {/* Symbols */}
             <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Symbols</h3>
-              <InputGroup 
-                 label="Allowed Symbols (comma-separated)" 
+              <SymbolSelector
+                 label="Allowed Symbols" 
                  value={formData.symbolsAllowed} 
                  onChange={(v) => handleArrayChange('symbolsAllowed', v)} 
-                 width="w-full" 
               />
-              <InputGroup 
-                 label="Blocked Symbols (comma-separated)" 
+              <SymbolSelector
+                 label="Blocked Symbols" 
                  value={formData.symbolsBlocked} 
                  onChange={(v) => handleArrayChange('symbolsBlocked', v)} 
-                 width="w-full" 
               />
             </div>
 

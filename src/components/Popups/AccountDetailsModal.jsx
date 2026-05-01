@@ -353,7 +353,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           messages.forEach(msgStr => {
             if (!msgStr) return;
             const msg = JSON.parse(msgStr);
-            if (msg.symbol === tradeSymbolRef.current && msg.bid && msg.ask) {
+            if (msg.symbol === tradeSymbolRef.current && msg.bid != null && msg.ask != null) {
               newTick = { bid: parseFloat(msg.bid), ask: parseFloat(msg.ask), time: Date.now() };
             }
           });

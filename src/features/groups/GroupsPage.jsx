@@ -118,6 +118,7 @@ const GroupsPage = () => {
                 <tr>
                   <th>Group Name</th>
                   <th>Description</th>
+                  <th>Routing</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -136,6 +137,17 @@ const GroupsPage = () => {
                   >
                     <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>
                     <td style={{ color: 'var(--text-2)' }}>{group.description}</td>
+                    <td>
+                      <span className={`ui-badge text-[10px] uppercase font-bold px-2 py-0.5 ${
+                        group.routingMode === 'a_book' ? 'ui-badge-warning' : 
+                        group.routingMode === 'hybrid' ? 'ui-badge-primary' : 
+                        'ui-badge-success'
+                      }`}>
+                        {group.routingMode === 'a_book' ? 'A-Book' : 
+                         group.routingMode === 'hybrid' ? 'Hybrid' : 
+                         'B-Book'}
+                      </span>
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="flex items-center justify-end gap-1">
                         <button

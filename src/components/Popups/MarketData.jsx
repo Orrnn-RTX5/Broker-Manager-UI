@@ -96,7 +96,7 @@ const MarketData = () => {
     let reconnectTimeout;
 
     const connectWebSocket = () => {
-      ws = new WebSocket('ws://69.197.178.27/ws/feed');
+      ws = new WebSocket(buildFeedWsUrl());
 
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
@@ -113,15 +113,15 @@ const MarketData = () => {
             messages.forEach(msgStr => {
               if (!msgStr) return;
               const msg = JSON.parse(msgStr);
-              if (msg.symbol && msg.bid && msg.ask) {
+              if (msg.symbol && msg.bid != null && msg.ask != null) {
                 const index = nextQuotes.findIndex(q => q.symbol === msg.symbol);
                 if (index !== -1) {
                   const oldQuote = nextQuotes[index];
                   const oldBidNum = parseFloat(oldQuote.bid);
                   const newBidNum = msg.bid;
                   
-                  const newBidStr = msg.bid.toFixed(5);
-                  const newAskStr = msg.ask.toFixed(5);
+                  const newBidStr = Number(msg.bid).toFixed(5);
+                  const newAskStr = Number(msg.ask).toFixed(5);
                   
                   if (msg.symbol === selectedSymbolRef.current) {
                     setTickHistory(prev => {
@@ -147,8 +147,8 @@ const MarketData = () => {
                 } else {
                   nextQuotes.push({
                     symbol: msg.symbol,
-                    bid: msg.bid.toFixed(5),
-                    ask: msg.ask.toFixed(5),
+                    bid: Number(msg.bid).toFixed(5),
+                    ask: Number(msg.ask).toFixed(5),
                     dir: 'up',
                     session: msg.session,
                     daily_open: msg.daily_open,

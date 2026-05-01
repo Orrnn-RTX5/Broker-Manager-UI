@@ -6,6 +6,7 @@ import NavigatorPanel from '../components/NavigatorPanel';
 import MarginCallsSidebar from '../components/MarginCallsSidebar';
 import MarketData from '../components/Popups/MarketData';
 import useThemeStore from '../store/themeStore';
+import useSymbolStore from '../store/symbolStore';
 
 import { DockingProvider } from '../components/docking/index.js';
 import DockLayout from '../components/docking/DockLayout';
@@ -55,6 +56,11 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
+
+  // ── Symbol Store Initialization ──────────────────────────────────────────
+  useEffect(() => {
+    useSymbolStore.getState().initWebSocket();
+  }, []);
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
