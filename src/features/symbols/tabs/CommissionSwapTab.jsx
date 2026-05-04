@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Loader2, X } from 'lucide-react';
 import {
-  symbolsList,
   commissionScheduleList, commissionScheduleCreate, commissionScheduleDelete,
   dynamicLeverageList, dynamicLeverageCreate, dynamicLeverageDelete,
   swapFreeGroupList, swapFreeGroupSet, swapFreeGroupDelete,
 } from '../../../services/api';
+import { buildFeedWsUrl } from '../../../config/endpoints';
 
 // ─── Generic delete-capable table ─────────────────────────────────────────────
 const DeletableTable = ({ rows, columns, idKey, onDelete, deletingId, emptyMsg }) => (
@@ -323,20 +323,60 @@ const SwapFreeSection = () => {
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const CommissionSwapTab = () => {
   const [allSymbols, setAllSymbols] = useState([]);
+  const [loadingSymbols, setLoadingSymbols] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState('');
 
   useEffect(() => {
-    symbolsList().then(d => setAllSymbols(Array.isArray(d) ? d : [])).catch(() => {});
+    setLoadingSymbols(true);
+    const ws = new WebSocket(buildFeedWsUrl());
+    const symbolSet = new Set();
+    
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+    ws.onmessage = (e) => {
+      try {
+        const messages = e.data.trim().split('\n');
+        for (let i = 0; i < messages.length; i++) {
+          if (!messages[i]) continue;
+          const msg = JSON.parse(messages[i]);
+          if (msg.symbol) symbolSet.add(msg.symbol);
+        }
+      } catch (err) {}
+    };
+
+    const timer = setTimeout(() => {
+      setAllSymbols(Array.from(symbolSet).sort());
+      setLoadingSymbols(false);
+      if (ws.readyState === WebSocket.OPEN) ws.close();
+    }, 3000);
+
+    ws.onerror = () => {
+      setAllSymbols([]);
+      setLoadingSymbols(false);
+    };
+
+    return () => {
+      clearTimeout(timer);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, []);
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-auto">
       <div className="flex items-center gap-3 shrink-0">
         <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-2)' }}>Symbol (for commission & leverage):</label>
-        <select className="ui-input ui-input-sm" style={{ width: 200 }} value={selectedSymbol} onChange={e => setSelectedSymbol(e.target.value)}>
-          <option value="">— select symbol —</option>
-          {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
-        </select>
+        {loadingSymbols ? (
+          <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
+            <Loader2 size={12} className="animate-spin" /> Loading symbols…
+          </div>
+        ) : (
+          <select className="ui-input ui-input-sm" style={{ width: 200 }} value={selectedSymbol} onChange={e => setSelectedSymbol(e.target.value)}>
+            <option value="">— select symbol —</option>
+            {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
+          </select>
+        )}
       </div>
       <CommissionSection symbol={selectedSymbol} />
       <DynamicLeverageSection symbol={selectedSymbol} />

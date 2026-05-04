@@ -88,23 +88,42 @@ const CategoryFormModal = ({ category: existing, allCategories, onClose, onSucce
 // ─── Tree Node ─────────────────────────────────────────────────────────────────
 const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) => {
   const [expanded, setExpanded] = useState(depth === 0);
+  const [symbols, setSymbols] = useState(null);
+  const [loadingSymbols, setLoadingSymbols] = useState(false);
   const children = allCategories.filter(c => c.parentId === (cat.id || cat.name));
+
+  const toggleExpand = async () => {
+    const nextExpanded = !expanded;
+    setExpanded(nextExpanded);
+    if (nextExpanded && symbols === null) {
+      setLoadingSymbols(true);
+      try {
+        const { symbolsByCategory } = await import('../../../services/api');
+        const data = await symbolsByCategory(cat.name);
+        setSymbols(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setSymbols([]);
+      } finally {
+        setLoadingSymbols(false);
+      }
+    }
+  };
 
   return (
     <div>
       <div
-        className="flex items-center gap-1 py-1.5 px-2 rounded transition-colors group"
+        className="flex items-center gap-1 py-1.5 px-2 rounded transition-colors group cursor-pointer"
         style={{ paddingLeft: 8 + depth * 20 }}
+        onClick={toggleExpand}
         onMouseOver={e => e.currentTarget.style.background = 'var(--accent-soft)'}
         onMouseOut={e => e.currentTarget.style.background = 'transparent'}
       >
-        <button
-          onClick={() => setExpanded(v => !v)}
+        <div
           className="w-4 h-4 flex items-center justify-center shrink-0"
-          style={{ color: 'var(--muted)', visibility: children.length > 0 ? 'visible' : 'hidden' }}
+          style={{ color: 'var(--muted)', visibility: (children.length > 0 || true) ? 'visible' : 'hidden' }}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
+        </div>
         {children.length > 0
           ? <FolderOpen size={14} className="text-yellow-500 shrink-0" />
           : <Folder size={14} className="shrink-0" style={{ color: 'var(--muted)' }} />
@@ -114,7 +133,7 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
         <span className={`ui-badge text-[10px] mr-2 ${cat.enabled !== false ? 'ui-badge-success' : 'ui-badge-danger'}`}>
           {cat.enabled !== false ? 'on' : 'off'}
         </span>
-        <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
+        <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity" onClick={e => e.stopPropagation()}>
           <button onClick={() => onEdit(cat)} className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" title="Edit"><Edit2 size={12} /></button>
           <button onClick={() => onDelete(cat)} className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" style={{ color: 'var(--danger)' }} title="Delete"><Trash2 size={12} /></button>
         </div>
@@ -122,15 +141,38 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
       {expanded && children.map(child => (
         <CategoryTreeNode key={child.id || child.name} cat={child} allCategories={allCategories} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} />
       ))}
+      {expanded && loadingSymbols && (
+        <div className="py-1 px-2 text-xs flex items-center gap-2" style={{ paddingLeft: 8 + (depth + 1) * 20, color: 'var(--muted)' }}>
+          <Loader2 size={12} className="animate-spin" /> Loading symbols...
+        </div>
+      )}
+      {expanded && symbols && symbols.length > 0 && (
+        <div className="py-1 flex flex-col gap-1" style={{ paddingLeft: 8 + (depth + 1) * 20 }}>
+          {symbols.map(sym => (
+             <div key={sym.symbol} className="flex items-center gap-2 text-[12px] py-1 px-2 rounded" style={{ background: 'var(--surface-hover)' }}>
+               <span style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{sym.symbol}</span>
+               <span className={`ui-badge text-[9px] ${sym.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
+                 {sym.symbolType || 'base'}
+               </span>
+               {!sym.enabled && <span className="ui-badge ui-badge-danger text-[9px]">Disabled</span>}
+             </div>
+          ))}
+        </div>
+      )}
+      {expanded && symbols && symbols.length === 0 && children.length === 0 && (
+        <div className="py-1 px-2 text-[11px]" style={{ paddingLeft: 8 + (depth + 1) * 20, color: 'var(--muted)' }}>
+          No symbols found.
+        </div>
+      )}
     </div>
   );
 };
 
-// ─── Main Tab ──────────────────────────────────────────────────────────────────
+
 const CategoriesTab = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // null | 'add' | 'edit'
+  const [modal, setModal] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [deleting, setDeleting] = useState(null);
 

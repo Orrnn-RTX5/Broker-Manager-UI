@@ -5,6 +5,8 @@ import {
   sessionOverrideList, sessionOverrideSet, sessionOverrideDelete,
 } from '../../../services/api';
 
+import { buildFeedWsUrl } from '../../../config/endpoints';
+
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ─── Session Row Editor ────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ const OverrideModal = ({ symbol, onClose, onSuccess }) => {
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const SessionsTab = () => {
   const [allSymbols, setAllSymbols] = useState([]);
+  const [loadingSymbols, setLoadingSymbols] = useState(true);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [baseSessions, setBaseSessions] = useState(DAYS.map((_, i) => ({ day_of_week: i, quoteStart: '', quoteEnd: '', tradeStart: '', tradeEnd: '' })));
   const [overrides, setOverrides] = useState([]);
@@ -124,7 +127,40 @@ const SessionsTab = () => {
   const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
-    symbolsList().then(data => setAllSymbols(Array.isArray(data) ? data : [])).catch(() => {});
+    setLoadingSymbols(true);
+    const ws = new WebSocket(buildFeedWsUrl());
+    const symbolSet = new Set();
+    
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+    ws.onmessage = (e) => {
+      try {
+        const messages = e.data.trim().split('\n');
+        for (let i = 0; i < messages.length; i++) {
+          if (!messages[i]) continue;
+          const msg = JSON.parse(messages[i]);
+          if (msg.symbol) symbolSet.add(msg.symbol);
+        }
+      } catch (err) {}
+    };
+
+    const timer = setTimeout(() => {
+      setAllSymbols(Array.from(symbolSet).sort());
+      setLoadingSymbols(false);
+      if (ws.readyState === WebSocket.OPEN) ws.close();
+    }, 3000);
+
+    ws.onerror = () => {
+      setAllSymbols([]);
+      setLoadingSymbols(false);
+    };
+
+    return () => {
+      clearTimeout(timer);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -178,15 +214,21 @@ const SessionsTab = () => {
       {/* Symbol selector */}
       <div className="flex items-center gap-3 shrink-0">
         <label className="text-xs font-medium shrink-0" style={{ color: 'var(--text-2)' }}>Symbol:</label>
-        <select
-          className="ui-input ui-input-sm"
-          style={{ width: 200 }}
-          value={selectedSymbol}
-          onChange={e => setSelectedSymbol(e.target.value)}
-        >
-          <option value="">— select symbol —</option>
-          {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
-        </select>
+        {loadingSymbols ? (
+          <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
+            <Loader2 size={12} className="animate-spin" /> Loading symbols…
+          </div>
+        ) : (
+          <select
+            className="ui-input ui-input-sm"
+            style={{ width: 200 }}
+            value={selectedSymbol}
+            onChange={e => setSelectedSymbol(e.target.value)}
+          >
+            <option value="">— select symbol —</option>
+            {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
+          </select>
+        )}
       </div>
 
       {!selectedSymbol ? (

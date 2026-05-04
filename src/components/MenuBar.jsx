@@ -109,7 +109,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
       case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} />;
       case 'Help': return <HelpMenu onClose={() => setActiveMenu(null)} />;
       default: return (
-        <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[200px] z-50">
+        <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[200px] z-50">
           <div className="px-6 py-1.5 text-[13px] text-gray-500 dark:text-gray-400 italic">Menu not implemented yet</div>
         </div>
       );

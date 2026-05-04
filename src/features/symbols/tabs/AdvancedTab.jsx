@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Save, Loader2, Plus, Trash2, X } from 'lucide-react';
 import {
-  symbolsList,
   marketDepthConfigGet, marketDepthConfigSet,
   symbolVisibilityList, symbolVisibilitySet,
 } from '../../../services/api';
+import { buildFeedWsUrl } from '../../../config/endpoints';
 
 // ─── Market Depth Section ──────────────────────────────────────────────────────
-const MarketDepthSection = ({ allSymbols }) => {
+const MarketDepthSection = ({ allSymbols, loadingSymbols }) => {
   const [symbol, setSymbol] = useState('');
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -49,10 +49,16 @@ const MarketDepthSection = ({ allSymbols }) => {
       </div>
       <div className="flex items-center gap-2">
         <label className="text-xs shrink-0" style={{ color: 'var(--text-2)' }}>Symbol:</label>
-        <select className="ui-input ui-input-sm" style={{ width: 200 }} value={symbol} onChange={e => setSymbol(e.target.value)}>
-          <option value="">— select —</option>
-          {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
-        </select>
+        {loadingSymbols ? (
+          <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
+            <Loader2 size={12} className="animate-spin" /> Loading symbols…
+          </div>
+        ) : (
+          <select className="ui-input ui-input-sm" style={{ width: 200 }} value={symbol} onChange={e => setSymbol(e.target.value)}>
+            <option value="">— select —</option>
+            {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
+          </select>
+        )}
       </div>
       {loading && <div className="text-xs" style={{ color: 'var(--muted)' }}><Loader2 size={12} className="animate-spin inline mr-1" />Loading…</div>}
       {config && !loading && (
@@ -83,7 +89,7 @@ const MarketDepthSection = ({ allSymbols }) => {
 };
 
 // ─── Visibility Modal ──────────────────────────────────────────────────────────
-const VisibilityModal = ({ allSymbols, onClose, onSuccess }) => {
+const VisibilityModal = ({ allSymbols, loadingSymbols, onClose, onSuccess }) => {
   const [form, setForm] = useState({ symbol: '', group: '', visible: true });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -114,10 +120,16 @@ const VisibilityModal = ({ allSymbols, onClose, onSuccess }) => {
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Symbol *</label>
-            <select className="ui-input ui-input-sm" value={form.symbol} onChange={e => set('symbol', e.target.value)}>
-              <option value="">— select —</option>
-              {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
-            </select>
+            {loadingSymbols ? (
+              <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
+                <Loader2 size={12} className="animate-spin" /> Loading symbols…
+              </div>
+            ) : (
+              <select className="ui-input ui-input-sm" value={form.symbol} onChange={e => set('symbol', e.target.value)}>
+                <option value="">— select —</option>
+                {allSymbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
+              </select>
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Group *</label>
@@ -141,7 +153,7 @@ const VisibilityModal = ({ allSymbols, onClose, onSuccess }) => {
 };
 
 // ─── Visibility Section ────────────────────────────────────────────────────────
-const VisibilitySection = ({ allSymbols }) => {
+const VisibilitySection = ({ allSymbols, loadingSymbols }) => {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -194,6 +206,7 @@ const VisibilitySection = ({ allSymbols }) => {
       {showModal && (
         <VisibilityModal
           allSymbols={allSymbols}
+          loadingSymbols={loadingSymbols}
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); load(); }}
         />
@@ -205,15 +218,49 @@ const VisibilitySection = ({ allSymbols }) => {
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const AdvancedTab = () => {
   const [allSymbols, setAllSymbols] = useState([]);
+  const [loadingSymbols, setLoadingSymbols] = useState(true);
 
   useEffect(() => {
-    symbolsList().then(d => setAllSymbols(Array.isArray(d) ? d : [])).catch(() => {});
+    setLoadingSymbols(true);
+    const ws = new WebSocket(buildFeedWsUrl());
+    const symbolSet = new Set();
+    
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+    ws.onmessage = (e) => {
+      try {
+        const messages = e.data.trim().split('\n');
+        for (let i = 0; i < messages.length; i++) {
+          if (!messages[i]) continue;
+          const msg = JSON.parse(messages[i]);
+          if (msg.symbol) symbolSet.add(msg.symbol);
+        }
+      } catch (err) {}
+    };
+
+    const timer = setTimeout(() => {
+      setAllSymbols(Array.from(symbolSet).sort());
+      setLoadingSymbols(false);
+      if (ws.readyState === WebSocket.OPEN) ws.close();
+    }, 3000);
+
+    ws.onerror = () => {
+      setAllSymbols([]);
+      setLoadingSymbols(false);
+    };
+
+    return () => {
+      clearTimeout(timer);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, []);
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-auto">
-      <MarketDepthSection allSymbols={allSymbols} />
-      <VisibilitySection allSymbols={allSymbols} />
+      <MarketDepthSection allSymbols={allSymbols} loadingSymbols={loadingSymbols} />
+      <VisibilitySection allSymbols={allSymbols} loadingSymbols={loadingSymbols} />
     </div>
   );
 };

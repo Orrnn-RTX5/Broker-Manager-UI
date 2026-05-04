@@ -15,7 +15,7 @@ export const MenuItem = ({
       onClick={disabled ? undefined : onClick}
       className={`
       flex items-center justify-between px-6 py-1.5 cursor-pointer select-none text-[13px] transition-colors
-      ${disabled ? 'text-gray-400 dark:text-gray-500 cursor-default' : 'text-[#1a1a1a] dark:text-gray-200 hover:bg-[#e6f0fa] dark:hover:bg-[#3f3f46]'}
+      ${disabled ? 'text-gray-400 dark:text-[var(--muted)] cursor-default' : 'text-[#1a1a1a] dark:text-[var(--text)] hover:bg-[#e6f0fa] dark:hover:bg-[var(--surface-hover,var(--surface-3))]'}
     `}>
       <div className="flex items-center gap-3">
         <div className={`w-5 h-5 flex justify-center items-center ${iconBg}`}>
@@ -31,4 +31,4 @@ export const MenuItem = ({
   );
 };
 
-export const MenuDivider = () => <div className="h-px bg-[#d7d7d7] dark:bg-[#404040] my-1 mx-1 transition-colors"></div>;
+export const MenuDivider = () => <div className="h-px bg-[#d7d7d7] dark:bg-[var(--border)] my-1 mx-1 transition-colors"></div>;

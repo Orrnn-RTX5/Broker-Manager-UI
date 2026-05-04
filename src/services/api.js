@@ -237,7 +237,41 @@ export const ibTree = (login) => apiClient.get(`/IBTree?login=${login}`);
 export const symbolsList = () => apiClient.get('/SymbolsList');
 export const symbolGet = (symbol) => apiClient.get(`/SymbolGet?symbol=${encodeURIComponent(symbol)}`);
 export const symbolsParams = (symbols) => apiClient.get(`/SymbolsParams?${symbols.map(s => `symbols[]=${encodeURIComponent(s)}`).join('&')}`);
-export const symbolList = () => apiClient.get('/SymbolList');
+export const symbolList = async () => {
+  const names = await apiClient.get('/SymbolsList');
+  if (!Array.isArray(names) || names.length === 0) return [];
+  
+  const params = names.map(s => `symbols[]=${encodeURIComponent(s)}`).join('&');
+  
+  const [mt5Data, cats] = await Promise.all([
+    apiClient.get(`/SymbolsParams?${params}`).catch(() => []),
+    apiClient.get('/SymbolCategoryList').catch(() => [])
+  ]);
+
+  const metaMap = {};
+  if (Array.isArray(cats)) {
+    const metaPromises = cats.map(c => 
+      apiClient.get(`/SymbolsByCategory?category=${encodeURIComponent(c.name)}`)
+        .then(res => ({ category: c.name, symbols: res }))
+        .catch(() => null)
+    );
+    const metaResults = await Promise.all(metaPromises);
+    for (const res of metaResults) {
+      if (res && Array.isArray(res.symbols)) {
+        for (const s of res.symbols) {
+          metaMap[s.symbol] = { ...s, category: res.category };
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(mt5Data)) return [];
+  
+  return mt5Data.map(s => {
+    const meta = metaMap[s.symbol] || {};
+    return { ...s, ...meta };
+  });
+};
 export const symbolAdd = (params) => apiClient.get(`/SymbolAdd?${new URLSearchParams(params).toString()}`);
 export const symbolUpdate = (params) => apiClient.get(`/SymbolUpdate?${new URLSearchParams(params).toString()}`);
 export const symbolEnable = (symbol) => apiClient.get(`/SymbolEnable?symbol=${encodeURIComponent(symbol)}`);

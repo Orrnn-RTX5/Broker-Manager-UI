@@ -42,7 +42,7 @@ const WindowMenu = ({ onClose }) => {
   };
 
   return (
-    <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[#252526] border border-[#a0a0a0] dark:border-[#333333] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[260px] z-[60] max-h-[90vh] overflow-y-auto transition-colors">
+    <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[260px] z-[60] max-h-[90vh] overflow-y-auto transition-colors">
       <MenuItem icon={LayoutGrid} text="Tile Windows" shortcut="Alt+R" iconColor="text-blue-500" />
       <MenuDivider />
       <MenuItem icon={Layers} text="Cascade" iconColor="text-blue-600" />

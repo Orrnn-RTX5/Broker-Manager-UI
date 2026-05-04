@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
 import {
   symbolList, symbolGet, symbolAdd, symbolUpdate, symbolEnable, symbolDisable,
   symbolClone, symbolCategoryList,
 } from '../../../services/api';
+import { buildFeedWsUrl } from '../../../config/endpoints';
 
 // ─── Add / Edit Modal ──────────────────────────────────────────────────────────
 const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) => {
@@ -94,7 +95,9 @@ const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) =
 };
 
 // ─── Clone Modal ───────────────────────────────────────────────────────────────
-const CloneModal = ({ symbols, categories, onClose, onSuccess }) => {
+const CloneModal = ({ categories, onClose, onSuccess }) => {
+  const [baseSymbols, setBaseSymbols] = useState([]);
+  const [loadingSymbols, setLoadingSymbols] = useState(true);
   const [form, setForm] = useState({
     baseSymbol: '',
     newSymbol: '',
@@ -108,6 +111,61 @@ const CloneModal = ({ symbols, categories, onClose, onSuccess }) => {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  // Fetch symbol names from the FIX WebSocket feed (same as MarketData.jsx)
+  useEffect(() => {
+    setLoadingSymbols(true);
+
+    // Step 1: Connect to WebSocket
+    const ws = new WebSocket(buildFeedWsUrl());
+    const symbolSet = new Set();  // collect unique names
+
+    ws.onopen = () => {
+      // Step 2: Subscribe to all symbols
+      ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        // Step 3: Parse each message, extract symbol name
+        const messages = e.data.trim().split('\n');
+        for (let i = 0; i < messages.length; i++) {
+          if (!messages[i]) continue;
+          const msg = JSON.parse(messages[i]);
+          if (msg.symbol) {
+            symbolSet.add(msg.symbol);
+          }
+        }
+      } catch (err) {
+        // ignore parse errors
+      }
+    };
+
+    // Step 4: After 3 seconds, stop and store the collected symbols
+    const timer = setTimeout(() => {
+      // Convert Set → sorted Array
+      const Symbols = Array.from(symbolSet).sort();
+      setBaseSymbols(Symbols);
+      setLoadingSymbols(false);
+
+      // Close WebSocket
+      if (ws.readyState === WebSocket.OPEN) ws.close();
+    }, 3000);
+
+    ws.onerror = () => {
+      setBaseSymbols([]);
+      setLoadingSymbols(false);
+    };
+
+    // Cleanup
+    return () => {
+      clearTimeout(timer);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -134,11 +192,19 @@ const CloneModal = ({ symbols, categories, onClose, onSuccess }) => {
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Base Symbol *</label>
-            <select className="ui-input ui-input-sm" value={form.baseSymbol} onChange={e => set('baseSymbol', e.target.value)} required>
-              <option value="">— select —</option>
-              {symbols.map(s => <option key={s.symbol || s} value={s.symbol || s}>{s.symbol || s}</option>)}
-            </select>
+            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Source Symbol *</label>
+            {loadingSymbols ? (
+              <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
+                <Loader2 size={12} className="animate-spin" /> Loading symbols…
+              </div>
+            ) : (
+              <select className="ui-input ui-input-sm" value={form.baseSymbol} onChange={e => set('baseSymbol', e.target.value)} required>
+                <option value="">— select —</option>
+                {baseSymbols.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>New Symbol Name *</label>
@@ -321,7 +387,10 @@ const SymbolsTab = () => {
                   <td style={{ color: 'var(--text-2)' }}>{s.category || '—'}</td>
                   <td style={{ color: 'var(--text-2)' }}>{s.digits ?? '—'}</td>
                   <td style={{ color: 'var(--text-2)' }}>{s.contractSize ?? '—'}</td>
-                  <td style={{ color: 'var(--text-2)' }}>{s.spread ?? '—'}</td>
+                  <td style={{ color: 'var(--text-2)' }}>
+                    {s.spread ?? '—'}
+                    {s.spreadMarkupPips > 0 && <span className="ml-1 text-[10px]" style={{ color: 'var(--warning)' }}>(+{s.spreadMarkupPips})</span>}
+                  </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.calcMode || '—'}</td>
                   <td>
                     <span className={`ui-badge text-[10px] ${s.enabled ? 'ui-badge-success' : 'ui-badge-danger'}`}>
@@ -368,7 +437,6 @@ const SymbolsTab = () => {
       )}
       {modal === 'clone' && (
         <CloneModal
-          symbols={symbols}
           categories={categories}
           onClose={() => setModal(null)}
           onSuccess={() => { setModal(null); load(); }}
