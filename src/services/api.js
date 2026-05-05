@@ -233,6 +233,85 @@ export const ibCommissionPay = (body) => apiClient.post('/IBCommissionPay', body
 export const ibStats = (params) => apiClient.get(`/IBStats?${new URLSearchParams(params).toString()}`);
 export const ibTree = (login) => apiClient.get(`/IBTree?login=${login}`);
 
+// ─── Symbol Management ────────────────────────────────────────────────────────
+export const symbolsList = () => apiClient.get('/SymbolsList');
+export const symbolGet = (symbol) => apiClient.get(`/SymbolGet?symbol=${encodeURIComponent(symbol)}`);
+export const symbolsParams = (symbols) => apiClient.get(`/SymbolsParams?${symbols.map(s => `symbols[]=${encodeURIComponent(s)}`).join('&')}`);
+export const symbolList = async () => {
+  const names = await apiClient.get('/SymbolsList');
+  if (!Array.isArray(names) || names.length === 0) return [];
+  
+  const params = names.map(s => `symbols[]=${encodeURIComponent(s)}`).join('&');
+  
+  const [mt5Data, cats] = await Promise.all([
+    apiClient.get(`/SymbolsParams?${params}`).catch(() => []),
+    apiClient.get('/SymbolCategoryList').catch(() => [])
+  ]);
+
+  const metaMap = {};
+  if (Array.isArray(cats)) {
+    const metaPromises = cats.map(c => 
+      apiClient.get(`/SymbolsByCategory?category=${encodeURIComponent(c.name)}`)
+        .then(res => ({ category: c.name, symbols: res }))
+        .catch(() => null)
+    );
+    const metaResults = await Promise.all(metaPromises);
+    for (const res of metaResults) {
+      if (res && Array.isArray(res.symbols)) {
+        for (const s of res.symbols) {
+          metaMap[s.symbol] = { ...s, category: res.category };
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(mt5Data)) return [];
+  
+  return mt5Data.map(s => {
+    const meta = metaMap[s.symbol] || {};
+    return { ...s, ...meta };
+  });
+};
+export const symbolAdd = (params) => apiClient.get(`/SymbolAdd?${new URLSearchParams(params).toString()}`);
+export const symbolUpdate = (params) => apiClient.get(`/SymbolUpdate?${new URLSearchParams(params).toString()}`);
+export const symbolEnable = (symbol) => apiClient.get(`/SymbolEnable?symbol=${encodeURIComponent(symbol)}`);
+export const symbolDisable = (symbol) => apiClient.get(`/SymbolDisable?symbol=${encodeURIComponent(symbol)}`);
+export const symbolClone = (body) => apiClient.post('/SymbolClone', body);
+export const symbolsByCategory = (category) => apiClient.get(`/SymbolsByCategory?category=${encodeURIComponent(category)}`);
+
+export const symbolCategoryList = () => apiClient.get('/SymbolCategoryList');
+export const symbolCategoryCreate = (body) => apiClient.post('/SymbolCategoryCreate', body);
+export const symbolCategoryUpdate = (body) => apiClient.post('/SymbolCategoryUpdate', body);
+export const symbolCategoryDelete = (name) => apiClient.get(`/SymbolCategoryDelete?name=${encodeURIComponent(name)}`);
+
+export const symbolMappingList = () => apiClient.get('/SymbolMappingList');
+export const symbolMappingCreate = (body) => apiClient.post('/SymbolMappingCreate', body);
+
+export const sessionOverrideList = (params) => apiClient.get(`/SessionOverrideList?${new URLSearchParams(params).toString()}`);
+export const sessionOverrideSet = (params, body) => apiClient.post(`/SessionOverrideSet?${new URLSearchParams(params).toString()}`, body);
+export const sessionOverrideDelete = (overrideId) => apiClient.get(`/SessionOverrideDelete?override_id=${overrideId}`);
+export const symbolSessionGet = (symbol) => apiClient.get(`/SymbolSessionGet?symbol=${encodeURIComponent(symbol)}`);
+export const symbolSessionSet = (body) => apiClient.post('/SymbolSessionSet', body);
+
+export const dynamicLeverageList = (symbol) => apiClient.get(`/DynamicLeverageList?symbol=${encodeURIComponent(symbol)}`);
+export const dynamicLeverageCreate = (body) => apiClient.post('/DynamicLeverageCreate', body);
+export const dynamicLeverageDelete = (tierId) => apiClient.get(`/DynamicLeverageDelete?tier_id=${tierId}`);
+
+export const commissionScheduleList = (symbol) => apiClient.get(`/CommissionScheduleList?symbol=${encodeURIComponent(symbol)}`);
+export const commissionScheduleCreate = (body) => apiClient.post('/CommissionScheduleCreate', body);
+export const commissionScheduleDelete = (scheduleId) => apiClient.get(`/CommissionScheduleDelete?schedule_id=${scheduleId}`);
+
+export const swapFreeGroupList = () => apiClient.get('/SwapFreeGroupList');
+export const swapFreeGroupSet = (body) => apiClient.post('/SwapFreeGroupSet', body);
+export const swapFreeGroupDelete = (groupId) => apiClient.get(`/SwapFreeGroupDelete?group_id=${groupId}`);
+
+export const marketDepthConfigGet = (symbol) => apiClient.get(`/MarketDepthConfigGet?symbol=${encodeURIComponent(symbol)}`);
+export const marketDepthConfigSet = (body) => apiClient.post('/MarketDepthConfigSet', body);
+
+export const symbolVisibilityList = () => apiClient.get('/SymbolVisibilityList');
+export const symbolVisibilityGet = (params) => apiClient.get(`/SymbolVisibilityGet?${new URLSearchParams(params).toString()}`);
+export const symbolVisibilitySet = (body) => apiClient.post('/SymbolVisibilitySet', body);
+
 export default {
   getOnlineUsers,
   getClients,

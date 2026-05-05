@@ -163,6 +163,11 @@ const GroupDetailsPage = () => {
           <DetailRow label="Trading Allowed"            value={group.tradeAllowed}              type="boolean" />
           <DetailRow label="Execution Mode"             value={group.executionMode} />
           <DetailRow label="Book Type"                  value={group.bookType}                  highlight />
+          <DetailRow label="Routing Mode"               value={
+            group.routingMode === 'a_book' ? 'A-Book' : 
+            group.routingMode === 'hybrid' ? 'Hybrid' : 
+            'B-Book'
+          } highlight />
           <DetailRow label="Spread Markup"              value={group.spreadMarkup} />
           <DetailRow label="Lot Divisor"                value={group.lotDivisor} />
           <DetailRow label="Max Lot Per Trade"          value={group.maxLotPerTrade} />
