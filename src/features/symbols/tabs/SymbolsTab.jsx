@@ -95,9 +95,26 @@ const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) =
 };
 
 // ─── Clone Modal ───────────────────────────────────────────────────────────────
+// localStorage cache for symbol names (instant open after first use)
+const SYMBOL_CACHE_KEY = 'rtx-clone-symbol-names-cache';
+const readSymbolCache = () => {
+  try {
+    const raw = localStorage.getItem(SYMBOL_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+};
+const writeSymbolCache = (names) => {
+  try { localStorage.setItem(SYMBOL_CACHE_KEY, JSON.stringify(names)); } catch { /* quota */ }
+};
+
 const CloneModal = ({ categories, onClose, onSuccess }) => {
-  const [baseSymbols, setBaseSymbols] = useState([]);
-  const [loadingSymbols, setLoadingSymbols] = useState(true);
+  const cached = readSymbolCache();
+  const [baseSymbols, setBaseSymbols] = useState(cached);
+  // If we have cached names, never block the dropdown — refresh silently in the background.
+  const [loadingSymbols, setLoadingSymbols] = useState(cached.length === 0);
+  const [refreshing, setRefreshing] = useState(cached.length > 0);
   const [form, setForm] = useState({
     baseSymbol: '',
     newSymbol: '',
@@ -112,52 +129,42 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
-  // Fetch symbol names from the FIX WebSocket feed (same as MarketData.jsx)
+  // Fetch symbol names from the FIX WebSocket feed.
+  // Cache hit  → render instantly, refresh silently in background.
+  // Cache miss → animated skeleton until first batch arrives (max 3s).
   useEffect(() => {
-    setLoadingSymbols(true);
-
-    // Step 1: Connect to WebSocket
     const ws = new WebSocket(buildFeedWsUrl());
-    const symbolSet = new Set();  // collect unique names
+    const symbolSet = new Set(cached);
 
     ws.onopen = () => {
-      // Step 2: Subscribe to all symbols
       ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
     };
 
     ws.onmessage = (e) => {
       try {
-        // Step 3: Parse each message, extract symbol name
         const messages = e.data.trim().split('\n');
         for (let i = 0; i < messages.length; i++) {
           if (!messages[i]) continue;
           const msg = JSON.parse(messages[i]);
-          if (msg.symbol) {
-            symbolSet.add(msg.symbol);
-          }
+          if (msg.symbol) symbolSet.add(msg.symbol);
         }
-      } catch (err) {
-        // ignore parse errors
-      }
+      } catch { /* ignore parse errors */ }
     };
 
-    // Step 4: After 3 seconds, stop and store the collected symbols
     const timer = setTimeout(() => {
-      // Convert Set → sorted Array
-      const Symbols = Array.from(symbolSet).sort();
-      setBaseSymbols(Symbols);
+      const symbols = Array.from(symbolSet).sort();
+      setBaseSymbols(symbols);
       setLoadingSymbols(false);
-
-      // Close WebSocket
+      setRefreshing(false);
+      writeSymbolCache(symbols);
       if (ws.readyState === WebSocket.OPEN) ws.close();
     }, 3000);
 
     ws.onerror = () => {
-      setBaseSymbols([]);
       setLoadingSymbols(false);
+      setRefreshing(false);
     };
 
-    // Cleanup
     return () => {
       clearTimeout(timer);
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -165,6 +172,7 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
         ws.close();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -192,10 +200,30 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Source Symbol *</label>
+            <label className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
+              Source Symbol *
+              {refreshing && (
+                <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'var(--muted)' }}>
+                  <Loader2 size={10} className="animate-spin" /> refreshing
+                </span>
+              )}
+            </label>
             {loadingSymbols ? (
-              <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
-                <Loader2 size={12} className="animate-spin" /> Loading symbols…
+              <div className="ui-input ui-input-sm relative overflow-hidden flex items-center" style={{ pointerEvents: 'none' }}>
+                <span
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent 0%, var(--surface-2, rgba(255,255,255,0.08)) 50%, transparent 100%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'rtxSkeletonShimmer 1.2s linear infinite',
+                  }}
+                />
+                <span className="relative inline-flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+                  <Loader2 size={12} className="animate-spin" />
+                  Loading symbols from feed…
+                </span>
+                <style>{`@keyframes rtxSkeletonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
               </div>
             ) : (
               <select className="ui-input ui-input-sm" value={form.baseSymbol} onChange={e => set('baseSymbol', e.target.value)} required>

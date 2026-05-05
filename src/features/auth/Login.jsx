@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Lock, Server, AlertCircle, Loader2 } from 'lucide-react';
+import { User, Lock, Server, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { DEFAULT_MT5_SERVER } from '../../config/endpoints';
 
 const Login = ({ onLoginSuccess }) => {
@@ -118,29 +118,46 @@ const Login = ({ onLoginSuccess }) => {
   );
 };
 
-const Field = ({ id, label, icon: Icon, type = 'text', value, onChange, placeholder }) => (
-  <div>
-    <label htmlFor={id} className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
-      {label}
-    </label>
-    <div className="relative">
-      <span
-        className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
-        style={{ color: 'var(--muted)' }}
-      >
-        <Icon size={16} />
-      </span>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="ui-input"
-        style={{ paddingLeft: 36 }}
-      />
+const Field = ({ id, label, icon: Icon, type = 'text', value, onChange, placeholder }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === 'password';
+  const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
+
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+        {label}
+      </label>  
+      <div className="relative">
+        <span
+          className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+          style={{ color: 'var(--muted)' }}
+        >
+          <Icon size={16} />
+        </span>
+        <input
+          id={id}
+          type={inputType}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="ui-input"
+          style={{ paddingLeft: 36, paddingRight: isPassword ? 36 : undefined }}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center hover:opacity-80 transition-opacity"
+            style={{ color: 'var(--muted)' }}
+            tabIndex="-1"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default Login;
