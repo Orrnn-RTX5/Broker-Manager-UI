@@ -1714,10 +1714,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
           {/* Footer */}
           <div className="h-12 bg-[#252526] border-t border-[#333] flex items-center justify-between px-4 flex-shrink-0">
-            <button className="px-5 py-1.5 min-w-[120px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
-              Client Properties
-            </button>
-
+            
             <div className="flex gap-2">
               <button onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
                 {updateLoading ? 'Wait...' : 'Update'}
