@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { User, Lock, Server, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { DEFAULT_MT5_SERVER } from '../../config/endpoints';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const Login = ({ onLoginSuccess }) => {
   const [user, setUser] = useState('10007');
@@ -20,8 +21,8 @@ const Login = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(
-        `/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
+      const response = await fetchManagerApi(
+        `/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
         { method: 'GET', headers: { accept: 'application/json' } }
       );
 

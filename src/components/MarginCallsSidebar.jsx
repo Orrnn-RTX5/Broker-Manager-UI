@@ -4,6 +4,7 @@ import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
+import { fetchManagerApi } from '../services/managerFetch';
 
 /**
  * MarginCallsSidebar — pure content component.
@@ -30,7 +31,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/manager/AccountDetailsMany?id=${id}`, {
+      const response = await fetchManagerApi(`/AccountDetailsMany?id=${id}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' },
       });
@@ -102,7 +103,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     if (action === 'summary') {
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/AccountsSummary?id=${token}&login%5B%5D=${login}`, {
+        const res = await fetchManagerApi(`/AccountsSummary?id=${token}&login%5B%5D=${login}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -119,7 +120,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     } else if (action === 'block') {
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/UserArchive?id=${token}&login=${login}`, {
+        const res = await fetchManagerApi(`/UserArchive?id=${token}&login=${login}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -133,7 +134,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     } else if (action === 'unblock') {
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/UserRestore?id=${token}&login=${login}`, {
+        const res = await fetchManagerApi(`/UserRestore?id=${token}&login=${login}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -148,7 +149,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/AccountDelete?id=${token}&login=${login}`, {
+        const res = await fetchManagerApi(`/AccountDelete?id=${token}&login=${login}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });

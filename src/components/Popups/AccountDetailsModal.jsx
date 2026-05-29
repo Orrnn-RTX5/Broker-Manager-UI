@@ -6,6 +6,7 @@ import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import { orderDelete } from '../../services/tradeApi';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
@@ -235,7 +236,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         result = await orderDelete(ticket);
       } else {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/OrderClose?id=${token}&ticket=${ticket}`, {
+        const res = await fetchManagerApi(`/OrderClose?id=${token}&ticket=${ticket}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -522,7 +523,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       }
 
       try {
-        const res = await fetch(`/api/manager/AccountDetails?id=${token}&login=${loginId}`, {
+        const res = await fetchManagerApi(`/AccountDetails?id=${token}&login=${loginId}`, {
           headers: { 'accept': 'application/json' }
         });
         const text = await res.text();
@@ -618,7 +619,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         ...formData
       });
 
-      const res = await fetch(`/api/manager/UserUpdate?${params.toString()}`, {
+      const res = await fetchManagerApi(`/UserUpdate?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });
@@ -649,7 +650,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         type: type,
         password: password
       });
-      const res = await fetch(`/api/manager/UserPasswordCheck?${params.toString()}`, {
+      const res = await fetchManagerApi(`/UserPasswordCheck?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'text/plain' }
       });
@@ -677,7 +678,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         type: type,
         password: password
       });
-      const res = await fetch(`/api/manager/UserPasswordChange?${params.toString()}`, {
+      const res = await fetchManagerApi(`/UserPasswordChange?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'text/plain' }
       });
@@ -711,7 +712,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       if (depositComment) params.append('comment', depositComment);
       if (depositCredit) params.append('credit', depositCredit);
 
-      const res = await fetch(`/api/manager/Deposit?${params.toString()}`, {
+      const res = await fetchManagerApi(`/Deposit?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
       });

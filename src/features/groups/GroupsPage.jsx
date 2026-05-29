@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
 import { Search, Plus, Trash2, Edit2, Filter, Loader2 } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ const GroupsPage = () => {
     if (window.confirm(`Are you sure you want to delete group '${groupName}'?`)) {
       try {
         const token = localStorage.getItem('authToken');
-        const res = await fetch(`/api/manager/GroupDelete?id=${token}&group=${groupName}`);
+        const res = await fetchManagerApi(`/GroupDelete?id=${token}&group=${groupName}`);
         if (!res.ok) throw new Error('Delete failed');
         alert(`Group '${groupName}' deleted successfully!`);
         window.location.reload();
@@ -45,7 +46,7 @@ const GroupsPage = () => {
     setIsFiltering(true);
     try {
       const id = localStorage.getItem('authToken');
-      const res = await fetch(`/api/manager/UserGroups?id=${id}`, {
+      const res = await fetchManagerApi(`/UserGroups?id=${id}`, {
         method: 'GET', headers: { accept: 'application/json' },
       });
       const data = await res.json();

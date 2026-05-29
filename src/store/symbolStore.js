@@ -79,10 +79,12 @@ const useSymbolStore = create(
         if (get().ws) return;
 
         const connect = () => {
-          const ws = new WebSocket(buildFeedWsUrl());
-          
+          const wsUrl = buildFeedWsUrl();
+          console.log('[SymbolStore] Connecting to WebSocket:', wsUrl);
+          const ws = new WebSocket(wsUrl);
+
           ws.onopen = () => {
-            console.log('[SymbolStore] Connected to WebSocket');
+            console.log('[SymbolStore] Connected to WebSocket:', wsUrl);
             set({ isConnected: true });
             ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
           };
@@ -113,7 +115,7 @@ const useSymbolStore = create(
           };
 
           ws.onerror = (err) => {
-            console.error('[SymbolStore] WS error:', err);
+            console.error('[SymbolStore] WS error:', wsUrl, err, 'Event:', err.type || 'unknown');
             ws.close();
           };
 

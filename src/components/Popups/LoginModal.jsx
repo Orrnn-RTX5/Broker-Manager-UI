@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, AlertCircle, Loader2, Link2 } from 'lucide-react';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
   const [user, setUser] = useState('');
@@ -21,8 +22,8 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(
-        `/api/manager/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
+      const response = await fetchManagerApi(
+        `/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
         { method: 'GET', headers: { accept: 'application/json' } }
       );
 

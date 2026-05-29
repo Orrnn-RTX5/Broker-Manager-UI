@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Info, Loader2, AlertCircle } from 'lucide-react';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const Row = ({ label, value }) => {
   const isBool = typeof value === 'boolean';
@@ -40,7 +41,7 @@ const AccountLimitModal = ({ isOpen, onClose }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/manager/AccountLimitStatus?id=${id}`, {
+      const response = await fetchManagerApi(`/AccountLimitStatus?id=${id}`, {
         method: 'GET', headers: { accept: 'application/json' },
       });
       if (!response.ok) throw new Error('Failed to fetch limit status');

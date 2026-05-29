@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 const LEVERAGES  = [1, 10, 25, 50, 100, 200, 300, 400, 500];
@@ -61,7 +62,7 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
     });
 
     try {
-      const response = await fetch(`/api/manager/AccountCreate?${params.toString()}`, {
+      const response = await fetchManagerApi(`/AccountCreate?${params.toString()}`, {
         method: 'GET', headers: { accept: 'application/json' },
       });
       const data = await response.json();

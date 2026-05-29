@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import useNotificationStore from '../store/notificationStore';
+import { fetchManagerApi } from '../services/managerFetch';
 
 export const useGroupList = () => {
   const addNotification = useNotificationStore((state) => state.addNotification);
@@ -12,7 +13,7 @@ export const useGroupList = () => {
         throw new Error('No authentication token found');
       }
 
-      const res = await fetch(`/api/manager/GroupList?id=${token}`, {
+      const res = await fetchManagerApi(`/GroupList?id=${token}`, {
         headers: { 'accept': 'application/json' }
       });
       

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
+import { fetchManagerApi } from '../../../services/managerFetch';
 
 const defaultPayload = {
   name: "",
@@ -104,8 +105,8 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
       setError(null);
       const token = localStorage.getItem('authToken');
       const url = initialData 
-        ? `/api/manager/GroupUpdate?id=${token}&group=${initialData.name}`
-        : `/api/manager/GroupCreate?id=${token}`;
+        ? `/GroupUpdate?id=${token}&group=${initialData.name}`
+        : `/GroupCreate?id=${token}`;
 
       const payload = { ...formData };
       if (typeof payload.symbolsAllowed === 'string') {
@@ -115,7 +116,7 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
         payload.symbolsBlocked = payload.symbolsBlocked.split(',').map(s => s.trim()).filter(Boolean);
       }
 
-      const res = await fetch(url, {
+      const res = await fetchManagerApi(url, {
         method: 'POST',
         headers: {
           'accept': 'application/json',

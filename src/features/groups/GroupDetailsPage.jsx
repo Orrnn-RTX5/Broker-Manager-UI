@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
 import { ArrowLeft, Users2, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
+import { fetchManagerApi } from '../../services/managerFetch';
 
 const GroupDetailsPage = () => {
   const { groupName } = useParams();
@@ -24,7 +25,7 @@ const GroupDetailsPage = () => {
       const token = localStorage.getItem('authToken');
       if (!token) { setStatsError('Not connected'); setStatsLoading(false); return; }
       try {
-        const res = await fetch(`/api/manager/GroupStats?id=${token}&group=${groupName}`, {
+        const res = await fetchManagerApi(`/GroupStats?id=${token}&group=${groupName}`, {
           headers: { accept: 'application/json' }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -43,7 +44,7 @@ const GroupDetailsPage = () => {
     setIsMoving(true);
     const token = localStorage.getItem('authToken');
     try {
-      const res = await fetch(`/api/manager/GroupMoveAccounts?id=${token}&from_group=${groupName}&to_group=${toGroupInput}`, {
+      const res = await fetchManagerApi(`/GroupMoveAccounts?id=${token}&from_group=${groupName}&to_group=${toGroupInput}`, {
         headers: { accept: 'application/json' }
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

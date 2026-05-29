@@ -3,6 +3,8 @@
  * Centralizes localStorage operations for tokens and handles session refresh.
  */
 
+import { buildManagerApiUrl } from '../config/endpoints';
+
 const TOKENS = {
   AUTH: 'authToken',
   REFRESH: 'refreshToken',
@@ -10,10 +12,20 @@ const TOKENS = {
   BROKER_ID: 'brokerId',
 };
 
-export const getAuthToken = () => localStorage.getItem(TOKENS.AUTH);
-export const getRefreshToken = () => localStorage.getItem(TOKENS.REFRESH);
+const getSessionAuth = () => {
+  try {
+    const raw = sessionStorage.getItem('auth');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getAuthToken = () => getSessionAuth()?.token || localStorage.getItem(TOKENS.AUTH);
+export const getRefreshToken = () => getSessionAuth()?.refresh_token || localStorage.getItem(TOKENS.REFRESH);
 
 export const setSession = (data) => {
+  sessionStorage.setItem('auth', JSON.stringify(data));
   if (data.token) localStorage.setItem(TOKENS.AUTH, data.token);
   if (data.refresh_token) localStorage.setItem(TOKENS.REFRESH, data.refresh_token);
   if (data.login) localStorage.setItem(TOKENS.BROKER_LOGIN, String(data.login));
@@ -21,6 +33,7 @@ export const setSession = (data) => {
 };
 
 export const clearSession = () => {
+  sessionStorage.removeItem('auth');
   localStorage.removeItem(TOKENS.AUTH);
   localStorage.removeItem(TOKENS.REFRESH);
   localStorage.removeItem(TOKENS.BROKER_LOGIN);
@@ -43,8 +56,7 @@ export const refreshSession = async () => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      // Switched to official POST /manager/api/v1/auth/refresh endpoint
-      const response = await fetch('/manager/api/v1/auth/refresh', {
+      const response = await fetch(buildManagerApiUrl('/api/v1/auth/refresh'), {
         method: 'POST',
         headers: {
           'accept': 'application/json',

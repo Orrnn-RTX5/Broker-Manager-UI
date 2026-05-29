@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
-import Login from './features/auth/Login';
+import { AdminLogin, BrokerSelector, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import authService from './services/authService';
+import { clearBrokerInfo } from './services/brokerAuth';
 
 import Dashboard from './features/dashboard/Dashboard';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
@@ -47,7 +49,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
+    const token = authService.getAuthToken();
     if (token) {
       setIsAuthenticated(true);
     }
@@ -62,12 +64,13 @@ function App() {
     );
   }
 
-  const handleLogin = (token) => {
+  const handleLogin = () => {
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
+    authService.clearSession();
+    clearBrokerInfo();
     setIsAuthenticated(false);
   };
 
@@ -76,12 +79,17 @@ function App() {
       <GlobalErrorBoundary>
         {!isAuthenticated ? (
           <Routes>
-            <Route path="*" element={<Login onLoginSuccess={handleLogin} />} />
+            <Route path="/" element={<BrokerSelector />} />
+            <Route path="/manager-login" element={<ManagerLogin onLoginSuccess={handleLogin} />} />
+            <Route path="/admin-login" element={<AdminLogin onLoginSuccess={handleLogin} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (
           <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin-dashboard" element={<Dashboard />} />
               <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
               <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />
               <Route path="/analytics/open-positions" element={<OpenPositionsPage />} />

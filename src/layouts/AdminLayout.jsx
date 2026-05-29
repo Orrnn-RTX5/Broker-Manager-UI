@@ -73,7 +73,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       
       if (isInput) return;
 
-      const key = e.key.toLowerCase();
+      const key = e.key?.toLowerCase() || '';
       const ctrlKey = e.ctrlKey || e.metaKey;
 
       // Ctrl + O -> Toggle Market Data
