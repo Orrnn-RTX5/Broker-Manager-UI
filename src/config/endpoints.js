@@ -264,6 +264,35 @@ const resolveFeedWsHost = (brokerInfo = {}) => {
 
   return getBaseWsHost();
 };
+const alignWsWithBackendProtocol = (wsEndpoint, brokerInfo = {}) => {
+  const backendUrl = trimTrailingSlash(getValue(
+    brokerInfo,
+    ['backend_url', 'api_url', 'server_url'],
+    API_HOST
+  ));
+
+  if (!backendUrl || !/^http:\/\//i.test(backendUrl) || !/^wss:\/\//i.test(wsEndpoint)) {
+    return wsEndpoint;
+  }
+
+  try {
+    const backend = new URL(backendUrl);
+    const ws = new URL(wsEndpoint);
+
+    if (backend.hostname !== ws.hostname) return wsEndpoint;
+
+    ws.protocol = 'ws:';
+    if (backend.port) {
+      ws.port = backend.port;
+    } else if (ws.port === '443') {
+      ws.port = '';
+    }
+
+    return trimTrailingSlash(ws.toString());
+  } catch {
+    return wsEndpoint.replace(/^wss:\/\//i, 'ws://');
+  }
+};
 const buildWsEndpoint = (url, path) => {
   const base = trimTrailingSlash(url);
   if (!base) return path || '/ws/feed';
@@ -276,7 +305,10 @@ export const buildFeedWsUrl = () => {
   const brokerInfo = readBrokerInfo();
   const base = resolveFeedWsHost(brokerInfo);
   const path = resolveFeedWsPath(brokerInfo);
-  return buildWsEndpoint(base || '', path || '/ws/feed');
+  return alignWsWithBackendProtocol(
+    buildWsEndpoint(base || '', path || '/ws/feed'),
+    brokerInfo
+  );
 };
 
 export const buildMetricsWsUrl = (token, login) =>
