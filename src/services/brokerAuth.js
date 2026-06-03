@@ -1,13 +1,15 @@
+import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget';
+import { updateDynamicEndpoints } from '../config/endpoints';
+
 const BROKER_INFO_KEY = 'broker_info';
 const AUTH_KEY = 'auth';
 const RECENT_BROKERS_KEY = 'recent_brokers';
-const ADMIN_LOGIN_PORT = 8091;
 
 export const DISCOVERY_BASE_URL =
-  import.meta.env.VITE_DISCOVERY_BASE_URL || 'https://superbackend.orrnn.com';
+  getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'], 'https://superbackend.orrnn.com');
 
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
-const USE_MOCK_DISCOVERY = import.meta.env.VITE_USE_MOCK_DISCOVERY === 'true';
+const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';
 
 // ---------------------------------------------------------------------------
 // Mock broker list — mirrors what the real /api/v2/broker/servers returns.
@@ -34,64 +36,6 @@ const MOCK_BROKER_LIST = [
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-const trimTrailingSlash = (value = '') => String(value || '').replace(/\/+$/, '');
-
-const isIpAddress = (host) => {
-  return /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(host);
-};
-
-const convertToHttpForIp = (url) => {
-  try {
-    const urlObj = new URL(url);
-    if (isIpAddress(urlObj.host)) {
-      urlObj.protocol = urlObj.protocol === 'https:' ? 'http:' : urlObj.protocol === 'wss:' ? 'ws:' : urlObj.protocol;
-      urlObj.port = '';
-      return urlObj.toString();
-    }
-    return url;
-  } catch {
-    return url;
-  }
-};
-
-const buildBackendUrl = (info) => {
-  const explicitUrl = info.backend_url || info.api_url || info.server_url;
-  if (explicitUrl) return trimTrailingSlash(explicitUrl);
-
-  const host = info.server_ip || info.host;
-  if (!host) return '';
-
-  if (/^https?:\/\//i.test(host)) return trimTrailingSlash(host);
-
-  const port = Number(info.server_port);
-  const protocol = info.protocol || (isIpAddress(host) ? 'http' : (port === 443 ? 'https' : 'http'));
-  const portSuffix = port && ![80, 443].includes(port) ? `:${port}` : '';
-
-  return `${protocol}://${host}${portSuffix}`;
-};
-
-const normalizeBrokerInfo = (info) => {
-  let backend_url = buildBackendUrl(info);
-  backend_url = convertToHttpForIp(backend_url);
-
-  return {
-    ...info,
-    broker_id: info.broker_id,
-    name: info.name || info.broker_name || info.broker_id,
-    status: info.status || 'active',
-    backend_url,
-    server_ip: info.server_ip || getServerFromBackend(backend_url),
-  };
-};
-
-const getServerFromBackend = (backendUrl) => {
-  try {
-    return new URL(backendUrl).host;
-  } catch {
-    return backendUrl || '';
-  }
-};
-
 const readJson = async (response) => {
   const text = await response.text();
   if (!text) return null;
@@ -110,21 +54,6 @@ const getResponseMessage = (data) =>
   data?.title ||
   '';
 
-const withAdminPort = (backendUrl = '') => {
-  const trimmed = trimTrailingSlash(backendUrl);
-  if (!trimmed) return '';
-
-  try {
-    const url = new URL(trimmed);
-    if (!url.port || url.port === '443') {
-      url.port = String(ADMIN_LOGIN_PORT);
-    }
-    return trimTrailingSlash(url.toString());
-  } catch {
-    return trimmed.replace(/:443(?=\/|$)/, `:${ADMIN_LOGIN_PORT}`);
-  }
-};
-
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
 // Calls:  GET {DISCOVERY_BASE_URL}/api/v1/broker/servers
@@ -132,7 +61,7 @@ const withAdminPort = (backendUrl = '') => {
 export const fetchBrokerList = async () => {
   if (USE_MOCK_DISCOVERY) {
     // Local fallback only; set VITE_USE_MOCK_DISCOVERY=true to use it.
-    return MOCK_BROKER_LIST.filter((b) => b.status === 'active').map(normalizeBrokerInfo);
+    return MOCK_BROKER_LIST.filter((b) => b.status === 'active').map((broker) => normalizeBrokerInfo(broker));
   }
 
   let response;
@@ -158,7 +87,7 @@ export const fetchBrokerList = async () => {
   const list = Array.isArray(data) ? data : (data?.brokers ?? data?.data ?? []);
   return list
     .filter((b) => !b.status || b.status === 'active')
-    .map(normalizeBrokerInfo);
+    .map((broker) => normalizeBrokerInfo(broker));
 };
 
 // ---------------------------------------------------------------------------
@@ -202,10 +131,24 @@ const postJson = async (url, body) => {
   return data || {};
 };
 
+const saveBrokerInfo = (brokerInfo) => {
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem(BROKER_INFO_KEY, JSON.stringify(brokerInfo));
+  }
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(BROKER_INFO_KEY)) {
+    localStorage.setItem(BROKER_INFO_KEY, JSON.stringify(brokerInfo));
+  }
+  updateDynamicEndpoints();
+};
+
 export const loginManager = async (brokerInfo, { user, password, server }) => {
+  const resolvedBrokerInfo = normalizeBrokerInfo(brokerInfo);
+  const backendUrl = resolveBrokerBackendUrl(resolvedBrokerInfo);
+  if (!backendUrl) throw new Error('Broker backend URL is not configured.');
+  saveBrokerInfo(resolvedBrokerInfo);
   try {
     return await postJson(
-      `${brokerInfo.backend_url.replace(/\/+$/, '')}/api/v2/auth/login`,
+      `${backendUrl.replace(/\/+$/, '')}/api/v2/auth/login`,
       { user, password, server }
     );
   } catch (error) {
@@ -214,9 +157,13 @@ export const loginManager = async (brokerInfo, { user, password, server }) => {
 };
 
 export const loginAdmin = async (brokerInfo, { user, password }) => {
+  const resolvedBrokerInfo = normalizeBrokerInfo(brokerInfo);
+  const backendUrl = resolveBrokerBackendUrl(resolvedBrokerInfo);
+  if (!backendUrl) throw new Error('Broker backend URL is not configured.');
+  saveBrokerInfo(resolvedBrokerInfo);
   try {
     return await postJson(
-      `${brokerInfo.backend_url.replace(/\/+$/, '')}/api/v2/admin/login`,
+      `${backendUrl.replace(/\/+$/, '')}/api/v2/admin/login`,
       { user, password }
     );
   } catch (error) {
@@ -246,21 +193,20 @@ const mapAdminLoginError = (message = '') => {
   return message || 'Login failed.';
 };
 
-import { updateDynamicEndpoints } from '../config/endpoints';
-
 export const getBrokerInfo = () => {
   try {
     const raw = sessionStorage.getItem(BROKER_INFO_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const normalized = normalizeBrokerInfo(JSON.parse(raw));
+    saveBrokerInfo(normalized);
+    return normalized;
   } catch {
     return null;
   }
 };
 
 export const setBrokerInfo = (brokerInfo) => {
-  const normalized = normalizeBrokerInfo(brokerInfo);
-  sessionStorage.setItem(BROKER_INFO_KEY, JSON.stringify(normalized));
-  updateDynamicEndpoints();
+  saveBrokerInfo(normalizeBrokerInfo(brokerInfo));
 };
 
 export const clearBrokerInfo = () => {

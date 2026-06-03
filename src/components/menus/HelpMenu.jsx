@@ -20,7 +20,7 @@ const HelpMenu = () => {
       <MenuDivider />
       <MenuItem icon={MessageCircle} text="MetaQuotes Ltd." iconColor="text-blue-500" />
       <MenuItem icon={GraduationCap} text="MQL5.community" iconColor="text-blue-600" />
-      <MenuItem icon={Globe} text="MetaTrader 5 Platform" iconColor="text-green-600" />
+      <MenuItem icon={Globe} text="RTX5 Platform" iconColor="text-green-600" />
       <MenuItem icon={Headphones} text="MetaQuotes Support Center" iconColor="text-blue-700" />
       <MenuItem icon={Send} text="Official News Channel" iconColor="text-blue-400" />
       <MenuDivider />

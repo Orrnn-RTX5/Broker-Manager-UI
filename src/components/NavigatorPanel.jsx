@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
+import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
@@ -59,15 +60,17 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 const NavigatorPanel = () => {
   const navigate = useNavigate();
   const { groups, loading: groupsLoading } = useGroupList();
+  const [brokerInfo] = useState(() => getBrokerInfo());
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
+  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
 
   return (
     <div className="h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
-        <TreeNode label="MetaTrader 5 Manager" icon={Server} iconColor="text-blue-400" defaultExpanded>
+        <TreeNode label="RTX5 Manager" icon={Server} iconColor="text-blue-400" defaultExpanded>
 
           <TreeNode label="Servers" icon={Server} iconColor="text-green-500" defaultExpanded>
-            <TreeNode label="FlexyMarkets-Server" icon={Folder} iconColor="text-yellow-500" defaultExpanded>
+            <TreeNode label={serverLabel} icon={Folder} iconColor="text-yellow-500" defaultExpanded>
 
               <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
 

@@ -351,7 +351,7 @@ export const BrokerSelector = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
             <button
               type="submit"
               disabled={!!loadingRole || brokerList.length === 0}
@@ -359,15 +359,6 @@ export const BrokerSelector = () => {
               style={{ padding: '10px 12px' }}
             >
               {loadingRole === 'manager' ? <SpinnerLabel>Checking</SpinnerLabel> : 'Continue as Manager'}
-            </button>
-            <button
-              type="button"
-              disabled={!!loadingRole || brokerList.length === 0}
-              onClick={() => submit('admin')}
-              className="ui-btn ui-btn-secondary w-full"
-              style={{ padding: '10px 12px' }}
-            >
-              {loadingRole === 'admin' ? <SpinnerLabel>Checking</SpinnerLabel> : 'Continue as Admin'}
             </button>
           </div>
         </form>
@@ -412,8 +403,9 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
     setLoading(true);
     setError('');
     try {
-      const auth = await loginManager(brokerInfo, { user, password, server });
-      const session = setAuthSession(auth, brokerInfo);
+      const currentBrokerInfo = getBrokerInfo() || brokerInfo;
+      const auth = await loginManager(currentBrokerInfo, { user, password, server });
+      const session = setAuthSession(auth, currentBrokerInfo);
       onLoginSuccess?.(session);
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -434,8 +426,6 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
       loading={loading}
       onSubmit={handleSubmit}
       onSwitchBroker={handleSwitchBroker}
-      switchToLabel="Admin login"
-      onSwitchRole={() => navigate('/admin-login')}
     >
       <Field id="manager-login" label="Login" type="number" icon={User} value={user} onChange={setUser} required />
       <PasswordField id="manager-password" value={password} onChange={setPassword} />
@@ -478,8 +468,9 @@ export const AdminLogin = ({ onLoginSuccess }) => {
     setLoading(true);
     setError('');
     try {
-      const auth = await loginAdmin(brokerInfo, { user, password });
-      const session = setAuthSession(auth, brokerInfo);
+      const currentBrokerInfo = getBrokerInfo() || brokerInfo;
+      const auth = await loginAdmin(currentBrokerInfo, { user, password });
+      const session = setAuthSession(auth, currentBrokerInfo);
       onLoginSuccess?.(session);
       navigate('/admin-dashboard', { replace: true });
     } catch (err) {
@@ -561,9 +552,11 @@ const LoginScreen = ({
       <button type="button" onClick={onSwitchBroker} className="ui-btn ui-btn-ghost ui-btn-sm">
         &larr; Switch broker
       </button>
-      <button type="button" onClick={onSwitchRole} className="ui-btn ui-btn-ghost ui-btn-sm">
-        {switchToLabel} <ArrowRight size={14} aria-hidden="true" />
-      </button>
+      {switchToLabel && onSwitchRole && (
+        <button type="button" onClick={onSwitchRole} className="ui-btn ui-btn-ghost ui-btn-sm">
+          {switchToLabel} <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      )}
     </div>
   </AuthShell>
 );

@@ -53,7 +53,7 @@ const LiquidityProviders = () => {
       <div className="mt-2 max-w-lg">
         <h3 className="font-semibold text-[13px] text-gray-800 dark:text-gray-200 mb-1">Liquidity Providers integrated into Ultency</h3>
         <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
-          Connect top-tier liquidity in a few clicks. The system is fully integrated with MetaTrader 5, no external gateways are needed. Try it now with a 90-day free access period.
+          Connect top-tier liquidity in a few clicks. The system is fully integrated with RTX5, no external gateways are needed. Try it now with a 90-day free access period.
         </p>
       </div>
     </div>

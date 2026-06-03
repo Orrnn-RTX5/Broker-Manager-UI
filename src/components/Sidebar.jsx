@@ -4,7 +4,7 @@ const Sidebar = () => {
   return (
     <div className="w-64 bg-white dark:bg-[#1e1e1e] border-r border-gray-200 dark:border-[#333333] text-gray-800 dark:text-gray-200 h-full flex flex-col transition-all duration-300">
       <div className="h-12 flex items-center justify-center border-b border-gray-200 dark:border-[#333333] transition-colors">
-        <h1 className="text-xl font-bold tracking-wider text-purple-600 dark:text-purple-400">MT5 MANAGER</h1>
+        <h1 className="text-xl font-bold tracking-wider text-purple-600 dark:text-purple-400">RTX5 MANAGER</h1>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4">

@@ -1,0 +1,32 @@
+{
+  "brokers": [
+    {
+      "id": "grow-trading-academy",
+      "broker_id": "grow-trading-academy",
+      "name": "Grow Trading Academy",
+      "host": "103.91.186.142",
+      "user": "root",
+      "port": 40111,
+      "channel": "canary",
+      "enabled": true,
+      "env_secret": "BROKER_ENV_GTA",
+      "domain": "admin.growtradingacademy.com",
+      "https": true,
+      "backend_url": "https://services.growtradingacademy.com",
+      "server_ip": "103.91.186.142",
+      "server_port": 8091,
+      "backend_host": "127.0.0.1",
+      "backend_port": 8091,
+      "app_port": 8080,
+      "env": {
+        "BACKEND_TARGET": "web",
+        "API_HOST": "https://services.growtradingacademy.com",
+        "API_HOST_EXT": "https://services.growtradingacademy.com",
+        "WS_HOST": "wss://services.growtradingacademy.com",
+        "DEFAULT_MT5_SERVER": "103.91.186.142",
+        "DISCOVERY_BASE_URL": "https://superbackend.orrnn.com",
+        "USE_MOCK_DISCOVERY": "false"
+      }
+    }
+  ]
+}

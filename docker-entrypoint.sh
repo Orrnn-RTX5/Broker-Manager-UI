@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+runtime_file="/usr/share/nginx/html/runtime-config.js"
+
+BACKEND_TARGET_VALUE="${BACKEND_TARGET:-${VITE_BACKEND_TARGET:-${BACKEND_MODE:-${VITE_BACKEND_MODE:-web}}}}"
+API_HOST_VALUE="${API_HOST:-${VITE_API_HOST:-}}"
+API_HOST_EXT_VALUE="${API_HOST_EXT:-${VITE_API_HOST_EXT:-}}"
+WS_HOST_VALUE="${WS_HOST:-${VITE_WS_HOST:-}}"
+DEFAULT_MT5_SERVER_VALUE="${DEFAULT_MT5_SERVER:-${VITE_DEFAULT_MT5_SERVER:-}}"
+DISCOVERY_BASE_URL_VALUE="${DISCOVERY_BASE_URL:-${VITE_DISCOVERY_BASE_URL:-https://superbackend.orrnn.com}}"
+USE_MOCK_DISCOVERY_VALUE="${USE_MOCK_DISCOVERY:-${VITE_USE_MOCK_DISCOVERY:-false}}"
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+cat > "$runtime_file" <<EOF
+window.__RTX_RUNTIME_CONFIG__ = {
+  BACKEND_TARGET: "$(json_escape "$BACKEND_TARGET_VALUE")",
+  API_HOST: "$(json_escape "$API_HOST_VALUE")",
+  WS_HOST: "$(json_escape "$WS_HOST_VALUE")",
+  API_HOST_EXT: "$(json_escape "$API_HOST_EXT_VALUE")",
+  DEFAULT_MT5_SERVER: "$(json_escape "$DEFAULT_MT5_SERVER_VALUE")",
+  DISCOVERY_BASE_URL: "$(json_escape "$DISCOVERY_BASE_URL_VALUE")",
+  USE_MOCK_DISCOVERY: "$(json_escape "$USE_MOCK_DISCOVERY_VALUE")"
+};
+window.RUNTIME_CONFIG = window.__RTX_RUNTIME_CONFIG__;
+EOF
+
+exec "$@"

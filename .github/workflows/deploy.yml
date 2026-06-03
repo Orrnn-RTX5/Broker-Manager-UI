@@ -1,0 +1,95 @@
+name: Build and Deploy Broker UI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BROKER_SSH_PRIVATE_KEY }}
+
+      - name: Resolve image name
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ github.token }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Prepare broker deployment file
+        shell: bash
+        env:
+          BROKERS_JSON_SECRET: ${{ secrets.BROKERS_JSON }}
+        run: |
+          if [ -n "$BROKERS_JSON_SECRET" ]; then
+            printf '%s' "$BROKERS_JSON_SECRET" > brokers.runtime.json
+          else
+            cp brokers.json brokers.runtime.json
+          fi
+          jq empty brokers.runtime.json
+
+      - name: Deploy enabled broker servers
+        shell: bash
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          GHCR_USER: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          jq -c '.brokers[] | select(.enabled == true)' brokers.runtime.json | while read -r broker; do
+            host="$(echo "$broker" | jq -r '.host')"
+            user="$(echo "$broker" | jq -r '.user // "root"')"
+            ssh_port="$(echo "$broker" | jq -r '.port // 22')"
+            app_port="$(echo "$broker" | jq -r '.app_port // 8080')"
+            name="$(echo "$broker" | jq -r '.id // .broker_id')"
+            env_args="$(echo "$broker" | jq -r '.env // {} | to_entries | map("-e " + .key + "=" + (.value|tostring)) | join(" ")')"
+
+            echo "Deploying $name to $user@$host:$ssh_port"
+            ssh -o StrictHostKeyChecking=no -p "$ssh_port" "$user@$host" \
+              "docker login ghcr.io -u '$GHCR_USER' -p '$GHCR_TOKEN' && \
+               docker pull '$IMAGE' && \
+               (docker rm -f 'rtx-manager-$name' >/dev/null 2>&1 || true) && \
+               docker run -d --name 'rtx-manager-$name' --restart unless-stopped \
+                 -p '$app_port:80' \
+                 $env_args \
+                 '$IMAGE'"
+          done
