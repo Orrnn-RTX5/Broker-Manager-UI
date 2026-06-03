@@ -80,6 +80,7 @@ jobs:
             user="$(echo "$broker" | jq -r '.user // "root"')"
             ssh_port="$(echo "$broker" | jq -r '.port // 22')"
             app_port="$(echo "$broker" | jq -r '.app_port // 8080')"
+            host_port="${app_port##*:}"
             name="$(echo "$broker" | jq -r '.id // .broker_id')"
             env_args="$(echo "$broker" | jq -r '.env // {} | to_entries | map("-e " + .key + "=" + (.value|tostring)) | join(" ")')"
 
@@ -88,7 +89,12 @@ jobs:
               "docker login ghcr.io -u '$GHCR_USER' -p '$GHCR_TOKEN' && \
                docker pull '$IMAGE' && \
                (docker rm -f 'rtx-manager-$name' >/dev/null 2>&1 || true) && \
+               conflicts=\$(docker ps -aq --filter 'publish=$host_port' || true) && \
+               if [ -n \"\$conflicts\" ]; then docker rm -f \$conflicts >/dev/null 2>&1 || true; fi && \
+               sleep 2 && \
                docker run -d --name 'rtx-manager-$name' --restart unless-stopped \
+                 --label 'com.rtx5.app=broker-manager-ui' \
+                 --label 'com.rtx5.broker=$name' \
                  -p '$app_port:80' \
                  $env_args \
                  '$IMAGE'"
