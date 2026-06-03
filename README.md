@@ -33,12 +33,12 @@ Web mode uses the broker public HTTPS backend domain. Desktop/Electron mode uses
 For Grow Trading Academy:
 
 ```text
-UI domain: admin.growtradingacademy.com
+UI domain: manager.growtradingacademy.com
 Web backend: https://services.growtradingacademy.com
 Desktop backend: http://103.91.186.142:8091
 ```
 
-Do not use `admin.growtradingacademy.com` as an API URL. It is only the UI deployment host.
+Do not use `manager.growtradingacademy.com` as an API URL. It is only the UI deployment host.
 
 ### Broker List Shape
 
@@ -143,9 +143,11 @@ On push to `main`, `.github/workflows/deploy.yml`:
 3. builds and pushes a Docker image to GHCR
 4. deploys enabled broker entries over SSH
 5. passes BACKEND_TARGET, API_HOST, API_HOST_EXT, WS_HOST, DEFAULT_MT5_SERVER, DISCOVERY_BASE_URL, and USE_MOCK_DISCOVERY into the container
+6. configures nginx for the broker `domain`
+7. issues or renews SSL with certbot when `https` is true
 ```
 
-For nginx/certbot deployments, issue SSL for the UI domain. The backend services domain must have its own valid SSL certificate. Do not use HTTPS directly against broker IP addresses.
+The checked-in GTA deployment uses `manager.growtradingacademy.com` as the UI host and proxies nginx to the local Docker app port `127.0.0.1:8080`. The backend services domain must have its own valid SSL certificate. Do not use HTTPS directly against broker IP addresses.
 
 ### Validation
 

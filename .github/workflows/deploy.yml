@@ -75,6 +75,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          shell_quote() {
+            jq -rn --arg value "$1" '$value | @sh'
+          }
+
           jq -c '.brokers[] | select(.enabled == true)' brokers.runtime.json | while read -r broker; do
             host="$(echo "$broker" | jq -r '.host')"
             user="$(echo "$broker" | jq -r '.user // "root"')"
@@ -82,20 +86,12 @@ jobs:
             app_port="$(echo "$broker" | jq -r '.app_port // 8080')"
             host_port="${app_port##*:}"
             name="$(echo "$broker" | jq -r '.id // .broker_id')"
-            env_args="$(echo "$broker" | jq -r '.env // {} | to_entries | map("-e " + .key + "=" + (.value|tostring)) | join(" ")')"
+            domain="$(echo "$broker" | jq -r '.domain // empty')"
+            https="$(echo "$broker" | jq -r '.https // false')"
+            certbot_email="$(echo "$broker" | jq -r '.certbot_email // .ssl_email // empty')"
+            env_file_b64="$(echo "$broker" | jq -r '.env // {} | to_entries[]? | "\(.key)=\(.value|tostring)"' | base64 | tr -d '\n')"
+            remote_env="IMAGE=$(shell_quote "$IMAGE") GHCR_USER=$(shell_quote "$GHCR_USER") GHCR_TOKEN=$(shell_quote "$GHCR_TOKEN") APP_PORT=$(shell_quote "$app_port") HOST_PORT=$(shell_quote "$host_port") NAME=$(shell_quote "$name") DOMAIN=$(shell_quote "$domain") HTTPS=$(shell_quote "$https") CERTBOT_EMAIL=$(shell_quote "$certbot_email") ENV_FILE_B64=$(shell_quote "$env_file_b64")"
 
             echo "Deploying $name to $user@$host:$ssh_port"
-            ssh -o StrictHostKeyChecking=no -p "$ssh_port" "$user@$host" \
-              "docker login ghcr.io -u '$GHCR_USER' -p '$GHCR_TOKEN' && \
-               docker pull '$IMAGE' && \
-               (docker rm -f 'rtx-manager-$name' >/dev/null 2>&1 || true) && \
-               conflicts=\$(docker ps -aq --filter 'publish=$host_port' || true) && \
-               if [ -n \"\$conflicts\" ]; then docker rm -f \$conflicts >/dev/null 2>&1 || true; fi && \
-               sleep 2 && \
-               docker run -d --name 'rtx-manager-$name' --restart unless-stopped \
-                 --label 'com.rtx5.app=broker-manager-ui' \
-                 --label 'com.rtx5.broker=$name' \
-                 -p '$app_port:80' \
-                 $env_args \
-                 '$IMAGE'"
+            ssh -o StrictHostKeyChecking=no -p "$ssh_port" "$user@$host" "$remote_env sh -s" < .github/scripts/deploy-broker-ui.sh
           done
