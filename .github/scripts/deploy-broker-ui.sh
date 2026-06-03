@@ -95,7 +95,32 @@ configure_domain() {
 
   ensure_nginx
 
-  conf_file="/etc/nginx/conf.d/rtx-manager-${NAME}.conf"
+  managed_dir="/etc/nginx/rtx5-managed"
+  challenge_root="/var/www/letsencrypt"
+  cert_dir="/etc/letsencrypt/live/${DOMAIN}"
+  conf_file="${managed_dir}/00-rtx-manager-${NAME}.conf"
+
+  mkdir -p "$managed_dir" "$challenge_root"
+
+  if ! grep -Fq "include /etc/nginx/rtx5-managed/*.conf;" /etc/nginx/nginx.conf; then
+    cp /etc/nginx/nginx.conf "/etc/nginx/nginx.conf.rtx5-backup-$(date +%Y%m%d%H%M%S)"
+    awk '
+      /^[[:space:]]*http[[:space:]]*\{/ && inserted == 0 {
+        print
+        print "    include /etc/nginx/rtx5-managed/*.conf;"
+        inserted = 1
+        next
+      }
+      { print }
+      END {
+        if (inserted != 1) {
+          exit 42
+        }
+      }
+    ' /etc/nginx/nginx.conf > /tmp/nginx.conf.rtx5
+    mv /tmp/nginx.conf.rtx5 /etc/nginx/nginx.conf
+  fi
+
   cat > "$conf_file" <<NGINX
 server {
     listen 80;
@@ -103,6 +128,11 @@ server {
     server_name ${DOMAIN};
 
     client_max_body_size 25m;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root ${challenge_root};
+        default_type "text/plain";
+    }
 
     location / {
         proxy_pass http://127.0.0.1:${HOST_PORT};
@@ -122,11 +152,55 @@ NGINX
   if truthy "${HTTPS:-false}"; then
     ensure_certbot
 
-    if [ -n "${CERTBOT_EMAIL:-}" ] && [ "$CERTBOT_EMAIL" != "null" ]; then
-      certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --email "$CERTBOT_EMAIL"
-    else
-      certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email
+    if [ ! -f "${cert_dir}/fullchain.pem" ] || [ ! -f "${cert_dir}/privkey.pem" ]; then
+      if [ -n "${CERTBOT_EMAIL:-}" ] && [ "$CERTBOT_EMAIL" != "null" ]; then
+        certbot certonly --webroot -w "$challenge_root" -d "$DOMAIN" --non-interactive --agree-tos --email "$CERTBOT_EMAIL"
+      else
+        certbot certonly --webroot -w "$challenge_root" -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
+      fi
     fi
+
+    cat > "$conf_file" <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root ${challenge_root};
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN};
+
+    ssl_certificate ${cert_dir}/fullchain.pem;
+    ssl_certificate_key ${cert_dir}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://127.0.0.1:${HOST_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGINX
+
+    reload_nginx
   fi
 }
 
