@@ -88,6 +88,48 @@ ensure_certbot() {
   return 1
 }
 
+ensure_python3() {
+  if command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    install_apt_packages python3
+    return 0
+  fi
+
+  echo "python3 is required to manage nginx config safely but apt-get is not available" >&2
+  return 1
+}
+
+ensure_managed_nginx_include() {
+  ensure_python3
+
+  python3 <<'PY'
+from pathlib import Path
+from datetime import datetime
+import re
+import sys
+
+path = Path("/etc/nginx/nginx.conf")
+text = path.read_text()
+include_line = "    include /etc/nginx/rtx5-managed/*.conf;"
+pattern = re.compile(r"^[ \t]*#?[ \t]*include[ \t]+/etc/nginx/rtx5-managed/\*\.conf;[ \t]*\n?", re.M)
+cleaned = pattern.sub("", text)
+match = re.search(r"(^[ \t]*http[ \t]*\{[ \t]*(?:\n|$))", cleaned, re.M)
+
+if not match:
+    print("Could not find http block in /etc/nginx/nginx.conf", file=sys.stderr)
+    sys.exit(1)
+
+updated = cleaned[:match.end()] + include_line + "\n" + cleaned[match.end():]
+if updated != text:
+    backup = path.with_name(f"nginx.conf.rtx5-backup-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+    backup.write_text(text)
+    path.write_text(updated)
+PY
+}
+
 configure_domain() {
   if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "null" ]; then
     return 0
@@ -101,25 +143,7 @@ configure_domain() {
   conf_file="${managed_dir}/00-rtx-manager-${NAME}.conf"
 
   mkdir -p "$managed_dir" "$challenge_root"
-
-  if ! grep -Fq "include /etc/nginx/rtx5-managed/*.conf;" /etc/nginx/nginx.conf; then
-    cp /etc/nginx/nginx.conf "/etc/nginx/nginx.conf.rtx5-backup-$(date +%Y%m%d%H%M%S)"
-    awk '
-      /^[[:space:]]*http[[:space:]]*\{/ && inserted == 0 {
-        print
-        print "    include /etc/nginx/rtx5-managed/*.conf;"
-        inserted = 1
-        next
-      }
-      { print }
-      END {
-        if (inserted != 1) {
-          exit 42
-        }
-      }
-    ' /etc/nginx/nginx.conf > /tmp/nginx.conf.rtx5
-    mv /tmp/nginx.conf.rtx5 /etc/nginx/nginx.conf
-  fi
+  ensure_managed_nginx_include
 
   cat > "$conf_file" <<NGINX
 server {
@@ -202,6 +226,9 @@ NGINX
 
     reload_nginx
   fi
+
+  echo "RTX5 active nginx entries for ${DOMAIN}:"
+  nginx -T 2>&1 | grep -n -A18 -B4 "${DOMAIN}" || true
 }
 
 configure_domain
