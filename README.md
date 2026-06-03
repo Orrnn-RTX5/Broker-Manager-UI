@@ -147,7 +147,7 @@ On push to `main`, `.github/workflows/deploy.yml`:
 7. issues or renews SSL with certbot when `https` is true
 ```
 
-The checked-in GTA deployment uses `manager.growtradingacademy.com` as the UI host and proxies nginx to the local Docker app port `127.0.0.1:8080`. The backend services domain must have its own valid SSL certificate. Do not use HTTPS directly against broker IP addresses.
+The checked-in GTA deployment uses `manager.growtradingacademy.com` as the UI host and proxies nginx to the local Docker app port `127.0.0.1:8082`. Nginx setup is idempotent: once the active vhost, certificate, and proxy target are correct, CI/CD updates only the Docker container and skips nginx/certbot. The backend services domain must have its own valid SSL certificate. Do not use HTTPS directly against broker IP addresses.
 
 ### Validation
 

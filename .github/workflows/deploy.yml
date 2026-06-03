@@ -88,9 +88,10 @@ jobs:
             name="$(echo "$broker" | jq -r '.id // .broker_id')"
             domain="$(echo "$broker" | jq -r '.domain // empty')"
             https="$(echo "$broker" | jq -r '.https // false')"
+            nginx_listen_host="$(echo "$broker" | jq -r '.nginx.listen_host // .listen_host // empty')"
             certbot_email="$(echo "$broker" | jq -r '.certbot_email // .ssl_email // empty')"
             env_file_b64="$(echo "$broker" | jq -r '.env // {} | to_entries[]? | "\(.key)=\(.value|tostring)"' | base64 | tr -d '\n')"
-            remote_env="IMAGE=$(shell_quote "$IMAGE") GHCR_USER=$(shell_quote "$GHCR_USER") GHCR_TOKEN=$(shell_quote "$GHCR_TOKEN") APP_PORT=$(shell_quote "$app_port") HOST_PORT=$(shell_quote "$host_port") NAME=$(shell_quote "$name") DOMAIN=$(shell_quote "$domain") HTTPS=$(shell_quote "$https") CERTBOT_EMAIL=$(shell_quote "$certbot_email") ENV_FILE_B64=$(shell_quote "$env_file_b64")"
+            remote_env="IMAGE=$(shell_quote "$IMAGE") GHCR_USER=$(shell_quote "$GHCR_USER") GHCR_TOKEN=$(shell_quote "$GHCR_TOKEN") APP_PORT=$(shell_quote "$app_port") HOST_PORT=$(shell_quote "$host_port") NAME=$(shell_quote "$name") DOMAIN=$(shell_quote "$domain") HTTPS=$(shell_quote "$https") NGINX_LISTEN_HOST=$(shell_quote "$nginx_listen_host") CERTBOT_EMAIL=$(shell_quote "$certbot_email") ENV_FILE_B64=$(shell_quote "$env_file_b64")"
 
             echo "Deploying $name to $user@$host:$ssh_port"
             ssh -o StrictHostKeyChecking=no -p "$ssh_port" "$user@$host" "$remote_env sh -s" < .github/scripts/deploy-broker-ui.sh
