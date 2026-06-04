@@ -30,11 +30,6 @@ jobs:
       - name: Build web app
         run: npm run build
 
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.BROKER_SSH_PRIVATE_KEY }}
-
       - name: Resolve image name
         run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
@@ -54,45 +49,31 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
 
-      - name: Prepare broker deployment file
+      - name: Trigger broker infra deploy
         shell: bash
         env:
-          BROKERS_JSON_SECRET: ${{ secrets.BROKERS_JSON }}
-        run: |
-          if [ -n "$BROKERS_JSON_SECRET" ]; then
-            printf '%s' "$BROKERS_JSON_SECRET" > brokers.runtime.json
-          else
-            cp brokers.json brokers.runtime.json
-          fi
-          jq empty brokers.runtime.json
-
-      - name: Deploy enabled broker servers
-        shell: bash
-        env:
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          GHCR_USER: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ github.token }}
+          INFRA_REPO: ${{ github.repository_owner }}/ORRNN-RTX5-Broker-Infra
+          INFRA_TOKEN: ${{ secrets.INFRA_REPO_DISPATCH_TOKEN }}
+          IMAGE_REF: ${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
           set -euo pipefail
+          if [[ -z "$INFRA_TOKEN" ]]; then
+            echo "INFRA_REPO_DISPATCH_TOKEN is required to trigger $INFRA_REPO" >&2
+            exit 1
+          fi
 
-          shell_quote() {
-            jq -rn --arg value "$1" '$value | @sh'
-          }
+          payload="$(jq -n \
+            --arg component "manager" \
+            --arg image_ref "$IMAGE_REF" \
+            --arg broker "myprop-trade" \
+            --arg source_repo "$GITHUB_REPOSITORY" \
+            --arg source_sha "$GITHUB_SHA" \
+            '{event_type:"deploy-broker-component",client_payload:{component:$component,image_ref:$image_ref,broker:$broker,source_repo:$source_repo,source_sha:$source_sha}}')"
 
-          jq -c '.brokers[] | select(.enabled == true)' brokers.runtime.json | while read -r broker; do
-            host="$(echo "$broker" | jq -r '.host')"
-            user="$(echo "$broker" | jq -r '.user // "root"')"
-            ssh_port="$(echo "$broker" | jq -r '.port // 22')"
-            app_port="$(echo "$broker" | jq -r '.app_port // 8080')"
-            host_port="${app_port##*:}"
-            name="$(echo "$broker" | jq -r '.id // .broker_id')"
-            domain="$(echo "$broker" | jq -r '.domain // empty')"
-            https="$(echo "$broker" | jq -r '.https // false')"
-            nginx_listen_host="$(echo "$broker" | jq -r '.nginx.listen_host // .listen_host // empty')"
-            certbot_email="$(echo "$broker" | jq -r '.certbot_email // .ssl_email // empty')"
-            env_file_b64="$(echo "$broker" | jq -r '.env // {} | to_entries[]? | "\(.key)=\(.value|tostring)"' | base64 | tr -d '\n')"
-            remote_env="IMAGE=$(shell_quote "$IMAGE") GHCR_USER=$(shell_quote "$GHCR_USER") GHCR_TOKEN=$(shell_quote "$GHCR_TOKEN") APP_PORT=$(shell_quote "$app_port") HOST_PORT=$(shell_quote "$host_port") NAME=$(shell_quote "$name") DOMAIN=$(shell_quote "$domain") HTTPS=$(shell_quote "$https") NGINX_LISTEN_HOST=$(shell_quote "$nginx_listen_host") CERTBOT_EMAIL=$(shell_quote "$certbot_email") ENV_FILE_B64=$(shell_quote "$env_file_b64")"
-
-            echo "Deploying $name to $user@$host:$ssh_port"
-            ssh -o StrictHostKeyChecking=no -p "$ssh_port" "$user@$host" "$remote_env sh -s" < .github/scripts/deploy-broker-ui.sh
-          done
+          curl --fail-with-body -sS \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $INFRA_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$INFRA_REPO/dispatches" \
+            -d "$payload"

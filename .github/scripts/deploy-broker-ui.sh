@@ -339,4 +339,8 @@ NGINX
   nginx -T 2>&1 | grep -n -A18 -B4 "${DOMAIN}" || true
 }
 
-configure_domain
+if [ "${MANAGE_NGINX_ON_DEPLOY:-false}" = "true" ]; then
+  configure_domain
+else
+  echo "Nginx management skipped during Manager deploy; infra repo owns /etc/nginx/rtx5-managed."
+fi
