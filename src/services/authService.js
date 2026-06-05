@@ -14,8 +14,20 @@ const TOKENS = {
   EXPIRES_AT_LEGACY: 'token_expires_at',
 };
 
+const AUTH_SESSION_KEY = 'auth';
 const SESSION_EXPIRED_EVENT = 'auth:session-expired';
 const TOKEN_UPDATED_EVENT = 'auth:token-updated';
+const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
+
+export const AUTH_STORAGE_KEYS = [
+  AUTH_SESSION_KEY,
+  TOKENS.AUTH,
+  TOKENS.REFRESH,
+  TOKENS.BROKER_LOGIN,
+  TOKENS.BROKER_ID,
+  TOKENS.EXPIRES_AT,
+  TOKENS.EXPIRES_AT_LEGACY,
+];
 
 export const normalizeTokenExpiresAt = (expiresAt, expiresIn) => {
   if (expiresAt !== undefined && expiresAt !== null && expiresAt !== '') {
@@ -46,29 +58,109 @@ const dispatchAuthEvent = (eventName, detail) => {
   window.dispatchEvent(new CustomEvent(eventName, { detail }));
 };
 
+const getStorageItem = (storageName, key) => {
+  try {
+    const storage = typeof window === 'undefined' ? null : window[storageName];
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const getSessionAuth = () => {
   try {
-    const raw = sessionStorage.getItem('auth');
+    const raw = getStorageItem('sessionStorage', AUTH_SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 };
 
-export const getAuthToken = () => getSessionAuth()?.token || localStorage.getItem(TOKENS.AUTH);
-export const getRefreshToken = () => getSessionAuth()?.refresh_token || localStorage.getItem(TOKENS.REFRESH);
+const getSessionToken = () => {
+  const session = getSessionAuth();
+  return session?.token || session?.access_token || session?.session_token || null;
+};
+
+const getLocalAuthToken = () => getStorageItem('localStorage', TOKENS.AUTH);
+
+export const getAuthToken = () => getSessionToken() || getLocalAuthToken();
+export const getRefreshToken = () => getSessionAuth()?.refresh_token || getStorageItem('localStorage', TOKENS.REFRESH);
 
 export const getTokenExpiresAt = () => {
   const session = getSessionAuth();
   const expiresAt = session?.tokenExpiresAt || session?.expires_at || session?.expiresAt || session?.token_expires_at;
   return normalizeTokenExpiresAt(expiresAt) ||
-    normalizeTokenExpiresAt(localStorage.getItem(TOKENS.EXPIRES_AT)) ||
-    normalizeTokenExpiresAt(localStorage.getItem(TOKENS.EXPIRES_AT_LEGACY));
+    normalizeTokenExpiresAt(getStorageItem('localStorage', TOKENS.EXPIRES_AT)) ||
+    normalizeTokenExpiresAt(getStorageItem('localStorage', TOKENS.EXPIRES_AT_LEGACY));
 };
 
 export const isTokenExpired = (skewMs = 0) => {
   const expiresAt = getTokenExpiresAt();
   return Boolean(expiresAt && expiresAt <= Date.now() + skewMs);
+};
+
+export const getAuthSnapshot = () => {
+  const session = getSessionAuth();
+  const sessionToken = session?.token || session?.access_token || session?.session_token || null;
+  const localToken = getLocalAuthToken();
+  const expiresAt = getTokenExpiresAt();
+
+  return {
+    token: sessionToken || localToken,
+    sessionToken,
+    localToken,
+    hasSessionAuth: Boolean(session),
+    refreshToken: getRefreshToken(),
+    expiresAt,
+    isExpired: Boolean(expiresAt && expiresAt <= Date.now()),
+  };
+};
+
+const invalidStatus = (reason, snapshot) => ({
+  authenticated: false,
+  reason,
+  message: SESSION_ERROR_MESSAGE,
+  snapshot,
+  hasAuthState: Boolean(
+    snapshot.token ||
+    snapshot.refreshToken ||
+    snapshot.hasSessionAuth ||
+    snapshot.expiresAt ||
+    getStorageItem('localStorage', TOKENS.BROKER_LOGIN) ||
+    getStorageItem('localStorage', TOKENS.BROKER_ID)
+  ),
+});
+
+export const getSessionStatus = ({ baseline } = {}) => {
+  const snapshot = getAuthSnapshot();
+
+  if (!snapshot.hasSessionAuth) {
+    return invalidStatus(snapshot.token ? 'session_storage_auth_missing' : 'token_missing', snapshot);
+  }
+  if (!snapshot.sessionToken) {
+    return invalidStatus('session_storage_token_missing', snapshot);
+  }
+  if (!snapshot.localToken) {
+    return invalidStatus('local_storage_token_missing', snapshot);
+  }
+  if (snapshot.sessionToken !== snapshot.localToken) {
+    return invalidStatus('token_storage_mismatch', snapshot);
+  }
+  if (baseline?.sessionToken && snapshot.sessionToken !== baseline.sessionToken) {
+    return invalidStatus('session_storage_token_changed', snapshot);
+  }
+  if (baseline?.localToken && snapshot.localToken !== baseline.localToken) {
+    return invalidStatus('local_storage_token_changed', snapshot);
+  }
+  if (snapshot.isExpired) return invalidStatus('token_expired', snapshot);
+
+  return {
+    authenticated: true,
+    reason: null,
+    message: null,
+    snapshot,
+    hasAuthState: true,
+  };
 };
 
 export const setSession = (data) => {
@@ -161,10 +253,13 @@ export const refreshSession = async () => {
 };
 
 export default {
+  AUTH_STORAGE_KEYS,
   getAuthToken,
   getRefreshToken,
   getTokenExpiresAt,
   isTokenExpired,
+  getAuthSnapshot,
+  getSessionStatus,
   setSession,
   clearSession,
   expireSession,

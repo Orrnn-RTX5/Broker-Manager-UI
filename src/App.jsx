@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import { AdminLogin, BrokerSelector, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import authService from './services/authService';
-import { clearBrokerInfo } from './services/brokerAuth';
+import { clearBrokerInfo, getBrokerInfo } from './services/brokerAuth';
 
 import Dashboard from './features/dashboard/Dashboard';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
@@ -30,11 +30,30 @@ import SymbolsOverviewPage from './features/symbols/SymbolsOverviewPage';
 import SymbolListPage from './features/symbols/SymbolListPage';
 import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 
+const AUTH_STORAGE_POLL_MS = 2000;
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [initialSessionStatus] = useState(() => authService.getSessionStatus());
+  const [isAuthenticated, setIsAuthenticated] = useState(() => initialSessionStatus.authenticated);
   const [sessionVersion, setSessionVersion] = useState(0);
+  const sessionSnapshotRef = useRef(
+    initialSessionStatus.authenticated ? initialSessionStatus.snapshot : null
+  );
+
+  const rememberValidSession = useCallback((status) => {
+    sessionSnapshotRef.current = status.snapshot;
+    return true;
+  }, []);
+
+  const validateCurrentSession = useCallback((fallbackReason = 'session_invalid') => {
+    const status = authService.getSessionStatus({ baseline: sessionSnapshotRef.current });
+    if (status.authenticated) return rememberValidSession(status);
+
+    authService.expireSession(status.reason || fallbackReason);
+    return false;
+  }, [rememberValidSession]);
+
+  const getUnauthenticatedRedirect = () => (getBrokerInfo() ? '/manager-login' : '/');
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -50,23 +69,26 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const token = authService.getAuthToken();
-    if (token && !authService.isTokenExpired()) {
-      setIsAuthenticated(true);
-    } else if (token) {
-      authService.expireSession('token_expired');
+    if (!initialSessionStatus.authenticated && initialSessionStatus.hasAuthState) {
+      authService.expireSession(initialSessionStatus.reason || 'session_invalid');
     }
-    setIsLoading(false);
-  }, []);
+  }, [initialSessionStatus]);
 
   useEffect(() => {
     const handleSessionExpired = () => {
       authService.clearSession();
-      clearBrokerInfo();
+      sessionSnapshotRef.current = null;
       setIsAuthenticated(false);
       setSessionVersion((value) => value + 1);
     };
     const handleTokenUpdated = () => {
+      const status = authService.getSessionStatus();
+      if (status.authenticated) {
+        rememberValidSession(status);
+        setIsAuthenticated(true);
+      } else {
+        authService.expireSession(status.reason || 'session_invalid');
+      }
       setSessionVersion((value) => value + 1);
     };
 
@@ -76,10 +98,43 @@ function App() {
       window.removeEventListener('auth:session-expired', handleSessionExpired);
       window.removeEventListener('auth:token-updated', handleTokenUpdated);
     };
-  }, []);
+  }, [rememberValidSession]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
+
+    const validate = (reason) => validateCurrentSession(reason);
+    const handleStorage = (event) => {
+      if (!event.key || authService.AUTH_STORAGE_KEYS.includes(event.key)) {
+        validate('storage_changed');
+      }
+    };
+    const handleFocus = () => validate('window_focus');
+    const handlePageShow = () => validate('page_show');
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') validate('visibility_visible');
+    };
+
+    validate('auth_monitor_started');
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handlePageShow);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const intervalId = window.setInterval(() => validate('storage_poll'), AUTH_STORAGE_POLL_MS);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated, validateCurrentSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    if (!validateCurrentSession('expiry_timer_check')) return undefined;
 
     const expiresAt = authService.getTokenExpiresAt();
     if (!expiresAt) return undefined;
@@ -96,21 +151,15 @@ function App() {
     );
 
     return () => window.clearTimeout(timeoutId);
-  }, [isAuthenticated, sessionVersion]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0f1115]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  }, [isAuthenticated, sessionVersion, validateCurrentSession]);
 
   const handleLogin = () => {
-    if (authService.isTokenExpired()) {
-      authService.expireSession('token_expired');
+    const status = authService.getSessionStatus();
+    if (!status.authenticated) {
+      authService.expireSession(status.reason || 'session_invalid');
       return;
     }
+    rememberValidSession(status);
     setSessionVersion((value) => value + 1);
     setIsAuthenticated(true);
   };
@@ -118,9 +167,12 @@ function App() {
   const handleLogout = () => {
     authService.clearSession();
     clearBrokerInfo();
+    sessionSnapshotRef.current = null;
     setSessionVersion((value) => value + 1);
     setIsAuthenticated(false);
   };
+
+  const unauthenticatedRedirect = getUnauthenticatedRedirect();
 
   return (
     <Router>
@@ -130,7 +182,7 @@ function App() {
             <Route path="/" element={<BrokerSelector />} />
             <Route path="/manager-login" element={<ManagerLogin onLoginSuccess={handleLogin} />} />
             <Route path="/admin-login" element={<AdminLogin onLoginSuccess={handleLogin} />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to={unauthenticatedRedirect} replace />} />
           </Routes>
         ) : (
           <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>

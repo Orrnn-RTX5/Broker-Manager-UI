@@ -1,6 +1,14 @@
 import authService from './authService';
 import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints';
 
+const AUTH_REJECTION_STATUSES = new Set([401, 403]);
+const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
+
+const expireAndThrow = (reason) => {
+  authService.expireSession(reason);
+  throw new Error(SESSION_ERROR_MESSAGE);
+};
+
 /**
  * Enhanced fetch wrapper that handles:
  * 1. Automatic inclusion of auth tokens (id param)
@@ -16,12 +24,12 @@ const apiClient = {
 
     // Preparation function for headers and URL with current token
     const prepareRequest = () => {
-      const token = authService.getAuthToken();
-      if (token && authService.isTokenExpired()) {
-        authService.expireSession('token_expired');
-        throw new Error('Session expired. Please log in again.');
+      const sessionStatus = authService.getSessionStatus();
+      if (!sessionStatus.authenticated) {
+        expireAndThrow(sessionStatus.reason || 'session_invalid');
       }
 
+      const token = sessionStatus.snapshot.token;
       const headers = { 'accept': 'application/json', ...options.headers };
       let finalUrl = url;
 
@@ -47,9 +55,9 @@ const apiClient = {
       if (response.status === 401) {
         console.warn('Authentication expired. Attempting silent refresh...');
 
-        if (authService.isTokenExpired()) {
-          authService.expireSession('token_expired');
-          throw new Error('Session expired. Please log in again.');
+        const sessionStatus = authService.getSessionStatus();
+        if (!sessionStatus.authenticated) {
+          expireAndThrow(sessionStatus.reason || 'token_rejected');
         }
 
         // Wait for refreshSession (which has its own lock)
@@ -59,10 +67,12 @@ const apiClient = {
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
           return await fetch(retryUrl, { ...options, headers: retryHeaders }).then(res => this.handleResponse(res));
         } else {
-          authService.expireSession('refresh_failed');
-
-          throw new Error('Session expired. Please log in again.');
+          expireAndThrow('refresh_failed');
         }
+      }
+
+      if (response.status === 403) {
+        expireAndThrow('token_rejected');
       }
 
       return await this.handleResponse(response);
@@ -77,8 +87,11 @@ const apiClient = {
     let data;
     try {
       data = JSON.parse(text);
-    } catch (e) {
+    } catch {
       if (!response.ok) {
+        if (AUTH_REJECTION_STATUSES.has(response.status)) {
+          expireAndThrow('token_rejected');
+        }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
         console.error(`📥 [API RESPONSE ERROR] ${response.status}`, errMsg, text);
         throw new Error(errMsg);
@@ -88,6 +101,9 @@ const apiClient = {
     }
 
     if (!response.ok) {
+      if (AUTH_REJECTION_STATUSES.has(response.status)) {
+        expireAndThrow('token_rejected');
+      }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;
       console.error(`📥 [API RESPONSE ERROR] ${response.status}`, errorMsg, data);
       throw new Error(errorMsg);

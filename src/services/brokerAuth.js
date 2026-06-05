@@ -1,9 +1,8 @@
 import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget';
 import { updateDynamicEndpoints } from '../config/endpoints';
-import { normalizeTokenExpiresAt } from './authService';
+import { normalizeTokenExpiresAt, setSession } from './authService';
 
 const BROKER_INFO_KEY = 'broker_info';
-const AUTH_KEY = 'auth';
 const RECENT_BROKERS_KEY = 'recent_brokers';
 
 export const DISCOVERY_BASE_URL =
@@ -247,16 +246,5 @@ export const setAuthSession = (authData, brokerInfo) => {
     broker_id: authData?.broker_id || brokerInfo?.broker_id,
   };
 
-  sessionStorage.setItem(AUTH_KEY, JSON.stringify(auth));
-
-  if (accessToken) localStorage.setItem('authToken', accessToken);
-  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-  if (tokenExpiresAt) {
-    localStorage.setItem('tokenExpiresAt', String(tokenExpiresAt));
-    localStorage.setItem('token_expires_at', String(tokenExpiresAt));
-  }
-  if (auth.login) localStorage.setItem('brokerLogin', String(auth.login));
-  if (auth.broker_id) localStorage.setItem('brokerId', auth.broker_id);
-
-  return auth;
+  return setSession(auth);
 };
