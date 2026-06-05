@@ -17,6 +17,11 @@ const apiClient = {
     // Preparation function for headers and URL with current token
     const prepareRequest = () => {
       const token = authService.getAuthToken();
+      if (token && authService.isTokenExpired()) {
+        authService.expireSession('token_expired');
+        throw new Error('Session expired. Please log in again.');
+      }
+
       const headers = { 'accept': 'application/json', ...options.headers };
       let finalUrl = url;
 
@@ -42,6 +47,11 @@ const apiClient = {
       if (response.status === 401) {
         console.warn('Authentication expired. Attempting silent refresh...');
 
+        if (authService.isTokenExpired()) {
+          authService.expireSession('token_expired');
+          throw new Error('Session expired. Please log in again.');
+        }
+
         // Wait for refreshSession (which has its own lock)
         const newToken = await authService.refreshSession();
 
@@ -49,7 +59,7 @@ const apiClient = {
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
           return await fetch(retryUrl, { ...options, headers: retryHeaders }).then(res => this.handleResponse(res));
         } else {
-          authService.clearSession();
+          authService.expireSession('refresh_failed');
 
           throw new Error('Session expired. Please log in again.');
         }

@@ -34,6 +34,7 @@ import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionVersion, setSessionVersion] = useState(0);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -50,11 +51,52 @@ function App() {
 
   useEffect(() => {
     const token = authService.getAuthToken();
-    if (token) {
+    if (token && !authService.isTokenExpired()) {
       setIsAuthenticated(true);
+    } else if (token) {
+      authService.expireSession('token_expired');
     }
     setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      authService.clearSession();
+      clearBrokerInfo();
+      setIsAuthenticated(false);
+      setSessionVersion((value) => value + 1);
+    };
+    const handleTokenUpdated = () => {
+      setSessionVersion((value) => value + 1);
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    window.addEventListener('auth:token-updated', handleTokenUpdated);
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired);
+      window.removeEventListener('auth:token-updated', handleTokenUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const expiresAt = authService.getTokenExpiresAt();
+    if (!expiresAt) return undefined;
+
+    const delay = expiresAt - Date.now();
+    if (delay <= 0) {
+      authService.expireSession('token_expired');
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(
+      () => authService.expireSession('token_expired'),
+      Math.min(delay, 2147483647)
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthenticated, sessionVersion]);
 
   if (isLoading) {
     return (
@@ -65,12 +107,18 @@ function App() {
   }
 
   const handleLogin = () => {
+    if (authService.isTokenExpired()) {
+      authService.expireSession('token_expired');
+      return;
+    }
+    setSessionVersion((value) => value + 1);
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
     authService.clearSession();
     clearBrokerInfo();
+    setSessionVersion((value) => value + 1);
     setIsAuthenticated(false);
   };
 

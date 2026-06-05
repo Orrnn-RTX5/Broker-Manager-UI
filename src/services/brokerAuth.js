@@ -1,5 +1,6 @@
 import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget';
 import { updateDynamicEndpoints } from '../config/endpoints';
+import { normalizeTokenExpiresAt } from './authService';
 
 const BROKER_INFO_KEY = 'broker_info';
 const AUTH_KEY = 'auth';
@@ -232,15 +233,28 @@ export const rememberBroker = (brokerId) => {
 };
 
 export const setAuthSession = (authData, brokerInfo) => {
+  const accessToken = authData?.token || authData?.access_token || authData?.session_token;
+  const refreshToken = authData?.refresh_token || accessToken;
+  const tokenExpiresAt = normalizeTokenExpiresAt(
+    authData?.expires_at || authData?.expiresAt || authData?.token_expires_at,
+    authData?.expires_in || authData?.expiresIn
+  );
   const auth = {
     ...authData,
+    token: accessToken,
+    refresh_token: refreshToken,
+    tokenExpiresAt,
     broker_id: authData?.broker_id || brokerInfo?.broker_id,
   };
 
   sessionStorage.setItem(AUTH_KEY, JSON.stringify(auth));
 
-  if (auth.token) localStorage.setItem('authToken', auth.token);
-  if (auth.refresh_token) localStorage.setItem('refreshToken', auth.refresh_token);
+  if (accessToken) localStorage.setItem('authToken', accessToken);
+  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+  if (tokenExpiresAt) {
+    localStorage.setItem('tokenExpiresAt', String(tokenExpiresAt));
+    localStorage.setItem('token_expires_at', String(tokenExpiresAt));
+  }
   if (auth.login) localStorage.setItem('brokerLogin', String(auth.login));
   if (auth.broker_id) localStorage.setItem('brokerId', auth.broker_id);
 
