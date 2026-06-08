@@ -2,7 +2,7 @@
   "brokers": [
     {
       "id": "grow-trading-academy",
-      "broker_id": "grow-trading-academy",
+      "broker_id": "gta_broker",
       "name": "Grow Trading Academy",
       "host": "103.91.186.142",
       "user": "root",
@@ -22,12 +22,15 @@
       "backend_port": 8091,
       "app_port": "127.0.0.1:8082",
       "env": {
+        "BROKER_ID": "gta_broker",
+        "VITE_BROKER_ID": "gta_broker",
         "BACKEND_TARGET": "web",
         "API_HOST": "https://services.growtradingacademy.com",
         "API_HOST_EXT": "https://services.growtradingacademy.com",
         "WS_HOST": "wss://services.growtradingacademy.com",
+        "FEED_BROKER_ID": "gta_broker",
         "DEFAULT_MT5_SERVER": "103.91.186.142",
-        "DISCOVERY_BASE_URL": "https://superbackend.orrnn.com",
+        "DISCOVERY_BASE_URL": "https://services.growtradingacademy.com",
         "USE_MOCK_DISCOVERY": "false"
       }
     }
