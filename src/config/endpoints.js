@@ -5,8 +5,9 @@ import {
   resolveBrokerBackendUrl,
   resolveBrokerExtApiUrl,
   resolveBrokerWsUrl,
+  isDirectBrokerBackendUrl,
   trimTrailingSlash,
-} from './backendTarget';
+} from './backendTarget.js';
 
 // Central place for all network endpoints.
 // Components should import from here instead of hardcoding a host.
@@ -116,18 +117,35 @@ const joinUrl = (base, path = '') => {
   return `${trimTrailingSlash(base)}/${normalizedPath.replace(/^\/+/, '')}`;
 };
 
+export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) =>
+  !isDirectBrokerBackendUrl(backendUrl, brokerInfo);
+
+export const buildManagerApiPath = (endpoint = '', useProxyPrefix = true) => {
+  const raw = String(endpoint || '');
+  const path = raw
+    .replace(/^\/api\/manager(?=\/|\?|$)/, '')
+    .replace(/^\/manager(?=\/|\?|$)/, '');
+
+  if (useProxyPrefix) {
+    return path
+      ? `/manager${path.startsWith('/') || path.startsWith('?') ? path : `/${path}`}`
+      : '/manager';
+  }
+
+  if (!path) return '';
+  return path.startsWith('/') || path.startsWith('?') ? path : `/${path}`;
+};
+
 export const buildManagerApiUrl = (endpoint = '') => {
   const raw = String(endpoint || '');
   if (/^https?:\/\//i.test(raw)) return raw;
 
   updateDynamicEndpoints();
 
-  const path = raw
-    .replace(/^\/api\/manager(?=\/|\?|$)/, '')
-    .replace(/^\/manager(?=\/|\?|$)/, '');
-  const managerPath = path
-    ? `/manager${path.startsWith('/') || path.startsWith('?') ? path : `/${path}`}`
-    : '/manager';
+  const storedInfo = readBrokerInfo();
+  const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
+  const useProxyPrefix = shouldUseManagerProxyPrefix(API_HOST, brokerInfo);
+  const managerPath = buildManagerApiPath(raw, useProxyPrefix);
 
   return joinUrl(API_HOST, managerPath);
 };
@@ -146,13 +164,171 @@ export const buildExtApiUrl = (endpoint = '') => {
   return API_HOST_EXT ? joinUrl(API_HOST_EXT, extPath) : `/ext-api${extPath}`;
 };
 
+const getNestedValue = (source, key) => {
+  if (!source || !key) return '';
+  const direct = source[key];
+  if (direct !== undefined && direct !== null && String(direct).trim() !== '') {
+    return String(direct).trim();
+  }
+  if (!key.includes('.')) return '';
+  const nested = key.split('.').reduce((value, part) => {
+    if (value === undefined || value === null) return undefined;
+    return value[part];
+  }, source);
+  return nested !== undefined && nested !== null && String(nested).trim() !== ''
+    ? String(nested).trim()
+    : '';
+};
+
+const firstValue = (...values) => {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+  return '';
+};
+
+const firstBrokerValue = (brokerInfo, keys) => {
+  for (const key of keys) {
+    const value = getNestedValue(brokerInfo, key);
+    if (value) return value;
+  }
+  return '';
+};
+
+const FEED_BROKER_ID_KEYS = [
+  'feed_broker_id',
+  'feedBrokerId',
+  'ws_broker_id',
+  'wsBrokerId',
+  'broker_id',
+  'id',
+  'env.FEED_BROKER_ID',
+  'env.VITE_FEED_BROKER_ID',
+  'env.BROKER_ID',
+  'env.VITE_BROKER_ID',
+];
+
+const FEED_TOKEN_KEYS = [
+  'feed_token',
+  'feedToken',
+  'feed_broker_token',
+  'feedBrokerToken',
+  'broker_feed_token',
+  'brokerFeedToken',
+  'upstream_ws_token',
+  'upstreamWsToken',
+  'ws_feed_token',
+  'wsFeedToken',
+  'env.FEED_BROKER_TOKEN',
+  'env.VITE_FEED_BROKER_TOKEN',
+  'env.BROKER_FEED_TOKEN',
+  'env.VITE_BROKER_FEED_TOKEN',
+  'env.WS_FEED_TOKEN',
+  'env.VITE_WS_FEED_TOKEN',
+];
+
+export const FEED_WS_AUTH_NOT_CONFIGURED = 'FEED_WS_AUTH_NOT_CONFIGURED';
+export const FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE =
+  'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN for this manager UI deployment.';
+
+export class FeedWsAuthConfigError extends Error {
+  constructor(message = FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE) {
+    super(message);
+    this.name = 'FeedWsAuthConfigError';
+    this.code = FEED_WS_AUTH_NOT_CONFIGURED;
+  }
+}
+
+export const resolveFeedWsAuth = (brokerInfo = {}) => {
+  const brokerID = firstValue(
+    firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS),
+    getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
+  );
+
+  const token = firstValue(
+    firstBrokerValue(brokerInfo, FEED_TOKEN_KEYS),
+    getRuntimeConfigValue([
+      'FEED_BROKER_TOKEN',
+      'VITE_FEED_BROKER_TOKEN',
+      'BROKER_FEED_TOKEN',
+      'VITE_BROKER_FEED_TOKEN',
+      'WS_FEED_TOKEN',
+      'VITE_WS_FEED_TOKEN',
+    ])
+  );
+
+  return { brokerID, token };
+};
+
+export const appendFeedAuthToWsUrl = (wsUrl, auth = {}) => {
+  const token = String(auth.token || '').trim();
+  if (!token) return wsUrl;
+
+  const brokerID = String(auth.brokerID || auth.broker_id || '').trim();
+  try {
+    const url = new URL(wsUrl);
+    if (brokerID && !url.searchParams.has('broker_id')) {
+      url.searchParams.set('broker_id', brokerID);
+    }
+    if (!url.searchParams.has('token')) {
+      url.searchParams.set('token', token);
+    }
+    return url.toString();
+  } catch {
+    const params = new URLSearchParams();
+    if (brokerID) params.set('broker_id', brokerID);
+    params.set('token', token);
+    const glue = String(wsUrl || '').includes('?') ? '&' : '?';
+    return `${wsUrl}${glue}${params.toString()}`;
+  }
+};
+
+const getExistingFeedQueryToken = (wsUrl = '') => {
+  const raw = String(wsUrl || '');
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw, 'http://rtx.local');
+    return String(url.searchParams.get('token') || '').trim();
+  } catch {
+    const query = raw.split('?')[1]?.split('#')[0];
+    if (!query) return '';
+    try {
+      return String(new URLSearchParams(query).get('token') || '').trim();
+    } catch {
+      return '';
+    }
+  }
+};
+
+export const getFeedWsDisabledMessage = (error) => (
+  error?.code === FEED_WS_AUTH_NOT_CONFIGURED
+    ? error.message
+    : 'Market feed unavailable: websocket connection could not be started.'
+);
+
 export const buildFeedWsUrl = () => {
   const storedInfo = readBrokerInfo();
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
-  return resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
+  const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
+  const auth = resolveFeedWsAuth(brokerInfo);
+  const token = auth.token || getExistingFeedQueryToken(wsUrl);
+  if (!token) {
+    throw new FeedWsAuthConfigError();
+  }
+  return appendFeedAuthToWsUrl(wsUrl, { ...auth, token });
 };
 
 const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));
 
-export const buildMetricsWsUrl = (token, login) =>
-  `${getBaseWsHost()}/manager/OnAccountMetrics?id=${token}&login=${login}`;
+export const buildMetricsWsUrl = (token, login) => {
+  // Browser WebSocket calls cannot attach Authorization headers, so this
+  // legacy endpoint is the only remaining token-in-query path.
+  const params = new URLSearchParams({
+    id: String(token || ''),
+    login: String(login || ''),
+  });
+  return `${getBaseWsHost()}/manager/OnAccountMetrics?${params.toString()}`;
+};

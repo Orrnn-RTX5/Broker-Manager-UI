@@ -1,7 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { Info, Ban, CheckCircle, FileText, Trash2, Shield } from 'lucide-react';
 
-const SidebarContextMenu = ({ x, y, account, onClose, onAction, isBlocked }) => {
+const SidebarContextMenu = ({
+  x,
+  y,
+  account,
+  onClose,
+  onAction,
+  isBlocked,
+  canManageAccounts = true,
+  canManageRestrictions = true,
+}) => {
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -43,22 +52,28 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, isBlocked }) => 
       </div>
 
       <div
-        className={`ui-ctxmenu-item ${isBlocked ? 'is-disabled' : ''}`}
-        onClick={() => { if (!isBlocked) { onAction('block', account); onClose(); } }}
+        className={`ui-ctxmenu-item ${isBlocked || !canManageAccounts ? 'is-disabled' : ''}`}
+        title={!canManageAccounts ? 'No permission to block accounts' : undefined}
+        onClick={() => { if (!isBlocked && canManageAccounts) { onAction('block', account); onClose(); } }}
       >
         <Ban size={14} style={{ color: 'var(--danger-text)' }} strokeWidth={1.75} />
         <span className="flex-1">Block</span>
       </div>
 
       <div
-        className={`ui-ctxmenu-item ${!isBlocked ? 'is-disabled' : ''}`}
-        onClick={() => { if (isBlocked) { onAction('unblock', account); onClose(); } }}
+        className={`ui-ctxmenu-item ${!isBlocked || !canManageAccounts ? 'is-disabled' : ''}`}
+        title={!canManageAccounts ? 'No permission to unblock accounts' : undefined}
+        onClick={() => { if (isBlocked && canManageAccounts) { onAction('unblock', account); onClose(); } }}
       >
         <CheckCircle size={14} style={{ color: 'var(--ok-text)' }} strokeWidth={1.75} />
         <span className="flex-1">Unblock</span>
       </div>
 
-      <div className="ui-ctxmenu-item" onClick={() => { onAction('restrictions', account); onClose(); }}>
+      <div
+        className={`ui-ctxmenu-item ${!canManageRestrictions ? 'is-disabled' : ''}`}
+        title={!canManageRestrictions ? 'No permission to change restrictions' : undefined}
+        onClick={() => { if (canManageRestrictions) { onAction('restrictions', account); onClose(); } }}
+      >
         <Shield size={14} style={{ color: 'var(--warn-text)' }} strokeWidth={1.75} />
         <span className="flex-1">Restrictions</span>
       </div>
@@ -66,9 +81,10 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, isBlocked }) => 
       <div className="ui-ctxmenu-sep" />
 
       <div
-        className="ui-ctxmenu-item"
+        className={`ui-ctxmenu-item ${!canManageAccounts ? 'is-disabled' : ''}`}
         style={{ color: 'var(--danger-text)' }}
-        onClick={() => { onAction('delete', account); onClose(); }}
+        title={!canManageAccounts ? 'No permission to delete accounts' : undefined}
+        onClick={() => { if (canManageAccounts) { onAction('delete', account); onClose(); } }}
       >
         <Trash2 size={14} strokeWidth={1.75} />
         <span className="flex-1">Delete</span>

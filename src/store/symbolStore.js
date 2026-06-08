@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { buildFeedWsUrl } from '../config/endpoints';
+import { buildFeedWsUrl, getFeedWsDisabledMessage } from '../config/endpoints';
+import { FEED_DATA_STATE } from '../utils/feedStatus';
 
 const CATEGORIES = {
   METALS: 'Metals',
@@ -32,6 +33,55 @@ const getCategory = (symbol) => {
   return CATEGORIES.OTHERS;
 };
 
+const getSymbolName = (entry = {}) => String(entry.symbol || '').trim();
+
+const getSymbolFeedFields = (entry = {}, staleReason = '') => {
+  const isStale = Boolean(staleReason || entry.isStale || entry.feedState === FEED_DATA_STATE.CACHED);
+  return {
+    feedState: isStale ? FEED_DATA_STATE.CACHED : FEED_DATA_STATE.LIVE,
+    isStale,
+    staleReason: isStale ? (staleReason || entry.staleReason || '') : '',
+  };
+};
+
+const buildMetadataEntry = (entry = {}, staleReason = '') => {
+  const symbol = getSymbolName(entry);
+  return {
+    symbol,
+    category: entry.category || getCategory(symbol),
+    ...getSymbolFeedFields(entry, staleReason),
+  };
+};
+
+const buildSymbolMetadata = (symbols = {}, staleReason = '') =>
+  Object.values(symbols)
+    .map((entry) => buildMetadataEntry(entry, staleReason))
+    .filter((entry) => entry.symbol)
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+const markCachedSymbolData = (state, staleReason) => {
+  const reason = staleReason || 'Market feed unavailable: cached symbol data is not live.';
+  const nextSymbols = Object.entries(state.symbols || {}).reduce((acc, [key, entry]) => {
+    acc[key] = {
+      ...entry,
+      ...getSymbolFeedFields(entry, reason),
+    };
+    return acc;
+  }, {});
+
+  const metadataSource = state.symbolMetadata?.length
+    ? state.symbolMetadata
+    : buildSymbolMetadata(nextSymbols, reason);
+
+  return {
+    symbols: nextSymbols,
+    symbolMetadata: metadataSource
+      .map((entry) => buildMetadataEntry(entry, reason))
+      .filter((entry) => entry.symbol)
+      .sort((a, b) => a.symbol.localeCompare(b.symbol)),
+  };
+};
+
 const useSymbolStore = create(
   persist(
     (set, get) => ({
@@ -39,6 +89,7 @@ const useSymbolStore = create(
       symbolMetadata: [], // Stable list of metadata
       ws: null,
       isConnected: false,
+      feedError: '',
 
       upsertSymbols: (dataArray) => {
         set((state) => {
@@ -46,9 +97,12 @@ const useSymbolStore = create(
           const now = Date.now();
           let metadataUpdated = false;
 
+          const updatedSymbols = new Set();
+
           dataArray.forEach(data => {
             const { symbol, bid, ask } = data;
             if (!nextSymbols[symbol]) metadataUpdated = true;
+            updatedSymbols.add(symbol);
             
             const category = getCategory(symbol);
             nextSymbols[symbol] = {
@@ -58,6 +112,9 @@ const useSymbolStore = create(
               ask: ask !== undefined && ask !== null ? Number(ask).toFixed(5) : (nextSymbols[symbol]?.ask || '0.00000'),
               lastUpdate: now,
               category,
+              feedState: FEED_DATA_STATE.LIVE,
+              isStale: false,
+              staleReason: '',
             };
           });
 
@@ -65,10 +122,13 @@ const useSymbolStore = create(
           
           // Recompute metadata if it's empty or a new symbol was added
           if (metadataUpdated || (state.symbolMetadata && state.symbolMetadata.length === 0 && Object.keys(nextSymbols).length > 0)) {
-            nextState.symbolMetadata = Object.values(nextSymbols)
-              .map(s => ({ symbol: s.symbol, category: s.category || getCategory(s.symbol) }))
-              .filter(s => s.symbol)
-              .sort((a, b) => a.symbol.localeCompare(b.symbol));
+            nextState.symbolMetadata = buildSymbolMetadata(nextSymbols);
+          } else if (updatedSymbols.size > 0 && state.symbolMetadata?.length > 0) {
+            nextState.symbolMetadata = state.symbolMetadata.map((entry) => (
+              updatedSymbols.has(entry.symbol) && nextSymbols[entry.symbol]
+                ? buildMetadataEntry(nextSymbols[entry.symbol])
+                : entry
+            ));
           }
 
           return nextState;
@@ -79,13 +139,27 @@ const useSymbolStore = create(
         if (get().ws) return;
 
         const connect = () => {
-          const wsUrl = buildFeedWsUrl();
-          console.log('[SymbolStore] Connecting to WebSocket:', wsUrl);
+          let wsUrl;
+          try {
+            wsUrl = buildFeedWsUrl();
+          } catch (err) {
+            const message = getFeedWsDisabledMessage(err);
+            console.warn(`[SymbolStore] ${message}`);
+            set((state) => ({
+              ...markCachedSymbolData(state, message),
+              isConnected: false,
+              ws: null,
+              feedError: message,
+            }));
+            return;
+          }
+
+          console.debug('[SymbolStore] Connecting to feed WebSocket');
           const ws = new WebSocket(wsUrl);
 
           ws.onopen = () => {
-            console.log('[SymbolStore] Connected to WebSocket:', wsUrl);
-            set({ isConnected: true });
+            console.debug('[SymbolStore] Connected to feed WebSocket');
+            set({ isConnected: true, feedError: '' });
             ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
           };
 
@@ -114,8 +188,12 @@ const useSymbolStore = create(
             setTimeout(connect, 5000);
           };
 
-          ws.onerror = (err) => {
-            console.error('[SymbolStore] WS error:', wsUrl, err, 'Event:', err.type || 'unknown');
+          ws.onerror = () => {
+            const message = 'Market feed unavailable: websocket connection failed.';
+            set((state) => ({
+              ...markCachedSymbolData(state, message),
+              feedError: message,
+            }));
             ws.close();
           };
 
@@ -127,12 +205,23 @@ const useSymbolStore = create(
 
       syncMetadata: () => {
         set((state) => {
-          if (state.symbolMetadata.length > 0 || Object.keys(state.symbols).length === 0) return {};
+          if (Object.keys(state.symbols).length === 0) return {};
+          if (state.symbolMetadata.length > 0) {
+            const needsSync = state.symbolMetadata.some((entry) => {
+              const symbol = state.symbols[entry.symbol];
+              if (!symbol) return false;
+              const nextFields = getSymbolFeedFields(symbol);
+              return entry.feedState !== nextFields.feedState || entry.isStale !== nextFields.isStale;
+            });
+            if (!needsSync) return {};
+            return {
+              symbolMetadata: state.symbolMetadata.map((entry) => (
+                state.symbols[entry.symbol] ? buildMetadataEntry(state.symbols[entry.symbol]) : entry
+              )),
+            };
+          }
           return {
-            symbolMetadata: Object.values(state.symbols)
-              .map(s => ({ symbol: s.symbol, category: s.category || getCategory(s.symbol) }))
-              .filter(s => s.symbol)
-              .sort((a, b) => a.symbol.localeCompare(b.symbol))
+            symbolMetadata: buildSymbolMetadata(state.symbols),
           };
         });
       },

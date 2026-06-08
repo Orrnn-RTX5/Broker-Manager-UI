@@ -3,7 +3,7 @@
  * Centralizes localStorage operations for tokens and handles session refresh.
  */
 
-import { buildManagerApiUrl } from '../config/endpoints';
+import { buildManagerApiUrl } from '../config/endpoints.js';
 
 const TOKENS = {
   AUTH: 'authToken',
@@ -82,6 +82,19 @@ const getSessionToken = () => {
 };
 
 const getLocalAuthToken = () => getStorageItem('localStorage', TOKENS.AUTH);
+
+// Synchronous read of the role claims the login endpoint embedded in the
+// session blob (the /api/v2/*/login response is spread into `auth`). Used by the
+// client RBAC layer for an immediate admin/manager decision before the richer
+// /SessionInfo permission set has loaded. The backend remains the authority.
+export const getSessionClaims = () => {
+  const session = getSessionAuth() || {};
+  return {
+    isAdmin: session.is_admin === true,
+    login: session.login ?? null,
+    brokerId: session.broker_id ?? null,
+  };
+};
 
 export const getAuthToken = () => getSessionToken() || getLocalAuthToken();
 export const getRefreshToken = () => getSessionAuth()?.refresh_token || getStorageItem('localStorage', TOKENS.REFRESH);
@@ -255,6 +268,7 @@ export const refreshSession = async () => {
 export default {
   AUTH_STORAGE_KEYS,
   getAuthToken,
+  getSessionClaims,
   getRefreshToken,
   getTokenExpiresAt,
   isTokenExpired,

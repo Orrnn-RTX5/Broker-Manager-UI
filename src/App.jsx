@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import { AdminLogin, BrokerSelector, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
 import { clearBrokerInfo, getBrokerInfo } from './services/brokerAuth';
 
@@ -33,6 +35,7 @@ import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 const AUTH_STORAGE_POLL_MS = 2000;
 
 function App() {
+  const queryClient = useQueryClient();
   const [initialSessionStatus] = useState(() => authService.getSessionStatus());
   const [isAuthenticated, setIsAuthenticated] = useState(() => initialSessionStatus.authenticated);
   const [sessionVersion, setSessionVersion] = useState(0);
@@ -77,6 +80,7 @@ function App() {
   useEffect(() => {
     const handleSessionExpired = () => {
       authService.clearSession();
+      queryClient.clear();
       sessionSnapshotRef.current = null;
       setIsAuthenticated(false);
       setSessionVersion((value) => value + 1);
@@ -98,7 +102,7 @@ function App() {
       window.removeEventListener('auth:session-expired', handleSessionExpired);
       window.removeEventListener('auth:token-updated', handleTokenUpdated);
     };
-  }, [rememberValidSession]);
+  }, [queryClient, rememberValidSession]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -166,6 +170,7 @@ function App() {
 
   const handleLogout = () => {
     authService.clearSession();
+    queryClient.clear();
     clearBrokerInfo();
     sessionSnapshotRef.current = null;
     setSessionVersion((value) => value + 1);
@@ -202,15 +207,15 @@ function App() {
               <Route path="/clients/positions" element={<PositionsPage />} />
               <Route path="/clients/orders" element={<OrdersPage />} />
               <Route path="/dealing" element={<DealsPage />} />
-              <Route path="/dealer/queue" element={<DealerQueuePage />} />
-              <Route path="/dealer/restrictions" element={<RestrictedAccountsPage />} />
-              <Route path="/ib" element={<IBListPage />} />
-              <Route path="/ib/tree" element={<IBTreePage />} />
-              <Route path="/groups" element={<GroupsPage />} />
-              <Route path="/groups/:groupName" element={<GroupDetailsPage />} />
-              <Route path="/symbols" element={<SymbolsOverviewPage />} />
-              <Route path="/symbols/:group" element={<SymbolListPage />} />
-              <Route path="/symbol-management" element={<SymbolManagementPage />} />
+              <Route path="/dealer/queue" element={<RequirePermission permission="dealer_queue"><DealerQueuePage /></RequirePermission>} />
+              <Route path="/dealer/restrictions" element={<RequirePermission permission="view_accounts"><RestrictedAccountsPage /></RequirePermission>} />
+              <Route path="/ib" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
+              <Route path="/ib/tree" element={<RequirePermission permission="manage_ib"><IBTreePage /></RequirePermission>} />
+              <Route path="/groups" element={<RequirePermission permission="manage_groups"><GroupsPage /></RequirePermission>} />
+              <Route path="/groups/:groupName" element={<RequirePermission permission="manage_groups"><GroupDetailsPage /></RequirePermission>} />
+              <Route path="/symbols" element={<RequirePermission permission="manage_groups"><SymbolsOverviewPage /></RequirePermission>} />
+              <Route path="/symbols/:group" element={<RequirePermission permission="manage_groups"><SymbolListPage /></RequirePermission>} />
+              <Route path="/symbol-management" element={<RequirePermission permission="manage_groups"><SymbolManagementPage /></RequirePermission>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AdminLayout>

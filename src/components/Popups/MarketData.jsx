@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
-import { buildFeedWsUrl } from '../../config/endpoints';
+import { buildFeedWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
 
 // ─── MEASUREMENT ────────────────────────────────────────────────────────────
 // These counters are module-level so they survive re-renders and are shared
@@ -80,6 +80,7 @@ const QuoteRow = memo(({ item, selected, onSelect }) => {
 const MarketData = () => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [liveQuotes, setLiveQuotes] = useState([]);
+  const [feedError, setFeedError] = useState('');
 
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [tickHistory, setTickHistory] = useState([]);
@@ -96,9 +97,18 @@ const MarketData = () => {
     let reconnectTimeout;
 
     const connectWebSocket = () => {
-      ws = new WebSocket(buildFeedWsUrl());
+      let wsUrl;
+      try {
+        wsUrl = buildFeedWsUrl();
+      } catch (err) {
+        setFeedError(getFeedWsDisabledMessage(err));
+        return;
+      }
+
+      ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
+        setFeedError('');
         ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
       };
 
@@ -172,8 +182,8 @@ const MarketData = () => {
         }
       };
 
-      ws.onerror = (err) => {
-        console.error('WebSocket error', err);
+      ws.onerror = () => {
+        setFeedError('Market feed unavailable: websocket connection failed.');
       };
 
       ws.onclose = () => {
@@ -228,7 +238,13 @@ const MarketData = () => {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {liveQuotes.map((item) => (
+                {feedError && liveQuotes.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-6 text-center text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
+                      {feedError}
+                    </td>
+                  </tr>
+                ) : liveQuotes.map((item) => (
                   <tr 
                     key={item.symbol} 
                     onDoubleClick={() => {

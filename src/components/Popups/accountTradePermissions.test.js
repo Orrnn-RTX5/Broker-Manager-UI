@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { canMutateAccountTrades, TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions.js';
+import { PERMISSIONS } from '../../utils/permissions.js';
+
+test('account trade mutations require the manipulate_trades permission key', () => {
+  const seen = [];
+  assert.equal(
+    canMutateAccountTrades((permission) => {
+      seen.push(permission);
+      return permission === PERMISSIONS.MANIPULATE_TRADES;
+    }),
+    true
+  );
+  assert.deepEqual(seen, [PERMISSIONS.MANIPULATE_TRADES]);
+});
+
+test('account trade mutations fail closed when permissions are unresolved or denied', () => {
+  assert.equal(canMutateAccountTrades(undefined), false);
+  assert.equal(canMutateAccountTrades(() => false), false);
+  assert.match(TRADE_MUTATION_DENIED_MESSAGE, /permission/i);
+});

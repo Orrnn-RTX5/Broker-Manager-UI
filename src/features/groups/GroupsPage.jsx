@@ -1,12 +1,19 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useGroupList } from '../../hooks/useGroupList';
 import { Search, Plus, Trash2, Edit2, Filter, Loader2 } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
+import { filterGroupsBySearch } from './groupFilters';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { canAct } = usePermissions();
+  const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const { groups, loading } = useGroupList();
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,20 +22,23 @@ const GroupsPage = () => {
   const [isFiltering, setIsFiltering] = useState(false);
 
   const filteredGroups = useMemo(() => {
-    let source = activeGroupsData || groups;
-    if (!search) return source;
-    return source.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+    const source = activeGroupsData || groups;
+    return filterGroupsBySearch(source, search);
   }, [groups, search, activeGroupsData]);
 
   const handleDelete = async (e, groupName) => {
     e.stopPropagation();
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
     if (window.confirm(`Are you sure you want to delete group '${groupName}'?`)) {
       try {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/GroupDelete?id=${token}&group=${groupName}`);
+        const params = new URLSearchParams({ group: String(groupName) });
+        const res = await fetchManagerApi(`/GroupDelete?${params.toString()}`);
         if (!res.ok) throw new Error('Delete failed');
         alert(`Group '${groupName}' deleted successfully!`);
-        window.location.reload();
+        // Refresh the list via react-query instead of a full SPA reload.
+        // Drop any "Active Only" snapshot so the invalidated list is shown.
+        setActiveGroupsData(null);
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
       } catch (err) {
         alert('Error deleting group: ' + err.message);
       }
@@ -37,7 +47,14 @@ const GroupsPage = () => {
 
   const handleEdit = (e, group) => {
     e.stopPropagation();
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
     setEditGroup(group);
+    setIsModalOpen(true);
+  };
+
+  const handleNewGroup = () => {
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    setEditGroup(null);
     setIsModalOpen(true);
   };
 
@@ -45,8 +62,7 @@ const GroupsPage = () => {
     if (activeGroupsData) { setActiveGroupsData(null); return; }
     setIsFiltering(true);
     try {
-      const id = localStorage.getItem('authToken');
-      const res = await fetchManagerApi(`/UserGroups?id=${id}`, {
+      const res = await fetchManagerApi('/UserGroups', {
         method: 'GET', headers: { accept: 'application/json' },
       });
       const data = await res.json();
@@ -78,7 +94,12 @@ const GroupsPage = () => {
             Configured trading groups and their settings.
           </p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="ui-btn ui-btn-primary ui-btn-sm">
+        <button
+          onClick={handleNewGroup}
+          disabled={!canManageGroups}
+          title={canManageGroups ? 'New Group' : 'No permission to manage groups'}
+          className="ui-btn ui-btn-primary ui-btn-sm"
+        >
           <Plus size={14} />
           New Group
         </button>
@@ -154,7 +175,8 @@ const GroupsPage = () => {
                         <button
                           onClick={(e) => handleEdit(e, group)}
                           className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
-                          title="Edit Group"
+                          title={canManageGroups ? 'Edit Group' : 'No permission to manage groups'}
+                          disabled={!canManageGroups}
                         >
                           <Edit2 size={13} />
                         </button>
@@ -162,7 +184,8 @@ const GroupsPage = () => {
                           onClick={(e) => handleDelete(e, group.name)}
                           className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
                           style={{ color: 'var(--danger)' }}
-                          title="Delete Group"
+                          title={canManageGroups ? 'Delete Group' : 'No permission to manage groups'}
+                          disabled={!canManageGroups}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -182,7 +205,12 @@ const GroupsPage = () => {
           onClose={() => { setIsModalOpen(false); setEditGroup(null); }}
           onSuccess={() => {
             alert(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
-            window.location.reload();
+            // Refresh the list via react-query instead of a full SPA reload.
+            // (NewGroupModal calls onClose() right after onSuccess, which clears
+            // the modal/edit state.) Drop any "Active Only" snapshot so the
+            // invalidated list is what renders.
+            setActiveGroupsData(null);
+            queryClient.invalidateQueries({ queryKey: ['groups'] });
           }}
         />
       )}

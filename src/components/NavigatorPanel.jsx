@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
+import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
+import { PERMISSIONS } from '../utils/permissions';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
 } from 'lucide-react';
@@ -12,9 +14,9 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const hasChildren = React.Children.count(children) > 0;
 
-  const handleClick = () => {
+  const handleClick = (event) => {
     if (hasChildren) setIsExpanded(!isExpanded);
-    if (onClickNode) onClickNode();
+    if (onClickNode) onClickNode(event);
   };
 
   return (
@@ -60,9 +62,20 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 const NavigatorPanel = () => {
   const navigate = useNavigate();
   const { groups, loading: groupsLoading } = useGroupList();
+  const { canAct } = usePermissions();
+  const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [brokerInfo] = useState(() => getBrokerInfo());
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
+
+  const openNewGroup = (event) => {
+    event?.stopPropagation();
+    if (!canManageGroups) {
+      alert('Your role does not have permission to manage groups.');
+      return;
+    }
+    setIsNewGroupOpen(true);
+  };
 
   return (
     <div className="h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
@@ -116,7 +129,7 @@ const NavigatorPanel = () => {
                 {groups?.map(g => (
                   <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigate(`/groups/${g.name}`)} />
                 ))}
-                <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={(e) => { e?.stopPropagation(); setIsNewGroupOpen(true); }} />
+                {canManageGroups && <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={openNewGroup} />}
               </TreeNode>
 
             </TreeNode>
@@ -124,7 +137,7 @@ const NavigatorPanel = () => {
 
         </TreeNode>
       </div>
-      {isNewGroupOpen && <NewGroupModal onClose={() => setIsNewGroupOpen(false)} onSuccess={() => alert('Group Created!')} />}
+      {isNewGroupOpen && canManageGroups && <NewGroupModal onClose={() => setIsNewGroupOpen(false)} onSuccess={() => alert('Group Created!')} />}
     </div>
   );
 };

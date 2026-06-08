@@ -1,12 +1,24 @@
-import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget';
-import { updateDynamicEndpoints } from '../config/endpoints';
-import { normalizeTokenExpiresAt, setSession } from './authService';
+import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget.js';
+import { buildManagerApiUrl, updateDynamicEndpoints } from '../config/endpoints.js';
+import { normalizeTokenExpiresAt, setSession } from './authService.js';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
+const DEFAULT_DISCOVERY_BASE_URL = 'https://backend.orrnn.com';
 
-export const DISCOVERY_BASE_URL =
-  getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'], 'https://superbackend.orrnn.com');
+const normalizeDiscoveryBaseUrl = (value = '') => {
+  const trimmed = String(value || '').replace(/\/+$/, '');
+  if (!trimmed) return DEFAULT_DISCOVERY_BASE_URL;
+  if (/testbrokerbackend\.orrnn\.com|brokerbackend|:8091(?:\/|$)/i.test(trimmed)) {
+    return DEFAULT_DISCOVERY_BASE_URL;
+  }
+  return trimmed;
+};
+
+const RUNTIME_DISCOVERY_BASE_URL = getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL']);
+const RUNTIME_API_HOST = getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
+
+export const DISCOVERY_BASE_URL = normalizeDiscoveryBaseUrl(RUNTIME_DISCOVERY_BASE_URL || RUNTIME_API_HOST);
 
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
 const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';
@@ -19,17 +31,15 @@ const MOCK_BROKER_LIST = [
     broker_id: 'testorrnn',
     name: 'Test Orrnn Broker (Demo)',
     status: 'active',
+    server: 'broker-server-testorrnn',
     backend_url: 'https://testbrokerbackend.orrnn.com',
-    server_ip: 'testbrokerbackend.orrnn.com',
-    server_port: 443,
   },
   {
     broker_id: 'orrnn',
     name: 'Orrnn Broker',
     status: 'active',
+    server: 'broker-server-orrnn',
     backend_url: 'https://testbrokerbackend.orrnn.com',
-    server_ip: 'testbrokerbackend.orrnn.com',
-    server_port: 443,
   },
 ];
 
@@ -56,7 +66,7 @@ const getResponseMessage = (data) =>
 
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
-// Calls:  GET {DISCOVERY_BASE_URL}/api/v1/broker/servers
+// Calls:  GET {DISCOVERY_BASE_URL}/api/v2/broker/servers
 // ---------------------------------------------------------------------------
 export const fetchBrokerList = async () => {
   if (USE_MOCK_DISCOVERY) {
@@ -67,7 +77,7 @@ export const fetchBrokerList = async () => {
   let response;
   try {
     response = await fetch(
-      `${DISCOVERY_BASE_URL.replace(/\/+$/, '')}/api/v1/broker/servers`,
+      `${DISCOVERY_BASE_URL.replace(/\/+$/, '')}/api/v2/broker/servers`,
       {
         method: 'GET',
         credentials: 'omit',
@@ -83,8 +93,8 @@ export const fetchBrokerList = async () => {
     throw new Error(getResponseMessage(data) || 'Failed to load broker list.');
   }
 
-  // API may return array directly or wrapped: { brokers: [...] } / { data: [...] }
-  const list = Array.isArray(data) ? data : (data?.brokers ?? data?.data ?? []);
+  // API may return array directly or wrapped: { servers: [...] } / { brokers: [...] } / { data: [...] }
+  const list = Array.isArray(data) ? data : (data?.servers ?? data?.brokers ?? data?.data ?? []);
   return list
     .filter((b) => !b.status || b.status === 'active')
     .map((broker) => normalizeBrokerInfo(broker));
@@ -93,8 +103,11 @@ export const fetchBrokerList = async () => {
 // ---------------------------------------------------------------------------
 // discoverBrokerById — resolves a selected broker from the already-fetched list
 // ---------------------------------------------------------------------------
+export const getBrokerSelectionId = (broker = {}) =>
+  broker.server || broker.server_handle || broker.handle || broker.broker_id || broker.id || '';
+
 export const discoverBrokerById = (brokerList, brokerId) => {
-  const found = brokerList.find((b) => b.broker_id === brokerId);
+  const found = brokerList.find((b) => getBrokerSelectionId(b) === brokerId || b.broker_id === brokerId);
   if (!found) throw new Error('Broker not found');
   if (found.status && found.status !== 'active') {
     throw new Error(`Broker is ${found.status}. Contact support.`);
@@ -144,12 +157,14 @@ const saveBrokerInfo = (brokerInfo) => {
 export const loginManager = async (brokerInfo, { user, password, server }) => {
   const resolvedBrokerInfo = normalizeBrokerInfo(brokerInfo);
   const backendUrl = resolveBrokerBackendUrl(resolvedBrokerInfo);
+  const serverHandle = server || getBrokerSelectionId(resolvedBrokerInfo);
   if (!backendUrl) throw new Error('Broker backend URL is not configured.');
+  if (!serverHandle) throw new Error('Broker server handle is not configured.');
   saveBrokerInfo(resolvedBrokerInfo);
   try {
     return await postJson(
-      `${backendUrl.replace(/\/+$/, '')}/api/v2/auth/login`,
-      { user, password, server }
+      buildManagerApiUrl('/api/v2/auth/login'),
+      { user, password, server: serverHandle }
     );
   } catch (error) {
     throw new Error(mapManagerLoginError(error.message));
@@ -163,7 +178,7 @@ export const loginAdmin = async (brokerInfo, { user, password }) => {
   saveBrokerInfo(resolvedBrokerInfo);
   try {
     return await postJson(
-      `${backendUrl.replace(/\/+$/, '')}/api/v2/admin/login`,
+      buildManagerApiUrl('/api/v2/admin/login'),
       { user, password }
     );
   } catch (error) {

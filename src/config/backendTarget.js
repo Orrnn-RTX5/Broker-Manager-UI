@@ -60,15 +60,26 @@ export const isDesktopBackendTarget = () => getBackendTarget() === 'desktop';
 const getNestedValue = (source, path) => {
   if (!source || !path) return '';
 
+  // N4-01: when the path is dotted, descend the nested structure FIRST so a
+  // genuinely-nested value (e.g. env.BACKEND_TARGET) is not shadowed by a flat
+  // key that happens to contain a literal dot. Fall back to the flat key only if
+  // the nested descent yields nothing.
+  if (path.includes('.')) {
+    const nested = path.split('.').reduce((value, key) => {
+      if (value === undefined || value === null) return undefined;
+      return value[key];
+    }, source);
+    if (nested !== undefined && nested !== null && String(nested).trim() !== '') {
+      return String(nested).trim();
+    }
+  }
+
   const direct = source[path];
   if (direct !== undefined && direct !== null && String(direct).trim() !== '') {
     return String(direct).trim();
   }
 
-  return path.split('.').reduce((value, key) => {
-    if (value === undefined || value === null) return undefined;
-    return value[key];
-  }, source);
+  return undefined;
 };
 
 const getValue = (source, keys = [], fallback = '') => {
@@ -116,6 +127,26 @@ const normalizeHttpUrl = (value = '', defaultProtocol = 'https', forceHttps = fa
   try {
     const url = new URL(raw);
     if (forceHttps && url.protocol === 'http:' && !isLocalHost(url.hostname)) {
+      url.protocol = 'https:';
+    }
+    if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) {
+      url.port = '';
+    }
+    return trimTrailingSlash(url.toString());
+  } catch {
+    return trimTrailingSlash(raw);
+  }
+};
+
+const normalizeDesktopHttpUrl = (value = '') => {
+  const raw = withProtocol(value, 'https');
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw);
+    if (isLocalHost(url.hostname) || isIpAddress(url.hostname)) {
+      if (!hasProtocol(value)) url.protocol = 'http:';
+    } else if (url.protocol === 'http:') {
       url.protocol = 'https:';
     }
     if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) {
@@ -193,8 +224,12 @@ const buildDirectBackendUrl = (hostValue = '', portValue = DEFAULT_DIRECT_BACKEN
   const explicitPort = String(portValue || DEFAULT_DIRECT_BACKEND_PORT).trim();
 
   try {
-    const url = new URL(withProtocol(rawHost, 'http'));
-    url.protocol = isIpAddress(url.hostname) || isLocalHost(url.hostname) ? 'http:' : (url.protocol || 'http:');
+    const url = new URL(withProtocol(rawHost, 'https'));
+    if (isIpAddress(url.hostname) || isLocalHost(url.hostname)) {
+      if (!hasProtocol(rawHost)) url.protocol = 'http:';
+    } else if (url.protocol === 'http:') {
+      url.protocol = 'https:';
+    }
     url.pathname = '';
     url.search = '';
     url.hash = '';
@@ -255,12 +290,12 @@ const resolveWebBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
 };
 
 const resolveDesktopBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
-  if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) {
-    return `http://${GTA_DIRECT_HOST}:${GTA_DIRECT_PORT}`;
-  }
-
   const explicit = getValue(brokerInfo, DESKTOP_BACKEND_KEYS);
-  if (explicit) return normalizeHttpUrl(explicit, 'http', false);
+  if (explicit) return normalizeDesktopHttpUrl(explicit);
+
+  if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) {
+    return GTA_PUBLIC_BACKEND_URL;
+  }
 
   const host = getValue(brokerInfo, DIRECT_HOST_KEYS);
   const port = getValue(brokerInfo, DIRECT_PORT_KEYS, String(DEFAULT_DIRECT_BACKEND_PORT));
@@ -271,7 +306,7 @@ const resolveDesktopBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
     getValue(brokerInfo, ['backend_url', 'api_url', 'server_url']) ||
     getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
 
-  return normalizeHttpUrl(fallbackCandidate, 'http', false);
+  return normalizeDesktopHttpUrl(fallbackCandidate);
 };
 
 export const resolveBrokerBackendUrl = (brokerInfo = {}, fallbackUrl = '') => (
@@ -288,7 +323,7 @@ export const resolveBrokerExtApiUrl = (brokerInfo = {}, backendUrl = '') => {
   const explicit = getValue(brokerInfo, explicitKeys);
   if (explicit) {
     return isDesktopBackendTarget()
-      ? normalizeHttpUrl(explicit, 'http', false)
+      ? normalizeDesktopHttpUrl(explicit)
       : sanitizeWebBackendCandidate(explicit, brokerInfo, backendUrl);
   }
 
@@ -298,7 +333,7 @@ export const resolveBrokerExtApiUrl = (brokerInfo = {}, backendUrl = '') => {
     resolveBrokerBackendUrl(brokerInfo);
 
   return isDesktopBackendTarget()
-    ? normalizeHttpUrl(fallback, 'http', false)
+    ? normalizeDesktopHttpUrl(fallback)
     : sanitizeWebBackendCandidate(fallback, brokerInfo, backendUrl);
 };
 
@@ -318,6 +353,23 @@ const toWsUrl = (value = '', defaultProtocol = 'ws') => {
   }
   if (raw.startsWith('//')) return `${defaultProtocol}:${raw}`;
   return `${defaultProtocol}://${raw}`;
+};
+
+const toDesktopWsUrl = (value = '') => {
+  const raw = toWsUrl(value, 'wss');
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw);
+    if (isLocalHost(url.hostname) || isIpAddress(url.hostname)) {
+      if (!/^wss?:\/\//i.test(String(value || ''))) url.protocol = 'ws:';
+    } else if (url.protocol === 'ws:') {
+      url.protocol = 'wss:';
+    }
+    return trimTrailingSlash(url.toString());
+  } catch {
+    return raw;
+  }
 };
 
 const buildWsEndpoint = (baseUrl = '', path = DEFAULT_WS_PATH) => {
@@ -351,7 +403,7 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
   const explicit = getValue(brokerInfo, explicitKeys) || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']);
   if (explicit) {
     const resolvedExplicit = isDesktopBackendTarget()
-      ? toWsUrl(explicit, 'ws')
+      ? toDesktopWsUrl(explicit)
       : sanitizeWebWsCandidate(explicit, brokerInfo, fallbackUrl);
     if (resolvedExplicit) return buildWsEndpoint(resolvedExplicit, path);
   }
@@ -364,7 +416,9 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
 export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {
   const host = hostnameFromUrl(backendUrl);
   if (!host) return false;
-  if (isIpAddress(host)) return true;
+  if (isIpAddress(host) || isLocalHost(host)) return true;
+  const port = portFromUrl(backendUrl);
+  if (!isDesktopBackendTarget()) return false;
 
   const directHosts = [
     getValue(brokerInfo, DIRECT_HOST_KEYS),

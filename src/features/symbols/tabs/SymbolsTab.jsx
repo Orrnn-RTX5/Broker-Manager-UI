@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
 import {
-  symbolList, symbolGet, symbolAdd, symbolUpdate, symbolEnable, symbolDisable,
+  symbolList, symbolAdd, symbolUpdate, symbolEnable, symbolDisable,
   symbolClone, symbolCategoryList,
 } from '../../../services/api';
-import { buildFeedWsUrl } from '../../../config/endpoints';
+import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
 
 // ─── Add / Edit Modal ──────────────────────────────────────────────────────────
 const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) => {
@@ -110,11 +110,14 @@ const writeSymbolCache = (names) => {
 };
 
 const CloneModal = ({ categories, onClose, onSuccess }) => {
-  const cached = readSymbolCache();
-  const [baseSymbols, setBaseSymbols] = useState(cached);
+  const cached = useMemo(() => readSymbolCache(), []);
+  const {
+    symbols: baseSymbols,
+    loading: loadingSymbols,
+    refreshing,
+    error: symbolLoadError,
+  } = useFeedSymbols({ initialSymbols: cached, onSymbols: writeSymbolCache });
   // If we have cached names, never block the dropdown — refresh silently in the background.
-  const [loadingSymbols, setLoadingSymbols] = useState(cached.length === 0);
-  const [refreshing, setRefreshing] = useState(cached.length > 0);
   const [form, setForm] = useState({
     baseSymbol: '',
     newSymbol: '',
@@ -132,49 +135,6 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
   // Fetch symbol names from the FIX WebSocket feed.
   // Cache hit  → render instantly, refresh silently in background.
   // Cache miss → animated skeleton until first batch arrives (max 3s).
-  useEffect(() => {
-    const ws = new WebSocket(buildFeedWsUrl());
-    const symbolSet = new Set(cached);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const messages = e.data.trim().split('\n');
-        for (let i = 0; i < messages.length; i++) {
-          if (!messages[i]) continue;
-          const msg = JSON.parse(messages[i]);
-          if (msg.symbol) symbolSet.add(msg.symbol);
-        }
-      } catch { /* ignore parse errors */ }
-    };
-
-    const timer = setTimeout(() => {
-      const symbols = Array.from(symbolSet).sort();
-      setBaseSymbols(symbols);
-      setLoadingSymbols(false);
-      setRefreshing(false);
-      writeSymbolCache(symbols);
-      if (ws.readyState === WebSocket.OPEN) ws.close();
-    }, 3000);
-
-    ws.onerror = () => {
-      setLoadingSymbols(false);
-      setRefreshing(false);
-    };
-
-    return () => {
-      clearTimeout(timer);
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
@@ -226,12 +186,23 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
                 <style>{`@keyframes rtxSkeletonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
               </div>
             ) : (
-              <select className="ui-input ui-input-sm" value={form.baseSymbol} onChange={e => set('baseSymbol', e.target.value)} required>
+              <>
+                <select
+                  className="ui-input ui-input-sm"
+                  value={form.baseSymbol}
+                  onChange={e => set('baseSymbol', e.target.value)}
+                  required
+                  disabled={Boolean(symbolLoadError) && baseSymbols.length === 0}
+                >
                 <option value="">— select —</option>
-                {baseSymbols.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+                  {baseSymbols.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                {symbolLoadError && (
+                  <p className="text-[11px]" style={{ color: 'var(--warning, var(--muted))' }}>{symbolLoadError}</p>
+                )}
+              </>
             )}
           </div>
           <div className="flex flex-col gap-1">

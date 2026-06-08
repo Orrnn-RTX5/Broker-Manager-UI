@@ -16,6 +16,7 @@
     "build:electron": "vite build --mode electron",
     "build:desktop": "vite build --mode desktop",
     "lint": "eslint .",
+    "test": "node --test \"src/**/*.test.js\"",
     "preview": "vite preview"
   },
   "dependencies": {

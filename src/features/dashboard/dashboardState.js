@@ -1,0 +1,2 @@
+export const DASHBOARD_BACKEND_ENDPOINTS = Object.freeze([]);
+export const DASHBOARD_PLACEHOLDER_MODE = DASHBOARD_BACKEND_ENDPOINTS.length === 0;

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { X, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 const LEVERAGES  = [1, 10, 25, 50, 100, 200, 300, 400, 500];
@@ -26,6 +28,8 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
   const { groups, loading: loadingGroups } = useGroupList();
+  const { canAct } = usePermissions();
+  const canCreate = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
 
   useEffect(() => {
     if (!loadingGroups && groups && groups.length > 0) {
@@ -41,14 +45,19 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const id = localStorage.getItem('authToken');
-    if (!id) { setResult({ success: false, message: 'Not authenticated. Please log in again.' }); return; }
-
+    // Client-side RBAC guard (defence-in-depth; backend still enforces).
+    if (!canCreate) {
+      setResult({ success: false, message: 'Your role does not have permission to create accounts.' });
+      return;
+    }
     setLoading(true);
     setResult(null);
 
-    const params = new URLSearchParams({
-      id,
+    // POST the payload as a JSON body so the cleartext master/investor passwords
+    // (and all other fields) stay out of the request URL, server access logs, and
+    // browser history (fe-manager-ui-03 / fe-manager-ui-08). The backend exposes
+    // /AccountCreate over POST JSON, mirroring /UserPasswordChange.
+    const payload = {
       master_pass: form.master_pass,
       investor_pass: form.investor_pass,
       Group: form.Group,
@@ -59,11 +68,13 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
       Phone: form.Phone,
       Country: form.Country,
       Currency: form.Currency,
-    });
+    };
 
     try {
-      const response = await fetchManagerApi(`/AccountCreate?${params.toString()}`, {
-        method: 'GET', headers: { accept: 'application/json' },
+      const response = await fetchManagerApi('/AccountCreate', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok || !data.login || typeof data.login !== 'number') {
@@ -189,8 +200,13 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
 
         {!result && (
           <div className="ui-modal-footer">
+            {!canCreate && (
+              <span className="text-xs mr-auto" style={{ color: 'var(--danger-text)' }}>
+                You do not have permission to create accounts.
+              </span>
+            )}
             <button type="button" onClick={handleClose} className="ui-btn ui-btn-secondary ui-btn-sm">Cancel</button>
-            <button type="submit" form="new-account-form" disabled={loading} className="ui-btn ui-btn-primary ui-btn-sm">
+            <button type="submit" form="new-account-form" disabled={loading || !canCreate} className="ui-btn ui-btn-primary ui-btn-sm">
               {loading ? <><Loader2 size={13} className="animate-spin" /> Creating…</> : 'Create Account'}
             </button>
           </div>

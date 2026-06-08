@@ -5,6 +5,8 @@ import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
+import { usePermissions } from '../hooks/usePermissions';
+import { PERMISSIONS } from '../utils/permissions';
 
 /**
  * MarginCallsSidebar — pure content component.
@@ -21,17 +23,17 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const [blockedUsers, setBlockedUsers] = useState({});
   const [restrictLogin, setRestrictLogin] = useState(null);
 
+  const { canAct } = usePermissions();
+  const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
+  const canEditRestrictions = canAct(PERMISSIONS.EDIT_ACCOUNTS);
+  const canManipulateRestrictionTrades = canAct(PERMISSIONS.MANIPULATE_TRADES);
+  const canOpenRestrictions = canEditRestrictions || canManipulateRestrictionTrades;
+
   const fetchAccounts = useCallback(async () => {
-    const id = localStorage.getItem('authToken');
-    if (!id) {
-      setError('Not connected.');
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchManagerApi(`/AccountDetailsMany?id=${id}`, {
+      const response = await fetchManagerApi('/AccountDetailsMany', {
         method: 'GET',
         headers: { 'accept': 'application/json' },
       });
@@ -81,11 +83,6 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     }
   }, [isAuthenticated, fetchAccounts]);
 
-  const fullName = (acc) =>
-    [acc.FirstName, acc.LastName].filter(Boolean).join(' ') ||
-    acc.Name ||
-    '—';
-
   const balanceDisplay = (acc) =>
     acc.balance !== undefined
       ? Number(acc.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -102,8 +99,9 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
 
     if (action === 'summary') {
       try {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/AccountsSummary?id=${token}&login%5B%5D=${login}`, {
+        const params = new URLSearchParams();
+        params.append('login[]', String(login));
+        const res = await fetchManagerApi(`/AccountsSummary?${params.toString()}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -116,11 +114,19 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     } else if (action === 'details') {
       setSelectedAccountDetails(acc);
     } else if (action === 'restrictions') {
+      if (!canOpenRestrictions) {
+        alert('Your role does not have permission to change account restrictions or trade overrides.');
+        return;
+      }
       setRestrictLogin(login);
     } else if (action === 'block') {
+      if (!canManageAccounts) {
+        alert('Your role does not have permission to block accounts.');
+        return;
+      }
       try {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/UserArchive?id=${token}&login=${login}`, {
+        const params = new URLSearchParams({ login: String(login) });
+        const res = await fetchManagerApi(`/UserArchive?${params.toString()}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -132,9 +138,13 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         alert("Error blocking user: " + err.message);
       }
     } else if (action === 'unblock') {
+      if (!canManageAccounts) {
+        alert('Your role does not have permission to unblock accounts.');
+        return;
+      }
       try {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/UserRestore?id=${token}&login=${login}`, {
+        const params = new URLSearchParams({ login: String(login) });
+        const res = await fetchManagerApi(`/UserRestore?${params.toString()}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -146,10 +156,14 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         alert("Error unblocking user: " + err.message);
       }
     } else if (action === 'delete') {
+      if (!canManageAccounts) {
+        alert('Your role does not have permission to delete accounts.');
+        return;
+      }
       if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
       try {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/AccountDelete?id=${token}&login=${login}`, {
+        const params = new URLSearchParams({ login: String(login) });
+        const res = await fetchManagerApi(`/AccountDelete?${params.toString()}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -239,7 +253,6 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                 accounts.map((acc, idx) => {
                   const isPrimitive = typeof acc === 'number' || typeof acc === 'string';
                   const login = isPrimitive ? acc : acc.login;
-                  const name = isPrimitive ? '—' : fullName(acc);
                   const bal = isPrimitive ? '—' : balanceDisplay(acc);
                   const mcl = isPrimitive ? undefined : acc.MarginCallLevel;
                   const isUrgent = mcl !== undefined && Number(mcl) < 100;
@@ -298,6 +311,8 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           account={contextMenu.account}
           onClose={() => setContextMenu(null)}
           onAction={handleMenuAction}
+          canManageAccounts={canManageAccounts}
+          canManageRestrictions={canOpenRestrictions}
           isBlocked={blockedUsers[typeof contextMenu.account === 'object' ? contextMenu.account.login : contextMenu.account]}
         />
       )}

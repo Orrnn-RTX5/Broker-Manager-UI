@@ -8,12 +8,7 @@ export const useGroupList = () => {
   const { data: groups = [], isLoading: loading, error, isError } = useQuery({
     queryKey: ['groups'],
     queryFn: async () => {
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const res = await fetchManagerApi(`/GroupList?id=${token}`, {
+      const res = await fetchManagerApi('/GroupList', {
         headers: { 'accept': 'application/json' }
       });
       

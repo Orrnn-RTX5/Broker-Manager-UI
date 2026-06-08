@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { User, Lock, Server, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { DEFAULT_MT5_SERVER } from '../../config/endpoints';
-import { fetchManagerApi } from '../../services/managerFetch';
 
-const Login = ({ onLoginSuccess }) => {
-  const [user, setUser] = useState('10007');
-  const [password, setPassword] = useState('Manager@123');
+const Login = () => {
+  const [user, setUser] = useState('');
+  const [password, setPassword] = useState('');
   const [server, setServer] = useState(DEFAULT_MT5_SERVER);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,27 +20,7 @@ const Login = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetchManagerApi(
-        `/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
-        { method: 'GET', headers: { accept: 'application/json' } }
-      );
-
-      if (!response.ok) {
-        throw new Error('Login failed. Please check your credentials.');
-      }
-
-      const data = await response.json();
-      const finalToken = data.token;
-
-      if (!finalToken) {
-        throw new Error('Invalid credentials. Please check your User ID and password.');
-      }
-
-      import('../../services/authService').then(auth => {
-        auth.setSession(data);
-      });
-      
-      if (onLoginSuccess) onLoginSuccess(finalToken);
+      throw new Error('Direct server login is disabled. Use the broker login screen.');
     } catch (err) {
       setError(err.message || 'An error occurred during login.');
     } finally {

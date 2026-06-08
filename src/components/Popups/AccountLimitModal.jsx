@@ -36,12 +36,10 @@ const AccountLimitModal = ({ isOpen, onClose }) => {
   }, [isOpen]);
 
   const fetchLimits = async () => {
-    const id = localStorage.getItem('authToken');
-    if (!id) { setError('Not authenticated. Please log in again.'); return; }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchManagerApi(`/AccountLimitStatus?id=${id}`, {
+      const response = await fetchManagerApi('/AccountLimitStatus', {
         method: 'GET', headers: { accept: 'application/json' },
       });
       if (!response.ok) throw new Error('Failed to fetch limit status');

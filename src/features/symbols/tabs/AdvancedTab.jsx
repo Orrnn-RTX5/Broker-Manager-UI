@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Save, Loader2, Plus, Trash2, X } from 'lucide-react';
 import {
   marketDepthConfigGet, marketDepthConfigSet,
   symbolVisibilityList, symbolVisibilitySet,
 } from '../../../services/api';
-import { buildFeedWsUrl } from '../../../config/endpoints';
+import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
 
 // ─── Market Depth Section ──────────────────────────────────────────────────────
-const MarketDepthSection = ({ allSymbols, loadingSymbols }) => {
+const MarketDepthSection = ({ allSymbols, loadingSymbols, symbolLoadError }) => {
   const [symbol, setSymbol] = useState('');
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +53,10 @@ const MarketDepthSection = ({ allSymbols, loadingSymbols }) => {
           <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
             <Loader2 size={12} className="animate-spin" /> Loading symbols…
           </div>
+        ) : symbolLoadError ? (
+          <div className="py-1 px-2 text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
+            {symbolLoadError}
+          </div>
         ) : (
           <select className="ui-input ui-input-sm" style={{ width: 200 }} value={symbol} onChange={e => setSymbol(e.target.value)}>
             <option value="">— select —</option>
@@ -89,7 +93,7 @@ const MarketDepthSection = ({ allSymbols, loadingSymbols }) => {
 };
 
 // ─── Visibility Modal ──────────────────────────────────────────────────────────
-const VisibilityModal = ({ allSymbols, loadingSymbols, onClose, onSuccess }) => {
+const VisibilityModal = ({ allSymbols, loadingSymbols, symbolLoadError, onClose, onSuccess }) => {
   const [form, setForm] = useState({ symbol: '', group: '', visible: true });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -124,6 +128,10 @@ const VisibilityModal = ({ allSymbols, loadingSymbols, onClose, onSuccess }) => 
               <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
                 <Loader2 size={12} className="animate-spin" /> Loading symbols…
               </div>
+            ) : symbolLoadError ? (
+              <div className="py-1 px-2 text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
+                {symbolLoadError}
+              </div>
             ) : (
               <select className="ui-input ui-input-sm" value={form.symbol} onChange={e => set('symbol', e.target.value)}>
                 <option value="">— select —</option>
@@ -153,17 +161,20 @@ const VisibilityModal = ({ allSymbols, loadingSymbols, onClose, onSuccess }) => 
 };
 
 // ─── Visibility Section ────────────────────────────────────────────────────────
-const VisibilitySection = ({ allSymbols, loadingSymbols }) => {
+const VisibilitySection = ({ allSymbols, loadingSymbols, symbolLoadError }) => {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     symbolVisibilityList().then(d => setRules(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   return (
     <div className="ui-card p-4 flex flex-col gap-3">
@@ -207,6 +218,7 @@ const VisibilitySection = ({ allSymbols, loadingSymbols }) => {
         <VisibilityModal
           allSymbols={allSymbols}
           loadingSymbols={loadingSymbols}
+          symbolLoadError={symbolLoadError}
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); load(); }}
         />
@@ -217,50 +229,12 @@ const VisibilitySection = ({ allSymbols, loadingSymbols }) => {
 
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const AdvancedTab = () => {
-  const [allSymbols, setAllSymbols] = useState([]);
-  const [loadingSymbols, setLoadingSymbols] = useState(true);
-
-  useEffect(() => {
-    setLoadingSymbols(true);
-    const ws = new WebSocket(buildFeedWsUrl());
-    const symbolSet = new Set();
-    
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
-    ws.onmessage = (e) => {
-      try {
-        const messages = e.data.trim().split('\n');
-        for (let i = 0; i < messages.length; i++) {
-          if (!messages[i]) continue;
-          const msg = JSON.parse(messages[i]);
-          if (msg.symbol) symbolSet.add(msg.symbol);
-        }
-      } catch (err) {}
-    };
-
-    const timer = setTimeout(() => {
-      setAllSymbols(Array.from(symbolSet).sort());
-      setLoadingSymbols(false);
-      if (ws.readyState === WebSocket.OPEN) ws.close();
-    }, 3000);
-
-    ws.onerror = () => {
-      setAllSymbols([]);
-      setLoadingSymbols(false);
-    };
-
-    return () => {
-      clearTimeout(timer);
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
-  }, []);
+  const { symbols: allSymbols, loading: loadingSymbols, error: symbolLoadError } = useFeedSymbols();
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-auto">
-      <MarketDepthSection allSymbols={allSymbols} loadingSymbols={loadingSymbols} />
-      <VisibilitySection allSymbols={allSymbols} loadingSymbols={loadingSymbols} />
+      <MarketDepthSection allSymbols={allSymbols} loadingSymbols={loadingSymbols} symbolLoadError={symbolLoadError} />
+      <VisibilitySection allSymbols={allSymbols} loadingSymbols={loadingSymbols} symbolLoadError={symbolLoadError} />
     </div>
   );
 };

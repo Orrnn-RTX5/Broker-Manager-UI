@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings } from 'lucide-react';
 import { getPositions } from '../../services/api';
-import { buildFeedWsUrl, buildMetricsWsUrl } from '../../config/endpoints';
+import { buildFeedWsUrl, buildMetricsWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
+import { redactSensitive } from '../../utils/redaction';
+import { canMutateAccountTrades, TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
@@ -14,27 +18,44 @@ const TABS = [
   'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
 ];
 
-const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade }) => {
+const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHeader, disabled = false }) => (
+  <div
+    className={`flex items-center gap-3 px-3 py-2 text-[12px] cursor-pointer transition-colors group
+      ${isHeader ? 'bg-blue-600/10 text-blue-400 font-bold border-b border-blue-500/20' : 'hover:bg-white/5 text-gray-300'}
+      ${disabled ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+    onClick={disabled ? undefined : onClick}
+  >
+    <div className="w-4 h-4 flex items-center justify-center">
+      {Icon && <Icon size={14} style={{ color: color || 'currentColor' }} />}
+    </div>
+    <span className="flex-1">{text}</span>
+    {submenu && <ChevronRight size={12} className="text-gray-600" />}
+  </div>
+);
+
+const TradeContextMenuSeparator = () => <div className="h-[1px] bg-[var(--border)] my-1 opacity-50" />;
+
+// Whitelist of fields the UserUpdate form is allowed to submit. Anything not in
+// this set (e.g. balance, equity, password_hash, broker_id, is_admin injected
+// via dev-tools into formData) is stripped before the request is built so the
+// client cannot be coaxed into pushing arbitrary columns to the backend.
+const USER_UPDATE_ALLOWED_FIELDS = new Set([
+  'FirstName', 'LastName', 'Company', 'Status', 'MQID',
+  'Email', 'Phone', 'Country', 'City', 'ZipCode', 'Address', 'Comment',
+  'Group', 'Leverage', 'MarginCallLevel', 'StopOutLevel',
+]);
+
+const pickAllowedFields = (source, allowed) =>
+  Object.entries(source || {}).reduce((acc, [key, value]) => {
+    if (allowed.has(key)) acc[key] = value;
+    return acc;
+  }, {});
+
+const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canManipulateTrades }) => {
   const style = {
     top: Math.min(y, window.innerHeight - 400),
     left: Math.min(x, window.innerWidth - 240),
   };
-
-  const Item = ({ icon: Icon, text, color, onClick, submenu, isHeader }) => (
-    <div
-      className={`flex items-center gap-3 px-3 py-2 text-[12px] cursor-pointer transition-colors group
-        ${isHeader ? 'bg-blue-600/10 text-blue-400 font-bold border-b border-blue-500/20' : 'hover:bg-white/5 text-gray-300'}`}
-      onClick={onClick}
-    >
-      <div className="w-4 h-4 flex items-center justify-center">
-        {Icon && <Icon size={14} style={{ color: color || 'currentColor' }} />}
-      </div>
-      <span className="flex-1">{text}</span>
-      {submenu && <ChevronRight size={12} className="text-gray-600" />}
-    </div>
-  );
-
-  const Sep = () => <div className="h-[1px] bg-[var(--border)] my-1 opacity-50" />;
 
   return (
     <div
@@ -42,35 +63,40 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade }) => {
       style={style}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <Item text={`TRADE #${data?.position || '---'}`} isHeader />
-      <Item icon={Plus} text="New Order" color="var(--ok-text)" />
-      <Item icon={CheckCircle2} text="Close Position" color="var(--danger-text)" onClick={() => { onCloseTrade(data.position); onClose(); }} />
-      <Item icon={Edit3} text="Modify or Cancel" color="var(--accent)" onClick={() => { onModify(data); onClose(); }} />
-      <Item icon={Play} text="Activate" />
-      <Sep />
-      <Item icon={Settings} text="Edit" color="var(--info-text)" />
-      <Item icon={Trash2} text="Delete" color="var(--danger-text)" />
-      <Sep />
-      <Item text="Volumes" icon={BarChart3} submenu />
-      <Item text="Profit" icon={BarChart3} submenu />
-      <Sep />
-      <Item text="Report" icon={FileText || BarChart3} submenu />
-      <Sep />
-      <Item text="Show Milliseconds" />
-      <Item text="Auto Arrange" hasCheck />
-      <Item text="Grid" hasCheck />
-      <Sep />
-      <Item text="Columns" submenu />
+      <TradeContextMenuItem text={`TRADE #${data?.position || '---'}`} isHeader />
+      <TradeContextMenuItem icon={Plus} text="New Order" color="var(--ok-text)" />
+      <TradeContextMenuItem icon={CheckCircle2} text="Close Position" color="var(--danger-text)" disabled={!canManipulateTrades} onClick={() => { onCloseTrade(data.position); onClose(); }} />
+      <TradeContextMenuItem icon={Edit3} text="Modify or Cancel" color="var(--accent)" disabled={!canManipulateTrades} onClick={() => { onModify(data); onClose(); }} />
+      <TradeContextMenuItem icon={Play} text="Activate" />
+      <TradeContextMenuSeparator />
+      <TradeContextMenuItem icon={Settings} text="Edit" color="var(--info-text)" />
+      <TradeContextMenuItem icon={Trash2} text="Delete" color="var(--danger-text)" />
+      <TradeContextMenuSeparator />
+      <TradeContextMenuItem text="Volumes" icon={BarChart3} submenu />
+      <TradeContextMenuItem text="Profit" icon={BarChart3} submenu />
+      <TradeContextMenuSeparator />
+      <TradeContextMenuItem text="Report" icon={FileText || BarChart3} submenu />
+      <TradeContextMenuSeparator />
+      <TradeContextMenuItem text="Show Milliseconds" />
+      <TradeContextMenuItem text="Auto Arrange" />
+      <TradeContextMenuItem text="Grid" />
+      <TradeContextMenuSeparator />
+      <TradeContextMenuItem text="Columns" submenu />
     </div>
   );
 };
 
 const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position' }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
+  const { canAct } = usePermissions();
+  const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
+  const canDeposit = canAct(PERMISSIONS.MANAGE_FINANCES);
+  const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
+  const canManipulateTrades = canMutateAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accountData, setAccountData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [, setLoading] = useState(false);
+  const [, setError] = useState(null);
   const [formData, setFormData] = useState({});
   const [updateLoading, setUpdateLoading] = useState(false);
   const [passwords, setPasswords] = useState({ master: '', investor: '', api: '', phone: '', otp: '' });
@@ -94,6 +120,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [tradeTickHistory, setTradeTickHistory] = useState([]);
+  const [tradeFeedError, setTradeFeedError] = useState('');
   const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
   const tradeSymbolRef = useRef(modalTradeSymbol);
 
@@ -163,7 +190,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let startWidth = size.width;
     let startHeight = size.height;
     let startPosX = position.x;
-    let startPosY = position.y;
 
     const handleMouseMove = (moveEvent) => {
       let dx = moveEvent.clientX - startX;
@@ -174,10 +200,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       } else if (edge === 'bottom') {
         setSize(prev => ({ ...prev, height: Math.max(400, startHeight + dy) }));
       } else if (edge === 'bottom-right') {
-        setSize(prev => ({
+        setSize({
           width: Math.max(500, startWidth + dx),
           height: Math.max(400, startHeight + dy)
-        }));
+        });
       } else if (edge === 'left') {
         let newWidth = Math.max(500, startWidth - dx);
         let actualDx = startWidth - newWidth;
@@ -219,9 +245,16 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setIsMinimized(!isMinimized);
   };
 
+  const requireTradeMutationPermission = () => {
+    if (canManipulateTrades) return true;
+    alert(TRADE_MUTATION_DENIED_MESSAGE);
+    return false;
+  };
+
   // Entity-aware close/cancel. For Position we cancel via OrderClose (legacy
   // behaviour kept); Order cancels via adapter; Deals cannot be deleted.
   const handleDeleteTrade = async (ticket) => {
+    if (!requireTradeMutationPermission()) return;
     if (entity === 'deal') {
       alert('Deals are historical records and cannot be deleted from this view.');
       return;
@@ -235,8 +268,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       if (entity === 'order') {
         result = await orderDelete(ticket);
       } else {
-        const token = localStorage.getItem('authToken');
-        const res = await fetchManagerApi(`/OrderClose?id=${token}&ticket=${ticket}`, {
+        const params = new URLSearchParams({ ticket: String(ticket) });
+        const res = await fetchManagerApi(`/OrderClose?${params.toString()}`, {
           method: 'GET',
           headers: { 'accept': 'application/json' }
         });
@@ -244,7 +277,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         try { result = JSON.parse(text); } catch { result = { message: text }; }
         if (!res.ok) throw Object.assign(new Error(result?.message || 'Failed to close position'), { status: res.status });
       }
-      console.log(`[${label}] response:`, result);
+      console.log(`[${label}] response:`, redactSensitive(result));
       const status = result?.retcode || result?.status || 'OK';
       const message = result?.message || JSON.stringify(result);
       alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
@@ -261,7 +294,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [liveMetrics, setLiveMetrics] = useState(null);
 
   // Since the user is passing either an Account Object or just an integer Login ID, we handle both.
-  const loginId = typeof account === 'object' ? account.login : account;
+  // Null-safe: `typeof null === 'object'`, so guard against a falsy `account`
+  // (the modal may now run its hooks before the `if (!account)` early return).
+  const loginId = account && typeof account === 'object' ? account.login : account;
 
   useEffect(() => {
     if (!loginId) return;
@@ -274,15 +309,20 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       if (!token) return;
 
       const metricsUrl = buildMetricsWsUrl(token, loginId);
-      console.log(`[Metrics WS] Connecting to: ${metricsUrl}`);
+      console.debug(`[Metrics WS] Connecting for account ${loginId}`);
       ws = new WebSocket(metricsUrl);
 
       ws.onopen = () => {
-        console.log(`[Metrics WS] Connected successfully for account ${account}`);
+        console.debug(`[Metrics WS] Connected successfully for account ${loginId}`);
       };
 
       ws.onerror = (e) => {
-        console.error(`[Metrics WS] Error payload:`, e);
+        // Do not log the raw event; devtools can expose WebSocket.url, including
+        // the legacy id query token used by this browser-only metrics endpoint.
+        console.error(`[Metrics WS] Error payload:`, {
+          type: e?.type,
+          readyState: ws?.readyState,
+        });
       };
 
       ws.onmessage = (e) => {
@@ -313,7 +353,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       };
 
       ws.onclose = (e) => {
-        console.log(`[Metrics WS] Connection closed cleanly=${e.wasClean} code=${e.code} reason=${e.reason}. Reconnecting in 3s...`);
+        console.debug(`[Metrics WS] Connection closed cleanly=${e.wasClean} code=${e.code} reason=${redactSensitive(e.reason)}. Reconnecting in 3s...`);
         reconnectTimeout = setTimeout(connectMetricsWs, 3000);
       };
     };
@@ -345,8 +385,19 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let reconnectTimeout;
 
     const connectWebSocket = () => {
-      ws = new WebSocket(buildFeedWsUrl());
-      ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
+      let wsUrl;
+      try {
+        wsUrl = buildFeedWsUrl();
+      } catch (err) {
+        setTradeFeedError(getFeedWsDisabledMessage(err));
+        return;
+      }
+
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        setTradeFeedError('');
+        ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
+      };
       ws.onmessage = (e) => {
         try {
           const messages = e.data.trim().split('\n');
@@ -377,7 +428,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
               }
             }
           }
-        } catch (err) { }
+        } catch {
+          // Ignore malformed feed ticks; the next websocket message can still update the chart.
+        }
+      };
+      ws.onerror = () => {
+        setTradeFeedError('Market feed unavailable: websocket connection failed.');
       };
       ws.onclose = () => { reconnectTimeout = setTimeout(connectWebSocket, 3000); };
     };
@@ -397,21 +453,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     };
   }, [activeTab]);
 
-  useEffect(() => {
-    if (liveMetrics) {
-      console.log(`[AccountDetailsModal ${loginId}] NEW LIVE METRICS TICK:`, {
-        balance: liveMetrics.balance,
-        equity: liveMetrics.equity,
-        margin: liveMetrics.used_margin,
-
-        free_margin: liveMetrics.free_margin,
-        margin_level: liveMetrics.margin_level,
-        pnl: liveMetrics.floating_pnl,
-        swap: liveMetrics.total_swap
-      });
-    }
-  }, [liveMetrics, loginId]);
-
   const handleModifySLTP = (pos) => {
     setSelectedTicketRow(pos);
     setModalTradeSymbol(pos.symbol || 'EURUSD');
@@ -426,7 +467,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // inspect headers/stack via devtools even if they dismiss the alert.
 
   const showResult = (label, result) => {
-    console.log(`[${label}] response:`, result);
+    console.log(`[${label}] response:`, redactSensitive(result));
     const status = result?.retcode || result?.status || 'OK';
     const message = result?.message || JSON.stringify(result);
     alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
@@ -442,6 +483,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // Commits S/L + T/P (and, for deals, any adapter-editable field)
   // through the entity-aware adapter.
   const handleUpdateTrade = async () => {
+    if (!requireTradeMutationPermission()) return;
     if (!selectedTicketRow) return;
     const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
     if (!ticket) { alert('No ticket selected.'); return; }
@@ -467,6 +509,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   // Runs a named adapter action (Flip, ForceClose, Cancel, etc.)
   const runAdapterAction = async (action) => {
+    if (!requireTradeMutationPermission()) return;
     if (!selectedTicketRow) { alert('Select a row first.'); return; }
     const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
     const login = loginId;
@@ -507,23 +550,20 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
   };
 
-  if (!account) return null;
-
+  // NOTE: all hooks (incl. this effect) MUST stay above the `if (!account)`
+  // early return below so hook order is stable even if the modal is ever
+  // rendered with a falsy `account` (react-hooks/rules-of-hooks). The effect
+  // self-guards on `loginId`, so it is a no-op when there is no account.
   useEffect(() => {
     if (!loginId) return;
 
     const fetchDetails = async () => {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        setError("Not connected");
-        setLoading(false);
-        return;
-      }
 
       try {
-        const res = await fetchManagerApi(`/AccountDetails?id=${token}&login=${loginId}`, {
+        const params = new URLSearchParams({ login: String(loginId) });
+        const res = await fetchManagerApi(`/AccountDetails?${params.toString()}`, {
           headers: { 'accept': 'application/json' }
         });
         const text = await res.text();
@@ -595,6 +635,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     fetchPositions();
   }, [loginId, targetTicket]);
 
+  // Early return AFTER all hooks so hook order is invariant across renders.
+  if (!account) return null;
+
   const activeData = accountData || (typeof account === 'object' ? account : {});
 
   const getValue = (field, fallback = '') => {
@@ -607,16 +650,18 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handleUpdate = async () => {
-    if (Object.keys(formData).length === 0) return;
+    if (!canManageAccounts) {
+      alert('Your role does not have permission to update accounts.');
+      return;
+    }
+    const allowedUpdates = pickAllowedFields(formData, USER_UPDATE_ALLOWED_FIELDS);
+    if (Object.keys(allowedUpdates).length === 0) return;
     try {
       setUpdateLoading(true);
-      const token = localStorage.getItem('authToken');
-      if (!token) throw new Error("Not connected");
 
       const params = new URLSearchParams({
-        id: token,
         login: loginId,
-        ...formData
+        ...allowedUpdates
       });
 
       const res = await fetchManagerApi(`/UserUpdate?${params.toString()}`, {
@@ -626,7 +671,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update');
 
-      setAccountData(prev => ({ ...prev, ...formData }));
+      setAccountData(prev => ({ ...prev, ...allowedUpdates }));
       setFormData({});
     } catch (err) {
       console.error(err);
@@ -637,22 +682,23 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handlePasswordCheck = async (type, password) => {
+    if (!canManagePasswords) {
+      alert('Your role does not have permission to verify account passwords.');
+      return;
+    }
     if (!password) {
       alert("Please enter a password to check.");
       return;
     }
     setCheckingPassword(type);
     try {
-      const token = localStorage.getItem('authToken');
-      const params = new URLSearchParams({
-        id: token,
-        login: loginId,
-        type: type,
-        password: password
-      });
-      const res = await fetchManagerApi(`/UserPasswordCheck?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'text/plain' }
+      // POST the cleartext password in a JSON body (mirrors UserPasswordChange)
+      // so it never appears in the request URL, server access logs, or browser
+      // history (fe-manager-ui-03 / fe-manager-ui-08). Backend exposes POST JSON.
+      const res = await fetchManagerApi('/UserPasswordCheck', {
+        method: 'POST',
+        headers: { 'accept': 'text/plain', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginId, type, password })
       });
       const text = await res.text();
       alert(`Password Check Result:\n${text}`);
@@ -665,22 +711,23 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
 
   const handlePasswordChange = async (type, password) => {
+    if (!canManagePasswords) {
+      alert('Your role does not have permission to change account passwords.');
+      return;
+    }
     if (!password) {
       alert("Please enter a new password to change.");
       return;
     }
     setChangingPassword(type);
     try {
-      const token = localStorage.getItem('authToken');
-      const params = new URLSearchParams({
-        id: token,
-        login: loginId,
-        type: type,
-        password: password
-      });
-      const res = await fetchManagerApi(`/UserPasswordChange?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'text/plain' }
+      // Send the new password in a POST JSON body. The backend exposes both GET
+      // and POST for /UserPasswordChange; POST keeps the cleartext password out
+      // of the request URL, server access logs, and browser history.
+      const res = await fetchManagerApi('/UserPasswordChange', {
+        method: 'POST',
+        headers: { 'accept': 'text/plain', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginId, type, password })
       });
       const text = await res.text();
       alert(`Password Change Result:\n${text}`);
@@ -692,10 +739,39 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handleDeposit = async () => {
-    const amountVal = Number(depositAmount);
-    if (!amountVal || amountVal <= 0 || amountVal > 1000000 || isNaN(amountVal)) {
-      setDepositError("Amount must be a positive number and cannot exceed 1,000,000.");
+    if (!canDeposit) {
+      setDepositError('Your role does not have permission to deposit funds.');
       return;
+    }
+    // Client-side validation is defence-in-depth only — the backend remains the
+    // authority — but it must still reject malformed/blank/over-precision input
+    // and validate the optional `credit` field, which previously went through raw.
+    const validateMoney = (raw, { allowNegative = false } = {}) => {
+      const str = String(raw).trim();
+      // up to 2 decimal places, optional leading minus
+      if (!/^-?\d+(\.\d{1,2})?$/.test(str)) return null;
+      const num = Number(str);
+      if (!Number.isFinite(num)) return null;
+      if (!allowNegative && num <= 0) return null;
+      if (Math.abs(num) > 1000000) return null;
+      return num;
+    };
+
+    const amountVal = validateMoney(depositAmount);
+    if (amountVal === null) {
+      setDepositError("Amount must be a positive number with up to 2 decimals and cannot exceed 1,000,000.");
+      return;
+    }
+
+    // credit is optional; when supplied it may be negative (credit removal) but
+    // must still be a well-formed number within the same magnitude cap.
+    let creditVal = null;
+    if (depositCredit !== '' && depositCredit !== null && depositCredit !== undefined) {
+      creditVal = validateMoney(depositCredit, { allowNegative: true });
+      if (creditVal === null) {
+        setDepositError("Credit must be a number with up to 2 decimals and cannot exceed ±1,000,000.");
+        return;
+      }
     }
 
     setIsDepositing(true);
@@ -703,14 +779,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setDepositSuccess(null);
 
     try {
-      const token = localStorage.getItem('authToken');
       const params = new URLSearchParams({
-        id: token,
         login: loginId,
         amount: amountVal
       });
       if (depositComment) params.append('comment', depositComment);
-      if (depositCredit) params.append('credit', depositCredit);
+      if (creditVal !== null) params.append('credit', String(creditVal));
 
       const res = await fetchManagerApi(`/Deposit?${params.toString()}`, {
         method: 'GET',
@@ -720,7 +794,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const responseText = await res.text();
       // attempt to parse if JSON
       let data;
-      try { data = JSON.parse(responseText); } catch (e) { data = responseText; }
+      try { data = JSON.parse(responseText); } catch { data = responseText; }
 
       if (!res.ok) {
         throw new Error(typeof data === 'object' ? (data.error || data.message || 'Deposit failed') : data);
@@ -934,7 +1008,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             <div className="p-2 flex items-center justify-center">
                               <button
                                 onClick={() => handleDeleteTrade(pos.position)}
-                                disabled={isDeleting}
+                                disabled={isDeleting || !canManipulateTrades}
+                                title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white px-2 py-0.5 rounded text-[10px] font-bold"
                               >
                                 CLOSE
@@ -1301,6 +1376,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   {/* Real-time SVG Chart */}
                   <div className="flex-1 relative overflow-hidden flex items-end">
                     {(() => {
+                      if (tradeFeedError) {
+                        return <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-500 text-[11px]">{tradeFeedError}</div>;
+                      }
                       if (tradeTickHistory.length < 2) {
                         return <div className="absolute inset-0 flex items-center justify-center text-gray-600 text-[11px]">Waiting for ticks on {modalTradeSymbol}...</div>;
                       }
@@ -1483,7 +1561,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     <div className="px-3 mb-2 flex flex-col gap-2">
                       <button
                         onClick={handleUpdateTrade}
-                        disabled={isUpdatingTrade}
+                        disabled={isUpdatingTrade || !canManipulateTrades}
+                        title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
                         className="ui-btn ui-btn-primary"
                         style={{ height: 34, fontWeight: 600 }}
                       >
@@ -1496,7 +1575,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             <button
                               key={act.key}
                               onClick={() => runAdapterAction(act)}
-                              title={act.title}
+                              title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : act.title}
+                              disabled={!canManipulateTrades}
                               className={
                                 act.tone === 'danger' ? 'ui-btn ui-btn-danger ui-btn-sm' :
                                   act.tone === 'danger-outline' ? 'ui-btn ui-btn-secondary ui-btn-sm' :
@@ -1551,8 +1631,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       </div>
                       <p className="text-[11px] text-[#dbab44] mt-1 tracking-wide">minimum 8 characters</p>
                     </div>
-                    <button onClick={() => handlePasswordCheck('USER_PASS_MAIN', passwords.master)} disabled={checkingPassword === 'USER_PASS_MAIN'} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_MAIN' ? '...' : 'Check'}</button>
-                    <button onClick={() => handlePasswordChange('Master', passwords.master)} disabled={changingPassword === 'Master'} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'Master' ? 'Wait...' : 'Change'}</button>
+                    <button onClick={() => handlePasswordCheck('USER_PASS_MAIN', passwords.master)} disabled={checkingPassword === 'USER_PASS_MAIN' || !canManagePasswords} title={!canManagePasswords ? 'No permission to verify passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_MAIN' ? '...' : 'Check'}</button>
+                    <button onClick={() => handlePasswordChange('Master', passwords.master)} disabled={changingPassword === 'Master' || !canManagePasswords} title={!canManagePasswords ? 'No permission to change passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'Master' ? 'Wait...' : 'Change'}</button>
                     <button className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200">Generate</button>
                   </div>
                 </div>
@@ -1574,8 +1654,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       </div>
                       <p className="text-[11px] text-gray-400 mt-1 tracking-wide">minimum 8 characters</p>
                     </div>
-                    <button onClick={() => handlePasswordCheck('USER_PASS_INVESTOR', passwords.investor)} disabled={checkingPassword === 'USER_PASS_INVESTOR'} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_INVESTOR' ? '...' : 'Check'}</button>
-                    <button onClick={() => handlePasswordChange('Invester', passwords.investor)} disabled={changingPassword === 'Invester'} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'Invester' ? 'Wait...' : 'Change'}</button>
+                    <button onClick={() => handlePasswordCheck('USER_PASS_INVESTOR', passwords.investor)} disabled={checkingPassword === 'USER_PASS_INVESTOR' || !canManagePasswords} title={!canManagePasswords ? 'No permission to verify passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_INVESTOR' ? '...' : 'Check'}</button>
+                    <button onClick={() => handlePasswordChange('Invester', passwords.investor)} disabled={changingPassword === 'Invester' || !canManagePasswords} title={!canManagePasswords ? 'No permission to change passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'Invester' ? 'Wait...' : 'Change'}</button>
                   </div>
                 </div>
 
@@ -1696,7 +1776,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                     <button
                       onClick={handleDeposit}
-                      disabled={isDepositing || !depositAmount}
+                      disabled={isDepositing || !depositAmount || !canDeposit}
+                      title={!canDeposit ? 'You do not have permission to deposit funds' : undefined}
                       className="mt-4 px-6 h-9 self-end bg-purple-600/80 hover:bg-purple-600 dark:bg-purple-500/80 dark:hover:bg-purple-500 backdrop-blur-md border border-purple-400/50 text-white text-[12px] font-medium rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center"
                     >
                       {isDepositing ? 'Working...' : 'Deposit'}
@@ -1717,7 +1798,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           <div className="h-12 bg-[#252526] border-t border-[#333] flex items-center justify-between px-4 flex-shrink-0">
             
             <div className="flex gap-2">
-              <button onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
+              <button onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
                 {updateLoading ? 'Wait...' : 'Update'}
               </button>
               <button onClick={onClose} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
@@ -1737,6 +1818,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           onClose={() => setCtxMenu(prev => ({ ...prev, isOpen: false }))}
           onModify={handleModifySLTP}
           onCloseTrade={handleDeleteTrade}
+          canManipulateTrades={canManipulateTrades}
         />
       )}
     </div>

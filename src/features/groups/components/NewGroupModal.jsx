@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
 import { fetchManagerApi } from '../../../services/managerFetch';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { PERMISSIONS } from '../../../utils/permissions';
 
 const defaultPayload = {
   name: "",
@@ -24,9 +26,20 @@ const defaultPayload = {
   accountType: "",
   lotDivisor: 0,
   routingMode: "b_book",
-  symbolsAllowed: [],       
+  symbolsAllowed: [],
   symbolsBlocked: []
 };
+
+// Only these keys are ever sent to GroupCreate/GroupUpdate. Anything else that
+// ends up in formData (e.g. server-echoed fields like createdAt/updatedAt/enabled
+// when editing, or values injected via dev-tools) is stripped before submit.
+const GROUP_ALLOWED_FIELDS = Object.keys(defaultPayload);
+
+const pickAllowedFields = (source, allowedKeys) =>
+  allowedKeys.reduce((acc, key) => {
+    if (source[key] !== undefined) acc[key] = source[key];
+    return acc;
+  }, {});
 
 const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]" }) => (
   <div className="flex flex-col gap-1">
@@ -70,6 +83,8 @@ const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
 );
 
 const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
+  const { canAct } = usePermissions();
+  const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [formData, setFormData] = useState(() => {
     const data = { ...(initialData || defaultPayload) };
     if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
@@ -95,6 +110,11 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
   };
 
   const handleSubmit = async () => {
+    if (!canManageGroups) {
+      setError('Your role does not have permission to manage groups.');
+      return;
+    }
+
     if (!formData.name) {
       setError("Group Name is required.");
       return;
@@ -103,12 +123,14 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('authToken');
+      const params = initialData
+        ? new URLSearchParams({ group: String(initialData.name) })
+        : null;
       const url = initialData 
-        ? `/GroupUpdate?id=${token}&group=${initialData.name}`
-        : `/GroupCreate?id=${token}`;
+        ? `/GroupUpdate?${params.toString()}`
+        : '/GroupCreate';
 
-      const payload = { ...formData };
+      const payload = pickAllowedFields(formData, GROUP_ALLOWED_FIELDS);
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -129,7 +151,7 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
       let responseData;
       try {
         responseData = JSON.parse(responseText);
-      } catch (e) {
+      } catch {
         throw new Error(responseText || "Invalid JSON received from server");
       }
 
@@ -252,7 +274,8 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
           </button>
           <button 
             onClick={handleSubmit} 
-            disabled={loading}
+            disabled={loading || !canManageGroups}
+            title={!canManageGroups ? 'No permission to manage groups' : undefined}
             className="px-4 py-1.5 min-w-[80px] text-[12px] bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 rounded-sm flex justify-center items-center gap-2 transition-colors disabled:opacity-50"
           >
             <Save size={13} />

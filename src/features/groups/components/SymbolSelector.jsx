@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Check, Search, X, Layers } from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { ChevronRight, ChevronDown, Check, Search, X } from 'lucide-react';
+import FeedStatusNotice from '../../../components/FeedStatusNotice';
 import useSymbolStore from '../../../store/symbolStore';
+import { getSymbolFeedStatus } from '../../../utils/feedStatus';
 
 const SymbolSelector = ({ label, value = '', onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,6 +12,8 @@ const SymbolSelector = ({ label, value = '', onChange }) => {
 
   // Get symbol metadata (names and categories) from store without price info
   const symbolMetadata = useSymbolStore(state => state.symbolMetadata);
+  const feedError = useSymbolStore(state => state.feedError);
+  const isConnected = useSymbolStore(state => state.isConnected);
   
   // Selected symbols as an array
   const selectedList = useMemo(() => {
@@ -126,10 +129,22 @@ const SymbolSelector = ({ label, value = '', onChange }) => {
             </div>
           </div>
 
+          {feedError && symbolMetadata.length > 0 && (
+            <div className="p-2 border-b dark:border-[#333] bg-white dark:bg-[#1e1e1e]">
+              <FeedStatusNotice feedError={feedError} cachedCount={symbolMetadata.length} compact />
+            </div>
+          )}
+
           {/* Groups List */}
           <div className="overflow-y-auto flex-1 p-1">
             {Object.keys(groupedData).length === 0 ? (
-              <div className="p-4 text-center text-gray-400 text-[11px]">No symbols found</div>
+              feedError && symbolMetadata.length === 0 ? (
+                <div className="p-2">
+                  <FeedStatusNotice feedError={feedError} compact />
+                </div>
+              ) : (
+                <div className="p-4 text-center text-gray-400 text-[11px]">No symbols found</div>
+              )
             ) : (
               Object.entries(groupedData).map(([groupName, syms]) => {
                 const isExpanded = expandedGroups[groupName] || search;
@@ -161,15 +176,22 @@ const SymbolSelector = ({ label, value = '', onChange }) => {
                       <div className="flex flex-col ml-6 pr-1 mt-1 gap-0.5 border-l dark:border-[#333]">
                         {syms.map(s => {
                           const isSelected = selectedList.includes(s.symbol);
+                          const status = getSymbolFeedStatus({ feedError, isConnected, symbol: s });
                           return (
                             <div 
                               key={s.symbol}
                               onClick={() => toggleSymbol(s.symbol)}
                               className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-[#252526] text-gray-600 dark:text-gray-300'}`}
+                              title={status.title}
                             >
                               <span className="text-[11px] font-medium">{s.symbol}</span>
-                              <div className={`w-3.5 h-3.5 border rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-400 dark:border-[#444]'}`}>
-                                {isSelected && <Check size={10} className="text-white" />}
+                              <div className="flex items-center gap-1.5">
+                                {!status.isLive && (
+                                  <span className="text-[9px] uppercase font-bold text-gray-400">{status.label}</span>
+                                )}
+                                <div className={`w-3.5 h-3.5 border rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-400 dark:border-[#444]'}`}>
+                                  {isSelected && <Check size={10} className="text-white" />}
+                                </div>
                               </div>
                             </div>
                           );

@@ -28,14 +28,14 @@ VITE_BACKEND_TARGET=desktop
 
 Runtime config also supports `BACKEND_TARGET`, `VITE_BACKEND_TARGET`, `BACKEND_MODE`, and `VITE_BACKEND_MODE`.
 
-Web mode uses the broker public HTTPS backend domain. Desktop/Electron mode uses the selected broker's direct `server_ip` and `server_port` from broker discovery.
+Web mode uses the broker public HTTPS backend domain. Desktop/Electron mode also prefers configured HTTPS domains, and only uses direct IP/localhost targets when a broker explicitly provides them.
 
 For Grow Trading Academy:
 
 ```text
 UI domain: manager.growtradingacademy.com
 Web backend: https://services.growtradingacademy.com
-Desktop backend: http://103.91.186.142:8091
+Desktop backend: https://services.growtradingacademy.com
 ```
 
 Do not use `manager.growtradingacademy.com` as an API URL. It is only the UI deployment host.
@@ -90,8 +90,8 @@ Mode files:
 
 ```text
 .env.web       -> VITE_BACKEND_TARGET=web
-.env.electron  -> VITE_BACKEND_TARGET=desktop, broker IP resolved dynamically
-.env.desktop   -> VITE_BACKEND_TARGET=desktop, broker IP resolved dynamically
+.env.electron  -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
+.env.desktop   -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
 ```
 
 Electron dev script:
@@ -183,10 +183,10 @@ https://103.91.186.142:443/...
 https://103.91.186.142:8091/...
 ```
 
-Desktop/Electron mode should use the selected broker's direct backend. For GTA that resolves to:
+Desktop/Electron mode should prefer the selected broker's HTTPS backend when one is configured. For GTA that resolves to:
 
 ```text
-http://103.91.186.142:8091/api/v2/...
+https://services.growtradingacademy.com/api/v2/...
 ```
 
 If a browser tab still runs an older `index-*.js` bundle, hard refresh or clear cache.

@@ -4,6 +4,8 @@ import useDataSource from '../../hooks/useDataSource';
 import { ibList, ibDelete } from '../../services/api';
 import IBDetailDrawer from './components/IBDetailDrawer';
 import IBCreateModal from './components/IBCreateModal';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -16,6 +18,8 @@ const STATUS_BADGE = {
 
 const IBListPage = () => {
   const { data: rawData, isLoading, error, reload } = useDataSource(ibList, []);
+  const { canAct } = usePermissions();
+  const canManageIB = canAct(PERMISSIONS.MANAGE_IB);
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedLogin, setSelectedLogin] = useState(null);
@@ -35,6 +39,7 @@ const IBListPage = () => {
 
   const handleDelete = async (e, login) => {
     e.stopPropagation();
+    if (!canManageIB) { alert('Your role does not have permission to manage IB accounts.'); return; }
     if (!window.confirm(`Soft-delete IB ${login}? Status will be set to "removed".`)) return;
     try {
       await ibDelete(login);
@@ -157,7 +162,8 @@ const IBListPage = () => {
                   <td style={{ textAlign: 'center' }}>
                     <button
                       className="ui-btn ui-btn-ghost ui-btn-sm px-1.5"
-                      title="Delete (soft)"
+                      title={canManageIB ? 'Delete (soft)' : 'No permission to manage IB accounts'}
+                      disabled={!canManageIB}
                       onClick={e => handleDelete(e, ib.login)}
                       style={{ color: 'var(--danger-text)' }}
                     >

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Loader2, X } from 'lucide-react';
 import {
   commissionScheduleList, commissionScheduleCreate, commissionScheduleDelete,
   dynamicLeverageList, dynamicLeverageCreate, dynamicLeverageDelete,
   swapFreeGroupList, swapFreeGroupSet, swapFreeGroupDelete,
 } from '../../../services/api';
-import { buildFeedWsUrl } from '../../../config/endpoints';
+import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
 
 // ─── Generic delete-capable table ─────────────────────────────────────────────
 const DeletableTable = ({ rows, columns, idKey, onDelete, deletingId, emptyMsg }) => (
@@ -52,13 +52,16 @@ const CommissionSection = ({ symbol }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [err, setErr] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!symbol) return;
     setLoading(true);
     commissionScheduleList(symbol).then(d => setSchedules(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  };
+  }, [symbol]);
 
-  useEffect(() => { load(); }, [symbol]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -155,13 +158,16 @@ const DynamicLeverageSection = ({ symbol }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [err, setErr] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!symbol) return;
     setLoading(true);
     dynamicLeverageList(symbol).then(d => setTiers(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  };
+  }, [symbol]);
 
-  useEffect(() => { load(); }, [symbol]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -322,46 +328,8 @@ const SwapFreeSection = () => {
 
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const CommissionSwapTab = () => {
-  const [allSymbols, setAllSymbols] = useState([]);
-  const [loadingSymbols, setLoadingSymbols] = useState(true);
+  const { symbols: allSymbols, loading: loadingSymbols, error: symbolLoadError } = useFeedSymbols();
   const [selectedSymbol, setSelectedSymbol] = useState('');
-
-  useEffect(() => {
-    setLoadingSymbols(true);
-    const ws = new WebSocket(buildFeedWsUrl());
-    const symbolSet = new Set();
-    
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
-    ws.onmessage = (e) => {
-      try {
-        const messages = e.data.trim().split('\n');
-        for (let i = 0; i < messages.length; i++) {
-          if (!messages[i]) continue;
-          const msg = JSON.parse(messages[i]);
-          if (msg.symbol) symbolSet.add(msg.symbol);
-        }
-      } catch (err) {}
-    };
-
-    const timer = setTimeout(() => {
-      setAllSymbols(Array.from(symbolSet).sort());
-      setLoadingSymbols(false);
-      if (ws.readyState === WebSocket.OPEN) ws.close();
-    }, 3000);
-
-    ws.onerror = () => {
-      setAllSymbols([]);
-      setLoadingSymbols(false);
-    };
-
-    return () => {
-      clearTimeout(timer);
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
-  }, []);
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-auto">
@@ -370,6 +338,10 @@ const CommissionSwapTab = () => {
         {loadingSymbols ? (
           <div className="flex items-center gap-2 py-1 px-2 text-xs" style={{ color: 'var(--muted)' }}>
             <Loader2 size={12} className="animate-spin" /> Loading symbols…
+          </div>
+        ) : symbolLoadError ? (
+          <div className="py-1 px-2 text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
+            {symbolLoadError}
           </div>
         ) : (
           <select className="ui-input ui-input-sm" style={{ width: 200 }} value={selectedSymbol} onChange={e => setSelectedSymbol(e.target.value)}>

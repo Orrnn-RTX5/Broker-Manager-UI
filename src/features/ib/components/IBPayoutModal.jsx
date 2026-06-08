@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { X, DollarSign, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { ibCommissionPay } from '../../../services/api';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { PERMISSIONS } from '../../../utils/permissions';
 
 const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const IBPayoutModal = ({ login, onClose, onSuccess }) => {
+  const { canAct } = usePermissions();
+  const canManageIB = canAct(PERMISSIONS.MANAGE_IB);
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + '01';
 
@@ -32,6 +36,7 @@ const IBPayoutModal = ({ login, onClose, onSuccess }) => {
 
   const handleCommit = async () => {
     if (!preview) return;
+    if (!canManageIB) { setError('Your role does not have permission to pay out IB commissions.'); return; }
     if (!window.confirm(`Pay ${fmt(preview.unpaid_total)} to IB ${login}? This cannot be undone.`)) return;
     setLoading(true);
     setError(null);
@@ -114,7 +119,8 @@ const IBPayoutModal = ({ login, onClose, onSuccess }) => {
             </button>
           )}
           {!committed && preview && preview.unpaid_count > 0 && (
-            <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleCommit} disabled={loading}
+            <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleCommit} disabled={loading || !canManageIB}
+              title={canManageIB ? undefined : 'No permission to pay out IB commissions'}
               style={{ background: 'var(--ok)', color: 'white' }}>
               {loading ? 'Processing…' : `Pay ${fmt(preview.unpaid_total)}`}
             </button>

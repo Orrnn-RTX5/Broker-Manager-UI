@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Search, Gavel, RefreshCw, Loader, AlertTriangle, User, CheckCircle2, XCircle } from 'lucide-react';
 import { getDealerQueue, orderApprove, orderReject } from '../../services/tradeApi';
 import useDataSource from '../../hooks/useDataSource';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const fmtTime = (unix) => {
@@ -40,6 +42,8 @@ const PromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
 
 const DealerQueuePage = () => {
   const { data: rawData, isLoading, error, reload: refetch } = useDataSource(getDealerQueue, []);
+  const { canAct } = usePermissions();
+  const canDeal = canAct(PERMISSIONS.DEALER_QUEUE);
   const [search, setSearch] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
   const [actionDialog, setActionDialog] = useState(null);
@@ -57,6 +61,7 @@ const DealerQueuePage = () => {
   });
 
   const handleApprove = (row) => {
+    if (!canDeal) { alert('Your role does not have permission to act on the dealer queue.'); return; }
     setActionDialog({
       title: `Approve Order #${row.orderTicket}`,
       fields: [{ key: 'comment', label: 'Comment (optional)', type: 'text' }],
@@ -77,6 +82,7 @@ const DealerQueuePage = () => {
   };
 
   const handleReject = (row) => {
+    if (!canDeal) { alert('Your role does not have permission to act on the dealer queue.'); return; }
     setActionDialog({
       title: `Reject Order #${row.orderTicket}`,
       fields: [{ key: 'comment', label: 'Reason', type: 'text', placeholder: 'e.g. invalid size' }],
@@ -179,7 +185,8 @@ const DealerQueuePage = () => {
                           <button
                             className="ui-btn ui-btn-sm px-2 py-0.5 text-[10px]"
                             style={{ background: 'var(--ok-soft)', color: 'var(--ok-text)', border: '1px solid var(--ok-border)' }}
-                            title="Approve"
+                            title={canDeal ? 'Approve' : 'No permission to act on the dealer queue'}
+                            disabled={!canDeal}
                             onClick={e => { e.stopPropagation(); handleApprove(row); }}
                           >
                             <CheckCircle2 size={11} />
@@ -187,7 +194,8 @@ const DealerQueuePage = () => {
                           <button
                             className="ui-btn ui-btn-sm px-2 py-0.5 text-[10px]"
                             style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)' }}
-                            title="Reject"
+                            title={canDeal ? 'Reject' : 'No permission to act on the dealer queue'}
+                            disabled={!canDeal}
                             onClick={e => { e.stopPropagation(); handleReject(row); }}
                           >
                             <XCircle size={11} />

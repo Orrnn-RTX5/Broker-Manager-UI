@@ -3,18 +3,24 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
 import { ArrowLeft, Users2, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const GroupDetailsPage = () => {
   const { groupName } = useParams();
   const navigate = useNavigate();
+  const { canAct } = usePermissions();
+  const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const { groups, loading, error } = useGroupList();
 
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState(null);
+  const [statsRefreshTick, setStatsRefreshTick] = useState(0);
 
   const [showMoveInput, setShowMoveInput] = useState(false);
   const [toGroupInput, setToGroupInput] = useState('');
+  const [pendingMoveTarget, setPendingMoveTarget] = useState(null);
   const [isMoving, setIsMoving] = useState(false);
 
   useEffect(() => {
@@ -22,10 +28,9 @@ const GroupDetailsPage = () => {
     const fetchStats = async () => {
       setStatsLoading(true);
       setStatsError(null);
-      const token = localStorage.getItem('authToken');
-      if (!token) { setStatsError('Not connected'); setStatsLoading(false); return; }
       try {
-        const res = await fetchManagerApi(`/GroupStats?id=${token}&group=${groupName}`, {
+        const params = new URLSearchParams({ group: String(groupName) });
+        const res = await fetchManagerApi(`/GroupStats?${params.toString()}`, {
           headers: { accept: 'application/json' }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -37,21 +42,45 @@ const GroupDetailsPage = () => {
       }
     };
     fetchStats();
-  }, [groupName]);
+  }, [groupName, statsRefreshTick]);
+
+  const handleToggleMoveInput = () => {
+    setShowMoveInput(prev => {
+      const next = !prev;
+      if (!next) {
+        setToGroupInput('');
+        setPendingMoveTarget(null);
+      }
+      return next;
+    });
+  };
+
+  const handleMoveRequest = () => {
+    const targetGroup = toGroupInput.trim();
+    if (!targetGroup || !groupName) return;
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    setPendingMoveTarget(targetGroup);
+  };
 
   const handleMoveAccounts = async () => {
-    if (!toGroupInput || !groupName) return;
+    if (!pendingMoveTarget || !groupName) return;
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
     setIsMoving(true);
-    const token = localStorage.getItem('authToken');
     try {
-      const res = await fetchManagerApi(`/GroupMoveAccounts?id=${token}&from_group=${groupName}&to_group=${toGroupInput}`, {
+      const params = new URLSearchParams({
+        from_group: String(groupName),
+        to_group: String(pendingMoveTarget),
+      });
+      const res = await fetchManagerApi(`/GroupMoveAccounts?${params.toString()}`, {
         headers: { accept: 'application/json' }
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await res.json();
-      alert(`Successfully moved accounts from ${groupName} to ${toGroupInput}`);
+      alert(`Successfully moved accounts from ${groupName} to ${pendingMoveTarget}`);
       setShowMoveInput(false);
       setToGroupInput('');
+      setPendingMoveTarget(null);
+      setStatsRefreshTick(value => value + 1);
     } catch (err) {
       alert('Error moving accounts: ' + err.message);
     } finally {
@@ -190,7 +219,7 @@ const GroupDetailsPage = () => {
             <button
               className="ui-btn ui-btn-ghost ui-btn-sm p-1"
               title="Move accounts to another group"
-              onClick={() => setShowMoveInput(v => !v)}
+              onClick={handleToggleMoveInput}
             >
               <ArrowRightLeft size={13} />
             </button>
@@ -205,17 +234,49 @@ const GroupDetailsPage = () => {
                   type="text"
                   placeholder="Target group name…"
                   value={toGroupInput}
-                  onChange={e => setToGroupInput(e.target.value)}
+                  onChange={e => {
+                    setToGroupInput(e.target.value);
+                    setPendingMoveTarget(null);
+                  }}
                   className="ui-input ui-input-sm flex-1"
                 />
                 <button
                   className="ui-btn ui-btn-primary ui-btn-sm"
-                  onClick={handleMoveAccounts}
-                  disabled={isMoving || !toGroupInput}
+                  onClick={handleMoveRequest}
+                  disabled={isMoving || !toGroupInput.trim() || !canManageGroups}
+                  title={canManageGroups ? undefined : 'No permission to manage groups'}
                 >
-                  {isMoving ? <Loader size={11} className="animate-spin" /> : 'Move'}
+                  Review
                 </button>
               </div>
+              {pendingMoveTarget && (
+                <div
+                  className="rounded px-2 py-2 flex flex-col gap-2 text-xs"
+                  style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)' }}
+                >
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle size={13} />
+                    Confirm moving all accounts from "{groupName}" to "{pendingMoveTarget}".
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      className="ui-btn ui-btn-secondary ui-btn-sm"
+                      onClick={() => setPendingMoveTarget(null)}
+                      disabled={isMoving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="ui-btn ui-btn-danger ui-btn-sm"
+                      onClick={handleMoveAccounts}
+                      disabled={isMoving || !canManageGroups}
+                      title={canManageGroups ? undefined : 'No permission to manage groups'}
+                    >
+                      {isMoving ? <Loader size={11} className="animate-spin" /> : 'Confirm Move'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

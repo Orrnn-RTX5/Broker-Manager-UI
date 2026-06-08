@@ -1,5 +1,6 @@
 import authService from './authService';
 import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints';
+import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction';
 
 const AUTH_REJECTION_STATUSES = new Set([401, 403]);
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
@@ -9,9 +10,29 @@ const expireAndThrow = (reason) => {
   throw new Error(SESSION_ERROR_MESSAGE);
 };
 
+const browserOrigin = () => {
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return 'http://localhost';
+};
+
+const withoutQueryToken = (url) => {
+  const urlObj = new URL(url, browserOrigin());
+  urlObj.searchParams.delete('id');
+  return urlObj.toString();
+};
+
+const safeRequestBody = (body) => {
+  if (!body || typeof body !== 'string') return undefined;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+};
+
 /**
- * Enhanced fetch wrapper that handles:
- * 1. Automatic inclusion of auth tokens (id param)
+ * Fetch wrapper that handles:
+ * 1. Authorization header attachment
  * 2. Standardized error handling
  * 3. Silent token refresh on 401 Unauthorized
  * 4. Automatic retry after refresh
@@ -22,7 +43,6 @@ const apiClient = {
       ? buildExtApiUrl(endpoint)
       : buildManagerApiUrl(endpoint);
 
-    // Preparation function for headers and URL with current token
     const prepareRequest = () => {
       const sessionStatus = authService.getSessionStatus();
       if (!sessionStatus.authenticated) {
@@ -30,27 +50,24 @@ const apiClient = {
       }
 
       const token = sessionStatus.snapshot.token;
-      const headers = { 'accept': 'application/json', ...options.headers };
-      let finalUrl = url;
+      const headers = { accept: 'application/json', ...options.headers };
+      const finalUrl = withoutQueryToken(url);
 
       if (token) {
-        const urlObj = new URL(url, window.location.origin);
-        urlObj.searchParams.set('id', token);
-        finalUrl = urlObj.toString();
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`;
       }
       return { finalUrl, headers };
     };
 
     const { finalUrl, headers } = prepareRequest();
 
-    console.log(`📤 [API REQUEST] ${options.method || 'GET'} ${finalUrl}`, {
-      headers,
-      body: options.body ? JSON.parse(options.body) : undefined,
+    console.debug(`[API REQUEST] ${options.method || 'GET'} ${redactUrl(finalUrl)}`, {
+      headers: redactHeaders(headers),
+      body: redactSensitive(safeRequestBody(options.body)),
     });
 
     try {
-      let response = await fetch(finalUrl, { ...options, headers });
+      const response = await fetch(finalUrl, { ...options, headers });
 
       if (response.status === 401) {
         console.warn('Authentication expired. Attempting silent refresh...');
@@ -60,15 +77,13 @@ const apiClient = {
           expireAndThrow(sessionStatus.reason || 'token_rejected');
         }
 
-        // Wait for refreshSession (which has its own lock)
         const newToken = await authService.refreshSession();
 
         if (newToken) {
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
-          return await fetch(retryUrl, { ...options, headers: retryHeaders }).then(res => this.handleResponse(res));
-        } else {
-          expireAndThrow('refresh_failed');
+          return await fetch(retryUrl, { ...options, headers: retryHeaders }).then((res) => this.handleResponse(res));
         }
+        expireAndThrow('refresh_failed');
       }
 
       if (response.status === 403) {
@@ -77,7 +92,7 @@ const apiClient = {
 
       return await this.handleResponse(response);
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error('API request failed:', redactSensitive(error));
       throw error;
     }
   },
@@ -93,10 +108,10 @@ const apiClient = {
           expireAndThrow('token_rejected');
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
-        console.error(`📥 [API RESPONSE ERROR] ${response.status}`, errMsg, text);
+        console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
         throw new Error(errMsg);
       }
-      console.log(`📥 [API RESPONSE SUCCESS] ${response.status}`, text);
+      console.debug(`[API RESPONSE SUCCESS] ${response.status}`, redactSensitive(text));
       return text;
     }
 
@@ -105,11 +120,11 @@ const apiClient = {
         expireAndThrow('token_rejected');
       }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;
-      console.error(`📥 [API RESPONSE ERROR] ${response.status}`, errorMsg, data);
+      console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
       throw new Error(errorMsg);
     }
 
-    console.log(`📥 [API RESPONSE SUCCESS] ${response.status}`, data);
+    console.debug(`[API RESPONSE SUCCESS] ${response.status}`, redactSensitive(data));
     return data;
   },
 
@@ -124,7 +139,7 @@ const apiClient = {
       headers: { 'Content-Type': 'application/json', ...options.headers },
       body: JSON.stringify(body),
     });
-  }
+  },
 };
 
 export default apiClient;

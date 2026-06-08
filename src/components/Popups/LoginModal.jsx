@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { X, AlertCircle, Loader2, Link2 } from 'lucide-react';
-import { fetchManagerApi } from '../../services/managerFetch';
 
-const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
+const LoginModal = ({ isOpen, onClose }) => {
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [server, setServer] = useState('10.20');
@@ -22,27 +21,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetchManagerApi(
-        `/Connect?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}`,
-        { method: 'GET', headers: { accept: 'application/json' } }
-      );
-
-      if (!response.ok) {
-        throw new Error('Connection failed. Please check your credentials.');
-      }
-
-      const data = await response.json();
-      const finalToken = data.token;
-
-      if (!finalToken) {
-        throw new Error('Invalid credentials. Server rejected the connection.');
-      }
-
-      const auth = await import('../../services/authService');
-      auth.setSession(data);
-      
-      if (onLoginSuccess) onLoginSuccess(finalToken);
-      onClose();
+      throw new Error('Direct server login is disabled. Use the broker login screen.');
     } catch (err) {
       setError(err.message || 'An error occurred during connection.');
     } finally {

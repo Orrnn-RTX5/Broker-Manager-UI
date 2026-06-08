@@ -3,9 +3,13 @@ import { Shield, Search, RefreshCw, User, AlertTriangle, Edit3, Trash2 } from 'l
 import useDataSource from '../../hooks/useDataSource';
 import { accountRestrictList, accountRestrictClear } from '../../services/tradeApi';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const RestrictedAccountsPage = () => {
   const { data: rawData, isLoading, error, reload: refetch } = useDataSource(accountRestrictList, []);
+  const { canAct } = usePermissions();
+  const canEditRestrictions = canAct(PERMISSIONS.EDIT_ACCOUNTS);
   const [search, setSearch] = useState('');
   const [editLogin, setEditLogin] = useState(null);
 
@@ -16,6 +20,7 @@ const RestrictedAccountsPage = () => {
   });
 
   const handleClear = async (login) => {
+    if (!canEditRestrictions) { alert('Your role does not have permission to clear account restrictions.'); return; }
     if (!window.confirm(`Clear all restrictions for login ${login}?`)) return;
     try {
       await accountRestrictClear(login);
@@ -106,7 +111,7 @@ const RestrictedAccountsPage = () => {
                           <button className="ui-btn ui-btn-ghost ui-btn-sm px-1.5" title="Edit" onClick={e => { e.stopPropagation(); setEditLogin(row.accountLogin); }}>
                             <Edit3 size={12} style={{ color: 'var(--accent)' }} />
                           </button>
-                          <button className="ui-btn ui-btn-ghost ui-btn-sm px-1.5" title="Clear" onClick={e => { e.stopPropagation(); handleClear(row.accountLogin); }}>
+                          <button className="ui-btn ui-btn-ghost ui-btn-sm px-1.5" title={canEditRestrictions ? 'Clear' : 'No permission to clear restrictions'} disabled={!canEditRestrictions} onClick={e => { e.stopPropagation(); handleClear(row.accountLogin); }}>
                             <Trash2 size={12} style={{ color: 'var(--danger-text)' }} />
                           </button>
                         </div>

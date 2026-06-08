@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -25,6 +25,7 @@ import {
   rememberBroker,
   setAuthSession,
   setBrokerInfo,
+  getBrokerSelectionId,
 } from '../../services/brokerAuth';
 
 // ---------------------------------------------------------------------------
@@ -111,7 +112,7 @@ const BrokerLogo = ({ broker, size = 40, fallback: Fallback = Building2 }) => {
         color: 'var(--accent-text)',
       }}
     >
-      <Fallback size={Math.max(16, Math.round(size * 0.45))} aria-hidden="true" />
+      {createElement(Fallback, { size: Math.max(16, Math.round(size * 0.45)), 'aria-hidden': 'true' })}
     </span>
   );
 };
@@ -119,7 +120,7 @@ const BrokerLogo = ({ broker, size = 40, fallback: Fallback = Building2 }) => {
 const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
-  const selectedBroker = brokers.find((broker) => broker.broker_id === selectedId);
+  const selectedBroker = brokers.find((broker) => getBrokerSelectionId(broker) === selectedId);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -149,8 +150,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
             {selectedBroker?.name || 'Select broker'}
           </span>
           <span className="block truncate text-xs tabular" style={{ color: 'var(--text-3)' }}>
-            {selectedBroker?.broker_id || 'No broker selected'}
-            {selectedBroker?.server_ip ? ` / ${selectedBroker.server_ip}` : ''}
+            {selectedBroker ? getBrokerSelectionId(selectedBroker) || selectedBroker.broker_id : 'No broker selected'}
           </span>
         </span>
         <ChevronDown
@@ -172,15 +172,16 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
           }}
         >
           {brokers.map((broker) => {
-            const selected = broker.broker_id === selectedId;
+            const optionId = getBrokerSelectionId(broker);
+            const selected = optionId === selectedId;
             return (
               <button
-                key={broker.broker_id}
+                key={optionId || broker.broker_id}
                 type="button"
                 role="option"
                 aria-selected={selected}
                 onClick={() => {
-                  onChange(broker.broker_id);
+                  onChange(optionId);
                   setOpen(false);
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5"
@@ -195,7 +196,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
                   </span>
                   <span className="block truncate text-xs tabular" style={{ color: 'var(--text-3)' }}>
                     {broker.broker_id}
-                    {broker.server_ip ? ` / ${broker.server_ip}` : ''}
+                    {optionId && optionId !== broker.broker_id ? ` / ${optionId}` : ''}
                   </span>
                 </span>
                 {selected && <Check size={16} style={{ color: 'var(--accent-text)' }} aria-hidden="true" />}
@@ -226,7 +227,7 @@ export const BrokerSelector = () => {
     fetchBrokerList()
       .then((list) => {
         setBrokerList(list);
-        if (list.length > 0) setSelectedId(list[0].broker_id);
+        if (list.length > 0) setSelectedId(getBrokerSelectionId(list[0]));
       })
       .catch((err) => setListError(err.message || 'Failed to load brokers.'))
       .finally(() => setListLoading(false));
@@ -334,7 +335,7 @@ export const BrokerSelector = () => {
                 aria-label="Select broker"
               >
                 {brokerList.map((broker) => (
-                  <option key={broker.broker_id} value={broker.broker_id}>
+                  <option key={getBrokerSelectionId(broker) || broker.broker_id} value={getBrokerSelectionId(broker)}>
                     {broker.name} — {broker.broker_id}
                   </option>
                 ))}
@@ -386,7 +387,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
       return;
     }
     setBrokerInfoState(storedBroker);
-    setServer(storedBroker.server_ip || '');
+    setServer(getBrokerSelectionId(storedBroker));
   }, [navigate]);
 
   const handleSwitchBroker = () => {
@@ -571,7 +572,7 @@ const Field = ({ id, label, icon: Icon, value, onChange, type = 'text', readOnly
     </label>
     <div className="relative">
       <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'var(--muted)' }}>
-        <Icon size={16} aria-hidden="true" />
+        {createElement(Icon, { size: 16, 'aria-hidden': 'true' })}
       </span>
       <input
         id={id}

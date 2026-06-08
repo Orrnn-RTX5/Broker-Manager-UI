@@ -1,13 +1,14 @@
 import { Users, DollarSign, BarChart3, Wallet } from 'lucide-react';
 import ComingSoon from '../../components/ComingSoon';
+import { DASHBOARD_PLACEHOLDER_MODE } from './dashboardState';
 
-const Kpi = ({ icon: Icon, label, value, hint }) => (
+const Kpi = ({ icon, label, value, hint }) => (
   <div className="ui-card ui-card-hover p-5 flex flex-col gap-3">
     <div
       className="w-10 h-10 rounded-lg flex items-center justify-center"
       style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
     >
-      <Icon size={18} />
+      {icon}
     </div>
     <div>
       <div className="text-xs uppercase tracking-wider font-medium mb-1" style={{ color: 'var(--text-3)' }}>
@@ -27,7 +28,7 @@ const Kpi = ({ icon: Icon, label, value, hint }) => (
 
 const Dashboard = () => {
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-6">
+    <div className="p-6 w-full h-full flex flex-col gap-6" data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}>
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>
@@ -41,10 +42,10 @@ const Dashboard = () => {
 
       {/* KPI row — live values pending backend aggregation endpoints */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi icon={Users}      label="Real Accounts"   hint="Live metric pending" />
-        <Kpi icon={DollarSign} label="Deposits 24h"    hint="Live metric pending" />
-        <Kpi icon={BarChart3}  label="Open Positions"  hint="Live metric pending" />
-        <Kpi icon={Wallet}     label="Equity"          hint="Live metric pending" />
+        <Kpi icon={<Users size={18} />}      label="Real Accounts"   hint="Live metric pending" />
+        <Kpi icon={<DollarSign size={18} />} label="Deposits 24h"    hint="Live metric pending" />
+        <Kpi icon={<BarChart3 size={18} />}  label="Open Positions"  hint="Live metric pending" />
+        <Kpi icon={<Wallet size={18} />}     label="Equity"          hint="Live metric pending" />
       </div>
 
       {/* Charts row — rendered when the backend aggregation endpoints ship */}

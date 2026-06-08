@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, TrendingUp, Coins, BarChart3, Droplets, Hash, ChevronRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import FeedStatusNotice from '../../components/FeedStatusNotice';
 import useSymbolStore from '../../store/symbolStore';
 
 const CATEGORY_META = {
@@ -15,6 +16,7 @@ const CATEGORY_META = {
 const SymbolsOverviewPage = () => {
   const navigate = useNavigate();
   const counts = useSymbolStore(useShallow(state => state.getGroupCounts()));
+  const feedError = useSymbolStore(state => state.feedError);
 
   return (
     <div className="p-6 w-full h-full flex flex-col gap-6 overflow-y-auto" style={{ background: 'var(--bg)' }}>
@@ -22,6 +24,10 @@ const SymbolsOverviewPage = () => {
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Symbol Browser</h1>
         <p className="text-sm" style={{ color: 'var(--text-3)' }}>Select a category to view live market symbols</p>
       </div>
+
+      {feedError && (
+        <FeedStatusNotice feedError={feedError} className="max-w-2xl" />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(CATEGORY_META).map(([name, meta]) => {

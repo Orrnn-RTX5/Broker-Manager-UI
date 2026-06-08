@@ -1,13 +1,23 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import FeedStatusNotice from '../../components/FeedStatusNotice';
 import useSymbolStore from '../../store/symbolStore';
+import { getSymbolFeedStatus } from '../../utils/feedStatus';
+
+const getStatusDotClass = (status) => {
+  if (status.isLive) return 'bg-green-500 animate-pulse';
+  if (status.tone === 'warning') return 'bg-amber-500';
+  return 'bg-gray-400';
+};
 
 const SymbolListPage = () => {
   const { group } = useParams();
   const navigate = useNavigate();
   const symbols = useSymbolStore(useShallow(state => state.getSymbolsByCategory(group)));
+  const feedError = useSymbolStore(state => state.feedError);
+  const isConnected = useSymbolStore(state => state.isConnected);
   const [search, setSearch] = useState('');
 
   const filteredSymbols = useMemo(() => {
@@ -43,6 +53,10 @@ const SymbolListPage = () => {
         />
       </div>
 
+      {feedError && (
+        <FeedStatusNotice feedError={feedError} cachedCount={symbols.length} className="max-w-2xl" />
+      )}
+
       {/* List */}
       <div className="ui-card flex-1 overflow-hidden flex flex-col border" style={{ borderColor: 'var(--border)' }}>
         <div className="overflow-auto flex-1">
@@ -63,25 +77,31 @@ const SymbolListPage = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSymbols.map((item) => (
-                  <tr key={item.symbol} className="hover:bg-[var(--surface-hover)] transition-colors">
-                    <td className="px-4 py-3 font-bold" style={{ color: 'var(--text)' }}>{item.symbol}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
-                       {item.bid}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
-                       {item.ask}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-center items-center">
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--surface-2)] border border-[var(--border)]">
-                           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                           <span className="text-[10px] uppercase font-bold" style={{ color: 'var(--text-3)' }}>Live</span>
+                filteredSymbols.map((item) => {
+                  const status = getSymbolFeedStatus({ feedError, isConnected, symbol: item });
+                  return (
+                    <tr key={item.symbol} className="hover:bg-[var(--surface-hover)] transition-colors">
+                      <td className="px-4 py-3 font-bold" style={{ color: 'var(--text)' }}>{item.symbol}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
+                         {item.bid}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
+                         {item.ask}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center items-center">
+                          <div
+                            className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--surface-2)] border border-[var(--border)]"
+                            title={status.title}
+                          >
+                             <div className={`w-1.5 h-1.5 rounded-full ${getStatusDotClass(status)}`} />
+                             <span className="text-[10px] uppercase font-bold" style={{ color: 'var(--text-3)' }}>{status.label}</span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
