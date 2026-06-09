@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   discoverBrokerById,
   fetchBrokerList,
+  getBrokerDisplayServerName,
   getBrokerSelectionId,
   loginManager,
 } from './brokerAuth.js';
@@ -89,6 +90,17 @@ test('discoverBrokerById can resolve by the opaque server handle', () => {
   );
 
   assert.equal(broker.broker_id, 'testorrnn');
+});
+
+test('getBrokerDisplayServerName prefers the real GTA server address over the opaque server handle', () => {
+  const broker = {
+    broker_id: 'gta_broker',
+    broker_name: 'Grow Trading Academy',
+    server: 'broker-server-2',
+  };
+
+  assert.equal(getBrokerDisplayServerName(broker), '103.91.186.142');
+  assert.equal(getBrokerSelectionId(broker), 'broker-server-2');
 });
 
 test('loginManager sends the selected opaque server handle to the broker backend', async () => {

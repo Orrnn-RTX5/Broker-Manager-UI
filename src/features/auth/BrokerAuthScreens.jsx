@@ -25,6 +25,7 @@ import {
   rememberBroker,
   setAuthSession,
   setBrokerInfo,
+  getBrokerDisplayServerName,
   getBrokerSelectionId,
 } from '../../services/brokerAuth';
 
@@ -150,7 +151,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
             {selectedBroker?.name || 'Select broker'}
           </span>
           <span className="block truncate text-xs tabular" style={{ color: 'var(--text-3)' }}>
-            {selectedBroker ? getBrokerSelectionId(selectedBroker) || selectedBroker.broker_id : 'No broker selected'}
+            {selectedBroker ? selectedBroker.broker_id || getBrokerDisplayServerName(selectedBroker) : 'No broker selected'}
           </span>
         </span>
         <ChevronDown
@@ -195,8 +196,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
                     {broker.name}
                   </span>
                   <span className="block truncate text-xs tabular" style={{ color: 'var(--text-3)' }}>
-                    {broker.broker_id}
-                    {optionId && optionId !== broker.broker_id ? ` / ${optionId}` : ''}
+                    {broker.broker_id || getBrokerDisplayServerName(broker)}
                   </span>
                 </span>
                 {selected && <Check size={16} style={{ color: 'var(--accent-text)' }} aria-hidden="true" />}
@@ -430,7 +430,15 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
     >
       <Field id="manager-login" label="Login" type="number" icon={User} value={user} onChange={setUser} required />
       <PasswordField id="manager-password" value={password} onChange={setPassword} />
-      <Field id="manager-server" label="Server" icon={Server} value={server} onChange={setServer} readOnly required />
+      <Field
+        id="manager-server"
+        label="Server"
+        icon={Server}
+        value={getBrokerDisplayServerName(brokerInfo)}
+        onChange={() => {}}
+        readOnly
+        required
+      />
     </LoginScreen>
   );
 };

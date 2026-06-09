@@ -1,4 +1,9 @@
-import { getRuntimeConfigValue, normalizeBrokerInfo, resolveBrokerBackendUrl } from '../config/backendTarget.js';
+import {
+  getRuntimeConfigValue,
+  normalizeBrokerInfo,
+  resolveBrokerBackendUrl,
+  resolveBrokerDefaultMt5Server,
+} from '../config/backendTarget.js';
 import { buildManagerApiUrl, updateDynamicEndpoints } from '../config/endpoints.js';
 import { normalizeTokenExpiresAt, setSession } from './authService.js';
 
@@ -105,6 +110,25 @@ export const fetchBrokerList = async () => {
 // ---------------------------------------------------------------------------
 export const getBrokerSelectionId = (broker = {}) =>
   broker.server || broker.server_handle || broker.handle || broker.broker_id || broker.id || '';
+
+export const getBrokerDisplayServerName = (broker = {}) => {
+  const normalized = normalizeBrokerInfo(broker);
+  return (
+    broker.server_name ||
+    broker.display_server_name ||
+    broker.default_mt5_server ||
+    broker.mt5_server ||
+    normalized.server_ip ||
+    resolveBrokerDefaultMt5Server(normalized, normalized.backend_url) ||
+    broker.server_url ||
+    broker.broker_name ||
+    broker.name ||
+    broker.display_name ||
+    broker.broker_id ||
+    broker.id ||
+    getBrokerSelectionId(broker)
+  );
+};
 
 export const discoverBrokerById = (brokerList, brokerId) => {
   const found = brokerList.find((b) => getBrokerSelectionId(b) === brokerId || b.broker_id === brokerId);
