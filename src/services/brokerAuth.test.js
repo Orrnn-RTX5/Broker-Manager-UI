@@ -6,6 +6,7 @@ import {
   getBrokerDisplayServerName,
   getBrokerSelectionId,
   loginManager,
+  resolveDefaultBrokerSelectionId,
 } from './brokerAuth.js';
 
 const createStorage = () => {
@@ -101,6 +102,74 @@ test('getBrokerDisplayServerName prefers the real GTA server address over the op
 
   assert.equal(getBrokerDisplayServerName(broker), '103.91.186.142');
   assert.equal(getBrokerSelectionId(broker), 'broker-server-2');
+});
+
+test('resolveDefaultBrokerSelectionId prefers broker matching the current manager hostname', () => {
+  const brokers = [
+    {
+      broker_id: 'alphafx',
+      name: 'Alpha FX Markets',
+      server: 'broker-alpha',
+      domain: 'manager.alphafx.example',
+    },
+    {
+      broker_id: 'myprop_trade',
+      name: 'MyProp Trade',
+      server: 'broker-myprop',
+      domain: 'myprop.trade',
+    },
+    {
+      broker_id: 'gta_broker',
+      name: 'Grow Trading Academy',
+      server: 'broker-gta',
+      manager_url: 'https://manager.growtradingacademy.com/manager-login',
+    },
+  ];
+
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'manager.myprop.trade',
+      storedBrokerId: 'broker-alpha',
+    }),
+    'broker-myprop'
+  );
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'manager.growtradingacademy.com',
+      storedBrokerId: 'broker-alpha',
+    }),
+    'broker-gta'
+  );
+});
+
+test('resolveDefaultBrokerSelectionId falls back to stored broker and then response order', () => {
+  const brokers = [
+    {
+      broker_id: 'alphafx',
+      name: 'Alpha FX Markets',
+      server: 'broker-alpha',
+    },
+    {
+      broker_id: 'myprop_trade',
+      name: 'MyProp Trade',
+      server: 'broker-myprop',
+    },
+  ];
+
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'unknown.example',
+      storedBrokerId: 'myprop_trade',
+    }),
+    'broker-myprop'
+  );
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'unknown.example',
+      storedBrokerId: 'missing',
+    }),
+    'broker-alpha'
+  );
 });
 
 test('loginManager sends the selected opaque server handle to the broker backend', async () => {

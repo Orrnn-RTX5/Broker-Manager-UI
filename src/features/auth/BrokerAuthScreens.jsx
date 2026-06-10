@@ -23,6 +23,7 @@ import {
   loginAdmin,
   loginManager,
   rememberBroker,
+  resolveDefaultBrokerSelectionId,
   setAuthSession,
   setBrokerInfo,
   getBrokerDisplayServerName,
@@ -278,7 +279,9 @@ export const BrokerSelector = () => {
     fetchBrokerList()
       .then((list) => {
         setBrokerList(list);
-        if (list.length > 0) setSelectedId(getBrokerSelectionId(list[0]));
+        setSelectedId(resolveDefaultBrokerSelectionId(list, {
+          storedBrokerId: getBrokerSelectionId(getBrokerInfo() || {}),
+        }));
       })
       .catch((err) => setListError(err.message || 'Failed to load brokers.'))
       .finally(() => setListLoading(false));
@@ -433,9 +436,8 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
 
     fetchBrokerList()
       .then((list) => {
-        const hasStoredBroker = storedId && list.some((broker) => getBrokerSelectionId(broker) === storedId);
         setBrokerList(list);
-        setSelectedId(hasStoredBroker ? storedId : (list[0] ? getBrokerSelectionId(list[0]) : ''));
+        setSelectedId(resolveDefaultBrokerSelectionId(list, { storedBrokerId: storedId }));
       })
       .catch((err) => {
         setBrokerList([]);
