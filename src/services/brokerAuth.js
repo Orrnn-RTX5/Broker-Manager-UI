@@ -101,6 +101,8 @@ export const getBrokerSelectionId = (broker = {}) =>
 
 const HOSTNAME_DOMAIN_KEYS = [
   'domain',
+  'domain_name',
+  'domainName',
   'manager_domain',
   'managerDomain',
   'manager_url',
@@ -119,11 +121,29 @@ const HOSTNAME_DOMAIN_KEYS = [
   'webDomain',
   'web_url',
   'webUrl',
+  'server_domain',
+  'serverDomain',
+  'server_url',
+  'serverUrl',
+  'services_domain',
+  'servicesDomain',
+  'service_domain',
+  'serviceDomain',
+  'backend_url',
+  'backendUrl',
+  'api_url',
+  'apiUrl',
+  'market_api_url',
+  'marketApiUrl',
+  'webterminal_domain',
+  'webterminalDomain',
   'env.DOMAIN',
   'env.MANAGER_DOMAIN',
   'env.VITE_MANAGER_DOMAIN',
   'env.UI_DOMAIN',
   'env.VITE_UI_DOMAIN',
+  'env.API_HOST',
+  'env.VITE_API_HOST',
 ];
 
 const HOSTNAME_DOMAIN_ARRAY_KEYS = [
@@ -144,6 +164,8 @@ const HOSTNAME_DOMAIN_ARRAY_KEYS = [
 
 const HOSTNAME_OBJECT_KEYS = [
   'domain',
+  'domain_name',
+  'domainName',
   'hostname',
   'host',
   'url',
@@ -155,6 +177,39 @@ const HOSTNAME_OBJECT_KEYS = [
   'uiDomain',
   'ui_url',
   'uiUrl',
+  'server',
+  'server_domain',
+  'serverDomain',
+  'services',
+  'services_domain',
+  'servicesDomain',
+  'service_domain',
+  'serviceDomain',
+  'backend',
+  'backend_url',
+  'backendUrl',
+  'api',
+  'api_url',
+  'apiUrl',
+  'webterminal',
+  'webterminal_domain',
+  'webterminalDomain',
+];
+
+const RUNTIME_BROKER_ID_KEYS = [
+  'FEED_BROKER_ID',
+  'VITE_FEED_BROKER_ID',
+  'BROKER_ID',
+  'VITE_BROKER_ID',
+];
+
+const RUNTIME_HOSTNAME_KEYS = [
+  'API_HOST',
+  'VITE_API_HOST',
+  'API_HOST_EXT',
+  'VITE_API_HOST_EXT',
+  'WS_HOST',
+  'VITE_WS_HOST',
 ];
 
 const getNestedValue = (source, path) => {
@@ -224,16 +279,49 @@ export const brokerMatchesHostname = (broker = {}, hostname = '') => {
   return false;
 };
 
+const normalizeSelectionValue = (value = '') => String(value || '').trim().toLowerCase();
+
+const brokerMatchesSelectionId = (broker = {}, selectionId = '') => {
+  const normalizedSelectionId = normalizeSelectionValue(selectionId);
+  if (!normalizedSelectionId) return false;
+
+  return [
+    getBrokerSelectionId(broker),
+    broker.broker_id,
+    broker.id,
+    broker.slug,
+    broker.handle,
+    broker.server_handle,
+  ].some((candidate) => normalizeSelectionValue(candidate) === normalizedSelectionId);
+};
+
+const getRuntimeBrokerId = () => getRuntimeConfigValue(RUNTIME_BROKER_ID_KEYS);
+
+const getRuntimeHostnames = () => RUNTIME_HOSTNAME_KEYS
+  .map((key) => getRuntimeConfigValue([key]))
+  .filter(Boolean);
+
 export const resolveDefaultBrokerSelectionId = (
   brokerList = [],
-  { currentHostname = typeof window !== 'undefined' ? window.location?.hostname : '', storedBrokerId = '' } = {}
+  {
+    currentHostname = typeof window !== 'undefined' ? window.location?.hostname : '',
+    runtimeBrokerId = getRuntimeBrokerId(),
+    runtimeHostnames = getRuntimeHostnames(),
+    storedBrokerId = '',
+  } = {}
 ) => {
+  const runtimeBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId));
+  if (runtimeBroker) return getBrokerSelectionId(runtimeBroker);
+
   const hostnameMatchedBroker = brokerList.find((broker) => brokerMatchesHostname(broker, currentHostname));
   if (hostnameMatchedBroker) return getBrokerSelectionId(hostnameMatchedBroker);
 
-  const storedBroker = brokerList.find((broker) => (
-    getBrokerSelectionId(broker) === storedBrokerId || broker.broker_id === storedBrokerId
+  const runtimeHostnameMatchedBroker = brokerList.find((broker) => (
+    runtimeHostnames.some((hostname) => brokerMatchesHostname(broker, hostname))
   ));
+  if (runtimeHostnameMatchedBroker) return getBrokerSelectionId(runtimeHostnameMatchedBroker);
+
+  const storedBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, storedBrokerId));
   if (storedBroker) return getBrokerSelectionId(storedBroker);
 
   return brokerList[0] ? getBrokerSelectionId(brokerList[0]) : '';

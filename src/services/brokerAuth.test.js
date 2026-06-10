@@ -142,6 +142,66 @@ test('resolveDefaultBrokerSelectionId prefers broker matching the current manage
   );
 });
 
+test('resolveDefaultBrokerSelectionId prefers runtime broker id before stored broker', () => {
+  const brokers = [
+    {
+      broker_id: 'alphafx',
+      name: 'Alpha FX Markets',
+      server: 'broker-alpha',
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'services.myprop.trade:443',
+      domain_name: 'services.myprop.trade',
+      manager_domain: '',
+    },
+  ];
+
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'manager.myprop.trade',
+      runtimeBrokerId: 'myprop-trade',
+      storedBrokerId: 'broker-alpha',
+    }),
+    'services.myprop.trade:443'
+  );
+});
+
+test('resolveDefaultBrokerSelectionId can match runtime service host when manager domain is missing', () => {
+  const brokers = [
+    {
+      broker_id: 'alphafx',
+      name: 'Alpha FX Markets',
+      server: 'broker-alpha',
+      domains: {
+        manager: '',
+        services: '',
+      },
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'services.myprop.trade:443',
+      domain_name: 'services.myprop.trade',
+      domains: {
+        manager: '',
+        services: 'services.myprop.trade',
+      },
+    },
+  ];
+
+  assert.equal(
+    resolveDefaultBrokerSelectionId(brokers, {
+      currentHostname: 'manager.myprop.trade',
+      runtimeBrokerId: '',
+      runtimeHostnames: ['https://services.myprop.trade'],
+      storedBrokerId: 'broker-alpha',
+    }),
+    'services.myprop.trade:443'
+  );
+});
+
 test('resolveDefaultBrokerSelectionId falls back to stored broker and then response order', () => {
   const brokers = [
     {
