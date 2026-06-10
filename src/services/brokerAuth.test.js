@@ -69,7 +69,7 @@ test('fetchBrokerList uses the v2 public broker discovery contract and preserves
   const brokers = await fetchBrokerList();
 
   assert.equal(fetchCalls.length, 1);
-  assert.match(fetchCalls[0].url, /\/api\/v2\/broker\/servers$/);
+  assert.equal(fetchCalls[0].url, 'https://superbackend.orrnn.com/api/v2/broker/servers');
   assert.equal(fetchCalls[0].options.credentials, 'omit');
   assert.equal(brokers.length, 1);
   assert.equal(brokers[0].broker_id, 'testorrnn');

@@ -2,11 +2,11 @@ import { useCallback, useRef, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
-import { AdminLogin, BrokerSelector, ManagerLogin } from './features/auth/BrokerAuthScreens';
+import { AdminLogin, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
-import { clearBrokerInfo, getBrokerInfo } from './services/brokerAuth';
+import { clearBrokerInfo } from './services/brokerAuth';
 
 import Dashboard from './features/dashboard/Dashboard';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
@@ -55,8 +55,6 @@ function App() {
     authService.expireSession(status.reason || fallbackReason);
     return false;
   }, [rememberValidSession]);
-
-  const getUnauthenticatedRedirect = () => (getBrokerInfo() ? '/manager-login' : '/');
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -177,17 +175,15 @@ function App() {
     setIsAuthenticated(false);
   };
 
-  const unauthenticatedRedirect = getUnauthenticatedRedirect();
-
   return (
     <Router>
       <GlobalErrorBoundary>
         {!isAuthenticated ? (
           <Routes>
-            <Route path="/" element={<BrokerSelector />} />
+            <Route path="/" element={<Navigate to="/manager-login" replace />} />
             <Route path="/manager-login" element={<ManagerLogin onLoginSuccess={handleLogin} />} />
             <Route path="/admin-login" element={<AdminLogin onLoginSuccess={handleLogin} />} />
-            <Route path="*" element={<Navigate to={unauthenticatedRedirect} replace />} />
+            <Route path="*" element={<Navigate to="/manager-login" replace />} />
           </Routes>
         ) : (
           <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>

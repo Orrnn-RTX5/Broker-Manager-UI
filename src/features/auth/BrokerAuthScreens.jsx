@@ -1,4 +1,4 @@
-import { createElement, useEffect, useRef, useState } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -29,25 +29,79 @@ import {
   getBrokerSelectionId,
 } from '../../services/brokerAuth';
 
+const AUTH_HERO_IMAGE = '/login-trading-hero.png';
+const BRAND_LOGO = '/brand-logo.png';
+
 // ---------------------------------------------------------------------------
 // Shell & shared UI primitives
 // ---------------------------------------------------------------------------
 const AuthShell = ({ children }) => (
   <div
-    className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
-    style={{ background: 'var(--bg)' }}
+    className="min-h-screen relative overflow-y-auto"
+    style={{
+      background:
+        'linear-gradient(135deg, #f7f8fa 0%, #ffffff 42%, #edf7e7 100%)',
+    }}
   >
     <div
       aria-hidden="true"
       className="absolute inset-0 pointer-events-none"
       style={{
         background:
-          'radial-gradient(600px 400px at 15% 10%, var(--accent-soft-2) 0%, transparent 60%), radial-gradient(500px 300px at 90% 90%, var(--accent-soft) 0%, transparent 55%)',
+          'radial-gradient(680px 420px at 76% 14%, rgba(122, 193, 61, 0.14) 0%, transparent 62%), radial-gradient(520px 360px at 96% 96%, rgba(16, 24, 40, 0.08) 0%, transparent 58%)',
       }}
     />
-    <div className="ui-card w-full max-w-md p-8 relative z-10" style={{ boxShadow: 'var(--shadow-xl)' }}>
-      {children}
+    <div className="relative z-10 flex min-h-screen flex-col lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
+      <div className="relative h-44 overflow-hidden lg:h-auto lg:min-h-screen">
+        <img
+          src={AUTH_HERO_IMAGE}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable="false"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(90deg, rgba(8, 12, 14, 0.18) 0%, rgba(8, 12, 14, 0.02) 48%, rgba(8, 12, 14, 0.70) 100%)',
+          }}
+        />
+      </div>
+
+      <main className="flex w-full flex-1 items-center justify-center px-4 py-8 sm:px-6 lg:px-10">
+        <div
+          className="ui-card w-full min-w-0 p-7 sm:p-8"
+          style={{
+            boxSizing: 'border-box',
+            borderColor: 'rgba(208, 213, 221, 0.84)',
+            boxShadow: '0 22px 52px rgba(16, 24, 40, 0.14)',
+            maxWidth: 440,
+            width: 'calc(100vw - 80px)',
+          }}
+        >
+          {children}
+        </div>
+      </main>
     </div>
+  </div>
+);
+
+const ProductHeader = ({ subtitle }) => (
+  <div className="text-center mb-8">
+    <span
+      className="mx-auto mb-4 flex h-16 w-56 items-center justify-center overflow-hidden"
+    >
+      <img
+        src={BRAND_LOGO}
+        alt="RTX5"
+        className="h-full w-full object-contain"
+        draggable="false"
+      />
+    </span>
+    <p className="mt-1 text-sm" style={{ color: 'var(--text-3)' }}>
+      {subtitle}
+    </p>
   </div>
 );
 
@@ -149,9 +203,6 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium" style={{ color: 'var(--text)' }}>
             {selectedBroker?.name || 'Select broker'}
-          </span>
-          <span className="block truncate text-xs tabular" style={{ color: 'var(--text-3)' }}>
-            {selectedBroker ? selectedBroker.broker_id || getBrokerDisplayServerName(selectedBroker) : 'No broker selected'}
           </span>
         </span>
         <ChevronDown
@@ -258,20 +309,7 @@ export const BrokerSelector = () => {
 
   return (
     <AuthShell>
-      <div className="text-center mb-8">
-        <div
-          className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4"
-          style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
-        >
-          <Building2 size={22} aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>
-          RTX 5
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--text-3)' }}>
-          Select your broker to continue
-        </p>
-      </div>
+      <ProductHeader subtitle="Select your broker to continue" />
 
       <InlineError>{error}</InlineError>
 
@@ -316,9 +354,14 @@ export const BrokerSelector = () => {
           onSubmit={(e) => { e.preventDefault(); submit('manager'); }}
         >
           <div>
-            <label htmlFor="broker-select" className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
-              Broker
-            </label>
+            <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
+              <label htmlFor="broker-select" className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+                Broker Server
+              </label>
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
+              </p>
+            </div>
             <BrokerDropdown
               brokers={brokerList}
               selectedId={selectedId}
@@ -347,9 +390,6 @@ export const BrokerSelector = () => {
                 <ChevronDown size={16} />
               </span>
             </div>
-            <p className="mt-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
-              {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
-            </p>
           </div>
 
           <div>
@@ -373,39 +413,55 @@ export const BrokerSelector = () => {
 // ---------------------------------------------------------------------------
 export const ManagerLogin = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
-  const [brokerInfo, setBrokerInfoState] = useState(() => getBrokerInfo());
+  const [brokerList, setBrokerList] = useState([]);
+  const [selectedId, setSelectedId] = useState(() => getBrokerSelectionId(getBrokerInfo() || {}));
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState('');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
-  const [server, setServer] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const storedBroker = getBrokerInfo();
-    if (!storedBroker) {
-      navigate('/', { replace: true });
-      return;
-    }
-    setBrokerInfoState(storedBroker);
-    setServer(getBrokerSelectionId(storedBroker));
-  }, [navigate]);
+  const selectedBroker = brokerList.find((broker) => getBrokerSelectionId(broker) === selectedId);
 
-  const handleSwitchBroker = () => {
-    clearBrokerInfo();
-    navigate('/', { replace: true });
-  };
+  const loadBrokers = useCallback(() => {
+    setListLoading(true);
+    setListError('');
+
+    const storedBroker = getBrokerInfo();
+    const storedId = getBrokerSelectionId(storedBroker || {});
+
+    fetchBrokerList()
+      .then((list) => {
+        const hasStoredBroker = storedId && list.some((broker) => getBrokerSelectionId(broker) === storedId);
+        setBrokerList(list);
+        setSelectedId(hasStoredBroker ? storedId : (list[0] ? getBrokerSelectionId(list[0]) : ''));
+      })
+      .catch((err) => {
+        setBrokerList([]);
+        setSelectedId('');
+        setListError(err.message || 'Failed to load brokers.');
+      })
+      .finally(() => setListLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadBrokers();
+  }, [loadBrokers]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!user || !password || !server) {
+    if (!user || !password || !selectedId) {
       setError('Login, password, and server are required.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const currentBrokerInfo = getBrokerInfo() || brokerInfo;
-      const auth = await loginManager(currentBrokerInfo, { user, password, server });
+      const currentBrokerInfo = discoverBrokerById(brokerList, selectedId);
+      setBrokerInfo(currentBrokerInfo);
+      rememberBroker(selectedId);
+      const auth = await loginManager(currentBrokerInfo, { user, password, server: selectedId });
       const session = setAuthSession(auth, currentBrokerInfo);
       onLoginSuccess?.(session);
       navigate('/dashboard', { replace: true });
@@ -416,30 +472,125 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
     }
   };
 
-  if (!brokerInfo) return null;
-
   return (
-    <LoginScreen
-      brokerInfo={brokerInfo}
-      subtitle="Manager Login"
-      tone="manager"
-      error={error}
-      loading={loading}
-      onSubmit={handleSubmit}
-      onSwitchBroker={handleSwitchBroker}
-    >
-      <Field id="manager-login" label="Login" type="number" icon={User} value={user} onChange={setUser} required />
-      <PasswordField id="manager-password" value={password} onChange={setPassword} />
-      <Field
-        id="manager-server"
-        label="Server"
-        icon={Server}
-        value={getBrokerDisplayServerName(brokerInfo)}
-        onChange={() => {}}
-        readOnly
-        required
-      />
-    </LoginScreen>
+    <AuthShell>
+      <ProductHeader subtitle="Select your broker to continue" />
+
+      <InlineError>{error}</InlineError>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
+            <label htmlFor="broker-select" className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+              Broker Server
+            </label>
+            {!listLoading && !listError && (
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
+              </p>
+            )}
+          </div>
+
+          {listLoading && (
+            <div className="flex items-center justify-center gap-3 py-4 text-sm" style={{ color: 'var(--text-3)' }}>
+              <Loader2 size={16} className="animate-spin" />
+              Loading brokers...
+            </div>
+          )}
+
+          {!listLoading && listError && (
+            <div className="space-y-3">
+              <div
+                className="flex items-start gap-3 p-3 rounded-lg text-sm"
+                role="alert"
+                style={{
+                  background: 'var(--danger-soft)',
+                  border: '1px solid var(--danger-border)',
+                  color: 'var(--danger-text)',
+                }}
+              >
+                <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                <span>{listError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={loadBrokers}
+                className="ui-btn ui-btn-secondary w-full"
+                style={{ padding: '8px 12px' }}
+              >
+                <RefreshCw size={14} /> Retry
+              </button>
+            </div>
+          )}
+
+          {!listLoading && !listError && (
+            <>
+              <BrokerDropdown
+                brokers={brokerList}
+                selectedId={selectedId}
+                disabled={loading}
+                onChange={(brokerId) => {
+                  setSelectedId(brokerId);
+                  setError('');
+                }}
+              />
+              <div className="hidden" aria-hidden="true">
+                <select
+                  id="broker-select-native"
+                  value={selectedId}
+                  onChange={(e) => {
+                    setSelectedId(e.target.value);
+                    setError('');
+                  }}
+                  disabled={loading}
+                  className="ui-input w-full appearance-none pr-9 cursor-pointer disabled:opacity-50"
+                  aria-label="Select broker"
+                >
+                  {brokerList.map((broker) => (
+                    <option key={getBrokerSelectionId(broker) || broker.broker_id} value={getBrokerSelectionId(broker)}>
+                      {broker.name} - {broker.broker_id}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  <ChevronDown size={16} />
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="pt-4 text-center" style={{ borderTop: '1px solid var(--border-2)' }}>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
+            Manager Login
+          </p>
+        </div>
+
+        <Field id="manager-login" label="Login" type="number" icon={User} value={user} onChange={setUser} required />
+        <PasswordField id="manager-password" value={password} onChange={setPassword} />
+        <Field
+          id="manager-server"
+          label="Server"
+          icon={Server}
+          value={selectedBroker ? getBrokerDisplayServerName(selectedBroker) : ''}
+          onChange={() => {}}
+          readOnly
+          required
+        />
+
+        <button
+          type="submit"
+          disabled={loading || listLoading || !!listError || !selectedBroker}
+          className="ui-btn ui-btn-primary w-full mt-2"
+          style={{ padding: '10px 16px' }}
+        >
+          {loading ? <SpinnerLabel>Signing in</SpinnerLabel> : 'Sign in'}
+        </button>
+      </form>
+    </AuthShell>
   );
 };
 

@@ -189,6 +189,7 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 
 /* Inputs */
 .ui-input, .ui-select, .ui-textarea {
+  box-sizing: border-box;
   display: block; width: 100%;
   padding: 8px 12px;
   font-size: 13px; line-height: 1.4;
@@ -210,6 +211,7 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 
 /* Card */
 .ui-card {
+  box-sizing: border-box;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

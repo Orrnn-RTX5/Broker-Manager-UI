@@ -9,21 +9,9 @@ import { normalizeTokenExpiresAt, setSession } from './authService.js';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
-const DEFAULT_DISCOVERY_BASE_URL = 'https://backend.orrnn.com';
+const PLATFORM_DISCOVERY_BASE_URL = 'https://superbackend.orrnn.com';
 
-const normalizeDiscoveryBaseUrl = (value = '') => {
-  const trimmed = String(value || '').replace(/\/+$/, '');
-  if (!trimmed) return DEFAULT_DISCOVERY_BASE_URL;
-  if (/testbrokerbackend\.orrnn\.com|brokerbackend|:8091(?:\/|$)/i.test(trimmed)) {
-    return DEFAULT_DISCOVERY_BASE_URL;
-  }
-  return trimmed;
-};
-
-const RUNTIME_DISCOVERY_BASE_URL = getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL']);
-const RUNTIME_API_HOST = getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
-
-export const DISCOVERY_BASE_URL = normalizeDiscoveryBaseUrl(RUNTIME_DISCOVERY_BASE_URL || RUNTIME_API_HOST);
+export const DISCOVERY_BASE_URL = PLATFORM_DISCOVERY_BASE_URL;
 
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
 const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';
@@ -71,7 +59,7 @@ const getResponseMessage = (data) =>
 
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
-// Calls:  GET {DISCOVERY_BASE_URL}/api/v2/broker/servers
+// Calls:  GET https://superbackend.orrnn.com/api/v2/broker/servers
 // ---------------------------------------------------------------------------
 export const fetchBrokerList = async () => {
   if (USE_MOCK_DISCOVERY) {
