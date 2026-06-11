@@ -389,6 +389,8 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 }
 
 .manager-broker-button {
+  display: flex;
+  align-items: center;
   min-height: 58px;
   gap: 18px;
   padding: 9px 52px 9px 22px;
@@ -398,6 +400,8 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 }
 
 .manager-broker-identity {
+  display: flex;
+  align-items: center;
   min-height: 58px;
   gap: 18px;
   padding: 9px 22px;
