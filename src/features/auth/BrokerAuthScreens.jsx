@@ -23,6 +23,7 @@ import {
   loginAdmin,
   loginManager,
   rememberBroker,
+  resolveBrokerSelection,
   resolveDefaultBrokerSelectionId,
   setAuthSession,
   setBrokerInfo,
@@ -308,6 +309,30 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange, variant = 'de
   );
 };
 
+const BrokerIdentity = ({ broker, variant = 'default' }) => {
+  const isManager = variant === 'manager';
+
+  return (
+    <div
+      className={`ui-input w-full h-auto flex items-center text-left ${
+        isManager ? 'manager-broker-identity' : 'min-h-[56px] gap-3'
+      }`}
+      role="group"
+      aria-label="Selected broker"
+    >
+      <BrokerLogo broker={broker} size={isManager ? 46 : 36} />
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block truncate font-medium ${isManager ? 'manager-broker-name' : 'text-sm'}`}
+          style={{ color: 'var(--text)' }}
+        >
+          {broker?.name || 'Broker'}
+        </span>
+      </span>
+    </div>
+  );
+};
+
 const ManagerLoginShell = ({ children }) => (
   <div className="manager-auth-shell">
     <div className="manager-auth-layout">
@@ -494,6 +519,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
   const [brokerList, setBrokerList] = useState([]);
   const [selectedId, setSelectedId] = useState(() => getBrokerSelectionId(getBrokerInfo() || {}));
+  const [brokerSelectionLocked, setBrokerSelectionLocked] = useState(false);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
   const [rememberedLogin] = useState(() => readRememberedManagerLogin());
@@ -515,12 +541,16 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
 
     fetchBrokerList()
       .then((list) => {
+        const selection = resolveBrokerSelection(list, { storedBrokerId: storedId });
+
         setBrokerList(list);
-        setSelectedId(resolveDefaultBrokerSelectionId(list, { storedBrokerId: storedId }));
+        setSelectedId(selection.brokerId);
+        setBrokerSelectionLocked(selection.locked);
       })
       .catch((err) => {
         setBrokerList([]);
         setSelectedId('');
+        setBrokerSelectionLocked(false);
         setListError(err.message || 'Failed to load brokers.');
       })
       .finally(() => setListLoading(false));
@@ -571,8 +601,11 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
       <form onSubmit={handleSubmit} className="manager-login-form">
         <div className="manager-form-group manager-broker-group">
           <div className="manager-broker-heading">
-            <label htmlFor="broker-select" className="manager-form-label manager-broker-label">
-              Select your broker to continue
+            <label
+              htmlFor={brokerSelectionLocked ? undefined : 'broker-select'}
+              className="manager-form-label manager-broker-label"
+            >
+              {brokerSelectionLocked ? 'Broker' : 'Select your broker to continue'}
             </label>
           </div>
 
@@ -609,47 +642,53 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
 
           {!listLoading && !listError && (
             <>
-              <BrokerDropdown
-                brokers={brokerList}
-                selectedId={selectedId}
-                disabled={loading}
-                variant="manager"
-                onChange={(brokerId) => {
-                  setSelectedId(brokerId);
-                  setError('');
-                  setNotice('');
-                }}
-              />
-              <p className="manager-broker-count">
-                <span aria-hidden="true" />
-                {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
-              </p>
-              <div className="hidden" aria-hidden="true">
-                <select
-                  id="broker-select-native"
-                  value={selectedId}
-                  onChange={(e) => {
-                    setSelectedId(e.target.value);
-                    setError('');
-                    setNotice('');
-                  }}
-                  disabled={loading}
-                  className="ui-input w-full appearance-none pr-9 cursor-pointer disabled:opacity-50"
-                  aria-label="Select broker"
-                >
-                  {brokerList.map((broker) => (
-                    <option key={getBrokerSelectionId(broker) || broker.broker_id} value={getBrokerSelectionId(broker)}>
-                      {broker.name} - {broker.broker_id}
-                    </option>
-                  ))}
-                </select>
-                <span
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  <ChevronDown size={16} />
-                </span>
-              </div>
+              {brokerSelectionLocked ? (
+                <BrokerIdentity broker={selectedBroker} variant="manager" />
+              ) : (
+                <>
+                  <BrokerDropdown
+                    brokers={brokerList}
+                    selectedId={selectedId}
+                    disabled={loading}
+                    variant="manager"
+                    onChange={(brokerId) => {
+                      setSelectedId(brokerId);
+                      setError('');
+                      setNotice('');
+                    }}
+                  />
+                  <p className="manager-broker-count">
+                    <span aria-hidden="true" />
+                    {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
+                  </p>
+                  <div className="hidden" aria-hidden="true">
+                    <select
+                      id="broker-select-native"
+                      value={selectedId}
+                      onChange={(e) => {
+                        setSelectedId(e.target.value);
+                        setError('');
+                        setNotice('');
+                      }}
+                      disabled={loading}
+                      className="ui-input w-full appearance-none pr-9 cursor-pointer disabled:opacity-50"
+                      aria-label="Select broker"
+                    >
+                      {brokerList.map((broker) => (
+                        <option key={getBrokerSelectionId(broker) || broker.broker_id} value={getBrokerSelectionId(broker)}>
+                          {broker.name} - {broker.broker_id}
+                        </option>
+                      ))}
+                    </select>
+                    <span
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      <ChevronDown size={16} />
+                    </span>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -761,6 +800,10 @@ export const AdminLogin = ({ onLoginSuccess }) => {
 
   if (!brokerInfo) return null;
 
+  const brokerSelection = resolveBrokerSelection([brokerInfo], {
+    storedBrokerId: getBrokerSelectionId(brokerInfo),
+  });
+
   return (
     <LoginScreen
       brokerInfo={brokerInfo}
@@ -769,7 +812,7 @@ export const AdminLogin = ({ onLoginSuccess }) => {
       error={error}
       loading={loading}
       onSubmit={handleSubmit}
-      onSwitchBroker={handleSwitchBroker}
+      onSwitchBroker={brokerSelection.locked ? undefined : handleSwitchBroker}
       switchToLabel="Manager login"
       onSwitchRole={() => navigate('/manager-login')}
     >
@@ -828,9 +871,13 @@ const LoginScreen = ({
     </form>
 
     <div className="mt-6 pt-5 flex items-center justify-between text-sm" style={{ borderTop: '1px solid var(--border-2)' }}>
-      <button type="button" onClick={onSwitchBroker} className="ui-btn ui-btn-ghost ui-btn-sm">
-        &larr; Switch broker
-      </button>
+      {onSwitchBroker ? (
+        <button type="button" onClick={onSwitchBroker} className="ui-btn ui-btn-ghost ui-btn-sm">
+          &larr; Switch broker
+        </button>
+      ) : (
+        <span />
+      )}
       {switchToLabel && onSwitchRole && (
         <button type="button" onClick={onSwitchRole} className="ui-btn ui-btn-ghost ui-btn-sm">
           {switchToLabel} <ArrowRight size={14} aria-hidden="true" />

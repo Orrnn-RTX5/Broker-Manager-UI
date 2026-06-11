@@ -6,6 +6,7 @@ import {
   getBrokerDisplayServerName,
   getBrokerSelectionId,
   loginManager,
+  resolveBrokerSelection,
   resolveDefaultBrokerSelectionId,
 } from './brokerAuth.js';
 
@@ -140,6 +141,49 @@ test('resolveDefaultBrokerSelectionId prefers broker matching the current manage
     }),
     'broker-gta'
   );
+});
+
+test('resolveBrokerSelection locks hostname and runtime broker matches only', () => {
+  const brokers = [
+    {
+      broker_id: 'alphafx',
+      name: 'Alpha FX Markets',
+      server: 'broker-alpha',
+      domain: 'manager.alphafx.example',
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'broker-myprop',
+      manager_domain: 'manager.myprop.trade',
+    },
+  ];
+
+  const hostnameSelection = resolveBrokerSelection(brokers, {
+    currentHostname: 'manager.myprop.trade',
+    storedBrokerId: 'broker-alpha',
+  });
+  assert.equal(hostnameSelection.brokerId, 'broker-myprop');
+  assert.equal(hostnameSelection.source, 'hostname');
+  assert.equal(hostnameSelection.locked, true);
+
+  const runtimeSelection = resolveBrokerSelection(brokers, {
+    runtimeBrokerId: 'alphafx',
+    storedBrokerId: 'broker-myprop',
+  });
+  assert.equal(runtimeSelection.brokerId, 'broker-alpha');
+  assert.equal(runtimeSelection.source, 'runtime-broker-id');
+  assert.equal(runtimeSelection.locked, true);
+
+  const storedSelection = resolveBrokerSelection(brokers, {
+    currentHostname: 'localhost',
+    runtimeBrokerId: '',
+    runtimeHostnames: [],
+    storedBrokerId: 'broker-myprop',
+  });
+  assert.equal(storedSelection.brokerId, 'broker-myprop');
+  assert.equal(storedSelection.source, 'stored-broker');
+  assert.equal(storedSelection.locked, false);
 });
 
 test('resolveDefaultBrokerSelectionId prefers runtime broker id before stored broker', () => {

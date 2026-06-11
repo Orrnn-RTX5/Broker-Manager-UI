@@ -309,22 +309,44 @@ export const resolveDefaultBrokerSelectionId = (
     runtimeHostnames = getRuntimeHostnames(),
     storedBrokerId = '',
   } = {}
+) => resolveBrokerSelection(brokerList, {
+  currentHostname,
+  runtimeBrokerId,
+  runtimeHostnames,
+  storedBrokerId,
+}).brokerId;
+
+export const resolveBrokerSelection = (
+  brokerList = [],
+  {
+    currentHostname = typeof window !== 'undefined' ? window.location?.hostname : '',
+    runtimeBrokerId = getRuntimeBrokerId(),
+    runtimeHostnames = getRuntimeHostnames(),
+    storedBrokerId = '',
+  } = {}
 ) => {
+  const result = (broker, source, locked = false) => ({
+    broker,
+    brokerId: broker ? getBrokerSelectionId(broker) : '',
+    source,
+    locked,
+  });
+
   const runtimeBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId));
-  if (runtimeBroker) return getBrokerSelectionId(runtimeBroker);
+  if (runtimeBroker) return result(runtimeBroker, 'runtime-broker-id', true);
 
   const hostnameMatchedBroker = brokerList.find((broker) => brokerMatchesHostname(broker, currentHostname));
-  if (hostnameMatchedBroker) return getBrokerSelectionId(hostnameMatchedBroker);
+  if (hostnameMatchedBroker) return result(hostnameMatchedBroker, 'hostname', true);
 
   const runtimeHostnameMatchedBroker = brokerList.find((broker) => (
     runtimeHostnames.some((hostname) => brokerMatchesHostname(broker, hostname))
   ));
-  if (runtimeHostnameMatchedBroker) return getBrokerSelectionId(runtimeHostnameMatchedBroker);
+  if (runtimeHostnameMatchedBroker) return result(runtimeHostnameMatchedBroker, 'runtime-hostname', true);
 
   const storedBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, storedBrokerId));
-  if (storedBroker) return getBrokerSelectionId(storedBroker);
+  if (storedBroker) return result(storedBroker, 'stored-broker', false);
 
-  return brokerList[0] ? getBrokerSelectionId(brokerList[0]) : '';
+  return result(brokerList[0], brokerList[0] ? 'first-broker' : 'none', false);
 };
 
 export const getBrokerDisplayServerName = (broker = {}) => {
