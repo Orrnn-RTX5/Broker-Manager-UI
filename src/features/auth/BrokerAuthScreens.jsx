@@ -32,6 +32,27 @@ import {
 
 const AUTH_HERO_IMAGE = '/login-trading-hero.png';
 const BRAND_LOGO = '/brand-logo.png';
+const MANAGER_LOGIN_HINT_KEY = 'manager_login_hint';
+
+const readRememberedManagerLogin = () => {
+  try {
+    return localStorage.getItem(MANAGER_LOGIN_HINT_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const writeRememberedManagerLogin = (login) => {
+  try {
+    if (login) {
+      localStorage.setItem(MANAGER_LOGIN_HINT_KEY, login);
+    } else {
+      localStorage.removeItem(MANAGER_LOGIN_HINT_KEY);
+    }
+  } catch {
+    // Non-critical preference storage. Login must continue even if storage is blocked.
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Shell & shared UI primitives
@@ -124,6 +145,24 @@ const InlineError = ({ children }) => {
   );
 };
 
+const InlineNotice = ({ children }) => {
+  if (!children) return null;
+  return (
+    <div
+      className="mb-5 flex items-start gap-3 rounded-lg p-3 text-sm"
+      role="status"
+      style={{
+        background: 'rgba(44, 154, 29, 0.08)',
+        border: '1px solid rgba(44, 154, 29, 0.18)',
+        color: '#1f7a14',
+      }}
+    >
+      <ShieldCheck size={18} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+      <span>{children}</span>
+    </div>
+  );
+};
+
 const SpinnerLabel = ({ children }) => (
   <>
     <Loader2 size={16} className="animate-spin" aria-hidden="true" />
@@ -173,9 +212,10 @@ const BrokerLogo = ({ broker, size = 40, fallback: Fallback = Building2 }) => {
   );
 };
 
-const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
+const BrokerDropdown = ({ brokers, selectedId, disabled, onChange, variant = 'default' }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  const isManager = variant === 'manager';
   const selectedBroker = brokers.find((broker) => getBrokerSelectionId(broker) === selectedId);
 
   useEffect(() => {
@@ -196,18 +236,23 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
         type="button"
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
-        className="ui-input w-full h-auto min-h-[56px] flex items-center gap-3 pr-9 text-left cursor-pointer disabled:opacity-50"
+        className={`ui-input w-full h-auto flex items-center text-left cursor-pointer disabled:opacity-50 ${
+          isManager ? 'manager-broker-button' : 'min-h-[56px] gap-3 pr-9'
+        }`}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <BrokerLogo broker={selectedBroker} size={36} />
+        <BrokerLogo broker={selectedBroker} size={isManager ? 46 : 36} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium" style={{ color: 'var(--text)' }}>
+          <span
+            className={`block truncate font-medium ${isManager ? 'manager-broker-name' : 'text-sm'}`}
+            style={{ color: 'var(--text)' }}
+          >
             {selectedBroker?.name || 'Select broker'}
           </span>
         </span>
         <ChevronDown
-          size={16}
+          size={isManager ? 20 : 16}
           className="absolute right-3 top-1/2 -translate-y-1/2"
           style={{ color: 'var(--muted)' }}
           aria-hidden="true"
@@ -237,12 +282,14 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
                   onChange(optionId);
                   setOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5"
+                className={`w-full flex items-center gap-3 text-left transition-colors hover:bg-black/5 ${
+                  isManager ? 'px-4 py-3' : 'px-3 py-2.5'
+                }`}
                 style={{
                   background: selected ? 'var(--accent-soft)' : 'transparent',
                 }}
               >
-                <BrokerLogo broker={broker} size={34} />
+                <BrokerLogo broker={broker} size={isManager ? 38 : 34} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium" style={{ color: 'var(--text)' }}>
                     {broker.name}
@@ -260,6 +307,35 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange }) => {
     </div>
   );
 };
+
+const ManagerLoginShell = ({ children }) => (
+  <div className="manager-auth-shell">
+    <div className="manager-auth-layout">
+      <main className="manager-auth-main">
+        <section className="manager-auth-card" aria-labelledby="manager-login-title">
+          {children}
+        </section>
+      </main>
+      <aside className="manager-auth-visual" aria-hidden="true">
+        <img src={AUTH_HERO_IMAGE} alt="" draggable="false" />
+        <div className="manager-auth-visual-shade" />
+      </aside>
+    </div>
+  </div>
+);
+
+const ManagerLoginHeader = () => (
+  <header className="manager-auth-header">
+    <span className="manager-brand-mark">
+      <img src={BRAND_LOGO} alt="RTX5" draggable="false" />
+    </span>
+    <h1 id="manager-login-title">MANAGER LOGIN</h1>
+    <p>Sign in to access your manager dashboard</p>
+    <div className="manager-title-rule" aria-hidden="true">
+      <span />
+    </div>
+  </header>
+);
 
 // ---------------------------------------------------------------------------
 // BrokerSelector — fetches full broker list from API, shows styled dropdown
@@ -420,9 +496,12 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
   const [selectedId, setSelectedId] = useState(() => getBrokerSelectionId(getBrokerInfo() || {}));
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
-  const [user, setUser] = useState('');
+  const [rememberedLogin] = useState(() => readRememberedManagerLogin());
+  const [user, setUser] = useState(rememberedLogin);
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => Boolean(rememberedLogin));
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
 
   const selectedBroker = brokerList.find((broker) => getBrokerSelectionId(broker) === selectedId);
@@ -454,16 +533,19 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!user || !password || !selectedId) {
+      setNotice('');
       setError('Login, password, and server are required.');
       return;
     }
     setLoading(true);
     setError('');
+    setNotice('');
     try {
       const currentBrokerInfo = discoverBrokerById(brokerList, selectedId);
       setBrokerInfo(currentBrokerInfo);
       rememberBroker(selectedId);
       const auth = await loginManager(currentBrokerInfo, { user, password, server: selectedId });
+      writeRememberedManagerLogin(rememberMe ? user : '');
       const session = setAuthSession(auth, currentBrokerInfo);
       onLoginSuccess?.(session);
       navigate('/dashboard', { replace: true });
@@ -474,27 +556,28 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
     }
   };
 
+  const showBrokerSupportNotice = () => {
+    setError('');
+    setNotice('Contact your broker administrator for account access or password recovery.');
+  };
+
   return (
-    <AuthShell>
-      <ProductHeader subtitle="Select your broker to continue" />
+    <ManagerLoginShell>
+      <ManagerLoginHeader />
 
       <InlineError>{error}</InlineError>
+      <InlineNotice>{notice}</InlineNotice>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
-            <label htmlFor="broker-select" className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>
-              Broker Server
+      <form onSubmit={handleSubmit} className="manager-login-form">
+        <div className="manager-form-group manager-broker-group">
+          <div className="manager-broker-heading">
+            <label htmlFor="broker-select" className="manager-form-label manager-broker-label">
+              Select your broker to continue
             </label>
-            {!listLoading && !listError && (
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
-              </p>
-            )}
           </div>
 
           {listLoading && (
-            <div className="flex items-center justify-center gap-3 py-4 text-sm" style={{ color: 'var(--text-3)' }}>
+            <div className="manager-loading-row">
               <Loader2 size={16} className="animate-spin" />
               Loading brokers...
             </div>
@@ -517,8 +600,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
               <button
                 type="button"
                 onClick={loadBrokers}
-                className="ui-btn ui-btn-secondary w-full"
-                style={{ padding: '8px 12px' }}
+                className="ui-btn ui-btn-secondary w-full manager-retry-button"
               >
                 <RefreshCw size={14} /> Retry
               </button>
@@ -531,11 +613,17 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
                 brokers={brokerList}
                 selectedId={selectedId}
                 disabled={loading}
+                variant="manager"
                 onChange={(brokerId) => {
                   setSelectedId(brokerId);
                   setError('');
+                  setNotice('');
                 }}
               />
+              <p className="manager-broker-count">
+                <span aria-hidden="true" />
+                {brokerList.length} broker{brokerList.length !== 1 ? 's' : ''} available
+              </p>
               <div className="hidden" aria-hidden="true">
                 <select
                   id="broker-select-native"
@@ -543,6 +631,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
                   onChange={(e) => {
                     setSelectedId(e.target.value);
                     setError('');
+                    setNotice('');
                   }}
                   disabled={loading}
                   className="ui-input w-full appearance-none pr-9 cursor-pointer disabled:opacity-50"
@@ -565,14 +654,17 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
           )}
         </div>
 
-        <div className="pt-4 text-center" style={{ borderTop: '1px solid var(--border-2)' }}>
-          <p className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-            Manager Login
-          </p>
-        </div>
-
-        <Field id="manager-login" label="Login" type="number" icon={User} value={user} onChange={setUser} required />
-        <PasswordField id="manager-password" value={password} onChange={setPassword} />
+        <Field
+          id="manager-login"
+          label="Login"
+          type="number"
+          icon={User}
+          value={user}
+          onChange={setUser}
+          required
+          variant="manager"
+        />
+        <PasswordField id="manager-password" value={password} onChange={setPassword} variant="manager" />
         <Field
           id="manager-server"
           label="Server"
@@ -581,18 +673,43 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
           onChange={() => {}}
           readOnly
           required
+          variant="manager"
         />
+
+        <div className="manager-login-options">
+          <label className="manager-remember-control">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(event) => {
+                const nextChecked = event.target.checked;
+                setRememberMe(nextChecked);
+                if (!nextChecked) writeRememberedManagerLogin('');
+              }}
+            />
+            <span>Remember me</span>
+          </label>
+          <button type="button" className="manager-link-button" onClick={showBrokerSupportNotice}>
+            Forgot password?
+          </button>
+        </div>
 
         <button
           type="submit"
           disabled={loading || listLoading || !!listError || !selectedBroker}
-          className="ui-btn ui-btn-primary w-full mt-2"
-          style={{ padding: '10px 16px' }}
+          className="manager-submit-button"
         >
           {loading ? <SpinnerLabel>Signing in</SpinnerLabel> : 'Sign in'}
         </button>
+
+        <p className="manager-contact-copy">
+          Don't have an account?{' '}
+          <button type="button" className="manager-link-button" onClick={showBrokerSupportNotice}>
+            Contact your broker
+          </button>
+        </p>
       </form>
-    </AuthShell>
+    </ManagerLoginShell>
   );
 };
 
@@ -726,40 +843,70 @@ const LoginScreen = ({
 // ---------------------------------------------------------------------------
 // Shared form field components
 // ---------------------------------------------------------------------------
-const Field = ({ id, label, icon: Icon, value, onChange, type = 'text', readOnly = false, required = false }) => (
+const Field = ({
+  id,
+  label,
+  icon: Icon,
+  value,
+  onChange,
+  type = 'text',
+  readOnly = false,
+  required = false,
+  variant = 'default',
+}) => {
+  const isManager = variant === 'manager';
+
+  return (
   <div>
-    <label htmlFor={id} className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+    <label
+      htmlFor={id}
+      className={isManager ? 'manager-form-label' : 'block text-sm font-medium mb-1.5'}
+      style={{ color: isManager ? undefined : 'var(--text-2)' }}
+    >
       {label}
     </label>
     <div className="relative">
-      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'var(--muted)' }}>
-        {createElement(Icon, { size: 16, 'aria-hidden': 'true' })}
+      <span
+        className={isManager ? 'manager-input-icon' : 'absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'}
+        style={{ color: isManager ? undefined : 'var(--muted)' }}
+      >
+        {createElement(Icon, { size: isManager ? 22 : 16, 'aria-hidden': 'true' })}
       </span>
       <input
         id={id}
-        type={type}
+        type={isManager && type === 'number' ? 'text' : type}
+        inputMode={type === 'number' ? 'numeric' : undefined}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         readOnly={readOnly}
         required={required}
-        className="ui-input"
-        style={{ paddingLeft: 36 }}
+        className={isManager ? 'ui-input manager-input' : 'ui-input'}
+        style={{ paddingLeft: isManager ? undefined : 36 }}
       />
     </div>
   </div>
-);
+  );
+};
 
-const PasswordField = ({ id, value, onChange }) => {
+const PasswordField = ({ id, value, onChange, variant = 'default' }) => {
   const [showPassword, setShowPassword] = useState(false);
+  const isManager = variant === 'manager';
 
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+      <label
+        htmlFor={id}
+        className={isManager ? 'manager-form-label' : 'block text-sm font-medium mb-1.5'}
+        style={{ color: isManager ? undefined : 'var(--text-2)' }}
+      >
         Password
       </label>
       <div className="relative">
-        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'var(--muted)' }}>
-          <Lock size={16} aria-hidden="true" />
+        <span
+          className={isManager ? 'manager-input-icon' : 'absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'}
+          style={{ color: isManager ? undefined : 'var(--muted)' }}
+        >
+          <Lock size={isManager ? 22 : 16} aria-hidden="true" />
         </span>
         <input
           id={id}
@@ -767,18 +914,22 @@ const PasswordField = ({ id, value, onChange }) => {
           value={value}
           onChange={(event) => onChange(event.target.value)}
           required
-          className="ui-input"
-          style={{ paddingLeft: 36, paddingRight: 36 }}
+          className={isManager ? 'ui-input manager-input manager-input-with-action' : 'ui-input'}
+          style={{ paddingLeft: isManager ? undefined : 36, paddingRight: isManager ? undefined : 36 }}
         />
         <button
           type="button"
           onClick={() => setShowPassword((v) => !v)}
-          className="absolute inset-y-0 right-0 pr-3 flex items-center hover:opacity-80 transition-opacity"
+          className={isManager
+            ? 'manager-password-toggle'
+            : 'absolute inset-y-0 right-0 pr-3 flex items-center hover:opacity-80 transition-opacity'}
           style={{ color: 'var(--muted)' }}
-          tabIndex={-1}
           aria-label={showPassword ? 'Hide password' : 'Show password'}
+          aria-pressed={showPassword}
         >
-          {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+          {showPassword
+            ? <EyeOff size={isManager ? 22 : 16} aria-hidden="true" />
+            : <Eye size={isManager ? 22 : 16} aria-hidden="true" />}
         </button>
       </div>
     </div>
