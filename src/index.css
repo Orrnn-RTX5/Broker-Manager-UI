@@ -11,6 +11,7 @@
 :root {
   /* Typography — Inter for UI, JetBrains Mono for numbers/code */
   --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --auth-sans: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace;
   --feature-sans: "cv11", "ss01", "ss03";  /* Inter stylistic sets: cleaner a, 1, curly-less l */
   --feature-num:  "tnum", "lnum", "zero";   /* tabular, lining, slashed zero */
@@ -225,6 +226,7 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   overflow-y: auto;
   background: #fbfcfb;
   color: var(--text);
+  font-family: var(--auth-sans);
   letter-spacing: 0;
 }
 
@@ -243,8 +245,8 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   justify-content: center;
   padding: 24px 44px;
   background:
-    radial-gradient(520px 380px at 0% 100%, rgba(44, 154, 29, 0.10) 0%, transparent 62%),
-    linear-gradient(180deg, #fbfcfb 0%, #ffffff 56%, #f0f8ed 100%);
+    radial-gradient(460px 320px at 0% 100%, rgba(44, 154, 29, 0.06) 0%, transparent 58%),
+    linear-gradient(180deg, #fcfcfb 0%, #ffffff 54%, #f5faf2 100%);
 }
 
 .manager-auth-card {
@@ -279,8 +281,8 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(251, 252, 251, 0.26) 0%, rgba(16, 24, 40, 0.08) 38%, rgba(16, 24, 40, 0.18) 100%),
-    radial-gradient(520px 420px at 14% 24%, rgba(44, 154, 29, 0.20), transparent 62%);
+    linear-gradient(90deg, rgba(251, 252, 251, 0.10) 0%, rgba(16, 24, 40, 0.04) 18%, rgba(16, 24, 40, 0.20) 100%),
+    radial-gradient(460px 360px at 10% 22%, rgba(44, 154, 29, 0.10), transparent 58%);
 }
 
 .manager-auth-header {
