@@ -9,11 +9,10 @@
    can be swapped later without touching components.
    ──────────────────────────────────────────────────────────────────── */
 :root {
-  /* Typography — Inter for UI, JetBrains Mono for numbers/code */
-  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --auth-sans: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Typography - Manrope for UI, JetBrains Mono for numbers/code */
+  --sans: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace;
-  --feature-sans: "cv11", "ss01", "ss03";  /* Inter stylistic sets: cleaner a, 1, curly-less l */
+  --feature-sans: normal;
   --feature-num:  "tnum", "lnum", "zero";   /* tabular, lining, slashed zero */
 
   /* Surfaces (Untitled UI "Gray" scale) */
@@ -226,7 +225,6 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   overflow-y: auto;
   background: #fbfcfb;
   color: var(--text);
-  font-family: var(--auth-sans);
   letter-spacing: 0;
 }
 
