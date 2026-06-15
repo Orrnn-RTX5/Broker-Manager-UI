@@ -229,6 +229,13 @@ const FEED_TOKEN_KEYS = [
   'env.VITE_WS_FEED_TOKEN',
 ];
 
+const FEED_AUTH_REQUIRED_KEYS = [
+  'feed_auth_required',
+  'feedAuthRequired',
+  'env.FEED_AUTH_REQUIRED',
+  'env.VITE_FEED_AUTH_REQUIRED',
+];
+
 export const FEED_WS_AUTH_NOT_CONFIGURED = 'FEED_WS_AUTH_NOT_CONFIGURED';
 export const FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE =
   'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN for this manager UI deployment.';
@@ -262,24 +269,31 @@ export const resolveFeedWsAuth = (brokerInfo = {}) => {
   return { brokerID, token };
 };
 
+const isTruthyConfigValue = (value = '') => /^(1|true|yes|on|required)$/i.test(String(value || '').trim());
+
+export const resolveFeedAuthRequired = (brokerInfo = {}) => isTruthyConfigValue(firstValue(
+  firstBrokerValue(brokerInfo, FEED_AUTH_REQUIRED_KEYS),
+  getRuntimeConfigValue(['FEED_AUTH_REQUIRED', 'VITE_FEED_AUTH_REQUIRED'])
+));
+
 export const appendFeedAuthToWsUrl = (wsUrl, auth = {}) => {
   const token = String(auth.token || '').trim();
-  if (!token) return wsUrl;
-
   const brokerID = String(auth.brokerID || auth.broker_id || '').trim();
+  if (!brokerID && !token) return wsUrl;
+
   try {
     const url = new URL(wsUrl);
     if (brokerID && !url.searchParams.has('broker_id')) {
       url.searchParams.set('broker_id', brokerID);
     }
-    if (!url.searchParams.has('token')) {
+    if (token && !url.searchParams.has('token')) {
       url.searchParams.set('token', token);
     }
     return url.toString();
   } catch {
     const params = new URLSearchParams();
     if (brokerID) params.set('broker_id', brokerID);
-    params.set('token', token);
+    if (token) params.set('token', token);
     const glue = String(wsUrl || '').includes('?') ? '&' : '?';
     return `${wsUrl}${glue}${params.toString()}`;
   }
@@ -315,7 +329,7 @@ export const buildFeedWsUrl = () => {
   const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
   const auth = resolveFeedWsAuth(brokerInfo);
   const token = auth.token || getExistingFeedQueryToken(wsUrl);
-  if (!token) {
+  if (!token && resolveFeedAuthRequired(brokerInfo)) {
     throw new FeedWsAuthConfigError();
   }
   return appendFeedAuthToWsUrl(wsUrl, { ...auth, token });

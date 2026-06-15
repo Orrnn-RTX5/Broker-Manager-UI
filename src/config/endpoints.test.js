@@ -5,6 +5,7 @@ import {
   buildFeedWsUrl,
   FEED_WS_AUTH_NOT_CONFIGURED,
   buildManagerApiPath,
+  resolveFeedAuthRequired,
   resolveFeedWsAuth,
   shouldUseManagerProxyPrefix,
 } from './endpoints.js';
@@ -71,6 +72,15 @@ test('feed websocket URL appends broker query auth when token is available', () 
   assert.equal(url.searchParams.get('token'), 'secret token');
 });
 
+test('feed websocket URL appends broker query without requiring a token', () => {
+  const out = appendFeedAuthToWsUrl('wss://services.example/ws/feed', {
+    brokerID: 'testorrnn',
+  });
+  const url = new URL(out);
+  assert.equal(url.searchParams.get('broker_id'), 'testorrnn');
+  assert.equal(url.searchParams.has('token'), false);
+});
+
 test('feed websocket URL preserves explicit query auth', () => {
   const out = appendFeedAuthToWsUrl('wss://services.example/ws/feed?broker_id=existing&token=provided', {
     brokerID: 'gta_broker',
@@ -105,6 +115,48 @@ test('feed websocket URL uses explicit runtime feed token and ignores manager se
   assert.equal(out.includes('manager-local-token'), false);
 });
 
+test('feed websocket URL allows tokenless feeds when auth is not required', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'testorrnn',
+    feed_wss_url: 'wss://testbrokerbackend.orrnn.com/ws/feed',
+  }));
+
+  const out = buildFeedWsUrl();
+  const url = new URL(out);
+  assert.equal(url.protocol, 'wss:');
+  assert.equal(url.hostname, 'testbrokerbackend.orrnn.com');
+  assert.equal(url.pathname, '/ws/feed');
+  assert.equal(url.searchParams.get('broker_id'), 'testorrnn');
+  assert.equal(url.searchParams.has('token'), false);
+});
+
+test('feed websocket URL prefers secure discovery feed URLs over plain ws_url', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'testorrnn',
+    ws_url: 'ws://testbrokerbackend.orrnn.com/ws/feed',
+    feed_wss_url: 'wss://testbrokerbackend.orrnn.com/ws/feed',
+  }));
+
+  const out = buildFeedWsUrl();
+  const url = new URL(out);
+  assert.equal(url.protocol, 'wss:');
+  assert.equal(url.hostname, 'testbrokerbackend.orrnn.com');
+  assert.equal(url.pathname, '/ws/feed');
+});
+
+test('feed websocket URL upgrades public plain ws discovery URLs to wss', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'testorrnn',
+    ws_url: 'ws://testbrokerbackend.orrnn.com/ws/feed',
+  }));
+
+  const out = buildFeedWsUrl();
+  const url = new URL(out);
+  assert.equal(url.protocol, 'wss:');
+  assert.equal(url.hostname, 'testbrokerbackend.orrnn.com');
+  assert.equal(url.pathname, '/ws/feed');
+});
+
 test('feed websocket URL uses explicit broker config feed token', () => {
   sessionStorage.setItem('broker_info', JSON.stringify({
     broker_id: 'broker_a',
@@ -118,10 +170,20 @@ test('feed websocket URL uses explicit broker config feed token', () => {
   assert.equal(url.searchParams.get('token'), 'broker-config-feed-token');
 });
 
-test('feed websocket URL fails closed when only manager session tokens are present', () => {
+test('feed auth required flag is parsed from broker info or runtime config', () => {
+  assert.equal(resolveFeedAuthRequired({ feed_auth_required: true }), true);
+  assert.equal(resolveFeedAuthRequired({ feed_auth_required: 'required' }), true);
+  assert.equal(resolveFeedAuthRequired({ feed_auth_required: false }), false);
+
+  globalThis.__RTX_RUNTIME_CONFIG__ = { FEED_AUTH_REQUIRED: 'true' };
+  assert.equal(resolveFeedAuthRequired({}), true);
+});
+
+test('feed websocket URL fails closed when auth is required and only manager session tokens are present', () => {
   sessionStorage.setItem('broker_info', JSON.stringify({
     broker_id: 'broker_a',
     web_ws_url: 'wss://services.example/ws/feed',
+    feed_auth_required: true,
   }));
   sessionStorage.setItem('auth', JSON.stringify({
     token: 'manager-session-token',

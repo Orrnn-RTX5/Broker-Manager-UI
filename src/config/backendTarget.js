@@ -377,7 +377,28 @@ const buildWsEndpoint = (baseUrl = '', path = DEFAULT_WS_PATH) => {
   const wsPath = path || DEFAULT_WS_PATH;
   if (!base) return wsPath;
   if (!wsPath) return base;
-  if (base.endsWith(wsPath)) return base;
+
+  try {
+    const url = new URL(base);
+    const desiredPath = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
+    const currentPath = trimTrailingSlash(url.pathname);
+
+    if (!currentPath || currentPath === '/') {
+      url.pathname = desiredPath;
+      return trimTrailingSlash(url.toString());
+    }
+    if (currentPath === desiredPath) return trimTrailingSlash(url.toString());
+    if (/\/ws\/v2$/i.test(currentPath)) {
+      url.pathname = desiredPath;
+      url.search = '';
+      url.hash = '';
+      return trimTrailingSlash(url.toString());
+    }
+    return trimTrailingSlash(url.toString());
+  } catch {
+    if (base.endsWith(wsPath)) return base;
+  }
+
   return `${base}${wsPath.startsWith('/') ? '' : '/'}${wsPath}`;
 };
 
@@ -392,13 +413,55 @@ const sanitizeWebWsCandidate = (candidate = '', brokerInfo = {}, fallbackUrl = '
   if (!host) return '';
   if (isIpAddress(host)) return '';
   if (isUiOnlyHost(host)) return '';
-  return wsUrl;
+
+  try {
+    const url = new URL(wsUrl);
+    if (url.protocol === 'ws:' && !isLocalHost(url.hostname)) {
+      url.protocol = 'wss:';
+    }
+    if ((url.protocol === 'wss:' && url.port === '443') || (url.protocol === 'ws:' && url.port === '80')) {
+      url.port = '';
+    }
+    return trimTrailingSlash(url.toString());
+  } catch {
+    return wsUrl.replace(/^ws:\/\//i, 'wss://');
+  }
 };
 
 export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEFAULT_WS_PATH) => {
   const explicitKeys = isDesktopBackendTarget()
-    ? ['desktop_ws_url', 'desktopWsUrl', 'ws_url', 'wsUrl']
-    : ['web_ws_url', 'webWsUrl', 'env.WS_HOST', 'env.VITE_WS_HOST', 'ws_url', 'wsUrl'];
+    ? [
+        'desktop_feed_ws_url',
+        'desktopFeedWsUrl',
+        'desktop_ws_url',
+        'desktopWsUrl',
+        'feed_ws_url',
+        'feedWsUrl',
+        'feed_url',
+        'feedUrl',
+        'ws_url',
+        'wsUrl',
+      ]
+    : [
+        'web_feed_wss_url',
+        'webFeedWssUrl',
+        'feed_wss_url',
+        'feedWssUrl',
+        'wss_url',
+        'wssUrl',
+        'web_feed_ws_url',
+        'webFeedWsUrl',
+        'web_ws_url',
+        'webWsUrl',
+        'feed_ws_url',
+        'feedWsUrl',
+        'feed_url',
+        'feedUrl',
+        'env.WS_HOST',
+        'env.VITE_WS_HOST',
+        'ws_url',
+        'wsUrl',
+      ];
 
   const explicit = getValue(brokerInfo, explicitKeys) || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']);
   if (explicit) {
@@ -417,7 +480,6 @@ export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {
   const host = hostnameFromUrl(backendUrl);
   if (!host) return false;
   if (isIpAddress(host) || isLocalHost(host)) return true;
-  const port = portFromUrl(backendUrl);
   if (!isDesktopBackendTarget()) return false;
 
   const directHosts = [
