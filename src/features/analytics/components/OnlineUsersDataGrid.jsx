@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
-import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
 import useDataSource from '../../../hooks/useDataSource';
 import { getOnlineUsers } from '../../../services/api';
 import { ONLINE_USERS_FALLBACK } from '../../../data/onlineUsers';
+import { normalizeOnlineUserRows } from '../../../utils/onlineUsers';
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -14,7 +15,9 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
-  const { data: rawData, isLoading, isFallback, error } = useDataSource(getOnlineUsers, ONLINE_USERS_FALLBACK);
+  const { data: rawData, isLoading, isFallback, error, reload } = useDataSource(getOnlineUsers, ONLINE_USERS_FALLBACK, {
+    pollingInterval: 10000,
+  });
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -27,14 +30,21 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     setPage(0);
   };
 
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
+
   const filtered = useMemo(() => {
-    let rows = [...rawData];
+    let rows = normalizeOnlineUserRows(rawData);
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(r =>
         (r.name || '').toLowerCase().includes(q) ||
         String(r.login).includes(q) ||
-        (r.group || '').toLowerCase().includes(q)
+        (r.group || '').toLowerCase().includes(q) ||
+        (r.client || '').toLowerCase().includes(q) ||
+        (r.version || '').toLowerCase().includes(q) ||
+        (r.ip || '').toLowerCase().includes(q)
       );
     }
 
@@ -48,7 +58,9 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     return rows;
   }, [rawData, search, sortCol, sortDir]);
 
-  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(filtered);
+  }, [filtered, onRowsChange]);
 
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
@@ -60,6 +72,24 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
 
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden">
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}
+      >
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+            {filtered.length} online users
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={reload}
+          className="ui-btn ui-btn-secondary ui-btn-xs flex items-center gap-1.5"
+        >
+          <RefreshCcw size={12} />
+          Refresh
+        </button>
+      </div>
       {error && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -130,6 +160,21 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
               BACKEND DISCONNECTED
             </span>
           </span>
+        </div>
+      )}
+
+      {!isFallback && pageRows.length < filtered.length && (
+        <div
+          className="flex items-center justify-center px-4 py-3 text-xs"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}
+        >
+          <button
+            type="button"
+            onClick={() => setPage((value) => value + 1)}
+            className="ui-btn ui-btn-secondary ui-btn-xs"
+          >
+            Load more
+          </button>
         </div>
       )}
     </div>

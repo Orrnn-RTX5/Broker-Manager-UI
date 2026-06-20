@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import useDataSource from '../../../hooks/useDataSource';
 import { getOrders } from '../../../services/api';
@@ -40,6 +40,10 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     setPage(0);
   };
 
+  useEffect(() => {
+    setPage(0);
+  }, [search, typeFilter, symbolFilter, reasonFilter]);
+
   const filtered = useMemo(() => {
     let rows = [...rawData];
     if (search) {
@@ -66,7 +70,9 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     return rows;
   }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
 
-  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(filtered);
+  }, [filtered, onRowsChange]);
 
   const pageRows = filtered.slice(0, (page + 1) * pageSize);
 
@@ -120,7 +126,12 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               </tr>
             ) : pageRows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
-              const isBuy = row.type === 'buy';
+              const side = String(row.side || '').toLowerCase();
+              const typeBadgeClass = side === 'buy'
+                ? 'ui-badge-success'
+                : side === 'sell'
+                  ? 'ui-badge-danger'
+                  : 'ui-badge-info';
               return (
                 <tr
                   key={rowKey}
@@ -139,7 +150,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                   <td style={{ color: 'var(--text-3)' }}>{row.group}</td>
                   <td style={{ fontWeight: 500 }}>{row.symbol}</td>
                   <td className="capitalize">
-                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                    <span className={`ui-badge ${typeBadgeClass}`}>
                       {row.type}
                     </span>
                   </td>

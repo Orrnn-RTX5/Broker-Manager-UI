@@ -1,54 +1,69 @@
-import React from 'react';
+import { useMemo } from 'react';
 import { Activity } from 'lucide-react';
+import { buildOrdersByReason } from '../../../utils/orderAnalytics';
 
-const data = [
-  { name: 'Mobile', value: 124, percentage: 95.38, color: '#7f56d9' }, // Using brand purple
-  { name: 'Expert', value: 4, percentage: 3.0, color: '#f79009' }, // Using warn orange
-  { name: 'Terminal', value: 2, percentage: 1.62, color: '#12b76a' }, // Using ok green
+const COLORS = [
+  'var(--accent)',
+  'var(--ok)',
+  'var(--warn)',
+  'var(--info)',
+  'var(--danger)',
+  'var(--muted)',
 ];
 
-const OrdersByReasonGrid = () => {
+const OrdersByReasonGrid = ({ orders = [] }) => {
+  const data = useMemo(() => buildOrdersByReason(orders), [orders]);
+  const total = orders.length;
+
   return (
-    <div className="ui-card flex flex-col overflow-hidden h-full">
-      <div className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-        <div className="flex items-center gap-2">
+    <div className="ui-card p-4">
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+        <div className="flex items-center gap-2 shrink-0">
           <Activity size={14} style={{ color: 'var(--accent)' }} />
-          <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-2)' }}>Orders by Reason</span>
+          <div>
+            <div className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-2)' }}>
+              Order State
+            </div>
+            <div className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              Backend state distribution for this login.
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 overflow-auto">
-        <table className="ui-grid">
-          <thead>
-            <tr>
-              <th className="text-left">Reason</th>
-              <th className="text-right">Orders</th>
-              <th className="text-right">Breakdown</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((item) => (
-              <tr key={item.name} className="group cursor-default">
-                <td className="relative pl-5">
-                  <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span className="font-medium text-[var(--text-2)]">{item.name}</span>
-                </td>
-                <td className="tabular text-right font-mono" style={{ color: 'var(--text)' }}>
-                  {item.value}
-                </td>
-                <td className="tabular text-right font-mono" style={{ color: 'var(--text-3)' }}>
-                  {item.percentage.toFixed(2)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <div className="flex flex-wrap gap-2 flex-1">
+          {data.length === 0 ? (
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              No order rows available.
+            </span>
+          ) : (
+            data.map((item, index) => (
+              <div
+                key={item.name}
+                className="flex items-center gap-2 rounded-md px-3 py-2"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                />
+                <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
+                  {item.name}
+                </span>
+                <span className="text-xs tabular font-mono" style={{ color: 'var(--text-3)' }}>
+                  {item.value} / {item.percentage.toFixed(0)}%
+                </span>
+              </div>
+            ))
+          )}
+        </div>
 
-      <div className="px-4 py-2 bg-[var(--surface-2)] border-t border-[var(--border)] flex justify-between items-center">
-         <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>Total Orders</span>
-         <span className="text-sm font-bold tabular" style={{ color: 'var(--text)' }}>130</span>
+        <div
+          className="flex items-center justify-between lg:justify-end gap-2 lg:min-w-28"
+          style={{ color: 'var(--text-3)' }}
+        >
+          <span className="text-[10px] uppercase tracking-widest font-bold">Total</span>
+          <span className="text-sm font-bold tabular" style={{ color: 'var(--text)' }}>{total}</span>
+        </div>
       </div>
     </div>
   );

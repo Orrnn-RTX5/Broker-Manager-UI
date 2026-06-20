@@ -1,4 +1,5 @@
 import apiClient from './apiClient';
+import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 
 const query = (params) => new URLSearchParams(
   Object.entries(params).reduce((acc, [key, value]) => {
@@ -15,7 +16,8 @@ const arrayQuery = (key, values = []) => {
 
 // ─── Online Users ──────────────────────────────────────────────────────────────
 export const getOnlineUsers = async () => {
-  return apiClient.get('/OnlineUsers');
+  const data = await apiClient.get('/OnlineUsers');
+  return normalizeOnlineUserRows(data);
 };
 
 export const getAccountsOnline = async () => {

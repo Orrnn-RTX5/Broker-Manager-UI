@@ -1,77 +1,154 @@
-import React from 'react';
-import { Hash, User, Activity, Clock, DollarSign, BarChart3, Info } from 'lucide-react';
+import { Activity, BarChart3, Clock, DollarSign, Hash, Info, User, Wallet } from 'lucide-react';
+
+const toFiniteNumber = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value !== 'string') return 0;
+
+  const parsed = Number(value.trim().replace(/[\s,]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatPrice = (value) => {
+  const numericValue = toFiniteNumber(value);
+  if (!numericValue) return '-';
+
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 5,
+  }).format(numericValue);
+};
+
+const formatMoney = (value) => new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(toFiniteNumber(value));
+
+const formatDate = (timestamp) => {
+  if (!timestamp) return '-';
+  const numericValue = toFiniteNumber(timestamp);
+  const date = new Date(numericValue > 1e11 ? numericValue : numericValue * 1000);
+  if (Number.isNaN(date.getTime())) return String(timestamp);
+
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+};
+
+const DetailItem = ({ icon: Icon, label, value, description, color = 'var(--text)' }) => (
+  <div className="min-w-0">
+    <div
+      className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold"
+      style={{ color: 'var(--text-3)' }}
+    >
+      {Icon && <Icon size={12} style={{ color: 'var(--accent)' }} />}
+      {label}
+    </div>
+    <div className="text-[14px] font-semibold tabular font-mono mt-1 truncate" style={{ color }}>
+      {value}
+    </div>
+    <div className="text-[11px] leading-snug mt-1" style={{ color: 'var(--muted)' }}>
+      {description}
+    </div>
+  </div>
+);
 
 const OpenedOrderCard = ({ order }) => {
-  const isBuy = order.side?.toLowerCase() === 'buy';
-  const profitTone = order.profit < 0 ? 'var(--danger-text)' : order.profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
-
-  const fmtDate = (ts) => {
-    if (!ts) return '—';
-    const dateObj = new Date(ts * 1000);
-    return dateObj.toLocaleString('en-US', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    });
-  };
-
-  const DetailItem = ({ icon: Icon, label, value, color = 'var(--text)', extra = null }) => (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-3)' }}>
-        {Icon && <Icon size={12} style={{ color: 'var(--accent)' }} />}
-        {label}
-      </div>
-      <div className="text-[13px] font-medium flex items-center gap-1 tabular font-mono" style={{ color }}>
-        {value}
-        {extra && <span className="text-[11px] font-normal" style={{ color: 'var(--muted)' }}>{extra}</span>}
-      </div>
-    </div>
-  );
+  const side = String(order.side || '').toLowerCase();
+  const isBuy = side === 'buy';
+  const isSell = side === 'sell';
+  const profit = toFiniteNumber(order.profit);
+  const swap = toFiniteNumber(order.swap);
+  const commission = toFiniteNumber(order.commission);
+  const costs = swap + commission;
+  const profitTone = profit < 0 ? 'var(--danger-text)' : profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
+  const badgeClass = isBuy ? 'ui-badge-success' : isSell ? 'ui-badge-danger' : 'ui-badge-info';
+  const state = String(order.state || 'active').toUpperCase();
 
   return (
     <div className="ui-card flex flex-col p-5 gap-5 transition-all hover:shadow-md">
-      {/* Header with Ticket and Side */}
-      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-2)]">
-        <div className="flex items-center gap-3">
-          <div className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'} px-2 py-1`}>
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pb-4 border-b border-[var(--border-2)]">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className={`ui-badge ${badgeClass} px-2 py-1 shrink-0`}>
             <Activity size={14} />
-            <span className="font-bold uppercase tracking-wider">{order.side}</span>
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[15px] font-bold tabular" style={{ color: 'var(--text)' }}>#{order.ticket}</span>
-              <span className="text-[13px] font-semibold" style={{ color: 'var(--accent-text)' }}>{order.symbol}</span>
+            <span className="font-bold uppercase tracking-wider">{order.side || 'Order'}</span>
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[15px] font-bold tabular" style={{ color: 'var(--text)' }}>
+                #{order.ticket || '-'}
+              </span>
+              <span className="text-[13px] font-semibold" style={{ color: 'var(--accent-text)' }}>
+                {order.symbol || '-'}
+              </span>
+              <span className="ui-badge ui-badge-neutral">{state}</span>
             </div>
-            <div className="text-[10px] uppercase tracking-widest font-medium" style={{ color: 'var(--muted)' }}>Order identification</div>
+            <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
+              Ticket, symbol, direction, and current backend state.
+            </div>
           </div>
         </div>
 
-        <div className="text-right">
-          <div className="text-lg font-bold tabular font-mono" style={{ color: profitTone }}>
-            ${Number(order.profit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div className="md:text-right">
+          <div className="text-xl font-bold tabular font-mono" style={{ color: profitTone }}>
+            {formatMoney(profit)}
           </div>
-          <div className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>Net Profit</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>
+            Floating P/L
+          </div>
         </div>
       </div>
 
-      {/* Main Grid Details */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-5 gap-x-4">
-        <DetailItem icon={User} label="Login ID" value={order.login} />
-        <DetailItem icon={BarChart3} label="Lots / Vol." value={`${order.lots} Lot`} extra={`(${order.volume})`} />
-        <DetailItem icon={DollarSign} label="Open Price" value={order.openPrice} />
-        <DetailItem icon={DollarSign} label="Close Price" value={order.closePrice || '—'} />
-
-        <DetailItem icon={Clock} label="Open Time" value={fmtDate(order.openTime)} />
-        <DetailItem icon={Clock} label="Close Time" value={order.closeTime ? fmtDate(order.closeTime) : 'ACTIVE'} color={order.closeTime ? 'var(--text)' : 'var(--ok-text)'} />
-        <DetailItem icon={Hash} label="Swap" value={order.swap.toFixed(2)} color={order.swap < 0 ? 'var(--danger-text)' : 'var(--text)'} />
-        <DetailItem icon={Info} label="Commission" value={order.commission.toFixed(2)} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-y-5 gap-x-5">
+        <DetailItem
+          icon={User}
+          label="Login"
+          value={order.login || '-'}
+          description="Trading account that owns this order."
+        />
+        <DetailItem
+          icon={BarChart3}
+          label="Size"
+          value={`${formatMoney(order.lots)} lot`}
+          description={`Order exposure. Raw volume ${order.volume || 0}.`}
+        />
+        <DetailItem
+          icon={DollarSign}
+          label="Entry Price"
+          value={formatPrice(order.openPrice)}
+          description="Price where the order was opened."
+        />
+        <DetailItem
+          icon={DollarSign}
+          label="Current / Close"
+          value={formatPrice(order.closePrice)}
+          description="Latest close/current price returned by backend."
+        />
+        <DetailItem
+          icon={Clock}
+          label="Open Time"
+          value={formatDate(order.openTime)}
+          description="Backend timestamp for when the order opened."
+        />
+        <DetailItem
+          icon={Wallet}
+          label="Costs"
+          value={formatMoney(costs)}
+          description="Swap plus commission for this order."
+          color={costs < 0 ? 'var(--danger-text)' : 'var(--text)'}
+        />
       </div>
 
-      {/* Footer State */}
-      <div className="flex items-center justify-between pt-4 border-t border-[var(--border-2)]">
-        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-          <span className={`w-2 h-2 rounded-full ${order.state === 'filled' ? 'bg-[var(--ok)]' : 'bg-[var(--accent)]'} animate-pulse`}></span>
-          State: <span className="font-bold" style={{ color: 'var(--text)' }}>{order.state?.toUpperCase()}</span>
-        </div>
+      <div className="flex items-center gap-2 pt-4 border-t border-[var(--border-2)] text-[11px]" style={{ color: 'var(--text-3)' }}>
+        <Info size={12} style={{ color: 'var(--accent)' }} />
+        <span>
+          Showing the fields that matter for monitoring: ownership, direction, exposure, entry/current price, P/L, costs, and state.
+        </span>
       </div>
     </div>
   );
