@@ -9,8 +9,10 @@ export default defineConfig(({ mode, command }) => {
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
   const proxySecure = env.VITE_PROXY_INSECURE !== 'true'
+  const isDesktopMode = mode === 'electron' || mode === 'desktop'
 
   return {
+    base: isDesktopMode ? './' : '/',
     plugins: [
       react(),
       tailwindcss(),
