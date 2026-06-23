@@ -1,8 +1,8 @@
 import authService from './authService';
 import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints';
+import { isAuthExpiredStatus } from './authHttpStatus.js';
 import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction';
 
-const AUTH_REJECTION_STATUSES = new Set([401, 403]);
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 
 const expireAndThrow = (reason) => {
@@ -69,7 +69,7 @@ const apiClient = {
     try {
       const response = await fetch(finalUrl, { ...options, headers });
 
-      if (response.status === 401) {
+      if (isAuthExpiredStatus(response.status)) {
         console.warn('Authentication expired. Attempting silent refresh...');
 
         const sessionStatus = authService.getSessionStatus();
@@ -86,10 +86,6 @@ const apiClient = {
         expireAndThrow('refresh_failed');
       }
 
-      if (response.status === 403) {
-        expireAndThrow('token_rejected');
-      }
-
       return await this.handleResponse(response);
     } catch (error) {
       console.error('API request failed:', redactSensitive(error));
@@ -104,7 +100,7 @@ const apiClient = {
       data = JSON.parse(text);
     } catch {
       if (!response.ok) {
-        if (AUTH_REJECTION_STATUSES.has(response.status)) {
+        if (isAuthExpiredStatus(response.status)) {
           expireAndThrow('token_rejected');
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
@@ -116,7 +112,7 @@ const apiClient = {
     }
 
     if (!response.ok) {
-      if (AUTH_REJECTION_STATUSES.has(response.status)) {
+      if (isAuthExpiredStatus(response.status)) {
         expireAndThrow('token_rejected');
       }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;

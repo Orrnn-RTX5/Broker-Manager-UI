@@ -1,7 +1,7 @@
 {
   "name": "rtx5-broker-manager-ui",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "RTX-5 broker manager web and desktop UI",
   "author": "RTX-5",
   "type": "module",
@@ -10,7 +10,8 @@
     "dev": "vite --mode web",
     "dev:web": "vite --mode web",
     "dev:normal": "vite --mode web",
-    "dev:electron": "vite --mode electron",
+    "dev:electron": "npm run electron:dev",
+    "dev:electron:renderer": "vite --mode electron",
     "dev:desktop": "vite --mode desktop",
     "electron:dev": "concurrently -k \"vite --mode electron\" \"npm:desktop:main:watch\" \"wait-on http://localhost:5173 dist-electron/main.cjs && electron . --dev-server=http://localhost:5173\"",
     "build": "vite build --mode web",

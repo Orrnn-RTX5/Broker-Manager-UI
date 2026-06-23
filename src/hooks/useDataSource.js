@@ -13,9 +13,10 @@
  *   1. Replace the stub in src/services/api.js with a real fetch/axios call.
  *   2. No changes needed in components — the hook handles the rest.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const FETCH_TIMEOUT_MS = 8000; // 8 seconds before giving up and using fallback
+const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
 const useDataSource = (fetchFn, fallbackData, options = {}) => {
   const { pollingInterval = null } = options; // optional polling in ms
@@ -24,8 +25,15 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
   const [isFallback, setIsFallback] = useState(false);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
+  const fetchFnRef = useRef(fetchFn);
+  const fallbackDataRef = useRef(fallbackData);
 
-  const load = async () => {
+  useEffect(() => {
+    fetchFnRef.current = fetchFn;
+    fallbackDataRef.current = fallbackData;
+  }, [fetchFn, fallbackData]);
+
+  const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -35,18 +43,18 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
     );
 
     try {
-      const result = await Promise.race([fetchFn(), timeoutPromise]);
+      const result = await Promise.race([fetchFnRef.current(), timeoutPromise]);
       setData(result);
       setIsFallback(false);
     } catch (err) {
       console.warn(`[useDataSource] API call to backend failed: ${err.message}. FALLBACK: Disconnected state.`);
-      setData(fallbackData);
+      setData(fallbackDataRef.current);
       setIsFallback(true);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
@@ -55,11 +63,16 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
       intervalRef.current = setInterval(load, pollingInterval);
     }
 
+    const handleManagerRefresh = () => {
+      load();
+    };
+    window.addEventListener(MANAGER_REFRESH_EVENT, handleManagerRefresh);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.removeEventListener(MANAGER_REFRESH_EVENT, handleManagerRefresh);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load, pollingInterval]);
 
   return { data, isLoading, isFallback, error, reload: load };
 };

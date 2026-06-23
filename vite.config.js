@@ -8,8 +8,10 @@ export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
+  const wsHost = env.VITE_WS_HOST || apiHost
   const proxySecure = env.VITE_PROXY_INSECURE !== 'true'
   const isDesktopMode = mode === 'electron' || mode === 'desktop'
+  const wsProxyTarget = wsHost.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:')
 
   return {
     base: isDesktopMode ? './' : '/',
@@ -52,6 +54,16 @@ export default defineConfig(({ mode, command }) => {
           changeOrigin: true,
           secure: proxySecure,
           rewrite: (path) => path.replace(/^\/ext-api/, ''),
+        },
+        '/ws/feed': {
+          target: wsProxyTarget,
+          changeOrigin: true,
+          secure: proxySecure,
+          ws: true,
+          rewriteWsOrigin: true,
+          headers: {
+            Origin: wsProxyTarget,
+          },
         },
       }
     }

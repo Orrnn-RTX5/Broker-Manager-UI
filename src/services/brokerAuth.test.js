@@ -8,6 +8,7 @@ import {
   loginManager,
   resolveBrokerSelection,
   resolveDefaultBrokerSelectionId,
+  resolveInteractiveBrokerSelection,
 } from './brokerAuth.js';
 
 const createStorage = () => {
@@ -274,6 +275,95 @@ test('resolveDefaultBrokerSelectionId falls back to stored broker and then respo
     }),
     'broker-alpha'
   );
+});
+
+test('resolveInteractiveBrokerSelection keeps desktop broker selection unlocked and prefers stored broker', () => {
+  const brokers = [
+    {
+      broker_id: 'gta_broker',
+      name: 'Grow Trading Academy',
+      server: 'services.growtradingacademy.com:443',
+      domains: {
+        manager: 'manager.growtradingacademy.com',
+        services: 'services.growtradingacademy.com',
+      },
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'services.myprop.trade:443',
+      domains: {
+        manager: 'manager.myprop.trade',
+        services: 'services.myprop.trade',
+      },
+    },
+  ];
+
+  const selection = resolveInteractiveBrokerSelection(brokers, {
+    currentHostname: 'manager.growtradingacademy.com',
+    runtimeBrokerId: 'gta_broker',
+    runtimeHostnames: ['https://services.growtradingacademy.com'],
+    storedBrokerId: 'services.myprop.trade:443',
+    recentBrokerIds: ['services.growtradingacademy.com:443'],
+  });
+
+  assert.equal(selection.brokerId, 'services.myprop.trade:443');
+  assert.equal(selection.source, 'stored-broker');
+  assert.equal(selection.locked, false);
+});
+
+test('resolveInteractiveBrokerSelection prefers recent broker before response order', () => {
+  const brokers = [
+    {
+      broker_id: 'gta_broker',
+      name: 'Grow Trading Academy',
+      server: 'services.growtradingacademy.com:443',
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'services.myprop.trade:443',
+    },
+  ];
+
+  const selection = resolveInteractiveBrokerSelection(brokers, {
+    currentHostname: 'manager.growtradingacademy.com',
+    runtimeBrokerId: 'gta_broker',
+    runtimeHostnames: ['https://services.growtradingacademy.com'],
+    storedBrokerId: 'missing',
+    recentBrokerIds: ['services.myprop.trade:443'],
+  });
+
+  assert.equal(selection.brokerId, 'services.myprop.trade:443');
+  assert.equal(selection.source, 'recent-broker');
+  assert.equal(selection.locked, false);
+});
+
+test('resolveInteractiveBrokerSelection falls back to first broker unlocked', () => {
+  const brokers = [
+    {
+      broker_id: 'gta_broker',
+      name: 'Grow Trading Academy',
+      server: 'services.growtradingacademy.com:443',
+    },
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      server: 'services.myprop.trade:443',
+    },
+  ];
+
+  const selection = resolveInteractiveBrokerSelection(brokers, {
+    currentHostname: 'manager.growtradingacademy.com',
+    runtimeBrokerId: 'gta_broker',
+    runtimeHostnames: ['https://services.growtradingacademy.com'],
+    storedBrokerId: 'missing',
+    recentBrokerIds: ['missing-recent'],
+  });
+
+  assert.equal(selection.brokerId, 'services.growtradingacademy.com:443');
+  assert.equal(selection.source, 'first-broker');
+  assert.equal(selection.locked, false);
 });
 
 test('loginManager sends the selected opaque server handle to the broker backend', async () => {

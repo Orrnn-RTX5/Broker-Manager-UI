@@ -2,7 +2,9 @@ import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendFeedAuthToWsUrl,
+  buildFeedStatusUrl,
   buildFeedWsUrl,
+  buildManagerApiUrl,
   FEED_WS_AUTH_NOT_CONFIGURED,
   buildManagerApiPath,
   resolveFeedAuthRequired,
@@ -62,6 +64,25 @@ test('direct broker backend URLs bypass the /manager proxy prefix', () => {
   );
 });
 
+test('desktop manager login prefers public HTTPS broker backend over direct server IP', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_BACKEND_TARGET: 'desktop',
+  };
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'myprop-trade',
+    name: 'MyProp',
+    backend_url: 'https://services.myprop.trade',
+    desktop_backend_url: 'http://185.204.168.202:443',
+    server_ip: '185.204.168.202',
+    server_port: 443,
+  }));
+
+  assert.equal(
+    buildManagerApiUrl('/api/v2/auth/login'),
+    'https://services.myprop.trade/api/v2/auth/login'
+  );
+});
+
 test('feed websocket URL appends broker query auth when token is available', () => {
   const out = appendFeedAuthToWsUrl('wss://services.example/ws/feed', {
     brokerID: 'gta_broker',
@@ -89,6 +110,25 @@ test('feed websocket URL preserves explicit query auth', () => {
   const url = new URL(out);
   assert.equal(url.searchParams.get('broker_id'), 'existing');
   assert.equal(url.searchParams.get('token'), 'provided');
+});
+
+test('feed status URL uses explicit secure discovery status URL', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'myprop-trade',
+    feed_status_https_url: 'https://services.myprop.trade/ws/feed/status',
+    feed_wss_url: 'wss://services.myprop.trade/ws/feed',
+  }));
+
+  assert.equal(buildFeedStatusUrl(), 'https://services.myprop.trade/ws/feed/status');
+});
+
+test('feed status URL derives from feed websocket URL', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'myprop-trade',
+    feed_wss_url: 'wss://services.myprop.trade/ws/feed',
+  }));
+
+  assert.equal(buildFeedStatusUrl(), 'https://services.myprop.trade/ws/feed/status');
 });
 
 test('feed websocket URL uses explicit runtime feed token and ignores manager session tokens', () => {

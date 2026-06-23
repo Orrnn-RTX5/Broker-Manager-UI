@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, protocol, session, shell } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 import log from 'electron-log';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -9,6 +10,7 @@ const APP_PROTOCOL = 'rtx5-manager';
 const APP_HOST = 'app';
 const APP_ORIGIN = `${APP_PROTOCOL}://${APP_HOST}`;
 const DEFAULT_DEV_SERVER_URL = 'http://localhost:5173';
+const WINDOW_STATE_CHANNEL = 'rtx5-window:state';
 const PUBLIC_ASSET_FILES = new Set([
   'brand-logo.png',
   'login-trading-hero.png',
@@ -205,6 +207,54 @@ const configureAutoUpdates = (): void => {
   }, 15000);
 };
 
+const getWindowFromEvent = (event: IpcMainInvokeEvent): BrowserWindow | null =>
+  BrowserWindow.fromWebContents(event.sender);
+
+const sendWindowState = (windowRef: BrowserWindow): void => {
+  if (windowRef.isDestroyed()) return;
+  windowRef.webContents.send(WINDOW_STATE_CHANNEL, {
+    isMaximized: windowRef.isMaximized(),
+  });
+};
+
+const registerWindowControlIpc = (): void => {
+  ipcMain.handle('rtx5-window:minimize', (event) => {
+    const windowRef = getWindowFromEvent(event);
+    if (!windowRef) return false;
+    windowRef.minimize();
+    return true;
+  });
+
+  ipcMain.handle('rtx5-window:toggle-maximize', (event) => {
+    const windowRef = getWindowFromEvent(event);
+    if (!windowRef) return false;
+    if (windowRef.isMaximized()) {
+      windowRef.unmaximize();
+    } else {
+      windowRef.maximize();
+    }
+    return windowRef.isMaximized();
+  });
+
+  ipcMain.handle('rtx5-window:close', (event) => {
+    const windowRef = getWindowFromEvent(event);
+    if (!windowRef) return false;
+    windowRef.close();
+    return true;
+  });
+
+  ipcMain.handle('rtx5-window:is-maximized', (event) => {
+    const windowRef = getWindowFromEvent(event);
+    return windowRef?.isMaximized() ?? false;
+  });
+};
+
+const bindWindowStateEvents = (windowRef: BrowserWindow): void => {
+  windowRef.on('maximize', () => sendWindowState(windowRef));
+  windowRef.on('unmaximize', () => sendWindowState(windowRef));
+  windowRef.on('restore', () => sendWindowState(windowRef));
+};
+
 const createWindow = async (devServerOrigin: string | null): Promise<void> => {
   log.info('Creating desktop window', {
     packaged: app.isPackaged,
@@ -220,15 +270,19 @@ const createWindow = async (devServerOrigin: string | null): Promise<void> => {
     title: 'RTX-5 Broker Manager',
     backgroundColor: '#080f1f',
     icon: path.join(getDistDirectory(), 'logo V2.ico'),
+    frame: false,
     show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: true,
       devTools: !app.isPackaged || process.env.RTX5_ENABLE_DEVTOOLS === 'true',
     },
   });
+
+  bindWindowStateEvents(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
     log.info('Desktop window ready to show');
@@ -280,6 +334,7 @@ app.whenReady().then(async () => {
   registerAppProtocol();
   log.info('Desktop protocol registered');
   configureSessionSecurity(devServerOrigin);
+  registerWindowControlIpc();
   Menu.setApplicationMenu(null);
 
   await createWindow(devServerOrigin);

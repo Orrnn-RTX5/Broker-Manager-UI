@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['electron/main.ts'],
+  entry: ['electron/main.ts', 'electron/preload.ts'],
   outDir: 'dist-electron',
   clean: true,
   format: ['cjs'],

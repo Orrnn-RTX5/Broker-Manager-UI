@@ -129,6 +129,104 @@ body {
   letter-spacing: -0.005em;
 }
 
+.desktop-window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 138px;
+  height: 36px;
+  z-index: 9998;
+  -webkit-app-region: drag;
+}
+
+.desktop-window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 138px;
+  height: 36px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: auto;
+  -webkit-app-region: no-drag !important;
+}
+
+.desktop-window-controls-auth {
+  backdrop-filter: blur(10px);
+}
+
+.desktop-window-controls-auth .desktop-window-control {
+  color: #f8fafc;
+}
+
+.desktop-window-controls-auth .desktop-window-control:hover {
+  background: rgba(248, 250, 252, 0.12);
+  color: #ffffff;
+}
+
+.desktop-window-controls-workspace {
+  background: transparent;
+}
+
+.desktop-window-controls * {
+  -webkit-app-region: no-drag !important;
+}
+
+.desktop-window-control {
+  position: relative;
+  width: 44px;
+  flex: 0 0 46px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color 120ms, color 120ms;
+  -webkit-app-region: no-drag !important;
+}
+
+.desktop-window-control svg {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  -webkit-app-region: no-drag !important;
+}
+
+.desktop-window-control:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: #ffffff;
+}
+
+.desktop-window-control-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.desktop-window-controls-auth .desktop-window-control-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.desktop-window-controls-enabled .app-menu-bar {
+  padding-right: 146px;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls-enabled .app-menu-bar * {
+  -webkit-app-region: no-drag !important;
+}
+
 /* Numbers: tabular, lining, slashed zero — for grids, KPIs, prices */
 .tabular,
 .ui-grid,
@@ -221,6 +319,18 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 
 /* Manager login redesign */
 .manager-auth-shell {
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f2f4f7;
+  --border: #e4e7ec;
+  --border-2: #f2f4f7;
+  --border-3: #d0d5dd;
+  --text: #101828;
+  --text-2: #344054;
+  --text-3: #475467;
+  --muted: #667085;
+  --accent-soft: #ecfdf3;
+  --accent-text: #2c9a1d;
   --manager-shell-padding-block: 24px;
   --manager-card-padding-top: 30px;
   --manager-card-padding-inline: 36px;
@@ -422,6 +532,7 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   padding: var(--manager-broker-row-padding-block) 52px var(--manager-broker-row-padding-block) 22px;
   border-color: #d0d5dd;
   border-radius: 8px;
+  background: #ffffff;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
@@ -481,11 +592,25 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   padding: var(--manager-input-padding-block) 18px var(--manager-input-padding-block) 56px;
   border-color: #d0d5dd;
   border-radius: 8px;
+  background: #ffffff;
   color: #050812;
   font-size: 16px;
   line-height: 1.35;
   letter-spacing: 0;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.manager-input::placeholder {
+  color: #667085;
+}
+
+.manager-input:-webkit-autofill,
+.manager-input:-webkit-autofill:hover,
+.manager-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #050812;
+  caret-color: #050812;
+  box-shadow: 0 0 0 1000px #ffffff inset, 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: background-color 9999s ease-out;
 }
 
 .manager-input[readonly] {

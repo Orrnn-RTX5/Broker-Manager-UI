@@ -1,7 +1,7 @@
 import { buildManagerApiUrl } from '../config/endpoints';
 import authService from './authService';
+import { isAuthExpiredStatus } from './authHttpStatus.js';
 
-const AUTH_REJECTION_STATUSES = new Set([401, 403]);
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 
 const isLoginEndpoint = (endpoint) =>
@@ -12,11 +12,11 @@ const browserOrigin = () => {
   return 'http://localhost';
 };
 
-const buildAuthenticatedUrl = (endpoint, token, legacyQueryToken = false) => {
+const buildAuthenticatedUrl = (endpoint, token, { legacyQueryToken = false, preserveQueryId = false } = {}) => {
   const url = new URL(buildManagerApiUrl(endpoint), browserOrigin());
   if (legacyQueryToken && token) {
     url.searchParams.set('id', token);
-  } else {
+  } else if (!preserveQueryId) {
     url.searchParams.delete('id');
   }
   return url.toString();
@@ -27,7 +27,12 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
     throw new Error('Legacy /Connect login is disabled. Use broker login instead.');
   }
 
-  const { legacyQueryToken = false, headers: optionHeaders, ...fetchOptions } = options || {};
+  const {
+    legacyQueryToken = false,
+    preserveQueryId = false,
+    headers: optionHeaders,
+    ...fetchOptions
+  } = options || {};
   const sessionStatus = authService.getSessionStatus();
   if (!sessionStatus.authenticated) {
     authService.expireSession(sessionStatus.reason || 'session_invalid');
@@ -38,12 +43,12 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
   const headers = { accept: 'application/json', ...optionHeaders };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(buildAuthenticatedUrl(endpoint, token, legacyQueryToken), {
+  const response = await fetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
     ...fetchOptions,
     headers,
   });
 
-  if (AUTH_REJECTION_STATUSES.has(response.status)) {
+  if (isAuthExpiredStatus(response.status)) {
     authService.expireSession('token_rejected');
   }
 

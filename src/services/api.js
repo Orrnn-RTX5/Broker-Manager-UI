@@ -1,5 +1,10 @@
 import apiClient from './apiClient';
+import authService from './authService';
+import { fetchManagerApi } from './managerFetch';
+import { API_HOST, updateDynamicEndpoints } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
+
+const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 
 const query = (params) => new URLSearchParams(
   Object.entries(params).reduce((acc, [key, value]) => {
@@ -12,6 +17,119 @@ const arrayQuery = (key, values = []) => {
   const params = new URLSearchParams();
   values.forEach((value) => params.append(key, String(value)));
   return params.toString();
+};
+
+const readJson = async (response) => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+};
+
+const getResponseMessage = (data, fallback) =>
+  data?.error?.message ||
+  data?.error ||
+  data?.message ||
+  data?.detail ||
+  fallback;
+
+const expireAndThrow = (reason) => {
+  authService.expireSession(reason);
+  throw new Error(SESSION_ERROR_MESSAGE);
+};
+
+const buildBrokerV2Url = (path, params = {}) => {
+  updateDynamicEndpoints();
+  if (!API_HOST) throw new Error('Broker backend URL is not configured.');
+
+  const normalizedPath = String(path || '').replace(/^\/+/, '');
+  const url = new URL(`${API_HOST.replace(/\/+$/, '')}/api/v2/${normalizedPath}`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString();
+};
+
+const getBrokerV2Json = async (path, params = {}) => {
+  const url = buildBrokerV2Url(path, params);
+  const prepareHeaders = () => {
+    const sessionStatus = authService.getSessionStatus();
+    if (!sessionStatus.authenticated) {
+      expireAndThrow(sessionStatus.reason || 'session_invalid');
+    }
+
+    return {
+      accept: 'application/json',
+      Authorization: `Bearer ${sessionStatus.snapshot.token}`,
+    };
+  };
+
+  let response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
+  if (response.status === 401) {
+    const nextToken = await authService.refreshSession();
+    if (!nextToken) expireAndThrow('token_rejected');
+    response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
+  }
+
+  const data = await readJson(response);
+  if (!response.ok) {
+    const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+};
+
+const getRecords = (data, key) => {
+  if (Array.isArray(data)) return data;
+  const records = data?.[key] || data?.answer || data?.data || data?.records || [];
+  return Array.isArray(records) ? records : [];
+};
+
+const normalizePositionHistoryRow = (p, index = 0) => {
+  const side = String(p.side ?? p.action ?? '').toLowerCase();
+  const cmd = Number(p.cmd ?? p.Cmd);
+  const type = side.includes('sell') || cmd === 1 ? 'sell' : 'buy';
+
+  return {
+    order: p.order ?? p.close_deal ?? p.ticket ?? p.position ?? p.open_deal ?? index,
+    login: p.account_login ?? p.login ?? p.Login ?? 0,
+    symbol: p.symbol ?? p.Symbol ?? '',
+    type,
+    volume: p.volume_lots ?? p.lots ?? p.volume ?? p.Volume ?? 0,
+    openTime: p.time_open ?? p.open_time ?? p.openTime ?? p.timeCreate ?? p.TimeCreate ?? 0,
+    closeTime: p.time_close ?? p.close_time ?? p.closeTime ?? p.timeDone ?? p.TimeDone ?? 0,
+    openPrice: p.price_open ?? p.open_price ?? p.openPrice ?? p.PriceOpen ?? 0,
+    closePrice: p.price_close ?? p.close_price ?? p.closePrice ?? p.PriceClose ?? 0,
+    sl: p.price_sl ?? p.sl ?? p.SL ?? 0,
+    tp: p.price_tp ?? p.tp ?? p.TP ?? 0,
+    profit: p.profit ?? p.Profit ?? 0,
+    swap: p.swap ?? p.storage ?? p.Swap ?? p.Storage ?? 0,
+    commission: p.commission ?? p.Commission ?? 0,
+    comment: p.comment ?? p.Comment ?? '',
+  };
+};
+
+const getOrderHistory = async (loginId) => {
+  const params = new URLSearchParams({ login: String(loginId) });
+  const response = await fetchManagerApi(`/OrderHistory?${params.toString()}`, {
+    method: 'GET',
+    legacyQueryToken: true,
+  });
+  const data = await readJson(response);
+
+  if (!response.ok) {
+    const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
+    error.status = response.status;
+    throw error;
+  }
+
+  return getRecords(data, 'answer').map(normalizePositionHistoryRow);
 };
 
 // ─── Online Users ──────────────────────────────────────────────────────────────
@@ -110,26 +228,25 @@ export const getPositions = async () => {
 
 export const getPositionHistory = async (loginId) => {
   if (!loginId) return [];
-  const data = await apiClient.get(`/PositionHistoryMT4Format?${arrayQuery('logins[]', [loginId])}`);
-  const records = Array.isArray(data) ? data : data.answer || [];
 
-  return records.map(p => ({
-    order: p.order || 0,
-    login: p.login || 0,
-    symbol: p.symbol || '',
-    type: p.cmd === 0 ? 'buy' : 'sell',
-    volume: p.volume || 0,
-    openTime: p.open_time || 0,
-    closeTime: p.close_time || 0,
-    openPrice: p.open_price || 0,
-    closePrice: p.close_price || 0,
-    sl: p.sl || 0,
-    tp: p.tp || 0,
-    profit: p.profit || 0,
-    swap: p.swap || 0,
-    commission: p.commission || 0,
-    comment: p.comment || '',
-  }));
+  try {
+    return await getOrderHistory(loginId);
+  } catch (error) {
+    if (error.status && error.status !== 404) throw error;
+  }
+
+  try {
+    const data = await getBrokerV2Json(`positions/${encodeURIComponent(loginId)}/history`, {
+      limit: 500,
+      offset: 0,
+    });
+    return getRecords(data, 'positions').map(normalizePositionHistoryRow);
+  } catch (error) {
+    if (error.status !== 404) throw error;
+  }
+
+  const data = await apiClient.get(`/PositionHistoryMT4Format?${arrayQuery('logins[]', [loginId])}`);
+  return getRecords(data, 'answer').map(normalizePositionHistoryRow);
 };
 
 export const getOpenedOrders = async (login) => {

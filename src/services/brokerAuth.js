@@ -301,6 +301,13 @@ const getRuntimeHostnames = () => RUNTIME_HOSTNAME_KEYS
   .map((key) => getRuntimeConfigValue([key]))
   .filter(Boolean);
 
+const createBrokerSelectionResult = (broker, source, locked = false) => ({
+  broker,
+  brokerId: broker ? getBrokerSelectionId(broker) : '',
+  source,
+  locked,
+});
+
 export const resolveDefaultBrokerSelectionId = (
   brokerList = [],
   {
@@ -316,6 +323,25 @@ export const resolveDefaultBrokerSelectionId = (
   storedBrokerId,
 }).brokerId;
 
+export const resolveInteractiveBrokerSelection = (
+  brokerList = [],
+  {
+    storedBrokerId = '',
+    recentBrokerIds = [],
+  } = {}
+) => {
+  const storedBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, storedBrokerId));
+  if (storedBroker) return createBrokerSelectionResult(storedBroker, 'stored-broker', false);
+
+  const recentIds = Array.isArray(recentBrokerIds) ? recentBrokerIds : [];
+  for (const brokerId of recentIds) {
+    const recentBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, brokerId));
+    if (recentBroker) return createBrokerSelectionResult(recentBroker, 'recent-broker', false);
+  }
+
+  return createBrokerSelectionResult(brokerList[0], brokerList[0] ? 'first-broker' : 'none', false);
+};
+
 export const resolveBrokerSelection = (
   brokerList = [],
   {
@@ -325,28 +351,21 @@ export const resolveBrokerSelection = (
     storedBrokerId = '',
   } = {}
 ) => {
-  const result = (broker, source, locked = false) => ({
-    broker,
-    brokerId: broker ? getBrokerSelectionId(broker) : '',
-    source,
-    locked,
-  });
-
   const runtimeBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId));
-  if (runtimeBroker) return result(runtimeBroker, 'runtime-broker-id', true);
+  if (runtimeBroker) return createBrokerSelectionResult(runtimeBroker, 'runtime-broker-id', true);
 
   const hostnameMatchedBroker = brokerList.find((broker) => brokerMatchesHostname(broker, currentHostname));
-  if (hostnameMatchedBroker) return result(hostnameMatchedBroker, 'hostname', true);
+  if (hostnameMatchedBroker) return createBrokerSelectionResult(hostnameMatchedBroker, 'hostname', true);
 
   const runtimeHostnameMatchedBroker = brokerList.find((broker) => (
     runtimeHostnames.some((hostname) => brokerMatchesHostname(broker, hostname))
   ));
-  if (runtimeHostnameMatchedBroker) return result(runtimeHostnameMatchedBroker, 'runtime-hostname', true);
+  if (runtimeHostnameMatchedBroker) return createBrokerSelectionResult(runtimeHostnameMatchedBroker, 'runtime-hostname', true);
 
   const storedBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, storedBrokerId));
-  if (storedBroker) return result(storedBroker, 'stored-broker', false);
+  if (storedBroker) return createBrokerSelectionResult(storedBroker, 'stored-broker', false);
 
-  return result(brokerList[0], brokerList[0] ? 'first-broker' : 'none', false);
+  return createBrokerSelectionResult(brokerList[0], brokerList[0] ? 'first-broker' : 'none', false);
 };
 
 export const getBrokerDisplayServerName = (broker = {}) => {

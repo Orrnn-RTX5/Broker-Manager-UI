@@ -261,6 +261,11 @@ const WEB_BACKEND_DOMAIN_KEYS = [
   'web_backend_domain',
 ];
 
+const BROKER_PUBLIC_BACKEND_KEYS = [
+  ...WEB_BACKEND_KEYS,
+  ...WEB_BACKEND_DOMAIN_KEYS,
+];
+
 const DESKTOP_BACKEND_KEYS = [
   'desktop_backend_url',
   'desktop_api_url',
@@ -289,13 +294,32 @@ const resolveWebBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
   return '';
 };
 
+const resolveBrokerPublicBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
+  for (const key of BROKER_PUBLIC_BACKEND_KEYS) {
+    const candidate = WEB_BACKEND_DOMAIN_KEYS.includes(key)
+      ? normalizeDomainCandidate(getValue(brokerInfo, [key]))
+      : getValue(brokerInfo, [key]);
+    const resolved = sanitizeWebBackendCandidate(candidate, brokerInfo, fallbackUrl);
+    if (resolved) return resolved;
+  }
+
+  return '';
+};
+
 const resolveDesktopBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
   const explicit = getValue(brokerInfo, DESKTOP_BACKEND_KEYS);
-  if (explicit) return normalizeDesktopHttpUrl(explicit);
+  const normalizedExplicit = explicit ? normalizeDesktopHttpUrl(explicit) : '';
+  const explicitHost = hostnameFromUrl(normalizedExplicit);
+  if (normalizedExplicit && explicitHost && !isIpAddress(explicitHost)) return normalizedExplicit;
 
   if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) {
     return GTA_PUBLIC_BACKEND_URL;
   }
+
+  const publicBackend = resolveBrokerPublicBackendUrl(brokerInfo, fallbackUrl);
+  if (publicBackend) return publicBackend;
+
+  if (normalizedExplicit) return normalizedExplicit;
 
   const host = getValue(brokerInfo, DIRECT_HOST_KEYS);
   const port = getValue(brokerInfo, DIRECT_PORT_KEYS, String(DEFAULT_DIRECT_BACKEND_PORT));

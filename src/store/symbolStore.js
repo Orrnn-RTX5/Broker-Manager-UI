@@ -1,7 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { buildFeedWsUrl, getFeedWsDisabledMessage } from '../config/endpoints';
+import {
+  buildFeedWsUrl,
+  FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE,
+  getFeedWsDisabledMessage,
+} from '../config/endpoints';
+import {
+  fetchSymbolMetadataFallback,
+  getSymbolName,
+  SYMBOL_METADATA_FALLBACK_REASON,
+} from '../services/symbolMetadata';
 import { FEED_DATA_STATE } from '../utils/feedStatus';
+import { extractFeedTicks } from '../utils/feedMessages';
 
 const CATEGORIES = {
   METALS: 'Metals',
@@ -33,8 +43,6 @@ const getCategory = (symbol) => {
   return CATEGORIES.OTHERS;
 };
 
-const getSymbolName = (entry = {}) => String(entry.symbol || '').trim();
-
 const getSymbolFeedFields = (entry = {}, staleReason = '') => {
   const isStale = Boolean(staleReason || entry.isStale || entry.feedState === FEED_DATA_STATE.CACHED);
   return {
@@ -42,6 +50,19 @@ const getSymbolFeedFields = (entry = {}, staleReason = '') => {
     isStale,
     staleReason: isStale ? (staleReason || entry.staleReason || '') : '',
   };
+};
+
+const formatPrice = (value, fallback = '0.00000') => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(5) : fallback;
+};
+
+const getEntryValue = (entry = {}, keys = []) => {
+  if (!entry || typeof entry !== 'object') return undefined;
+  for (const key of keys) {
+    if (entry[key] !== undefined && entry[key] !== null && entry[key] !== '') return entry[key];
+  }
+  return undefined;
 };
 
 const buildMetadataEntry = (entry = {}, staleReason = '') => {
@@ -82,6 +103,51 @@ const markCachedSymbolData = (state, staleReason) => {
   };
 };
 
+const buildFallbackSymbols = (rows = [], staleReason = '', currentSymbols = {}) => {
+  const now = Date.now();
+  return rows.reduce((acc, row) => {
+    const symbol = getSymbolName(row);
+    if (!symbol) return acc;
+
+    const source = row && typeof row === 'object' ? row : {};
+    const existing = acc[symbol] || currentSymbols[symbol] || {};
+    const bid = getEntryValue(source, ['bid', 'Bid', 'price_bid', 'priceBid']);
+    const ask = getEntryValue(source, ['ask', 'Ask', 'price_ask', 'priceAsk']);
+
+    acc[symbol] = {
+      ...existing,
+      ...source,
+      symbol,
+      bid: formatPrice(bid, existing.bid || '0.00000'),
+      ask: formatPrice(ask, existing.ask || '0.00000'),
+      lastUpdate: existing.lastUpdate || now,
+      category: source.category || source.Category || existing.category || getCategory(symbol),
+      dir: existing.dir || 'up',
+      ...getSymbolFeedFields(source, staleReason),
+    };
+    return acc;
+  }, { ...currentSymbols });
+};
+
+const hasFeedQueryToken = (wsUrl = '') => {
+  const raw = String(wsUrl || '');
+  if (!raw) return false;
+  try {
+    const url = new URL(raw, 'http://rtx.local');
+    return Boolean(String(url.searchParams.get('token') || '').trim());
+  } catch {
+    const query = raw.split('?')[1]?.split('#')[0];
+    if (!query) return false;
+    try {
+      return Boolean(String(new URLSearchParams(query).get('token') || '').trim());
+    } catch {
+      return false;
+    }
+  }
+};
+
+let symbolFallbackPromise = null;
+
 const useSymbolStore = create(
   persist(
     (set, get) => ({
@@ -89,6 +155,7 @@ const useSymbolStore = create(
       symbolMetadata: [], // Stable list of metadata
       ws: null,
       isConnected: false,
+      isConnecting: false,
       feedError: '',
 
       upsertSymbols: (dataArray) => {
@@ -100,9 +167,17 @@ const useSymbolStore = create(
           const updatedSymbols = new Set();
 
           dataArray.forEach(data => {
-            const { symbol, bid, ask } = data;
+            const symbol = getSymbolName(data);
+            if (!symbol) return;
+            const { bid, ask } = data;
             if (!nextSymbols[symbol]) metadataUpdated = true;
             updatedSymbols.add(symbol);
+
+            const previousBid = Number(nextSymbols[symbol]?.bid);
+            const nextBid = Number(bid);
+            const dir = Number.isFinite(previousBid) && Number.isFinite(nextBid)
+              ? (nextBid >= previousBid ? 'up' : 'down')
+              : (nextSymbols[symbol]?.dir || 'up');
             
             const category = getCategory(symbol);
             nextSymbols[symbol] = {
@@ -112,6 +187,7 @@ const useSymbolStore = create(
               ask: ask !== undefined && ask !== null ? Number(ask).toFixed(5) : (nextSymbols[symbol]?.ask || '0.00000'),
               lastUpdate: now,
               category,
+              dir,
               feedState: FEED_DATA_STATE.LIVE,
               isStale: false,
               staleReason: '',
@@ -135,10 +211,48 @@ const useSymbolStore = create(
         });
       },
 
-      initWebSocket: () => {
-        if (get().ws) return;
+      loadSymbolFallback: async (staleReason = SYMBOL_METADATA_FALLBACK_REASON, options = {}) => {
+        if (symbolFallbackPromise) return symbolFallbackPromise;
 
-        const connect = () => {
+        symbolFallbackPromise = (async () => {
+          const result = await fetchSymbolMetadataFallback();
+          const reason = staleReason || SYMBOL_METADATA_FALLBACK_REASON;
+
+          set((state) => {
+            if (!Array.isArray(result.symbols) || result.symbols.length === 0) {
+              return options.setFeedError
+                ? {
+                    ...markCachedSymbolData(state, reason),
+                    feedError: reason,
+                  }
+                : {};
+            }
+
+            const nextSymbols = buildFallbackSymbols(result.symbols, reason, state.symbols);
+            return {
+              symbols: nextSymbols,
+              symbolMetadata: buildSymbolMetadata(nextSymbols, reason),
+              ...(options.setFeedError ? { feedError: reason } : {}),
+            };
+          });
+
+          return result;
+        })().finally(() => {
+          symbolFallbackPromise = null;
+        });
+
+        return symbolFallbackPromise;
+      },
+
+      initWebSocket: () => {
+        if (get().ws || get().isConnecting) return;
+
+        const connect = async () => {
+          if (get().ws || get().isConnecting) return;
+          set({ isConnecting: true });
+
+          const fallback = await get().loadSymbolFallback(SYMBOL_METADATA_FALLBACK_REASON).catch(() => null);
+
           let wsUrl;
           try {
             wsUrl = buildFeedWsUrl();
@@ -148,6 +262,20 @@ const useSymbolStore = create(
             set((state) => ({
               ...markCachedSymbolData(state, message),
               isConnected: false,
+              isConnecting: false,
+              ws: null,
+              feedError: message,
+            }));
+            return;
+          }
+
+          if (fallback?.feedAuthRequired && !hasFeedQueryToken(wsUrl)) {
+            const message = FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE;
+            console.warn(`[SymbolStore] ${message}`);
+            set((state) => ({
+              ...markCachedSymbolData(state, message),
+              isConnected: false,
+              isConnecting: false,
               ws: null,
               feedError: message,
             }));
@@ -155,25 +283,30 @@ const useSymbolStore = create(
           }
 
           console.debug('[SymbolStore] Connecting to feed WebSocket');
-          const ws = new WebSocket(wsUrl);
+          let ws;
+          try {
+            ws = new WebSocket(wsUrl);
+          } catch {
+            const message = 'Market feed unavailable: websocket connection could not be started.';
+            set((state) => ({
+              ...markCachedSymbolData(state, message),
+              isConnected: false,
+              isConnecting: false,
+              ws: null,
+              feedError: message,
+            }));
+            return;
+          }
 
           ws.onopen = () => {
             console.debug('[SymbolStore] Connected to feed WebSocket');
-            set({ isConnected: true, feedError: '' });
+            set({ isConnected: true, isConnecting: false, feedError: '' });
             ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
           };
 
           ws.onmessage = (e) => {
             try {
-              const messages = e.data.trim().split('\n');
-              const updates = [];
-              messages.forEach(msgStr => {
-                if (!msgStr) return;
-                const msg = JSON.parse(msgStr);
-                if (msg.symbol && (msg.bid !== undefined || msg.ask !== undefined)) {
-                  updates.push(msg);
-                }
-              });
+              const updates = extractFeedTicks(e.data);
               if (updates.length > 0) {
                 get().upsertSymbols(updates);
               }
@@ -184,16 +317,20 @@ const useSymbolStore = create(
 
           ws.onclose = () => {
             console.log('[SymbolStore] Disconnected. Reconnecting...');
-            set({ isConnected: false, ws: null });
-            setTimeout(connect, 5000);
+            set({ isConnected: false, isConnecting: false, ws: null });
+            if (!get().feedError?.includes('Market feed disabled')) {
+              setTimeout(connect, 5000);
+            }
           };
 
           ws.onerror = () => {
             const message = 'Market feed unavailable: websocket connection failed.';
             set((state) => ({
               ...markCachedSymbolData(state, message),
+              isConnecting: false,
               feedError: message,
             }));
+            get().loadSymbolFallback(message, { setFeedError: true });
             ws.close();
           };
 

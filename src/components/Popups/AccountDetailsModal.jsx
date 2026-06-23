@@ -10,6 +10,7 @@ import { fetchManagerApi } from '../../services/managerFetch';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
+import { extractFeedTicks } from '../../utils/feedMessages';
 import { canMutateAccountTrades, TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
@@ -400,11 +401,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       };
       ws.onmessage = (e) => {
         try {
-          const messages = e.data.trim().split('\n');
           let newTick = null;
-          messages.forEach(msgStr => {
-            if (!msgStr) return;
-            const msg = JSON.parse(msgStr);
+          extractFeedTicks(e.data).forEach((msg) => {
             if (msg.symbol === tradeSymbolRef.current && msg.bid != null && msg.ask != null) {
               newTick = { bid: parseFloat(msg.bid), ask: parseFloat(msg.ask), time: Date.now() };
             }

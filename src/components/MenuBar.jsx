@@ -48,8 +48,6 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
     if (isAuthenticated) {
         checkConnection();
         intervalId = setInterval(checkConnection, 10000); // Poll every 10s
-    } else {
-        setConnectionData(null);
     }
 
     return () => {
@@ -116,12 +114,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
     }
   };
 
-  const isConnected = connectionData?.status === 'Connected';
-  const pingTone = pingMs == null ? 'var(--muted)' : pingMs < 150 ? 'var(--ok)' : 'var(--warn)';
+  const visibleConnectionData = isAuthenticated ? connectionData : null;
+  const visiblePingMs = isAuthenticated ? pingMs : null;
+  const isConnected = visibleConnectionData?.status === 'Connected';
+  const pingTone = visiblePingMs == null ? 'var(--muted)' : visiblePingMs < 150 ? 'var(--ok)' : 'var(--warn)';
 
   return (
     <div
-      className="h-9 flex items-center justify-between px-2 text-[13px] select-none relative z-50"
+      className="app-menu-bar h-9 flex items-center justify-between px-2 text-[13px] select-none relative z-50"
       style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
@@ -215,11 +215,11 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
                 <div style={{ color: 'var(--text-3)' }}>Status</div>
-                <div style={{ color: 'var(--ok-text)', fontWeight: 500 }}>{connectionData.status}</div>
+                <div style={{ color: 'var(--ok-text)', fontWeight: 500 }}>{visibleConnectionData.status}</div>
                 <div style={{ color: 'var(--text-3)' }}>Login</div>
-                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{connectionData.login}</div>
+                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.login}</div>
                 <div style={{ color: 'var(--text-3)' }}>Uptime</div>
-                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{connectionData.connectedTime}s</div>
+                <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.connectedTime}s</div>
               </div>
             </div>
           )}

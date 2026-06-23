@@ -20,6 +20,16 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
+const HeaderCell = ({ col, label, align = 'left', sortCol, sortDir, onSort }) => (
+  <th
+    onClick={() => onSort(col)}
+    style={{ textAlign: align }}
+    className="cursor-pointer hover:bg-var(--surface-3) transition-colors"
+  >
+    {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+  </th>
+);
+
 const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
   const [sortCol, setSortCol] = useState('openTime');
   const [sortDir, setSortDir] = useState('desc');
@@ -42,12 +52,6 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
     return rows;
   }, [data, sortCol, sortDir]);
 
-  const TH = ({ col, label, align = 'left' }) => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }} className="cursor-pointer hover:bg-var(--surface-3) transition-colors">
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
-    </th>
-  );
-
   return (
     <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
       {error && (
@@ -60,21 +64,21 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <TH col="order" label="Order ID" />
-              <TH col="login" label="Login" />
-              <TH col="symbol" label="Symbol" />
-              <TH col="type" label="Type" />
-              <TH col="volume" label="Volume" align="right" />
-              <TH col="openPrice" label="Open Price" align="right" />
-              <TH col="closePrice" label="Close Price" align="right" />
-              <TH col="openTime" label="Open Time" />
-              <TH col="closeTime" label="Close Time" />
-              <TH col="sl" label="S/L" align="right" />
-              <TH col="tp" label="T/P" align="right" />
-              <TH col="profit" label="Profit" align="right" />
-              <TH col="swap" label="Swap" align="right" />
-              <TH col="commission" label="Comm." align="right" />
-              <TH col="comment" label="Comment" />
+              <HeaderCell col="order" label="Order ID" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="login" label="Login" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="symbol" label="Symbol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="type" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="volume" label="Volume" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="openPrice" label="Open Price" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="closePrice" label="Close Price" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="openTime" label="Open Time" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="closeTime" label="Close Time" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="sl" label="S/L" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="tp" label="T/P" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="profit" label="Profit" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="swap" label="Swap" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="commission" label="Comm." align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="comment" label="Comment" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>

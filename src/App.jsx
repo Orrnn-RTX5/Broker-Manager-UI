@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import { AdminLogin, ManagerLogin } from './features/auth/BrokerAuthScreens';
+import DesktopWindowControls from './components/DesktopWindowControls';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
@@ -178,6 +179,7 @@ function App() {
   return (
     <Router>
       <GlobalErrorBoundary>
+        <DesktopWindowControls variant={isAuthenticated ? 'workspace' : 'auth'} />
         {!isAuthenticated ? (
           <Routes>
             <Route path="/" element={<Navigate to="/manager-login" replace />} />

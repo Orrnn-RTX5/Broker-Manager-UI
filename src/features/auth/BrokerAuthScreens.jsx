@@ -20,16 +20,19 @@ import {
   discoverBrokerById,
   fetchBrokerList,
   getBrokerInfo,
+  getRecentBrokers,
   loginAdmin,
   loginManager,
   rememberBroker,
   resolveBrokerSelection,
   resolveDefaultBrokerSelectionId,
+  resolveInteractiveBrokerSelection,
   setAuthSession,
   setBrokerInfo,
   getBrokerDisplayServerName,
   getBrokerSelectionId,
 } from '../../services/brokerAuth';
+import { isDesktopBackendTarget } from '../../config/backendTarget';
 
 const AUTH_HERO_IMAGE = '/login-trading-hero.png';
 const BRAND_LOGO = '/brand-logo.png';
@@ -541,7 +544,12 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
 
     fetchBrokerList()
       .then((list) => {
-        const selection = resolveBrokerSelection(list, { storedBrokerId: storedId });
+        const selection = isDesktopBackendTarget()
+          ? resolveInteractiveBrokerSelection(list, {
+            storedBrokerId: storedId,
+            recentBrokerIds: getRecentBrokers(),
+          })
+          : resolveBrokerSelection(list, { storedBrokerId: storedId });
 
         setBrokerList(list);
         setSelectedId(selection.brokerId);

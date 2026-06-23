@@ -236,6 +236,19 @@ const FEED_AUTH_REQUIRED_KEYS = [
   'env.VITE_FEED_AUTH_REQUIRED',
 ];
 
+const FEED_STATUS_URL_KEYS = [
+  'web_feed_status_https_url',
+  'webFeedStatusHttpsUrl',
+  'feed_status_https_url',
+  'feedStatusHttpsUrl',
+  'web_feed_status_url',
+  'webFeedStatusUrl',
+  'feed_status_url',
+  'feedStatusUrl',
+  'env.FEED_STATUS_URL',
+  'env.VITE_FEED_STATUS_URL',
+];
+
 export const FEED_WS_AUTH_NOT_CONFIGURED = 'FEED_WS_AUTH_NOT_CONFIGURED';
 export const FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE =
   'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN for this manager UI deployment.';
@@ -317,6 +330,78 @@ const getExistingFeedQueryToken = (wsUrl = '') => {
   }
 };
 
+const isLocalHttpOrigin = () => {
+  if (typeof window === 'undefined' || !window.location?.origin) return false;
+  try {
+    const url = new URL(window.location.origin);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+};
+
+const shouldUseFeedDevProxy = () => {
+  const explicit = getRuntimeConfigValue(['FEED_USE_DEV_PROXY', 'VITE_FEED_USE_DEV_PROXY'], 'true');
+  return import.meta.env?.DEV === true && explicit !== 'false' && isLocalHttpOrigin();
+};
+
+const toLocalDevWsProxyUrl = (feedUrl = '') => {
+  if (!shouldUseFeedDevProxy()) return feedUrl;
+
+  try {
+    const upstream = new URL(feedUrl);
+    const local = new URL(window.location.origin);
+    local.protocol = local.protocol === 'https:' ? 'wss:' : 'ws:';
+    local.pathname = upstream.pathname;
+    local.search = upstream.search;
+    local.hash = '';
+    return local.toString();
+  } catch {
+    return feedUrl;
+  }
+};
+
+const normalizeFeedStatusUrl = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+    if (url.protocol === 'wss:') url.protocol = 'https:';
+    if (url.protocol === 'ws:') url.protocol = 'http:';
+    if (!/\/status\/?$/i.test(url.pathname)) {
+      url.pathname = `${trimTrailingSlash(url.pathname || WS_FEED_PATH)}/status`;
+    }
+    url.search = '';
+    url.hash = '';
+    return trimTrailingSlash(url.toString());
+  } catch {
+    const withoutTrailingSlash = trimTrailingSlash(raw)
+      .replace(/^wss:/i, 'https:')
+      .replace(/^ws:/i, 'http:');
+    return /\/status$/i.test(withoutTrailingSlash)
+      ? withoutTrailingSlash
+      : `${withoutTrailingSlash}/status`;
+  }
+};
+
+export const buildFeedStatusUrl = () => {
+  const storedInfo = readBrokerInfo();
+  const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
+  const explicit = firstValue(
+    firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS),
+    getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL'])
+  );
+
+  if (explicit) return normalizeFeedStatusUrl(explicit);
+
+  const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
+  return normalizeFeedStatusUrl(wsUrl);
+};
+
 export const getFeedWsDisabledMessage = (error) => (
   error?.code === FEED_WS_AUTH_NOT_CONFIGURED
     ? error.message
@@ -332,7 +417,7 @@ export const buildFeedWsUrl = () => {
   if (!token && resolveFeedAuthRequired(brokerInfo)) {
     throw new FeedWsAuthConfigError();
   }
-  return appendFeedAuthToWsUrl(wsUrl, { ...auth, token });
+  return toLocalDevWsProxyUrl(appendFeedAuthToWsUrl(wsUrl, { ...auth, token }));
 };
 
 const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));

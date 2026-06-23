@@ -2,6 +2,8 @@
 // Authorization headers; REST token query parameters are intentionally avoided.
 
 import apiClient from './apiClient';
+import { getSessionClaims } from './authService';
+import { fetchManagerApi } from './managerFetch';
 
 const TRADE_BASE = '/ext-api';
 
@@ -16,6 +18,157 @@ const qs = (params) => new URLSearchParams(
     return acc;
   }, {})
 ).toString();
+
+const readJson = async (response) => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+};
+
+const getResponseMessage = (data, fallback) =>
+  data?.error?.message ||
+  data?.error ||
+  data?.message ||
+  data?.detail ||
+  fallback;
+
+const getRecords = (data, key) => {
+  if (Array.isArray(data)) return data;
+  const records =
+    data?.[key] ||
+    data?.answer ||
+    data?.data ||
+    data?.records ||
+    data?.items ||
+    data?.queue ||
+    data?.requests ||
+    data?.orders ||
+    data?.list ||
+    data?.restrictions ||
+    [];
+  return Array.isArray(records) ? records : [];
+};
+
+const asBoolean = (value) => value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+const toNumber = (value, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const toUnixSeconds = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 100000000000 ? Math.floor(value / 1000) : value;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw);
+    return numeric > 100000000000 ? Math.floor(numeric / 1000) : numeric;
+  }
+
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? 0 : Math.floor(parsed / 1000);
+};
+
+const normalizeOrderSide = (value) => {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return '';
+  if (raw === '0' || raw.includes('buy')) return 'buy';
+  if (raw === '1' || raw.includes('sell')) return 'sell';
+  return raw;
+};
+
+const normalizeRestrictionRow = (row = {}) => ({
+  accountLogin: firstDefined(row.accountLogin, row.account_login, row.login, row.Login, row.id, ''),
+  noTrading: asBoolean(firstDefined(row.noTrading, row.no_trading, row.noTrade, row.no_trade, false)),
+  noDeposit: asBoolean(firstDefined(row.noDeposit, row.no_deposit, false)),
+  noWithdraw: asBoolean(firstDefined(row.noWithdraw, row.no_withdraw, row.noWithdrawal, row.no_withdrawal, false)),
+  closeOnly: asBoolean(firstDefined(row.closeOnly, row.close_only, false)),
+  maxLot: firstDefined(row.maxLot, row.max_lot, row.maxLots, row.max_lots, 0),
+  maxTotalLot: firstDefined(row.maxTotalLot, row.max_total_lot, row.maxTotalLots, row.max_total_lots, 0),
+  customSpreadMarkup: firstDefined(row.customSpreadMarkup, row.spreadMarkup, row.spread_markup, 0),
+  customLeverage: firstDefined(row.customLeverage, row.custom_leverage, row.leverage, 0),
+  aBookOverride: asBoolean(firstDefined(row.aBookOverride, row.a_book_override, row.aBook, row.a_book, false)),
+  bBookOverride: asBoolean(firstDefined(row.bBookOverride, row.b_book_override, row.bBook, row.b_book, false)),
+  executionDelayMs: firstDefined(row.executionDelayMs, row.execution_delay_ms, row.delay, row.delay_ms, 0),
+  notes: firstDefined(row.notes, row.comment, row.Comment, ''),
+  raw: row,
+});
+
+const normalizeDealerQueueRow = (row = {}, index = 0) => ({
+  id: firstDefined(row.id, row.ID, row.queueId, row.queue_id, row.requestId, row.request_id, row.ticket, row.Ticket, row.order, row.Order, index + 1),
+  orderTicket: firstDefined(row.orderTicket, row.order_ticket, row.order, row.Order, row.ticket, row.Ticket, row.position, row.Position, ''),
+  accountLogin: firstDefined(row.accountLogin, row.account_login, row.login, row.Login, row.account, row.Account, ''),
+  symbol: firstDefined(row.symbol, row.Symbol, row.instrument, row.Instrument, ''),
+  side: normalizeOrderSide(firstDefined(row.side, row.Side, row.action, row.Action, row.type, row.Type, row.cmd, row.Cmd, '')),
+  volume: toNumber(firstDefined(row.volume, row.Volume, row.volume_lots, row.lots, row.Lots, 0)),
+  requestedPrice: toNumber(firstDefined(
+    row.requestedPrice,
+    row.requested_price,
+    row.reqPrice,
+    row.req_price,
+    row.price_order,
+    row.priceOrder,
+    row.price,
+    row.Price,
+    row.price_open,
+    row.priceOpen,
+    0
+  )),
+  reason: firstDefined(row.reason, row.Reason, row.requestType, row.request_type, row.type, row.Type, ''),
+  queuedAt: toUnixSeconds(firstDefined(
+    row.queuedAt,
+    row.queued_at,
+    row.createdAt,
+    row.created_at,
+    row.timeCreate,
+    row.TimeCreate,
+    row.time_msc,
+    row.time,
+    row.Time,
+    0
+  )),
+  comment: firstDefined(row.comment, row.Comment, row.message, row.Message, row.note, row.notes, ''),
+  raw: row,
+});
+
+const getCurrentManagerLogin = () => {
+  const sessionLogin = getSessionClaims()?.login;
+  if (sessionLogin !== undefined && sessionLogin !== null && sessionLogin !== '') {
+    return String(sessionLogin);
+  }
+
+  try {
+    return localStorage.getItem('brokerLogin') || '';
+  } catch {
+    return '';
+  }
+};
+
+const fetchManagerJson = async (endpoint, options = {}) => {
+  const response = await fetchManagerApi(endpoint, {
+    method: 'GET',
+    ...options,
+  });
+  const data = await readJson(response);
+
+  if (!response.ok || data?.code === 'MT_RET_ERR_NOTFOUND') {
+    const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
+    error.status = response.status;
+    error.code = data?.code;
+    throw error;
+  }
+
+  return data;
+};
 
 export const orderModify = ({ ticket, stoploss, takeprofit }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });
@@ -79,8 +232,14 @@ export const orderApprove = ({ ticket, comment }) => {
   return tradeClient.get(`/OrderApprove?${params.toString()}`);
 };
 
-export const getDealerQueue = () =>
-  tradeClient.get('/DealerQueueList');
+export const getDealerQueue = async () => {
+  const managerLogin = getCurrentManagerLogin();
+  const endpoint = managerLogin
+    ? `/DealerQueueList?${qs({ id: managerLogin })}`
+    : '/DealerQueueList';
+  const data = await fetchManagerJson(endpoint, { preserveQueryId: Boolean(managerLogin) });
+  return getRecords(data, 'answer').map(normalizeDealerQueueRow);
+};
 
 export const dealRollback = ({ deal, comment }) => {
   const params = new URLSearchParams({ deal: String(deal) });
@@ -109,8 +268,10 @@ export const accountRestrictSet = (params) => {
 export const accountRestrictClear = (login) =>
   tradeClient.get(`/AccountRestrictClear?${qs({ login })}`);
 
-export const accountRestrictList = () =>
-  tradeClient.get('/AccountRestrictList');
+export const accountRestrictList = async () => {
+  const data = await fetchManagerJson('/AccountRestrictList');
+  return getRecords(data, 'answer').map(normalizeRestrictionRow);
+};
 
 export const accountSpreadSet = ({ login, symbol, markup }) =>
   tradeClient.get(`/AccountSpreadSet?${qs({ login, symbol, markup })}`);

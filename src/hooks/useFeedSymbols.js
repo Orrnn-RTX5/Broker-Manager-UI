@@ -1,5 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import { buildFeedWsUrl, getFeedWsDisabledMessage } from '../config/endpoints';
+import {
+  buildFeedWsUrl,
+  FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE,
+  getFeedWsDisabledMessage,
+} from '../config/endpoints';
+import { fetchSymbolMetadataFallback, getSymbolName } from '../services/symbolMetadata';
+import { extractFeedTicks } from '../utils/feedMessages';
+
+const hasFeedQueryToken = (wsUrl = '') => {
+  const raw = String(wsUrl || '');
+  if (!raw) return false;
+
+  try {
+    const url = new URL(raw, 'http://rtx.local');
+    return Boolean(String(url.searchParams.get('token') || '').trim());
+  } catch {
+    const query = raw.split('?')[1]?.split('#')[0];
+    if (!query) return false;
+    try {
+      return Boolean(String(new URLSearchParams(query).get('token') || '').trim());
+    } catch {
+      return false;
+    }
+  }
+};
 
 export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbols } = {}) => {
   const [initialSymbolList] = useState(() => Array.isArray(initialSymbols) ? initialSymbols : []);
@@ -16,74 +40,93 @@ export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbol
   useEffect(() => {
     let ws;
     let timer;
-    let clearErrorTimer;
+    let cancelled = false;
     const symbolSet = new Set(initialSymbolList);
 
-    let wsUrl;
-    try {
-      wsUrl = buildFeedWsUrl();
-    } catch (err) {
-      const nextSymbols = Array.from(symbolSet).sort();
-      const errorMessage = getFeedWsDisabledMessage(err);
-      const disabledTimer = window.setTimeout(() => {
-        setSymbols(nextSymbols);
-        setLoading(false);
-        setRefreshing(false);
-        setError(errorMessage);
-      }, 0);
-
-      return () => window.clearTimeout(disabledTimer);
-    }
-
-    clearErrorTimer = window.setTimeout(() => {
-      setError('');
-    }, 0);
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const messages = event.data.trim().split('\n');
-        for (let i = 0; i < messages.length; i += 1) {
-          if (!messages[i]) continue;
-          const msg = JSON.parse(messages[i]);
-          if (msg.symbol) symbolSet.add(msg.symbol);
-        }
-      } catch {
-        // Ignore malformed feed frames; a later frame can still add symbols.
-      }
-    };
-
-    const finish = () => {
+    const finish = (errorMessage = '') => {
+      if (cancelled) return;
       const nextSymbols = Array.from(symbolSet).sort();
       setSymbols(nextSymbols);
       setLoading(false);
       setRefreshing(false);
+      setError(errorMessage);
       onSymbolsRef.current?.(nextSymbols);
     };
 
-    timer = setTimeout(() => {
-      finish();
-      if (ws.readyState === WebSocket.OPEN) ws.close();
-    }, timeoutMs);
-
-    ws.onerror = () => {
-      clearTimeout(clearErrorTimer);
-      clearTimeout(timer);
-      setSymbols(Array.from(symbolSet).sort());
-      setLoading(false);
-      setRefreshing(false);
-      setError('Market feed unavailable: websocket connection failed.');
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+    const mergeFallbackSymbols = async () => {
+      const result = await fetchSymbolMetadataFallback();
+      if (Array.isArray(result.symbols)) {
+        result.symbols.forEach((entry) => {
+          const symbol = getSymbolName(entry);
+          if (symbol) symbolSet.add(symbol);
+        });
       }
+      return result;
     };
 
+    const start = async () => {
+      const fallback = await mergeFallbackSymbols().catch(() => null);
+      if (symbolSet.size > 0) {
+        const nextSymbols = Array.from(symbolSet).sort();
+        setSymbols(nextSymbols);
+        setLoading(false);
+        setRefreshing(true);
+        onSymbolsRef.current?.(nextSymbols);
+      }
+
+      let wsUrl;
+      try {
+        wsUrl = buildFeedWsUrl();
+      } catch (err) {
+        finish(getFeedWsDisabledMessage(err));
+        return;
+      }
+
+      if (fallback?.feedAuthRequired && !hasFeedQueryToken(wsUrl)) {
+        finish(FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE);
+        return;
+      }
+
+      setError('');
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        finish('Market feed unavailable: websocket connection could not be started.');
+        return;
+      }
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          extractFeedTicks(event.data).forEach((tick) => {
+            if (tick.symbol) symbolSet.add(tick.symbol);
+          });
+        } catch {
+          // Ignore malformed feed frames; a later frame can still add symbols.
+        }
+      };
+
+      timer = setTimeout(() => {
+        finish();
+        if (ws.readyState === WebSocket.OPEN) ws.close();
+      }, timeoutMs);
+
+      ws.onerror = () => {
+        clearTimeout(timer);
+        finish('Market feed unavailable: websocket connection failed.');
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+      };
+    };
+
+    start();
+
     return () => {
-      clearTimeout(clearErrorTimer);
+      cancelled = true;
       clearTimeout(timer);
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         ws.onclose = null;
