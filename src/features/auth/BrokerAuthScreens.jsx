@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
+import DesktopAppDownloadButton from '../../components/DesktopAppDownloadButton';
 import {
   clearBrokerInfo,
   discoverBrokerById,
@@ -748,6 +749,8 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
         >
           {loading ? <SpinnerLabel>Signing in</SpinnerLabel> : 'Sign in'}
         </button>
+
+        <DesktopAppDownloadButton variant="auth" />
 
         <p className="manager-contact-copy">
           Don't have an account?{' '}

@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 
 const WINDOW_STATE_CHANNEL = 'rtx5-window:state';
+const HTTP_REQUEST_CHANNEL = 'rtx5-http:request';
+const UPDATE_CHECK_CHANNEL = 'rtx5-update:check';
 
 type WindowState = {
   isMaximized: boolean;
@@ -26,4 +28,12 @@ contextBridge.exposeInMainWorld('rtx5WindowControls', {
     ipcRenderer.on(WINDOW_STATE_CHANNEL, listener);
     return () => ipcRenderer.removeListener(WINDOW_STATE_CHANNEL, listener);
   },
+});
+
+contextBridge.exposeInMainWorld('rtx5DesktopHttp', {
+  request: (request: unknown) => ipcRenderer.invoke(HTTP_REQUEST_CHANNEL, request),
+});
+
+contextBridge.exposeInMainWorld('rtx5Updater', {
+  checkForUpdates: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),
 });

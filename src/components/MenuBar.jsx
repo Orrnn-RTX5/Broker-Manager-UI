@@ -7,7 +7,10 @@ import WindowMenu from './menus/WindowMenu';
 import HelpMenu from './menus/HelpMenu';
 import NewAccountModal from './Popups/NewAccountModal';
 import LoginModal from './Popups/LoginModal';
+import DesktopAppDownloadButton from './DesktopAppDownloadButton';
+import DesktopUpdateButton from './DesktopUpdateButton';
 import apiClient from '../services/apiClient';
+import { isDesktopBackendTarget } from '../config/backendTarget.js';
 
 const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   const [activeMenu, setActiveMenu] = useState(null);
@@ -118,6 +121,8 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
   const visiblePingMs = isAuthenticated ? pingMs : null;
   const isConnected = visibleConnectionData?.status === 'Connected';
   const pingTone = visiblePingMs == null ? 'var(--muted)' : visiblePingMs < 150 ? 'var(--ok)' : 'var(--warn)';
+  const showDesktopDownload = !isDesktopBackendTarget();
+  const showDesktopUpdater = typeof window !== 'undefined' && typeof window.rtx5Updater?.checkForUpdates === 'function';
 
   return (
     <div
@@ -170,7 +175,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
       </div>
 
       {/* Right side status */}
-      <div className="flex items-center h-full gap-3 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
+      <div className="flex items-center h-full gap-2 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
         <select
           className="border-none focus:outline-none rounded-md px-2 py-1 cursor-pointer appearance-none text-[11px]"
           style={{ background: 'transparent', color: 'var(--text-2)' }}
@@ -179,6 +184,20 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
             <option key={code}>{code}</option>
           ))}
         </select>
+
+        {showDesktopDownload && (
+          <>
+            <span className="h-4 w-px" style={{ background: 'var(--border)' }} />
+            <DesktopAppDownloadButton variant="menu" />
+          </>
+        )}
+
+        {showDesktopUpdater && (
+          <>
+            <span className="h-4 w-px" style={{ background: 'var(--border)' }} />
+            <DesktopUpdateButton />
+          </>
+        )}
 
         <span className="h-4 w-px" style={{ background: 'var(--border)' }} />
 

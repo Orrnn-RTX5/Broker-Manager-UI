@@ -4,6 +4,7 @@
  */
 
 import { buildManagerApiUrl } from '../config/endpoints.js';
+import { desktopFetch } from './desktopHttp.js';
 
 const TOKENS = {
   AUTH: 'authToken',
@@ -234,7 +235,7 @@ export const refreshSession = async () => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      const response = await fetch(buildManagerApiUrl('/api/v1/auth/refresh'), {
+      const response = await desktopFetch(buildManagerApiUrl('/api/v1/auth/refresh'), {
         method: 'POST',
         headers: {
           'accept': 'application/json',

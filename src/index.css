@@ -285,6 +285,144 @@ h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
 .ui-btn-icon { padding: 7px; }
 .ui-btn-icon.ui-btn-sm { padding: 5px; }
 
+.desktop-app-download {
+  min-width: 0;
+}
+
+.desktop-app-download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms;
+}
+
+.desktop-app-download-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.desktop-app-download-button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.desktop-app-download-button-menu {
+  height: 26px;
+  padding: 0 11px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--ok-text);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.desktop-app-download-button-menu:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: #05603a;
+  box-shadow: none;
+}
+
+.desktop-app-download-button-menu:active:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.dark .desktop-app-download-button-menu {
+  background: transparent;
+  border-color: transparent;
+  color: #47cd89;
+  box-shadow: none;
+}
+
+.dark .desktop-app-download-button-menu:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: #6ce9a6;
+  box-shadow: none;
+}
+
+.desktop-update-button {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.desktop-update-button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.desktop-update-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.desktop-update-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.desktop-update-button-success {
+  color: var(--ok-text);
+}
+
+.desktop-update-button-error {
+  color: var(--danger-text);
+}
+
+.desktop-app-download-auth {
+  display: grid;
+  gap: 6px;
+}
+
+.desktop-app-download-button-auth {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: #f6fbf3;
+  border-color: rgba(44, 154, 29, 0.22);
+  color: #17630c;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.desktop-app-download-button-auth:hover:not(:disabled) {
+  background: #eef8e9;
+  border-color: rgba(44, 154, 29, 0.34);
+  color: #124d09;
+}
+
+.desktop-app-download-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+}
+
 /* Inputs */
 .ui-input, .ui-select, .ui-textarea {
   box-sizing: border-box;

@@ -1,5 +1,6 @@
 import { buildFeedStatusUrl } from '../config/endpoints';
 import { symbolList, symbolsList } from './api';
+import { desktopFetch } from './desktopHttp.js';
 
 export const SYMBOL_METADATA_FALLBACK_REASON =
   'Market feed unavailable: symbol metadata loaded without live prices.';
@@ -44,7 +45,7 @@ export const fetchFeedStatus = async () => {
   const url = buildFeedStatusUrl();
   if (!url) throw new Error('Feed status URL is not configured.');
 
-  const response = await fetch(url, {
+  const response = await desktopFetch(url, {
     method: 'GET',
     headers: { accept: 'application/json' },
   });

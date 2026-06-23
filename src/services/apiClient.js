@@ -1,6 +1,7 @@
 import authService from './authService';
+import { desktopFetch } from './desktopHttp.js';
 import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints';
-import { isAuthExpiredStatus } from './authHttpStatus.js';
+import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
 import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction';
 
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
@@ -67,7 +68,7 @@ const apiClient = {
     });
 
     try {
-      const response = await fetch(finalUrl, { ...options, headers });
+      const response = await desktopFetch(finalUrl, { ...options, headers });
 
       if (isAuthExpiredStatus(response.status)) {
         console.warn('Authentication expired. Attempting silent refresh...');
@@ -81,7 +82,7 @@ const apiClient = {
 
         if (newToken) {
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
-          return await fetch(retryUrl, { ...options, headers: retryHeaders }).then((res) => this.handleResponse(res));
+          return await desktopFetch(retryUrl, { ...options, headers: retryHeaders }).then((res) => this.handleResponse(res));
         }
         expireAndThrow('refresh_failed');
       }
@@ -100,7 +101,7 @@ const apiClient = {
       data = JSON.parse(text);
     } catch {
       if (!response.ok) {
-        if (isAuthExpiredStatus(response.status)) {
+        if (isAuthExpiredResponse(response.status, text)) {
           expireAndThrow('token_rejected');
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
@@ -112,7 +113,7 @@ const apiClient = {
     }
 
     if (!response.ok) {
-      if (isAuthExpiredStatus(response.status)) {
+      if (isAuthExpiredResponse(response.status, data)) {
         expireAndThrow('token_rejected');
       }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;

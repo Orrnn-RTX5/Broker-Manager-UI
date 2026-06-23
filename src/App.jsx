@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import { AdminLogin, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import DesktopWindowControls from './components/DesktopWindowControls';
@@ -34,6 +34,19 @@ import SymbolListPage from './features/symbols/SymbolListPage';
 import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 
 const AUTH_STORAGE_POLL_MS = 2000;
+const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
+
+const SessionExpiryRedirect = ({ isAuthenticated }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated || PUBLIC_AUTH_PATHS.has(location.pathname)) return;
+    navigate('/manager-login', { replace: true });
+  }, [isAuthenticated, location.pathname, navigate]);
+
+  return null;
+};
 
 function App() {
   const queryClient = useQueryClient();
@@ -180,6 +193,7 @@ function App() {
     <Router>
       <GlobalErrorBoundary>
         <DesktopWindowControls variant={isAuthenticated ? 'workspace' : 'auth'} />
+        <SessionExpiryRedirect isAuthenticated={isAuthenticated} />
         {!isAuthenticated ? (
           <Routes>
             <Route path="/" element={<Navigate to="/manager-login" replace />} />

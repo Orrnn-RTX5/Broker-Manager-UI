@@ -1,6 +1,7 @@
 import { buildManagerApiUrl } from '../config/endpoints';
 import authService from './authService';
-import { isAuthExpiredStatus } from './authHttpStatus.js';
+import { desktopFetch } from './desktopHttp.js';
+import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
 
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 
@@ -43,13 +44,18 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
   const headers = { accept: 'application/json', ...optionHeaders };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
+  const response = await desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
     ...fetchOptions,
     headers,
   });
 
   if (isAuthExpiredStatus(response.status)) {
     authService.expireSession('token_rejected');
+  } else if (response.status === 403) {
+    const errorText = await response.clone().text().catch(() => '');
+    if (isAuthExpiredResponse(response.status, errorText)) {
+      authService.expireSession('token_rejected');
+    }
   }
 
   return response;

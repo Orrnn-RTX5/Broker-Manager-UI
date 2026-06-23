@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, protocol, session, shell } from 'electron';
-import type { IpcMainInvokeEvent } from 'electron';
+import type { Input, IpcMainInvokeEvent } from 'electron';
 import log from 'electron-log';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -11,6 +11,21 @@ const APP_HOST = 'app';
 const APP_ORIGIN = `${APP_PROTOCOL}://${APP_HOST}`;
 const DEFAULT_DEV_SERVER_URL = 'http://localhost:5173';
 const WINDOW_STATE_CHANNEL = 'rtx5-window:state';
+const HTTP_REQUEST_CHANNEL = 'rtx5-http:request';
+const UPDATE_CHECK_CHANNEL = 'rtx5-update:check';
+const MAX_DESKTOP_HTTP_BODY_BYTES = 1024 * 1024;
+const ALLOWED_DESKTOP_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+const BLOCKED_DESKTOP_HTTP_HEADERS = new Set([
+  'connection',
+  'content-length',
+  'cookie',
+  'host',
+  'origin',
+  'referer',
+  'sec-fetch-mode',
+  'sec-fetch-site',
+  'transfer-encoding',
+]);
 const PUBLIC_ASSET_FILES = new Set([
   'brand-logo.png',
   'login-trading-hero.png',
@@ -19,6 +34,31 @@ const PUBLIC_ASSET_FILES = new Set([
   'runtime-config.js',
 ]);
 let mainWindow: BrowserWindow | null = null;
+let autoUpdatesConfigured = false;
+let updateCheckInFlight: Promise<DesktopUpdateCheckResponse> | null = null;
+
+type DesktopHttpRequest = {
+  url?: unknown;
+  method?: unknown;
+  headers?: unknown;
+  body?: unknown;
+};
+
+type DesktopHttpResponse = {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+};
+
+type DesktopUpdateCheckStatus = 'disabled' | 'not-available' | 'downloaded' | 'error';
+
+type DesktopUpdateCheckResponse = {
+  status: DesktopUpdateCheckStatus;
+  message: string;
+  currentVersion: string;
+  version?: string;
+};
 
 const MIME_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -181,15 +221,148 @@ const configureSessionSecurity = (devServerOrigin: string | null): void => {
   });
 };
 
+const isPrivateOrLocalHostname = (hostname: string): boolean => {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (
+    normalized === 'localhost' ||
+    normalized === '::1' ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe80:')
+  ) {
+    return true;
+  }
+
+  const parts = normalized.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+
+  const [first = 0, second = 0] = parts;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    first === 169 && second === 254 ||
+    first === 172 && second >= 16 && second <= 31 ||
+    first === 192 && second === 168
+  );
+};
+
+const isAllowedDesktopHttpPath = (pathname: string): boolean => (
+  pathname === '/' ||
+  pathname.startsWith('/api/') ||
+  pathname.startsWith('/manager/') ||
+  pathname.startsWith('/Manager/') ||
+  pathname.startsWith('/ext-api/') ||
+  /^\/[A-Za-z][A-Za-z0-9]*(?:\/|$)/.test(pathname)
+);
+
+const validateDesktopHttpUrl = (rawUrl: unknown): URL => {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    throw new Error('Desktop HTTP request URL is required.');
+  }
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error('Desktop HTTP request URL is invalid.');
+  }
+
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('Desktop HTTP bridge only allows HTTP(S) URLs.');
+  }
+  if (isPrivateOrLocalHostname(url.hostname)) {
+    throw new Error('Desktop HTTP bridge does not allow local or private hosts.');
+  }
+  if (!isAllowedDesktopHttpPath(url.pathname)) {
+    throw new Error('Desktop HTTP bridge rejected this endpoint path.');
+  }
+
+  return url;
+};
+
+const normalizeDesktopHttpMethod = (method: unknown): string => {
+  const normalized = String(method || 'GET').trim().toUpperCase();
+  if (!ALLOWED_DESKTOP_HTTP_METHODS.has(normalized)) {
+    throw new Error(`Desktop HTTP method is not allowed: ${normalized}`);
+  }
+  return normalized;
+};
+
+const normalizeDesktopHttpHeaders = (headers: unknown): Record<string, string> => {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return {};
+
+  return Object.entries(headers as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, value]) => {
+    const normalizedKey = key.trim().toLowerCase();
+    if (!normalizedKey || BLOCKED_DESKTOP_HTTP_HEADERS.has(normalizedKey)) return acc;
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(normalizedKey)) return acc;
+    if (value === undefined || value === null) return acc;
+    acc[normalizedKey] = String(value);
+    return acc;
+  }, {});
+};
+
+const normalizeDesktopHttpBody = (body: unknown): string | undefined => {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== 'string') throw new Error('Desktop HTTP request body must be a string.');
+  if (Buffer.byteLength(body, 'utf8') > MAX_DESKTOP_HTTP_BODY_BYTES) {
+    throw new Error('Desktop HTTP request body is too large.');
+  }
+  return body;
+};
+
+const responseHeadersToObject = (headers: Headers): Record<string, string> => {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+};
+
+const registerDesktopHttpIpc = (): void => {
+  ipcMain.handle(HTTP_REQUEST_CHANNEL, async (_event, rawRequest: DesktopHttpRequest): Promise<DesktopHttpResponse> => {
+    const url = validateDesktopHttpUrl(rawRequest?.url);
+    const method = normalizeDesktopHttpMethod(rawRequest?.method);
+    const headers = normalizeDesktopHttpHeaders(rawRequest?.headers);
+    const body = normalizeDesktopHttpBody(rawRequest?.body);
+
+    log.info('Desktop HTTP request', { method, url: `${url.origin}${url.pathname}` });
+
+    const requestInit: RequestInit = {
+      method,
+      headers,
+      redirect: 'follow',
+    };
+    if (body !== undefined) requestInit.body = body;
+
+    const response = await fetch(url, requestInit);
+
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeadersToObject(response.headers),
+      body: await response.text(),
+    };
+  });
+};
+
 const configureAutoUpdates = (): void => {
   if (!app.isPackaged) return;
+  if (autoUpdatesConfigured) return;
 
   log.transports.file.level = 'info';
   autoUpdater.logger = log;
   autoUpdater.allowPrerelease = false;
+  autoUpdater.autoDownload = false;
 
   autoUpdater.on('error', (error) => {
     log.error('Desktop update error', error);
+  });
+
+  autoUpdater.on('checking-for-update', () => {
+    log.info('Checking for desktop update');
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -200,11 +373,75 @@ const configureAutoUpdates = (): void => {
     log.info('Desktop is up to date', info.version);
   });
 
-  setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch((error: unknown) => {
-      log.error('Desktop update check failed', error);
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('Desktop update downloaded', info.version);
+  });
+
+  autoUpdatesConfigured = true;
+};
+
+const getDesktopUpdateErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return 'Update check failed.';
+};
+
+const checkAndDownloadDesktopUpdate = async (): Promise<DesktopUpdateCheckResponse> => {
+  const currentVersion = app.getVersion();
+
+  if (!app.isPackaged) {
+    return {
+      status: 'disabled',
+      message: 'Updates are available only in the installed desktop app.',
+      currentVersion,
+    };
+  }
+
+  configureAutoUpdates();
+
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    if (!result?.isUpdateAvailable) {
+      return {
+        status: 'not-available',
+        message: 'App is already up to date.',
+        currentVersion,
+      };
+    }
+
+    const nextVersion = result.updateInfo.version;
+    await autoUpdater.downloadUpdate();
+
+    const response: DesktopUpdateCheckResponse = {
+      status: 'downloaded',
+      message: nextVersion
+        ? `Update ${nextVersion} downloaded. Restart the app to install it.`
+        : 'Update downloaded. Restart the app to install it.',
+      currentVersion,
+    };
+
+    if (nextVersion) response.version = nextVersion;
+    return response;
+  } catch (error: unknown) {
+    const message = getDesktopUpdateErrorMessage(error);
+    log.error('Manual desktop update check failed', error);
+    return {
+      status: 'error',
+      message,
+      currentVersion,
+    };
+  }
+};
+
+const registerDesktopUpdateIpc = (): void => {
+  ipcMain.handle(UPDATE_CHECK_CHANNEL, async (): Promise<DesktopUpdateCheckResponse> => {
+    if (updateCheckInFlight) return updateCheckInFlight;
+
+    updateCheckInFlight = checkAndDownloadDesktopUpdate().finally(() => {
+      updateCheckInFlight = null;
     });
-  }, 15000);
+
+    return updateCheckInFlight;
+  });
 };
 
 const getWindowFromEvent = (event: IpcMainInvokeEvent): BrowserWindow | null =>
@@ -255,6 +492,27 @@ const bindWindowStateEvents = (windowRef: BrowserWindow): void => {
   windowRef.on('restore', () => sendWindowState(windowRef));
 };
 
+const isDevToolsToggleShortcut = (input: Input): boolean => {
+  if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
+
+  const key = input.key.toLowerCase();
+  return input.control && input.shift && !input.alt && !input.meta && key === 'i';
+};
+
+const bindDevToolsShortcut = (windowRef: BrowserWindow): void => {
+  windowRef.webContents.on('before-input-event', (event, input) => {
+    if (!isDevToolsToggleShortcut(input)) return;
+
+    event.preventDefault();
+    if (windowRef.webContents.isDevToolsOpened()) {
+      windowRef.webContents.closeDevTools();
+      return;
+    }
+
+    windowRef.webContents.openDevTools({ mode: 'detach', activate: true });
+  });
+};
+
 const createWindow = async (devServerOrigin: string | null): Promise<void> => {
   log.info('Creating desktop window', {
     packaged: app.isPackaged,
@@ -278,11 +536,12 @@ const createWindow = async (devServerOrigin: string | null): Promise<void> => {
       sandbox: false,
       preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: true,
-      devTools: !app.isPackaged || process.env.RTX5_ENABLE_DEVTOOLS === 'true',
+      devTools: true,
     },
   });
 
   bindWindowStateEvents(mainWindow);
+  bindDevToolsShortcut(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
     log.info('Desktop window ready to show');
@@ -334,6 +593,8 @@ app.whenReady().then(async () => {
   registerAppProtocol();
   log.info('Desktop protocol registered');
   configureSessionSecurity(devServerOrigin);
+  registerDesktopHttpIpc();
+  registerDesktopUpdateIpc();
   registerWindowControlIpc();
   Menu.setApplicationMenu(null);
 

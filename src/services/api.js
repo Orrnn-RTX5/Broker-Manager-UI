@@ -1,6 +1,8 @@
 import apiClient from './apiClient';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
+import { desktopFetch } from './desktopHttp.js';
+import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
 import { API_HOST, updateDynamicEndpoints } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 
@@ -69,15 +71,18 @@ const getBrokerV2Json = async (path, params = {}) => {
     };
   };
 
-  let response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
-  if (response.status === 401) {
+  let response = await desktopFetch(url, { method: 'GET', headers: prepareHeaders() });
+  if (isAuthExpiredStatus(response.status)) {
     const nextToken = await authService.refreshSession();
     if (!nextToken) expireAndThrow('token_rejected');
-    response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
+    response = await desktopFetch(url, { method: 'GET', headers: prepareHeaders() });
   }
 
   const data = await readJson(response);
   if (!response.ok) {
+    if (isAuthExpiredResponse(response.status, data)) {
+      expireAndThrow('token_rejected');
+    }
     const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
     error.status = response.status;
     throw error;
