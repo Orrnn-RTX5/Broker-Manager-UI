@@ -1,7 +1,7 @@
 {
   "name": "rtx5-broker-manager-ui",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "RTX-5 broker manager web and desktop UI",
   "author": "RTX-5",
   "type": "module",
