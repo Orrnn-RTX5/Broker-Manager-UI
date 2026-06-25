@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
-import useDataSource from '../../../hooks/useDataSource';
-import { getOnlineUsers } from '../../../services/api';
-import { ONLINE_USERS_FALLBACK } from '../../../data/onlineUsers';
-import { normalizeOnlineUserRows } from '../../../utils/onlineUsers';
+import usePagedData from '../../../hooks/usePagedData';
+import useManualGridLoad from '../../../hooks/useManualGridLoad';
+import { getOnlineUsersPage } from '../../../services/api';
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -15,60 +14,74 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
-  const { data: rawData, isLoading, isFallback, error, reload } = useDataSource(getOnlineUsers, ONLINE_USERS_FALLBACK, {
-    pollingInterval: 10000,
-  });
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const [hasRequestedData, markDataRequested] = useManualGridLoad('analytics-online-users');
+  const pageSize = 30;
+
+  const params = useMemo(() => ({
+    search,
+    sort_by: sortCol,
+    sort_dir: sortDir,
+  }), [search, sortCol, sortDir]);
+
+  const {
+    rows,
+    total,
+    hasMore,
+    page,
+    offset,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    nextPage,
+    prevPage,
+  } = usePagedData({
+    queryKey: ['online-users', 'page'],
+    queryFn: getOnlineUsersPage,
+    params,
+    pageSize,
+    enabled: hasRequestedData,
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(rows);
+  }, [rows, onRowsChange]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-    setPage(0);
+    if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
   };
 
-  useEffect(() => {
-    setPage(0);
-  }, [search]);
+  const handleLoadData = () => markDataRequested();
 
-  const filtered = useMemo(() => {
-    let rows = normalizeOnlineUserRows(rawData);
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(r =>
-        (r.name || '').toLowerCase().includes(q) ||
-        String(r.login).includes(q) ||
-        (r.group || '').toLowerCase().includes(q) ||
-        (r.client || '').toLowerCase().includes(q) ||
-        (r.version || '').toLowerCase().includes(q) ||
-        (r.ip || '').toLowerCase().includes(q)
-      );
+  const handleRefresh = () => {
+    if (!hasRequestedData) {
+      markDataRequested();
+      return;
     }
+    refetch();
+  };
 
-    rows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-      return sortDir === 'asc'
-        ? String(av || '').localeCompare(String(bv || ''))
-        : String(bv || '').localeCompare(String(av || ''));
-    });
-    return rows;
-  }, [rawData, search, sortCol, sortDir]);
-
-  useEffect(() => {
-    if (onRowsChange) onRowsChange(filtered);
-  }, [filtered, onRowsChange]);
-
-  const pageRows = filtered.slice(0, (page + 1) * pageSize);
-
-  const TH = ({ col, label, align = 'left' }) => (
+  const renderHeader = (col, label, align = 'left') => (
     <th onClick={() => handleSort(col)} style={{ textAlign: align }} className="cursor-pointer">
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
+
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = rows.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + rows.length;
+  const isIdle = !hasRequestedData;
+  const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden">
@@ -78,48 +91,57 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
       >
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
-            {filtered.length} online users
+            {isIdle ? 'Online users not loaded' : `${total ?? rows.length} online users`}
           </div>
         </div>
         <button
           type="button"
-          onClick={reload}
+          onClick={handleRefresh}
+          disabled={isFetching}
           className="ui-btn ui-btn-secondary ui-btn-xs flex items-center gap-1.5"
         >
-          <RefreshCcw size={12} />
-          Refresh
+          <RefreshCcw size={12} className={isFetching ? 'animate-spin' : ''} />
+          {isIdle ? 'Load' : 'Refresh'}
         </button>
       </div>
-      {error && (
+      {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
-          <strong>API Fallback Detected.</strong> {error}
+          <strong>API Error.</strong> {error?.message || 'Failed to load online users.'}
         </div>
       )}
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <TH col="login" label="Login" />
-              <TH col="name" label="Name" />
-              <TH col="group" label="Group" />
-              <TH col="client" label="Client" />
-              <TH col="version" label="Build" />
-              <TH col="ip" label="IP Address" />
-              <TH col="equity" label="Equity" align="right" />
-              <TH col="currency" label="Cu." />
+              {renderHeader('login', 'Login')}
+              {renderHeader('name', 'Name')}
+              {renderHeader('group', 'Group')}
+              {renderHeader('client', 'Client')}
+              {renderHeader('version', 'Build')}
+              {renderHeader('ip', 'IP Address')}
+              {renderHeader('equity', 'Equity', 'right')}
+              {renderHeader('currency', 'Cu.')}
             </tr>
           </thead>
           <tbody>
-            {pageRows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isLoading ? 'Loading online users…' : (isFallback ? 'BACKEND DISCONNECTED' : 'No online users match the current filters.')}
+                  {isIdle ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <span>Online users are not loaded.</span>
+                      <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
+                        <RefreshCcw size={13} />
+                        {loadLabel}
+                      </button>
+                    </div>
+                  ) : isLoading ? 'Loading online users...' : 'No online users match the current filters.'}
                 </td>
               </tr>
-            ) : pageRows.map((row, idx) => {
+            ) : rows.map((row, idx) => {
               const rowKey = `${row.login}-${idx}`;
               return (
                 <tr
@@ -149,34 +171,33 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </table>
       </div>
 
-      {isFallback && (
-        <div
-          className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
-        >
-          <span className="flex items-center gap-2">
+      <div
+        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+      >
+        <span className="flex items-center gap-2">
+          {isIdle ? (
+            'Online users not loaded'
+          ) : (
+            <>
+              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+              {' '}of{' '}
+              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+            </>
+          )}
+          {isFetching && !isLoading && (
             <span className="ui-badge ui-badge-danger">
               <AlertTriangle size={10} />
-              BACKEND DISCONNECTED
+              Updating
             </span>
-          </span>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
         </div>
-      )}
-
-      {!isFallback && pageRows.length < filtered.length && (
-        <div
-          className="flex items-center justify-center px-4 py-3 text-xs"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}
-        >
-          <button
-            type="button"
-            onClick={() => setPage((value) => value + 1)}
-            className="ui-btn ui-btn-secondary ui-btn-xs"
-          >
-            Load more
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

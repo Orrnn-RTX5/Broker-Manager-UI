@@ -59,7 +59,7 @@ const Item = ({ text, icon: Icon, iconTone, rightText, rightIcon: RightIcon, has
 
 const ClientsContextMenu = ({
   x, y, onClose,
-  grid, rows = [], allRows = [], selectedRow,
+  grid, rows = [], selectedRow,
   entityLabel = 'row',
   onNewClient,
   onOpenDetails,

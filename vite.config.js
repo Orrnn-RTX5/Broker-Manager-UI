@@ -1,7 +1,22 @@
-import { defineConfig, loadEnv } from 'vite'
+import { createLogger, defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import process from 'node:process'
+
+const ignoredWsProxyErrorCodes = new Set(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT'])
+const viteLogger = createLogger()
+const defaultLoggerError = viteLogger.error
+
+viteLogger.error = (message, options) => {
+  const isIgnoredWsProxyError = (
+    typeof message === 'string'
+    && ignoredWsProxyErrorCodes.has(options?.error?.code)
+    && (message.includes('ws proxy error:') || message.includes('ws proxy socket error:'))
+  )
+
+  if (isIgnoredWsProxyError) return
+  defaultLoggerError.call(viteLogger, message, options)
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode, command }) => {
@@ -15,6 +30,7 @@ export default defineConfig(({ mode, command }) => {
 
   return {
     base: isDesktopMode ? './' : '/',
+    customLogger: viteLogger,
     plugins: [
       react(),
       tailwindcss(),

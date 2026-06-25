@@ -48,10 +48,14 @@ const ClientsDashboard = () => {
   const [contextMenu, setContextMenu] = useState(null);
   const [detailsClient, setDetailsClient] = useState(null);
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [currentRows, setCurrentRows] = useState([]);
 
   // Filtered rows are lifted from the grid so the context menu operates on them.
   const rowsRef = useRef([]);
-  const handleRowsChange = (rows) => { rowsRef.current = rows; };
+  const handleRowsChange = (rows) => {
+    rowsRef.current = rows;
+    setCurrentRows(rows);
+  };
 
   const grid = useGridController({
     columns: CLIENT_COLUMNS,
@@ -152,7 +156,7 @@ const ClientsDashboard = () => {
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           grid={grid}
-          rows={rowsRef.current}
+          rows={currentRows}
           selectedRow={contextMenu.row}
           entityLabel="client"
           onNewClient={() => setIsNewAccountOpen(true)}

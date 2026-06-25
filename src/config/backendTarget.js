@@ -211,6 +211,7 @@ const sanitizeWebBackendCandidate = (candidate = '', brokerInfo = {}, fallbackUr
   const normalized = normalizeHttpUrl(candidate, 'https', true);
   const host = hostnameFromUrl(normalized);
   if (!host) return '';
+  if (host.toLowerCase() === 'services.myprop.trad.app') return 'https://services.myprop.trade';
   if (isIpAddress(host)) return '';
   if (isUiOnlyHost(host)) return '';
 

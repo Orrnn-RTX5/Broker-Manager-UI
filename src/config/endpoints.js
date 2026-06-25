@@ -120,11 +120,16 @@ const joinUrl = (base, path = '') => {
 export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) =>
   !isDirectBrokerBackendUrl(backendUrl, brokerInfo);
 
+const isNativeAuthApiPath = (path = '') =>
+  /^\/api\/v\d+\/(?:auth|admin)(?:\/|\?|$)/i.test(path);
+
 export const buildManagerApiPath = (endpoint = '', useProxyPrefix = true) => {
   const raw = String(endpoint || '');
   const path = raw
     .replace(/^\/api\/manager(?=\/|\?|$)/, '')
     .replace(/^\/manager(?=\/|\?|$)/, '');
+
+  if (isNativeAuthApiPath(path)) return path;
 
   if (useProxyPrefix) {
     return path

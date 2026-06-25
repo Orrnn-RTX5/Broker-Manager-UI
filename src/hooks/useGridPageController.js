@@ -20,9 +20,13 @@ export default function useGridPageController({
 }) {
   const grid = useGridController({ columns, rowKey, onClearFilter });
   const [contextMenu, setContextMenu] = useState(null);
+  const [currentRows, setCurrentRows] = useState([]);
   const rowsRef = useRef([]);
 
-  const handleRowsChange = useCallback((rows) => { rowsRef.current = rows; }, []);
+  const handleRowsChange = useCallback((rows) => {
+    rowsRef.current = rows;
+    setCurrentRows(rows);
+  }, []);
 
   const handlePageContext = useCallback((e) => {
     e.preventDefault();
@@ -70,7 +74,7 @@ export default function useGridPageController({
       ...(contextMenu || {}),
       isOpen: !!contextMenu,
       grid,
-      rows: rowsRef.current,
+      rows: currentRows,
       selectedRow: contextMenu?.row || null,
       entityLabel,
       onCopyAs: handleCopyAs,

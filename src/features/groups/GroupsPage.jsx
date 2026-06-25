@@ -1,30 +1,50 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGroupList } from '../../hooks/useGroupList';
 import { Search, Plus, Trash2, Edit2, Filter, Loader2 } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { getActiveGroupsPage, getGroupsPage } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
+import usePagedData from '../../hooks/usePagedData';
 import { PERMISSIONS } from '../../utils/permissions';
-import { filterGroupsBySearch } from './groupFilters';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
-  const { groups, loading } = useGroupList();
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeGroupsData, setActiveGroupsData] = useState(null);
   const [editGroup, setEditGroup] = useState(null);
-  const [isFiltering, setIsFiltering] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(false);
+  const pageSize = 100;
 
-  const filteredGroups = useMemo(() => {
-    const source = activeGroupsData || groups;
-    return filterGroupsBySearch(source, search);
-  }, [groups, search, activeGroupsData]);
+  const params = useMemo(() => ({
+    search,
+    sort_by: 'name',
+    sort_dir: 'asc',
+  }), [search]);
+
+  const {
+    rows: groups,
+    total,
+    hasMore,
+    page,
+    offset,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    nextPage,
+    prevPage,
+    resetPage,
+  } = usePagedData({
+    queryKey: ['groups', activeOnly ? 'active' : 'all'],
+    queryFn: activeOnly ? getActiveGroupsPage : getGroupsPage,
+    params,
+    pageSize,
+  });
 
   const handleDelete = async (e, groupName) => {
     e.stopPropagation();
@@ -35,9 +55,6 @@ const GroupsPage = () => {
         const res = await fetchManagerApi(`/GroupDelete?${params.toString()}`);
         if (!res.ok) throw new Error('Delete failed');
         alert(`Group '${groupName}' deleted successfully!`);
-        // Refresh the list via react-query instead of a full SPA reload.
-        // Drop any "Active Only" snapshot so the invalidated list is shown.
-        setActiveGroupsData(null);
         queryClient.invalidateQueries({ queryKey: ['groups'] });
       } catch (err) {
         alert('Error deleting group: ' + err.message);
@@ -58,32 +75,14 @@ const GroupsPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleActiveGroupsFilter = async () => {
-    if (activeGroupsData) { setActiveGroupsData(null); return; }
-    setIsFiltering(true);
-    try {
-      const res = await fetchManagerApi('/UserGroups', {
-        method: 'GET', headers: { accept: 'application/json' },
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        const formatted = data.map(item => typeof item === 'string'
-          ? { name: item, description: '' }
-          : { name: item.Group || item.name || 'Unnamed', description: item.Currency || item.description || '' });
-        setActiveGroupsData(formatted);
-      } else if (data && Array.isArray(data.groups)) {
-        setActiveGroupsData(data.groups);
-      } else if (data && data.error) {
-        throw new Error(data.error);
-      } else {
-        alert('Unexpected response:\n' + JSON.stringify(data, null, 2));
-      }
-    } catch (err) {
-      alert('Error fetching active groups: ' + err.message);
-    } finally {
-      setIsFiltering(false);
-    }
+  const handleActiveGroupsFilter = () => {
+    resetPage();
+    setActiveOnly((value) => !value);
   };
+
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = groups.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + groups.length;
 
   return (
     <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
@@ -110,7 +109,7 @@ const GroupsPage = () => {
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"
-            placeholder="Search group names…"
+            placeholder="Search group names..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="ui-input ui-input-sm"
@@ -120,82 +119,107 @@ const GroupsPage = () => {
 
         <button
           onClick={handleActiveGroupsFilter}
-          disabled={isFiltering}
-          className={`ui-btn ${activeGroupsData ? 'ui-btn-primary' : 'ui-btn-secondary'} ui-btn-sm`}
+          disabled={isFetching}
+          className={`ui-btn ${activeOnly ? 'ui-btn-primary' : 'ui-btn-secondary'} ui-btn-sm`}
         >
-          {isFiltering ? <Loader2 size={13} className="animate-spin" /> : <Filter size={13} />}
-          {activeGroupsData ? 'Show All' : 'Active Only'}
+          {isFetching ? <Loader2 size={13} className="animate-spin" /> : <Filter size={13} />}
+          {activeOnly ? 'Show All' : 'Active Only'}
         </button>
       </div>
 
       <div className="ui-card flex-1 overflow-hidden flex flex-col">
-        {loading ? (
+        {isError && (
+          <div
+            className="px-4 py-2 text-xs break-all"
+            style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
+          >
+            <strong>API Error.</strong> {error?.message || 'Failed to load groups.'}
+          </div>
+        )}
+        {isLoading ? (
           <div className="flex-1 flex items-center justify-center text-sm" style={{ color: 'var(--muted)' }}>
-            Fetching groups…
+            Fetching groups...
           </div>
         ) : (
-          <div className="w-full overflow-y-auto">
-            <table className="ui-grid">
-              <thead>
-                <tr>
-                  <th>Group Name</th>
-                  <th>Description</th>
-                  <th>Routing</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredGroups.length === 0 ? (
+          <>
+            <div className="w-full overflow-y-auto">
+              <table className="ui-grid">
+                <thead>
                   <tr>
-                    <td colSpan={3} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
-                      No groups match your search.
-                    </td>
+                    <th>Group Name</th>
+                    <th>Description</th>
+                    <th>Routing</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
-                ) : filteredGroups.map(group => (
-                  <tr
-                    key={group.name}
-                    onClick={() => navigate(`/groups/${group.name}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>
-                    <td style={{ color: 'var(--text-2)' }}>{group.description}</td>
-                    <td>
-                      <span className={`ui-badge text-[10px] uppercase font-bold px-2 py-0.5 ${
-                        group.routingMode === 'a_book' ? 'ui-badge-warning' : 
-                        group.routingMode === 'hybrid' ? 'ui-badge-primary' : 
-                        'ui-badge-success'
-                      }`}>
-                        {group.routingMode === 'a_book' ? 'A-Book' : 
-                         group.routingMode === 'hybrid' ? 'Hybrid' : 
-                         'B-Book'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={(e) => handleEdit(e, group)}
-                          className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
-                          title={canManageGroups ? 'Edit Group' : 'No permission to manage groups'}
-                          disabled={!canManageGroups}
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(e, group.name)}
-                          className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
-                          style={{ color: 'var(--danger)' }}
-                          title={canManageGroups ? 'Delete Group' : 'No permission to manage groups'}
-                          disabled={!canManageGroups}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {groups.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
+                        No groups match your search.
+                      </td>
+                    </tr>
+                  ) : groups.map((group) => (
+                    <tr
+                      key={group.name}
+                      onClick={() => navigate(`/groups/${group.name}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>
+                      <td style={{ color: 'var(--text-2)' }}>{group.description}</td>
+                      <td>
+                        <span className={`ui-badge text-[10px] uppercase font-bold px-2 py-0.5 ${
+                          group.routingMode === 'a_book' ? 'ui-badge-warning' :
+                          group.routingMode === 'hybrid' ? 'ui-badge-primary' :
+                          'ui-badge-success'
+                        }`}>
+                          {group.routingMode === 'a_book' ? 'A-Book' :
+                           group.routingMode === 'hybrid' ? 'Hybrid' :
+                           'B-Book'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => handleEdit(e, group)}
+                            className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
+                            title={canManageGroups ? 'Edit Group' : 'No permission to manage groups'}
+                            disabled={!canManageGroups}
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(e, group.name)}
+                            className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
+                            style={{ color: 'var(--danger)' }}
+                            title={canManageGroups ? 'Delete Group' : 'No permission to manage groups'}
+                            disabled={!canManageGroups}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div
+              className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+              style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+            >
+              <span>
+                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+                {' '}of{' '}
+                <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span> groups
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={prevPage} disabled={page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+                <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{page + 1} / {totalPages ?? '?'}</span>
+                <button onClick={nextPage} disabled={!hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -205,11 +229,6 @@ const GroupsPage = () => {
           onClose={() => { setIsModalOpen(false); setEditGroup(null); }}
           onSuccess={() => {
             alert(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
-            // Refresh the list via react-query instead of a full SPA reload.
-            // (NewGroupModal calls onClose() right after onSuccess, which clears
-            // the modal/edit state.) Drop any "Active Only" snapshot so the
-            // invalidated list is what renders.
-            setActiveGroupsData(null);
             queryClient.invalidateQueries({ queryKey: ['groups'] });
           }}
         />

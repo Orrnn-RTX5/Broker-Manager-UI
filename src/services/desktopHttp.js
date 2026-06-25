@@ -4,6 +4,19 @@ const getDesktopHttpBridge = () => (
     : null
 );
 
+const createAbortError = () => {
+  if (typeof DOMException === 'function') {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  }
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+};
+
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) throw createAbortError();
+};
+
 const headersToObject = (headers = {}) => {
   const out = {};
   new Headers(headers).forEach((value, key) => {
@@ -28,12 +41,16 @@ export const desktopFetch = async (url, options = {}) => {
   const bridge = getDesktopHttpBridge();
   if (!bridge) return fetch(url, options);
 
+  throwIfAborted(options.signal);
+
   const result = await bridge.request({
     url: String(url),
     method: options.method || 'GET',
     headers: headersToObject(options.headers),
     body: normalizeBody(options.body),
   });
+
+  throwIfAborted(options.signal);
 
   const body = [204, 205, 304].includes(Number(result.status))
     ? null

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings } from 'lucide-react';
-import { getPositions } from '../../services/api';
+import { getPositionsPage } from '../../services/api';
 import { buildFeedWsUrl, buildMetricsWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
@@ -582,8 +582,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
     const fetchPositions = async () => {
       try {
-        const data = await getPositions();
-        const mine = data.filter(p => String(p.login) === String(loginId));
+        const data = await getPositionsPage({
+          limit: 500,
+          offset: 0,
+          filters: { login: String(loginId) },
+          sort_by: 'position',
+          sort_dir: 'desc',
+        });
+        const mine = data.rows;
         setPositions(mine);
 
         // When the popup was opened via double-click on a row, `targetTicket`

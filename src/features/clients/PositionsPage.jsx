@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, Search, RefreshCw, Send } from 'lucide-react';
+import { History, Search, RefreshCw } from 'lucide-react';
 import PositionHistoryGrid from './components/PositionHistoryGrid';
 import { getPositionHistory } from '../../services/api';
 
@@ -12,14 +12,15 @@ const PositionsPage = () => {
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
-    if (!loginInput.trim()) return;
+    const login = loginInput.trim();
+    if (!login) return;
 
     setIsLoading(true);
     setError(null);
-    setCurrentLogin(loginInput);
+    setCurrentLogin(login);
 
     try {
-      const data = await getPositionHistory(loginInput);
+      const data = await getPositionHistory(login);
       setHistoryData(data);
     } catch (err) {
       console.error('History fetch error:', err);

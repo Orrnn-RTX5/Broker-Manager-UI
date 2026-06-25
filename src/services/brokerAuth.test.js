@@ -247,6 +247,30 @@ test('resolveDefaultBrokerSelectionId can match runtime service host when manage
   );
 });
 
+test('fetchBrokerList normalizes known MyProp typo service domain', async () => {
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        servers: [
+          {
+            broker_id: 'myprop-trade',
+            name: 'MyProp',
+            status: 'active',
+            server: 'services.myprop.trade:443',
+            backend_url: 'https://services.myprop.trad.app',
+          },
+        ],
+      }),
+    };
+  };
+
+  const brokers = await fetchBrokerList();
+  assert.equal(brokers[0].backend_url, 'https://services.myprop.trade');
+});
+
 test('resolveDefaultBrokerSelectionId falls back to stored broker and then response order', () => {
   const brokers = [
     {
@@ -388,10 +412,36 @@ test('loginManager sends the selected opaque server handle to the broker backend
   );
 
   assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0].url, 'https://testbrokerbackend.orrnn.com/manager/api/v2/auth/login');
+  assert.equal(fetchCalls[0].url, 'https://testbrokerbackend.orrnn.com/api/v2/auth/login');
   assert.deepEqual(JSON.parse(fetchCalls[0].options.body), {
     user: '1001',
     password: 'secret',
     server: 'broker-server-42',
   });
+});
+
+test('loginManager uses native auth route for MyProp broker backend', async () => {
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ token: 'manager-token', login: 10017 }),
+    };
+  };
+
+  await loginManager(
+    {
+      broker_id: 'myprop-trade',
+      name: 'MyProp',
+      status: 'active',
+      server: 'services.myprop.trade:443',
+      backend_url: 'https://services.myprop.trade',
+      server_ip: '185.204.168.202',
+    },
+    { user: '10017', password: 'secret', server: 'services.myprop.trade:443' }
+  );
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, 'https://services.myprop.trade/api/v2/auth/login');
 });

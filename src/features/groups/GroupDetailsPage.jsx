@@ -11,7 +11,13 @@ const GroupDetailsPage = () => {
   const navigate = useNavigate();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
-  const { groups, loading, error } = useGroupList();
+  const { groups, loading, error } = useGroupList({
+    limit: 20,
+    offset: 0,
+    search: groupName || '',
+    sort_by: 'name',
+    sort_dir: 'asc',
+  });
 
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);

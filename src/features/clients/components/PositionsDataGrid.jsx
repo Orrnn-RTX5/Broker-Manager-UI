@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
-import useDataSource from '../../../hooks/useDataSource';
-import { getPositions } from '../../../services/api';
-import { POSITIONS_FALLBACK } from '../../../data/positions';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import usePagedData from '../../../hooks/usePagedData';
+import useManualGridLoad from '../../../hooks/useManualGridLoad';
+import { getPositionsPage } from '../../../services/api';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
@@ -15,95 +15,130 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
-  const { data: rawData, isLoading, isFallback, error } = useDataSource(getPositions, POSITIONS_FALLBACK);
   const [sortCol, setSortCol] = useState('position');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
   const [activeAccountTicket, setActiveAccountTicket] = useState(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const [hasRequestedData, markDataRequested] = useManualGridLoad('open-positions');
+  const pageSize = 30;
+
+  const filters = useMemo(() => ({
+    ...(typeFilter !== 'All Types' ? { type: typeFilter.toLowerCase() } : {}),
+    ...(symbolFilter !== 'All Symbols' ? { symbol: symbolFilter } : {}),
+    ...(reasonFilter !== 'All Reasons' ? { reason: reasonFilter } : {}),
+  }), [typeFilter, symbolFilter, reasonFilter]);
+
+  const params = useMemo(() => ({
+    search,
+    sort_by: sortCol,
+    sort_dir: sortDir,
+    filters,
+  }), [search, sortCol, sortDir, filters]);
+
+  const {
+    rows,
+    total,
+    hasMore,
+    page,
+    offset,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    nextPage,
+    prevPage,
+  } = usePagedData({
+    queryKey: ['positions', 'page'],
+    queryFn: getPositionsPage,
+    params,
+    pageSize,
+    enabled: hasRequestedData,
+  });
+
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(rows);
+  }, [rows, onRowsChange]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-    setPage(0);
+    if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
   };
 
-  const filtered = useMemo(() => {
-    let rows = [...rawData];
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(r =>
-        r.login.includes(q) ||
-        String(r.position).includes(q) ||
-        r.symbol.toLowerCase().includes(q) ||
-        (r.name || '').toLowerCase().includes(q) ||
-        (r.email || '').toLowerCase().includes(q)
-      );
+  const handleLoadData = () => markDataRequested();
+
+  const handleRefresh = () => {
+    if (!hasRequestedData) {
+      markDataRequested();
+      return;
     }
-    if (typeFilter !== 'All Types') rows = rows.filter(r => r.type === typeFilter.toLowerCase());
-    if (symbolFilter !== 'All Symbols') rows = rows.filter(r => r.symbol === symbolFilter);
-    if (reasonFilter !== 'All Reasons') rows = rows.filter(r => r.comment === reasonFilter);
+    refetch();
+  };
 
-    rows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-      return sortDir === 'asc'
-        ? String(av).localeCompare(String(bv))
-        : String(bv).localeCompare(String(av));
-    });
-    return rows;
-  }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
-
-  useMemo(() => { if (onRowsChange) onRowsChange(filtered); /* eslint-disable-line */ }, [filtered]);
-
-  const pageRows = filtered.slice(0, (page + 1) * pageSize);
-
-  const TH = ({ col, label, align = 'left' }) => (
+  const renderHeader = (col, label, align = 'left') => (
     <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
 
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = rows.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + rows.length;
+  const pageBuys = rows.filter((row) => row.type === 'buy').length;
+  const pageSells = rows.filter((row) => row.type === 'sell').length;
+  const isIdle = !hasRequestedData;
+  const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
+
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden">
-      {error && (
+      {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
-          <strong>API Fallback Detected.</strong> {error}
+          <strong>API Error.</strong> {error?.message || 'Failed to load positions.'}
         </div>
       )}
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <TH col="position" label="Ticket" />
-              <TH col="login" label="Login" />
-              <TH col="name" label="User Name" />
-              <TH col="email" label="Email" />
-              <TH col="symbol" label="Symbol" />
-              <TH col="type" label="Action" />
-              <TH col="volume" label="Lots" align="right" />
-              <TH col="priceOpen" label="Open" align="right" />
-              <TH col="priceCurrent" label="Current" align="right" />
-              <TH col="priceSl" label="S/L" align="right" />
-              <TH col="priceTp" label="T/P" align="right" />
-              <TH col="swap" label="Storage" align="right" />
-              <TH col="profit" label="Profit" align="right" />
-              <TH col="comment" label="Comment" />
+              {renderHeader('position', 'Ticket')}
+              {renderHeader('login', 'Login')}
+              {renderHeader('name', 'User Name')}
+              {renderHeader('email', 'Email')}
+              {renderHeader('symbol', 'Symbol')}
+              {renderHeader('type', 'Action')}
+              {renderHeader('volume', 'Lots', 'right')}
+              {renderHeader('priceOpen', 'Open', 'right')}
+              {renderHeader('priceCurrent', 'Current', 'right')}
+              {renderHeader('priceSl', 'S/L', 'right')}
+              {renderHeader('priceTp', 'T/P', 'right')}
+              {renderHeader('swap', 'Storage', 'right')}
+              {renderHeader('profit', 'Profit', 'right')}
+              {renderHeader('comment', 'Comment')}
             </tr>
           </thead>
           <tbody>
-            {pageRows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={14} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isLoading ? 'Loading positions…' : (isFallback ? 'BACKEND DISCONNECTED' : 'No positions match the current filters.')}
+                  {isIdle ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <span>Open positions are not loaded.</span>
+                      <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
+                        <RefreshCw size={13} />
+                        {loadLabel}
+                      </button>
+                    </div>
+                  ) : isLoading ? 'Loading positions...' : 'No positions match the current filters.'}
                 </td>
               </tr>
-            ) : pageRows.map((row, idx) => {
+            ) : rows.map((row, idx) => {
               const rowKey = `${row.position}-${idx}`;
               const isBuy = row.type === 'buy';
               const swapTone = row.swap < 0 ? 'var(--danger-text)' : 'var(--text-2)';
@@ -145,38 +180,41 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
         </table>
       </div>
 
-      {filtered.length > 50 && (
-        <div
-          className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
-        >
-          <span className="flex items-center gap-3">
-            <span>
-              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>1–{Math.min((page + 1) * pageSize, filtered.length)}</span>
-              {' '}of{' '}
-              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span>
-            </span>
-            <span style={{ color: 'var(--muted)' }}>·</span>
-            <span>Buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{filtered.filter(r => r.type === 'buy').length}</span></span>
-            <span>Sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{filtered.filter(r => r.type === 'sell').length}</span></span>
-            {isFallback && (
-              <span className="ui-badge ui-badge-danger">
-                <AlertTriangle size={10} />
-                BACKEND DISCONNECTED
-              </span>
+      <div
+        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+      >
+        <span className="flex items-center gap-3">
+          <span>
+            {isIdle ? (
+              'Open positions not loaded'
+            ) : (
+              <>
+                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+                {' '}of{' '}
+                <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+              </>
             )}
           </span>
-          <div className="flex items-center gap-2">
-            {(page + 1) * pageSize < filtered.length ? (
-              <button onClick={() => setPage(p => p + 1)} className="ui-btn ui-btn-primary ui-btn-xs">
-                Show More
-              </button>
-            ) : (
-              <span className="italic" style={{ color: 'var(--muted)' }}>All loaded</span>
-            )}
-          </div>
+          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{pageBuys}</span></span>}
+          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{pageSells}</span></span>}
+          {isFetching && !isLoading && (
+            <span className="ui-badge ui-badge-danger">
+              <AlertTriangle size={10} />
+              Updating
+            </span>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">
+            <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
+            {isIdle ? 'Load' : 'Refresh'}
+          </button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs">Next</button>
         </div>
-      )}
+      </div>
 
       {activeAccountDetailsId && (
         <AccountDetailsModal

@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
-import useDataSource from '../../../hooks/useDataSource';
-import { getOrders } from '../../../services/api';
+import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import usePagedData from '../../../hooks/usePagedData';
+import useManualGridLoad from '../../../hooks/useManualGridLoad';
+import { getOrdersPage } from '../../../services/api';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
-
-const ORDERS_FALLBACK = [];
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtDate = (ts) => {
-  if (!ts) return '—';
+  if (!ts) return '-';
   const dateObj = new Date(ts > 1e11 ? ts : ts * 1000);
   if (isNaN(dateObj.getTime())) return String(ts);
   return dateObj.toLocaleString('en-US', {
@@ -25,106 +24,131 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
-  const { data: rawData, isLoading, isFallback, error } = useDataSource(getOrders, ORDERS_FALLBACK);
   const [sortCol, setSortCol] = useState('ticket');
   const [sortDir, setSortDir] = useState('desc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
   const [activeAccountTicket, setActiveAccountTicket] = useState(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const [hasRequestedData, markDataRequested] = useManualGridLoad('orders');
+  const pageSize = 30;
+
+  const filters = useMemo(() => ({
+    ...(typeFilter !== 'All Types' ? { type: typeFilter.toLowerCase() } : {}),
+    ...(symbolFilter !== 'All Symbols' ? { symbol: symbolFilter } : {}),
+    ...(reasonFilter !== 'All Reasons' ? { reason: reasonFilter } : {}),
+  }), [typeFilter, symbolFilter, reasonFilter]);
+
+  const params = useMemo(() => ({
+    search,
+    sort_by: sortCol,
+    sort_dir: sortDir,
+    filters,
+  }), [search, sortCol, sortDir, filters]);
+
+  const {
+    rows,
+    total,
+    hasMore,
+    page,
+    offset,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    nextPage,
+    prevPage,
+  } = usePagedData({
+    queryKey: ['orders', 'page'],
+    queryFn: getOrdersPage,
+    params,
+    pageSize,
+    enabled: hasRequestedData,
+  });
+
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(rows);
+  }, [rows, onRowsChange]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-    setPage(0);
+    if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
   };
 
-  useEffect(() => {
-    setPage(0);
-  }, [search, typeFilter, symbolFilter, reasonFilter]);
+  const handleLoadData = () => markDataRequested();
 
-  const filtered = useMemo(() => {
-    let rows = [...rawData];
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(r =>
-        String(r.login).includes(q) ||
-        String(r.ticket).includes(q) ||
-        (r.symbol || '').toLowerCase().includes(q) ||
-        (r.name || '').toLowerCase().includes(q) ||
-        (r.email || '').toLowerCase().includes(q)
-      );
+  const handleRefresh = () => {
+    if (!hasRequestedData) {
+      markDataRequested();
+      return;
     }
-    if (typeFilter !== 'All Types') rows = rows.filter(r => (r.type || '').toLowerCase() === typeFilter.toLowerCase());
-    if (symbolFilter !== 'All Symbols') rows = rows.filter(r => r.symbol === symbolFilter);
-    if (reasonFilter !== 'All Reasons') rows = rows.filter(r => r.comment === reasonFilter);
+    refetch();
+  };
 
-    rows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-      return sortDir === 'asc'
-        ? String(av || '').localeCompare(String(bv || ''))
-        : String(bv || '').localeCompare(String(av || ''));
-    });
-    return rows;
-  }, [rawData, search, typeFilter, symbolFilter, reasonFilter, sortCol, sortDir]);
-
-  useEffect(() => {
-    if (onRowsChange) onRowsChange(filtered);
-  }, [filtered, onRowsChange]);
-
-  const pageRows = filtered.slice(0, (page + 1) * pageSize);
-
-  const TH = ({ col, label, align = 'left' }) => (
+  const renderHeader = (col, label, align = 'left') => (
     <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
 
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = rows.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + rows.length;
+  const pageBuys = rows.filter((row) => (row.type || '').toLowerCase() === 'buy').length;
+  const pageSells = rows.filter((row) => (row.type || '').toLowerCase() === 'sell').length;
+  const isIdle = !hasRequestedData;
+  const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
+
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden">
-      {error && (
+      {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
-          <strong>API Error Detected.</strong> {error}
+          <strong>API Error.</strong> {error?.message || 'Failed to load orders.'}
         </div>
       )}
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <TH col="ticket" label="Ticket" />
-              <TH col="login" label="Login" />
-              <TH col="name" label="User Name" />
-              <TH col="group" label="Group" />
-              <TH col="symbol" label="Symbol" />
-              <TH col="type" label="Type" />
-              <TH col="side" label="Side" />
-              <TH col="volume" label="Lots" align="right" />
-              <TH col="priceOpen" label="Open" align="right" />
-              <TH col="priceSl" label="S/L" align="right" />
-              <TH col="priceTp" label="T/P" align="right" />
-              <TH col="status" label="Status" />
-              <TH col="timeSetup" label="Setup Time" />
-              <TH col="timeDone" label="Done Time" />
-              <TH col="comment" label="Comment" />
+              {renderHeader('ticket', 'Ticket')}
+              {renderHeader('login', 'Login')}
+              {renderHeader('name', 'User Name')}
+              {renderHeader('group', 'Group')}
+              {renderHeader('symbol', 'Symbol')}
+              {renderHeader('type', 'Type')}
+              {renderHeader('side', 'Side')}
+              {renderHeader('volume', 'Lots', 'right')}
+              {renderHeader('priceOpen', 'Open', 'right')}
+              {renderHeader('priceSl', 'S/L', 'right')}
+              {renderHeader('priceTp', 'T/P', 'right')}
+              {renderHeader('status', 'Status')}
+              {renderHeader('timeSetup', 'Setup Time')}
+              {renderHeader('timeDone', 'Done Time')}
+              {renderHeader('comment', 'Comment')}
             </tr>
           </thead>
           <tbody>
-            {isLoading && pageRows.length === 0 ? (
-              <tr>
-                <td colSpan={15} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading orders…</td>
-              </tr>
-            ) : pageRows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={15} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  {isFallback ? 'BACKEND DISCONNECTED' : 'No orders match the current filters.'}
+                  {isIdle ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <span>Orders are not loaded.</span>
+                      <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
+                        <RefreshCw size={13} />
+                        {loadLabel}
+                      </button>
+                    </div>
+                  ) : isLoading ? 'Loading orders...' : 'No orders match the current filters.'}
                 </td>
               </tr>
-            ) : pageRows.map((row, idx) => {
+            ) : rows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
               const side = String(row.side || '').toLowerCase();
               const typeBadgeClass = side === 'buy'
@@ -170,38 +194,41 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
         </table>
       </div>
 
-      {filtered.length > 50 && (
-        <div
-          className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
-        >
-          <span className="flex items-center gap-3">
-            <span>
-              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>1–{Math.min((page + 1) * pageSize, filtered.length)}</span>
-              {' '}of{' '}
-              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{filtered.length}</span>
-            </span>
-            <span style={{ color: 'var(--muted)' }}>·</span>
-            <span>Buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{filtered.filter(r => (r.type || '').toLowerCase() === 'buy').length}</span></span>
-            <span>Sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{filtered.filter(r => (r.type || '').toLowerCase() === 'sell').length}</span></span>
-            {isFallback && (
-              <span className="ui-badge ui-badge-danger">
-                <AlertTriangle size={10} />
-                BACKEND DISCONNECTED
-              </span>
+      <div
+        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+      >
+        <span className="flex items-center gap-3">
+          <span>
+            {isIdle ? (
+              'Orders not loaded'
+            ) : (
+              <>
+                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+                {' '}of{' '}
+                <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+              </>
             )}
           </span>
-          <div className="flex items-center gap-2">
-            {(page + 1) * pageSize < filtered.length ? (
-              <button onClick={() => setPage(p => p + 1)} className="ui-btn ui-btn-primary ui-btn-xs">
-                Show More
-              </button>
-            ) : (
-              <span className="italic" style={{ color: 'var(--muted)' }}>All loaded</span>
-            )}
-          </div>
+          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{pageBuys}</span></span>}
+          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{pageSells}</span></span>}
+          {isFetching && !isLoading && (
+            <span className="ui-badge ui-badge-danger">
+              <AlertTriangle size={10} />
+              Updating
+            </span>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">
+            <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
+            {isIdle ? 'Load' : 'Refresh'}
+          </button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs">Next</button>
         </div>
-      )}
+      </div>
 
       {activeAccountDetailsId && (
         <AccountDetailsModal

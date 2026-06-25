@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
 import { usePermissions } from '../hooks/usePermissions';
@@ -8,6 +9,17 @@ import { PERMISSIONS } from '../utils/permissions';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
 } from 'lucide-react';
+
+const HEAVY_GRID_QUERY_KEYS = new Set([
+  'accounts-online',
+  'analytics-online-users',
+  'clients',
+  'deals',
+  'online-users',
+  'orders',
+  'positions',
+  'trading-accounts',
+]);
 
 // Reusable Tree Node Component
 const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode }) => {
@@ -61,12 +73,25 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 
 const NavigatorPanel = () => {
   const navigate = useNavigate();
-  const { groups, loading: groupsLoading } = useGroupList();
+  const queryClient = useQueryClient();
+  const { groups, total: groupsTotal, hasMore: groupsHasMore, loading: groupsLoading } = useGroupList({
+    limit: 100,
+    offset: 0,
+    sort_by: 'name',
+    sort_dir: 'asc',
+  });
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [brokerInfo] = useState(() => getBrokerInfo());
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
+
+  const navigateTo = (path) => {
+    void queryClient.cancelQueries({
+      predicate: (query) => HEAVY_GRID_QUERY_KEYS.has(query.queryKey?.[0]),
+    });
+    navigate(path);
+  };
 
   const openNewGroup = (event) => {
     event?.stopPropagation();
@@ -87,48 +112,49 @@ const NavigatorPanel = () => {
 
               <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
 
-                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/online-users')} />
-                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-positions')} />
-                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigate('/analytics/open-orders')} />
+                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/online-users')} />
+                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/open-positions')} />
+                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/open-orders')} />
 
 
               </TreeNode>
 
               <TreeNode label="Clients & Orders" icon={Users} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/online-users')} />
-                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients')} />
-                <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/trading-accounts')} />
-                <TreeNode label="Position History" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/positions')} />
-                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onClickNode={() => navigate('/clients/orders')} />
+                <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/online-users')} />
+                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients')} />
+                <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/trading-accounts')} />
+                <TreeNode label="Position History" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/positions')} />
+                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/orders')} />
               </TreeNode>
 
-              <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigate('/dealing')} />
+              <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigateTo('/dealing')} />
 
               <TreeNode label="Dealer Operations" icon={Gavel} iconColor="text-orange-500" defaultExpanded>
-                <TreeNode label="Dealer Queue" icon={Gavel} iconColor="text-orange-400" onClickNode={() => navigate('/dealer/queue')} />
-                <TreeNode label="Restricted Accounts" icon={Shield} iconColor="text-red-400" onClickNode={() => navigate('/dealer/restrictions')} />
+                <TreeNode label="Dealer Queue" icon={Gavel} iconColor="text-orange-400" onClickNode={() => navigateTo('/dealer/queue')} />
+                <TreeNode label="Restricted Accounts" icon={Shield} iconColor="text-red-400" onClickNode={() => navigateTo('/dealer/restrictions')} />
               </TreeNode>
 
               <TreeNode label="IB Management" icon={Handshake} iconColor="text-emerald-500" defaultExpanded>
-                <TreeNode label="IB Accounts" icon={Handshake} iconColor="text-emerald-400" onClickNode={() => navigate('/ib')} />
-                <TreeNode label="IB Tree" icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigate('/ib/tree')} />
+                <TreeNode label="IB Accounts" icon={Handshake} iconColor="text-emerald-400" onClickNode={() => navigateTo('/ib')} />
+                <TreeNode label="IB Tree" icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigateTo('/ib/tree')} />
               </TreeNode>
 
               <TreeNode label="Market Overview" icon={TrendingUp} iconColor="text-indigo-500" defaultExpanded>
-                <TreeNode label="Symbols Browser" icon={BarChart2} iconColor="text-indigo-400" onClickNode={() => navigate('/symbols')} />
-                <TreeNode label="Symbol Management" icon={Settings2} iconColor="text-indigo-400" onClickNode={() => navigate('/symbol-management')} />
+                <TreeNode label="Symbols Browser" icon={BarChart2} iconColor="text-indigo-400" onClickNode={() => navigateTo('/symbols')} />
+                <TreeNode label="Symbol Management" icon={Settings2} iconColor="text-indigo-400" onClickNode={() => navigateTo('/symbol-management')} />
               </TreeNode>
 
               <TreeNode
                 label="Groups"
-                count={groupsLoading ? '…' : (groups?.length || 0).toString()}
+                count={groupsLoading ? '...' : (groupsTotal ?? groups?.length ?? 0).toString()}
                 icon={Users2}
                 iconColor="text-blue-500"
-                onClickNode={() => navigate('/groups')}
+                onClickNode={() => navigateTo('/groups')}
               >
                 {groups?.map(g => (
-                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigate(`/groups/${g.name}`)} />
+                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigateTo(`/groups/${g.name}`)} />
                 ))}
+                {groupsHasMore && <TreeNode label="View all groups" iconColor="text-gray-400" onClickNode={() => navigateTo('/groups')} />}
                 {canManageGroups && <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={openNewGroup} />}
               </TreeNode>
 

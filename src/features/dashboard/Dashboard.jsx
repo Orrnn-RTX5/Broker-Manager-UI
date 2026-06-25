@@ -60,9 +60,9 @@ const Kpi = ({ icon, label, value, hint, loading, unavailable, tone = 'default' 
 const DashboardNotice = ({ errors }) => {
   if (!errors.length) return null;
 
-  const isFullFailure = errors.length >= 2;
+  const isFullFailure = errors.some((error) => error.key === 'summary');
   const message = isFullFailure
-    ? 'Dashboard data unavailable. Account and position endpoints failed.'
+    ? 'Dashboard data unavailable. DashboardSummary failed.'
     : `Partial dashboard data. ${errors.map((error) => error.key).join(', ')} endpoint failed.`;
 
   return (
@@ -94,10 +94,14 @@ const Dashboard = () => {
   } = useDashboardMetrics();
 
   const metrics = data?.metrics;
-  const accountsReady = Boolean(data?.sources?.accounts?.ok);
-  const positionsReady = Boolean(data?.sources?.positions?.ok);
+  const sourceMode = data?.sourceMode || 'summary';
+  const isSummarySource = sourceMode === 'summary';
+  const isFallbackSource = sourceMode === 'paged-fallback';
   const errors = data?.errors || [];
   const asOf = formatTime(data?.asOf);
+  const sourceHint = isSummarySource
+    ? `From DashboardSummary${asOf ? ` at ${asOf}` : ''}`
+    : `From paged account/position totals${asOf ? ` at ${asOf}` : ''}`;
 
   return (
     <div
@@ -129,33 +133,35 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi
           icon={<Users size={18} />}
-          label="Real Accounts"
-          value={accountsReady && metrics ? formatInteger(metrics.realAccounts) : null}
+          label={isFallbackSource ? 'Accounts' : 'Real Accounts'}
+          value={metrics?.realAccounts != null ? formatInteger(metrics.realAccounts) : null}
           loading={isLoading}
-          unavailable={!isLoading && !accountsReady}
-          hint={accountsReady ? `From AccountDetailsMany${asOf ? ` at ${asOf}` : ''}` : 'Account endpoint unavailable'}
+          unavailable={!isLoading && metrics?.realAccounts == null}
+          hint={metrics?.realAccounts != null ? sourceHint : 'Account total unavailable'}
         />
         <Kpi
           icon={<DollarSign size={18} />}
           label="Deposits 24h"
-          unavailable
-          hint="Backend cashflow metric required"
+          value={metrics?.deposits24h != null ? formatMoney(metrics.deposits24h) : null}
+          loading={isLoading}
+          unavailable={!isLoading && metrics?.deposits24h == null}
+          hint={metrics?.deposits24h != null ? 'From DashboardSummary' : 'DashboardSummary required for cashflow'}
         />
         <Kpi
           icon={<BarChart3 size={18} />}
           label="Open Positions"
-          value={positionsReady && metrics ? formatInteger(metrics.openPositions) : null}
+          value={metrics?.openPositions != null ? formatInteger(metrics.openPositions) : null}
           loading={isLoading}
-          unavailable={!isLoading && !positionsReady}
-          hint={positionsReady ? `From PositionsAll${asOf ? ` at ${asOf}` : ''}` : 'Positions endpoint unavailable'}
+          unavailable={!isLoading && metrics?.openPositions == null}
+          hint={metrics?.openPositions != null ? sourceHint : 'Position total unavailable'}
         />
         <Kpi
           icon={<Wallet size={18} />}
           label="Equity"
-          value={accountsReady && metrics ? formatMoney(metrics.equity) : null}
+          value={metrics?.equity != null ? formatMoney(metrics.equity) : null}
           loading={isLoading}
-          unavailable={!isLoading && !accountsReady}
-          hint={accountsReady ? 'Sum of non-demo account equity' : 'Account endpoint unavailable'}
+          unavailable={!isLoading && metrics?.equity == null}
+          hint={metrics?.equity != null ? 'From DashboardSummary' : 'DashboardSummary required for equity'}
         />
       </div>
 

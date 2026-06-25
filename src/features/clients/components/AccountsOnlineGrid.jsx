@@ -1,13 +1,14 @@
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { 
-  User, Shield, Laptop, Smartphone, Monitor, Clock, 
+import { useEffect, useMemo, useState } from 'react';
+import {
+  User, Shield, Laptop, Smartphone, Monitor, Clock,
   ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw
 } from 'lucide-react';
-import { getAccountsOnline } from '../../../services/api';
+import usePagedData from '../../../hooks/usePagedData';
+import useManualGridLoad from '../../../hooks/useManualGridLoad';
+import { getAccountsOnlinePage } from '../../../services/api';
 
 const formatDateTime = (ts) => {
-  if (!ts) return '—';
+  if (!ts) return '-';
   return new Date(ts * 1000).toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
   });
@@ -32,104 +33,143 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
-  const { data: rawData = [], isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['accounts-online'],
-    queryFn: getAccountsOnline,
-    refetchInterval: 10000, // Auto refresh every 10s
-  });
-
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
+  const [hasRequestedData, markDataRequested] = useManualGridLoad('accounts-online');
+  const pageSize = 30;
+
+  const params = useMemo(() => ({
+    search,
+    sort_by: sortCol,
+    sort_dir: sortDir,
+  }), [search, sortCol, sortDir]);
+
+  const {
+    rows,
+    total,
+    hasMore,
+    page,
+    offset,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    nextPage,
+    prevPage,
+  } = usePagedData({
+    queryKey: ['accounts-online', 'page'],
+    queryFn: getAccountsOnlinePage,
+    params,
+    pageSize,
+    enabled: hasRequestedData,
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(rows);
+  }, [rows, onRowsChange]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
+    if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
   };
 
-  const filtered = useMemo(() => {
-    const rows = Array.isArray(rawData) ? [...rawData] : (rawData?.answer || []);
-    let filteredRows = rows;
+  const handleLoadData = () => markDataRequested();
 
-    if (search) {
-      const q = search.toLowerCase();
-      filteredRows = rows.filter(r => 
-        String(r.login).includes(q) || 
-        (r.deviceType || '').toLowerCase().includes(q)
-      );
+  const handleRefresh = () => {
+    if (!hasRequestedData) {
+      markDataRequested();
+      return;
     }
+    refetch();
+  };
 
-    filteredRows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-      return sortDir === 'asc'
-        ? String(av || '').localeCompare(String(bv || ''))
-        : String(bv || '').localeCompare(String(av || ''));
-    });
-    return filteredRows;
-  }, [rawData, search, sortCol, sortDir]);
-
-  useMemo(() => { if (onRowsChange) onRowsChange(filtered); }, [filtered, onRowsChange]);
-
-  const TH = ({ col, label, align = 'left' }) => (
+  const renderHeader = (col, label, align = 'left') => (
     <th onClick={() => handleSort(col)} style={{ textAlign: align }} className="cursor-pointer">
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
+
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = rows.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + rows.length;
+  const isIdle = !hasRequestedData;
+  const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden min-h-[400px]">
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border-2)' }}>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold tabular" style={{ color: 'var(--text-3)' }}>
-            {filtered.length} ACTIVE SESSIONS
+            {isIdle ? 'ACTIVE SESSIONS NOT LOADED' : `${total ?? rows.length} ACTIVE SESSIONS`}
           </span>
           {isFetching && <RefreshCcw size={12} className="animate-spin" style={{ color: 'var(--accent)' }} />}
         </div>
-        <button onClick={() => refetch()} className="ui-btn ui-btn-ghost ui-btn-xs">FORCE RELOAD</button>
+        <button onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-ghost ui-btn-xs">
+          <RefreshCcw size={11} className={isFetching ? 'animate-spin' : ''} />
+          {isIdle ? 'LOAD' : 'FORCE RELOAD'}
+        </button>
       </div>
 
       <div className="w-full overflow-x-auto flex-1">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <TH col="login" label="Login ID" />
-              <TH col="connectedAt" label="Connected Since" />
-              <TH col="sessionAge" label="Duration" />
-              <TH col="isAdmin" label="Role" />
-              <TH col="deviceType" label="Access Type" />
+              {renderHeader('login', 'Login ID')}
+              {renderHeader('connectedAt', 'Connected Since')}
+              {renderHeader('sessionAge', 'Duration')}
+              {renderHeader('isAdmin', 'Role')}
+              {renderHeader('deviceType', 'Access Type')}
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
+            {isIdle ? (
+              <tr>
+                <td colSpan={5} className="text-center py-20">
+                  <div className="flex flex-col items-center gap-3" style={{ color: 'var(--muted)' }}>
+                    <span className="text-sm">Active sessions are not loaded.</span>
+                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
+                      <RefreshCcw size={13} />
+                      {loadLabel}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ) : isLoading && rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-20">
                   <div className="flex flex-col items-center gap-2">
                     <RefreshCcw size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-                    <span className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>Analyzing online sessions…</span>
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>Analyzing online sessions...</span>
                   </div>
                 </td>
               </tr>
-            ) : error ? (
+            ) : isError ? (
               <tr>
                 <td colSpan={5} className="text-center py-20">
                   <div className="flex flex-col items-center gap-2 text-red-500">
                     <AlertTriangle size={24} />
                     <span className="text-sm font-bold">Failed to load session data</span>
-                    <span className="text-xs opacity-70">{error.message}</span>
+                    <span className="text-xs opacity-70">{error?.message}</span>
                   </div>
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-20 text-sm" style={{ color: 'var(--muted)' }}>
                   No active accounts found online.
                 </td>
               </tr>
-            ) : filtered.map((row, idx) => {
+            ) : rows.map((row, idx) => {
               const rowKey = `${row.login}-${idx}`;
-              const DeviceIcon = row.deviceType?.toLowerCase().includes('manager') ? Monitor : 
-                               row.deviceType?.toLowerCase().includes('mobile') ? Smartphone : Laptop;
+              const DeviceIcon = row.deviceType?.toLowerCase().includes('manager') ? Monitor :
+                row.deviceType?.toLowerCase().includes('mobile') ? Smartphone : Laptop;
 
               return (
                 <tr
@@ -174,6 +214,28 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div
+        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+      >
+        <span>
+          {isIdle ? (
+            'Active sessions not loaded'
+          ) : (
+            <>
+              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+              {' '}of{' '}
+              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+            </>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
+        </div>
       </div>
     </div>
   );

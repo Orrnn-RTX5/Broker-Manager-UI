@@ -1,12 +1,13 @@
 import apiClient from './apiClient';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
-import { desktopFetch } from './desktopHttp.js';
-import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
 import { API_HOST, updateDynamicEndpoints } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
+import { buildPagedEndpoint, normalizePagedResult, normalizePagedStreamResult, normalizePagedTextResult } from '../utils/pagination';
 
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
+const PAGED_RESPONSE_MAX_BYTES = 1_500_000;
+const PAGED_RESPONSE_TOO_LARGE = 'Response is too large for a paged grid request';
 
 const query = (params) => new URLSearchParams(
   Object.entries(params).reduce((acc, [key, value]) => {
@@ -71,18 +72,15 @@ const getBrokerV2Json = async (path, params = {}) => {
     };
   };
 
-  let response = await desktopFetch(url, { method: 'GET', headers: prepareHeaders() });
-  if (isAuthExpiredStatus(response.status)) {
+  let response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
+  if (response.status === 401) {
     const nextToken = await authService.refreshSession();
     if (!nextToken) expireAndThrow('token_rejected');
-    response = await desktopFetch(url, { method: 'GET', headers: prepareHeaders() });
+    response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
   }
 
   const data = await readJson(response);
   if (!response.ok) {
-    if (isAuthExpiredResponse(response.status, data)) {
-      expireAndThrow('token_rejected');
-    }
     const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
     error.status = response.status;
     throw error;
@@ -94,6 +92,185 @@ const getRecords = (data, key) => {
   if (Array.isArray(data)) return data;
   const records = data?.[key] || data?.answer || data?.data || data?.records || [];
   return Array.isArray(records) ? records : [];
+};
+
+const getFirstRecord = (data) => {
+  if (Array.isArray(data)) return data[0] || null;
+  if (!data || typeof data !== 'object') return null;
+
+  for (const key of ['answer', 'data', 'record', 'account', 'user']) {
+    const value = data[key];
+    if (Array.isArray(value)) return value[0] || null;
+    if (value && typeof value === 'object') return value;
+  }
+
+  return data.login || data.Login ? data : null;
+};
+
+export const normalizeClientRow = (p = {}) => ({
+  id: String(p.login || p.Login || ''),
+  name: p.Name || p.name || [p.FirstName || p.firstName, p.LastName || p.lastName].filter(Boolean).join(' ') || '',
+  city: p.City || p.city || '',
+  type: p.Type || p.type || 'Individual',
+  status: p.status || p.Status || 'Active',
+  lead: p.Lead || p.lead || '',
+  email: p.email || p.Email || '',
+  phone: p.phone || p.Phone || '',
+  country: p.Country || p.country || '',
+  balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
+});
+
+export const normalizeTradingAccountRow = (p = {}) => ({
+  login: String(p.login || p.Login || ''),
+  name: p.Name || p.name || '',
+  group: p.Group || p.group || '',
+  country: p.Country || p.country || '',
+  client: p.client || p.Client || '',
+  balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
+  equity: p.equity !== undefined ? p.equity : (p.Equity !== undefined ? p.Equity : 0),
+  profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
+  currency: p.Currency || p.currency || '',
+  leverage: p.leverage || p.Leverage || 100,
+  credit: p.credit || p.Credit || 0,
+  status: p.status || p.Status || 'active',
+  margin: p.margin || p.Margin || 0,
+  marginFree: p.marginFree || p.MarginFree || 0,
+  marginLevel: p.marginLevel || p.MarginLevel || 0,
+  email: p.email || p.Email || '',
+  firstName: p.firstName || p.FirstName || '',
+  lastName: p.lastName || p.LastName || '',
+});
+
+export const normalizePositionRow = (p = {}) => {
+  let type = 'unknown';
+  if (typeof p.action === 'string') type = p.action.toLowerCase();
+  else if (p.Action === 0 || p.action === 0) type = 'buy';
+  else if (p.Action === 1 || p.action === 1) type = 'sell';
+
+  let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : 0));
+  if (volume >= 100) volume = volume / 10000;
+
+  return {
+    position: p.positionTicket || p.Position || p.ticket || p.position || 0,
+    login: String(p.login || p.Login || ''),
+    name: p.accountName || p.AccountName || '',
+    email: p.username || p.Username || '',
+    group: p.accountGroup || p.AccountGroup || '',
+    symbol: p.symbol || p.Symbol || '',
+    type,
+    volume,
+    priceOpen: p.priceOpen || p.PriceOpen || p.Price || p.price || 0,
+    priceCurrent: p.priceCurrent || p.PriceCurrent || 0,
+    priceSl: p.priceSl || 0,
+    priceTp: p.priceTp || 0,
+    profit: p.profit || 0,
+    comment: String(p.comment || p.Comment || ''),
+    swap: p.storage || p.Storage || p.swap || p.Swap || 0,
+    timeCreate: p.timeCreate || p.TimeCreate || 0,
+    timeUpdate: p.timeUpdate || p.TimeUpdate || 0,
+  };
+};
+
+export const normalizeOrderRow = (p = {}) => {
+  let type = 'unknown';
+  if (typeof p.type === 'string') type = p.type.toLowerCase();
+  else if (p.type === 0) type = 'buy';
+  else if (p.type === 1) type = 'sell';
+
+  let volume = p.volume !== undefined ? p.volume : 0;
+  if (volume >= 100) volume = volume / 10000;
+
+  return {
+    ticket: p.ticket || 0,
+    login: String(p.login || ''),
+    name: p.accountName || p.username || '',
+    email: p.username || '',
+    group: p.accountGroup || '',
+    symbol: p.symbol || '',
+    type,
+    side: p.side || '',
+    volume,
+    priceOpen: p.priceOpen || 0,
+    priceSl: p.priceSl || 0,
+    priceTp: p.priceTp || 0,
+    status: p.status || '',
+    timeSetup: p.timeSetup || 0,
+    timeDone: p.timeDone || 0,
+    comment: String(p.comment || ''),
+  };
+};
+
+export const normalizeDealRow = (p = {}) => ({
+  ticket: p.ticket || 0,
+  orderTicket: p.orderTicket || 0,
+  login: String(p.login || ''),
+  username: p.username || '',
+  accountName: p.accountName || '',
+  accountGroup: p.accountGroup || '',
+  symbol: p.symbol || '',
+  action: p.action || '',
+  entry: p.entry || '',
+  volume: p.volume !== undefined ? p.volume : 0,
+  price: p.price || 0,
+  profit: p.profit || 0,
+  commission: p.commission || 0,
+  swap: p.swap || 0,
+  fee: p.fee || 0,
+  time: p.time || 0,
+  comment: String(p.comment || ''),
+});
+
+export const normalizeGroupRow = (item = {}) => (
+  typeof item === 'string'
+    ? { name: item, description: '' }
+    : {
+        ...item,
+        name: item.name || item.Group || item.group || item.group_name || 'Unnamed',
+        description: item.description || item.Description || item.Currency || '',
+      }
+);
+
+const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options = {}) => {
+  const pagedEndpoint = buildPagedEndpoint(endpoint, params);
+  if (endpoint === '/AccountDetailsMany') {
+    const response = await apiClient.getRaw(pagedEndpoint, options);
+    return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, options);
+  }
+
+  try {
+    const data = await apiClient.get(pagedEndpoint, {
+      maxResponseBytes: PAGED_RESPONSE_MAX_BYTES,
+      ...options,
+    });
+    return normalizePagedResult(data, params, normalizeRow, preferredKeys);
+  } catch (error) {
+    if (!String(error?.message || '').includes(PAGED_RESPONSE_TOO_LARGE)) throw error;
+  }
+
+  const text = await apiClient.getText(pagedEndpoint, options);
+  return normalizePagedTextResult(text, params, normalizeRow, preferredKeys, options);
+};
+
+const isExactLoginSearch = (value) => /^\d+$/.test(String(value || '').trim());
+
+const getSingleAccountSearchPage = async (params = {}, normalizeRow, options = {}) => {
+  const search = String(params.search || '').trim();
+  const offset = Number(params.offset || 0);
+  if (!isExactLoginSearch(search)) return null;
+  if (Number.isFinite(offset) && offset > 0) {
+    return normalizePagedResult([], { ...params, offset }, normalizeRow);
+  }
+
+  try {
+    const data = await apiClient.get(`/AccountDetails?${query({ login: search })}`, options);
+    const record = getFirstRecord(data);
+    return normalizePagedResult(record ? [record] : [], { ...params, limit: params.limit || 30, offset: 0 }, normalizeRow);
+  } catch (error) {
+    if (String(error?.message || '').includes('HTTP 404')) {
+      return normalizePagedResult([], { ...params, limit: params.limit || 30, offset: 0 }, normalizeRow);
+    }
+    throw error;
+  }
 };
 
 const normalizePositionHistoryRow = (p, index = 0) => {
@@ -139,97 +316,55 @@ const getOrderHistory = async (loginId) => {
 
 // ─── Online Users ──────────────────────────────────────────────────────────────
 export const getOnlineUsers = async () => {
-  const data = await apiClient.get('/OnlineUsers');
-  return normalizeOnlineUserRows(data);
+  const page = await getOnlineUsersPage({ limit: 30, offset: 0 });
+  return page.rows;
+};
+
+export const getOnlineUsersPage = async (params = {}, options = {}) => {
+  return getPaged('/OnlineUsers', params, (row) => normalizeOnlineUserRows([row])[0] || row, ['users'], options);
 };
 
 export const getAccountsOnline = async () => {
-  return apiClient.get('/AccountsOnline');
+  const page = await getAccountsOnlinePage({ limit: 30, offset: 0 });
+  return page.rows;
 };
+
+export const getAccountsOnlinePage = async (params = {}, options = {}) => (
+  getPaged('/AccountsOnline', params, (row) => row, ['accounts', 'users'], options)
+);
 
 // ─── Clients ───────────────────────────────────────────────────────────────────
 export const getClients = async () => {
-  const data = await apiClient.get('/AccountDetailsMany');
-  const records = Array.isArray(data) ? data : data.answer || [];
+  const page = await getClientsPage({ limit: 30, offset: 0 });
+  return page.rows;
+};
 
-  return records.map(p => ({
-    id: String(p.login || p.Login || ''),
-    name: p.Name || p.name || [p.FirstName || p.firstName, p.LastName || p.lastName].filter(Boolean).join(' ') || '',
-    city: p.City || p.city || '',
-    type: p.Type || p.type || 'Individual',
-    status: p.status || p.Status || 'Active',
-    lead: p.Lead || p.lead || '',
-    email: p.email || p.Email || '',
-    phone: p.phone || p.Phone || '',
-    country: p.Country || p.country || '',
-    balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
-  }));
+export const getClientsPage = async (params = {}, options = {}) => {
+  const singleAccountPage = await getSingleAccountSearchPage(params, normalizeClientRow, options);
+  if (singleAccountPage) return singleAccountPage;
+  return getPaged('/AccountDetailsMany', params, normalizeClientRow, ['accounts'], options);
 };
 
 // ─── Trading Accounts ──────────────────────────────────────────────────────────
 export const getTradingAccounts = async () => {
-  const data = await apiClient.get('/AccountDetailsMany');
-  const records = Array.isArray(data) ? data : data.answer || [];
+  const page = await getTradingAccountsPage({ limit: 30, offset: 0 });
+  return page.rows;
+};
 
-  return records.map(p => ({
-    login: String(p.login || p.Login || ''),
-    name: p.Name || p.name || '',
-    group: p.Group || p.group || '',
-    country: p.Country || p.country || '',
-    client: p.client || p.Client || '',
-    balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
-    equity: p.equity !== undefined ? p.equity : (p.Equity !== undefined ? p.Equity : 0),
-    profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
-    currency: p.Currency || p.currency || '',
-
-    // NEW FIELDS FROM SWAGGER
-    leverage: p.leverage || p.Leverage || 100,
-    credit: p.credit || p.Credit || 0,
-    status: p.status || p.Status || 'active',
-    margin: p.margin || p.Margin || 0,
-    marginFree: p.marginFree || p.MarginFree || 0,
-    marginLevel: p.marginLevel || p.MarginLevel || 0,
-    email: p.email || p.Email || '',
-    firstName: p.firstName || p.FirstName || '',
-    lastName: p.lastName || p.LastName || '',
-  }));
+export const getTradingAccountsPage = async (params = {}, options = {}) => {
+  const singleAccountPage = await getSingleAccountSearchPage(params, normalizeTradingAccountRow, options);
+  if (singleAccountPage) return singleAccountPage;
+  return getPaged('/AccountDetailsMany', params, normalizeTradingAccountRow, ['accounts'], options);
 };
 
 export const getPositions = async () => {
-  const data = await apiClient.get('/PositionsAll');
-  const records = Array.isArray(data) ? data : data.answer || [];
-
-  return records.map(p => {
-    let type = 'unknown';
-    if (typeof p.action === 'string') type = p.action.toLowerCase();
-    else if (p.Action === 0 || p.action === 0) type = 'buy';
-    else if (p.Action === 1 || p.action === 1) type = 'sell';
-
-    let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : 0));
-    if (volume >= 100) volume = volume / 10000;
-
-    return {
-      position: p.positionTicket || p.Position || p.ticket || p.position || 0,
-      login: String(p.login || p.Login || ''),
-      name: p.accountName || p.AccountName || '',
-      email: p.username || p.Username || '',
-      group: p.accountGroup || p.AccountGroup || '',
-      symbol: p.symbol || p.Symbol || '',
-      type,
-      volume,
-      priceOpen: p.priceOpen || p.PriceOpen || p.Price || p.price || 0,
-      priceCurrent: p.priceCurrent || p.PriceCurrent || 0,
-      priceSl: p.priceSl || 0,
-      priceTp: p.priceTp || 0,
-      profit: p.profit || 0,
-      comment: String(p.comment || p.Comment || ''),
-      swap: p.storage || p.Storage || p.swap || p.Swap || 0,
-      // NEW FIELDS FROM SWAGGER
-      timeCreate: p.timeCreate || p.TimeCreate || 0,
-      timeUpdate: p.timeUpdate || p.TimeUpdate || 0,
-    };
-  });
+  const page = await getPositionsPage({ limit: 30, offset: 0 });
+  return page.rows;
 };
+
+export const getPositionsPage = async (params = {}, options = {}) => (
+  getPaged('/PositionsAll', params, normalizePositionRow, ['positions'], options)
+);
 
 export const getPositionHistory = async (loginId) => {
   if (!loginId) return [];
@@ -283,70 +418,56 @@ export const getTradingAccountsAnalytics = async () => {
 };
 
 export const getOpenOrders = async () => {
-  return apiClient.get('/OrdersAll');
+  const page = await getOrdersPage({ limit: 30, offset: 0 });
+  return page.rows;
 };
 
 export const getOrders = async () => {
-  const data = await apiClient.get('/BrokerOrders?limit=100&offset=0');
-  const records = Array.isArray(data) ? data : data.answer || [];
-
-  return records.map(p => {
-    let type = 'unknown';
-    if (typeof p.type === 'string') type = p.type.toLowerCase();
-    else if (p.type === 0) type = 'buy';
-    else if (p.type === 1) type = 'sell';
-
-    let volume = p.volume !== undefined ? p.volume : 0;
-    if (volume >= 100) volume = volume / 10000;
-
-    return {
-      ticket: p.ticket || 0,
-      login: String(p.login || ''),
-      name: p.accountName || p.username || '',
-      email: p.username || '',
-      group: p.accountGroup || '',
-      symbol: p.symbol || '',
-      type,
-      side: p.side || '',
-      volume,
-      priceOpen: p.priceOpen || 0,
-      priceSl: p.priceSl || 0,
-      priceTp: p.priceTp || 0,
-      status: p.status || '',
-      timeSetup: p.timeSetup || 0,
-      timeDone: p.timeDone || 0,
-      comment: String(p.comment || ''),
-    };
-  });
+  const page = await getOrdersPage({ limit: 30, offset: 0 });
+  return page.rows;
 };
+
+export const getOrdersPage = async (params = {}, options = {}) => (
+  getPaged('/BrokerOrders', params, normalizeOrderRow, ['orders'], options)
+);
 
 export const getBrokerDeals = async () => {
-  const data = await apiClient.get('/BrokerDeals?limit=100&offset=0');
-  const records = Array.isArray(data) ? data : data.answer || [];
-
-  return records.map(p => ({
-    ticket: p.ticket || 0,
-    orderTicket: p.orderTicket || 0,
-    login: String(p.login || ''),
-    username: p.username || '',
-    accountName: p.accountName || '',
-    accountGroup: p.accountGroup || '',
-    symbol: p.symbol || '',
-    action: p.action || '',
-    entry: p.entry || '',
-    volume: p.volume !== undefined ? p.volume : 0,
-    price: p.price || 0,
-    profit: p.profit || 0,
-    commission: p.commission || 0,
-    swap: p.swap || 0,
-    fee: p.fee || 0,
-    time: p.time || 0,
-    comment: String(p.comment || ''),
-  }));
+  const page = await getBrokerDealsPage({ limit: 30, offset: 0 });
+  return page.rows;
 };
 
+export const getBrokerDealsPage = async (params = {}, options = {}) => (
+  getPaged('/BrokerDeals', params, normalizeDealRow, ['deals'], options)
+);
+
 export const getOpenPositions = async () => {
-  return apiClient.get('/PositionsAll');
+  const page = await getPositionsPage({ limit: 30, offset: 0 });
+  return page.rows;
+};
+
+export const getDashboardSummary = async (options = {}) => {
+  return apiClient.get('/DashboardSummary', options);
+};
+
+export const getGroupsPage = async (params = {}, options = {}) => {
+  const response = await fetchManagerApi(buildPagedEndpoint('/GroupList', params), {
+    headers: { accept: 'application/json' },
+    ...options,
+  });
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(getResponseMessage(data, 'Failed to fetch groups'));
+  return normalizePagedResult(data, params, normalizeGroupRow, ['groups']);
+};
+
+export const getActiveGroupsPage = async (params = {}, options = {}) => {
+  const response = await fetchManagerApi(buildPagedEndpoint('/UserGroups', params), {
+    method: 'GET',
+    headers: { accept: 'application/json' },
+    ...options,
+  });
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(getResponseMessage(data, 'Failed to fetch active groups'));
+  return normalizePagedResult(data, params, normalizeGroupRow, ['groups']);
 };
 
 export const getAdvertisingCampaigns = async () => {
@@ -453,13 +574,23 @@ export const symbolVisibilitySet = (body) => apiClient.post('/SymbolVisibilitySe
 
 export default {
   getOnlineUsers,
+  getOnlineUsersPage,
+  getAccountsOnlinePage,
   getClients,
+  getClientsPage,
   getTradingAccounts,
+  getTradingAccountsPage,
   getPositions,
+  getPositionsPage,
   getTradingAccountsAnalytics,
   getOpenOrders,
   getOrders,
+  getOrdersPage,
   getBrokerDeals,
+  getBrokerDealsPage,
   getOpenPositions,
+  getDashboardSummary,
+  getGroupsPage,
+  getActiveGroupsPage,
   getAdvertisingCampaigns,
 };

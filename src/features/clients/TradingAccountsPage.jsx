@@ -5,9 +5,8 @@ import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
+import { useGroupList } from '../../hooks/useGroupList';
 import { ALL_COUNTRIES } from '../../utils/countries';
-
-const GROUPS = ['FlexyB\\CENT','FlexyB\\STD','FlexyB\\Social','FlexyB\\Superfast','FlexyB\\YOFX','FlexyB\\YOFXNET','Demo\\extra','Demo\\MaxMaster','YOFX\\YOFX','demo\\PRO','demo\\STD','demo\\Propfirm'];
 
 const ACCOUNT_COLUMNS = [
   { key: 'login',    label: 'Login' },
@@ -41,6 +40,8 @@ const TradingAccountsPage = () => {
   const [countryFilter, setCountryFilter] = useState('All Countries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [restrictLogin, setRestrictLogin] = useState(null);
+  const { groups } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
+  const groupOptions = groups.map((group) => group.name).filter(Boolean);
 
   const ctl = useGridPageController({
     columns: ACCOUNT_COLUMNS,
@@ -63,7 +64,7 @@ const TradingAccountsPage = () => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Groups"    width="w-[160px]" options={GROUPS}        onChange={(e) => setGroupFilter(e.target.value)} />
+          <Dropdown value="All Groups"    width="w-[160px]" options={groupOptions}  onChange={(e) => setGroupFilter(e.target.value)} />
           <Dropdown value="All Countries" width="w-[140px]" options={ALL_COUNTRIES} onChange={(e) => setCountryFilter(e.target.value)} />
         </div>
       </div>

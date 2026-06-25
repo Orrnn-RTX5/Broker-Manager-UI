@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildDashboardMetrics,
+  buildDashboardFallbackMetrics,
   isDemoAccount,
   isRealAccount,
+  normalizeDashboardSummary,
   toFiniteNumber,
 } from './dashboardMetrics.js';
 
@@ -52,4 +54,42 @@ test('dashboard metrics handle missing backend arrays without fake values', () =
     openPositions: 0,
     equity: 0,
   });
+});
+
+test('dashboard summary normalizer accepts aggregate KPI fields', () => {
+  assert.deepEqual(normalizeDashboardSummary({
+    real_accounts: '40,000',
+    open_positions: 125,
+    total_equity: '1,250,500.25',
+    deposits_24h: '10000',
+  }), {
+    realAccounts: 40000,
+    openPositions: 125,
+    equity: 1250500.25,
+    deposits24h: 10000,
+  });
+});
+
+test('dashboard summary normalizer rejects unsupported payloads', () => {
+  assert.equal(normalizeDashboardSummary({ status: 'ok' }), null);
+  assert.equal(normalizeDashboardSummary(null), null);
+});
+
+test('dashboard fallback metrics use paged totals without requiring page rows', () => {
+  assert.deepEqual(buildDashboardFallbackMetrics({
+    accountsPage: { rows: [{ login: 1 }], total: 40000 },
+    positionsPage: { rows: [], total: '125' },
+  }), {
+    realAccounts: 40000,
+    openPositions: 125,
+    equity: null,
+    deposits24h: null,
+  });
+});
+
+test('dashboard fallback metrics reject pages without totals', () => {
+  assert.equal(buildDashboardFallbackMetrics({
+    accountsPage: { rows: [{ login: 1 }], total: null },
+    positionsPage: { rows: [{ position: 1 }], total: null },
+  }), null);
 });

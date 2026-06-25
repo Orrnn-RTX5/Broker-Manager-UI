@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { User, RefreshCw, AlertTriangle, Loader, WifiOff } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { User, RefreshCw, AlertTriangle, Loader, WifiOff, Search } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
@@ -7,6 +7,55 @@ import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
 import { usePermissions } from '../hooks/usePermissions';
 import { PERMISSIONS } from '../utils/permissions';
+import { normalizePagedStreamResult } from '../utils/pagination';
+
+const SIDEBAR_ACCOUNT_PAGE_SIZE = 30;
+const ACCOUNT_SEARCH_DEBOUNCE_MS = 350;
+const MIN_ACCOUNT_SEARCH_LENGTH = 2;
+
+const isRecordObject = (value) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const extractRows = (data) => {
+  if (Array.isArray(data)) return data;
+  if (!isRecordObject(data)) return [];
+
+  const rowKeys = ['accounts', 'answer', 'data', 'records', 'record', 'account', 'user'];
+  for (const key of rowKeys) {
+    const value = data[key];
+    if (Array.isArray(value)) return value;
+    if (isRecordObject(value) && (value.login || value.Login)) return [value];
+  }
+
+  return data.login || data.Login ? [data] : [];
+};
+
+const normalizeAccount = (acc) => {
+  if (typeof acc === 'number' || typeof acc === 'string') {
+    return {
+      login: String(acc),
+      Name: '',
+      balance: undefined,
+      MarginCallLevel: undefined,
+    };
+  }
+
+  return {
+    ...acc,
+    login: acc.login || acc.Login,
+    Name: acc.Name || acc.name || [acc.FirstName || acc.firstName, acc.LastName || acc.lastName].filter(Boolean).join(' ') || '',
+    balance: acc.balance !== undefined ? acc.balance : (acc.Balance !== undefined ? acc.Balance : undefined),
+    MarginCallLevel: acc.marginLevel || acc.MarginLevel || acc.MarginCallLevel,
+  };
+};
+
+const parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Unexpected response: ${text.slice(0, 80)}`);
+  }
+};
 
 /**
  * MarginCallsSidebar — pure content component.
@@ -14,7 +63,13 @@ import { PERMISSIONS } from '../utils/permissions';
  * from the docking system. This component renders only data UI.
  */
 const MarginCallsSidebar = ({ isAuthenticated }) => {
+  const abortRef = useRef(null);
+  const inFlightKeyRef = useRef(null);
   const [accounts, setAccounts] = useState([]);
+  const [totalAccounts, setTotalAccounts] = useState(null);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
+  const [hasRequestedAccounts, setHasRequestedAccounts] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
@@ -29,59 +84,133 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const canManipulateRestrictionTrades = canAct(PERMISSIONS.MANIPULATE_TRADES);
   const canOpenRestrictions = canEditRestrictions || canManipulateRestrictionTrades;
 
-  const fetchAccounts = useCallback(async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedAccountSearch(accountSearch.trim());
+    }, ACCOUNT_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [accountSearch]);
+
+  const fetchAccounts = useCallback(async ({ query = debouncedAccountSearch, allowEmpty = false } = {}) => {
+    const searchValue = query.trim();
+    if (!allowEmpty && searchValue.length < MIN_ACCOUNT_SEARCH_LENGTH) return;
+
+    const requestKey = searchValue || '__first_page__';
+    if (abortRef.current && inFlightKeyRef.current === requestKey) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    inFlightKeyRef.current = requestKey;
+
+    setHasRequestedAccounts(true);
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchManagerApi('/AccountDetailsMany', {
+      const isExactLoginSearch = /^\d+$/.test(searchValue) && searchValue.length > 0;
+      const params = new URLSearchParams();
+      let endpoint = '/AccountDetailsMany';
+
+      if (isExactLoginSearch) {
+        endpoint = '/AccountDetails';
+        params.set('login', searchValue);
+      } else {
+        params.set('limit', String(SIDEBAR_ACCOUNT_PAGE_SIZE));
+        params.set('offset', '0');
+        if (searchValue) params.set('search', searchValue);
+      }
+
+      const response = await fetchManagerApi(`${endpoint}?${params.toString()}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' },
+        signal: controller.signal,
       });
 
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(`Unexpected response: ${text.slice(0, 80)}`);
+      if (!isExactLoginSearch) {
+        const page = await normalizePagedStreamResult(
+          response,
+          { limit: SIDEBAR_ACCOUNT_PAGE_SIZE, offset: 0, search: searchValue },
+          normalizeAccount,
+          ['accounts'],
+          { signal: controller.signal }
+        );
+        setTotalAccounts(page.total);
+        setAccounts(page.rows);
+        return;
       }
+
+      const text = await response.text();
+      const data = parseJson(text);
 
       if (!response.ok) {
         throw new Error(data?.error || data?.message || `API error ${response.status}`);
       }
 
-      const raw = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.answer)
-          ? data.answer
-          : Array.isArray(data?.accounts)
-            ? data.accounts
-            : Array.isArray(data?.data)
-              ? data.data
-              : [];
+      const raw = extractRows(data);
+      const list = raw.slice(0, SIDEBAR_ACCOUNT_PAGE_SIZE).map(normalizeAccount);
 
-      const list = raw.map(acc => ({
-        ...acc,
-        login: acc.login || acc.Login,
-        Name: acc.Name || acc.name || [acc.FirstName || acc.firstName, acc.LastName || acc.lastName].filter(Boolean).join(' ') || '',
-        balance: acc.balance !== undefined ? acc.balance : (acc.Balance !== undefined ? acc.Balance : undefined),
-        MarginCallLevel: acc.marginLevel || acc.MarginLevel || acc.MarginCallLevel,
-      }));
-
+      setTotalAccounts(list.length);
       setAccounts(list);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('[MarginCallsSidebar] fetch error:', err);
       setError(err.message || 'Failed to load accounts.');
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        inFlightKeyRef.current = null;
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [debouncedAccountSearch]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchAccounts();
-    }
-  }, [isAuthenticated, fetchAccounts]);
+    if (!isAuthenticated) return undefined;
+    if (debouncedAccountSearch.length < MIN_ACCOUNT_SEARCH_LENGTH) return undefined;
+    fetchAccounts({ query: debouncedAccountSearch, allowEmpty: false });
+    return undefined;
+  }, [isAuthenticated, debouncedAccountSearch, fetchAccounts]);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    inFlightKeyRef.current = null;
+  }, []);
+
+  const loadedLabel = !hasRequestedAccounts
+    ? 'Accounts idle'
+    : totalAccounts === null
+      ? `${accounts.length} accounts loaded`
+      : `${accounts.length} of ${totalAccounts} accounts`;
+
+  const resetAccounts = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    inFlightKeyRef.current = null;
+    setAccounts([]);
+    setTotalAccounts(null);
+    setHasRequestedAccounts(false);
+    setLoading(false);
+    setError(null);
+  }, []);
+
+  const handleSearchChange = (event) => {
+    const nextValue = event.target.value;
+    setAccountSearch(nextValue);
+    if (!nextValue.trim()) resetAccounts();
+  };
+
+  const handleLoadFirstPage = () => {
+    setAccountSearch('');
+    setDebouncedAccountSearch('');
+    fetchAccounts({ query: '', allowEmpty: true });
+  };
+
+  const handleRefresh = () => {
+    fetchAccounts({
+      query: debouncedAccountSearch,
+      allowEmpty: !debouncedAccountSearch,
+    });
+  };
 
   const balanceDisplay = (acc) =>
     acc.balance !== undefined
@@ -178,7 +307,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         }
 
         alert(`Account ${login} deleted successfully.`);
-        fetchAccounts();
+        handleRefresh();
       } catch (err) {
         alert("Error deleting account: " + err.message);
       }
@@ -189,21 +318,58 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     <div className="flex flex-col h-full w-full" style={{ background: 'var(--surface)' }}>
       {/* Mini toolbar */}
       <div
-        className="h-8 flex items-center justify-between px-3 shrink-0"
+        className="shrink-0"
         style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
       >
-        <span className="text-xs font-medium tabular" style={{ color: 'var(--text-3)' }}>
-          {!loading && `${accounts.length} accounts`}
-        </span>
+        <div className="h-8 flex items-center justify-between px-3">
+          <span className="text-xs font-medium tabular" style={{ color: 'var(--text-3)' }}>
+            {!loading && loadedLabel}
+          </span>
+          {isAuthenticated && (
+            <div className="flex items-center gap-1">
+              {!hasRequestedAccounts && (
+                <button
+                  type="button"
+                  onClick={handleLoadFirstPage}
+                  disabled={loading}
+                  title="Load first 30 accounts"
+                  className="ui-btn ui-btn-ghost ui-btn-xs"
+                >
+                  Load
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading || !hasRequestedAccounts}
+                title="Refresh accounts"
+                className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
+              >
+                <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          )}
+        </div>
         {isAuthenticated && (
-          <button
-            onClick={fetchAccounts}
-            disabled={loading}
-            title="Refresh accounts"
-            className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
-          >
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-          </button>
+          <div className="px-2 pb-2">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+              <input
+                value={accountSearch}
+                onChange={handleSearchChange}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    const query = accountSearch.trim();
+                    setDebouncedAccountSearch(query);
+                    fetchAccounts({ query, allowEmpty: true });
+                  }
+                }}
+                className="ui-input ui-input-sm w-full"
+                placeholder="Search login..."
+                style={{ paddingLeft: 26 }}
+              />
+            </div>
+          </div>
         )}
       </div>
 
@@ -213,6 +379,20 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: 'var(--muted)' }}>
             <WifiOff size={18} />
             <span className="text-xs">Not connected</span>
+          </div>
+        )}
+
+        {isAuthenticated && !loading && !error && !hasRequestedAccounts && (
+          <div className="flex flex-col items-center justify-center h-40 gap-3 px-4 text-center" style={{ color: 'var(--text-3)' }}>
+            <Search size={20} style={{ color: 'var(--accent)' }} />
+            <span className="text-xs">Search login or load first 30.</span>
+            <button
+              type="button"
+              onClick={handleLoadFirstPage}
+              className="ui-btn ui-btn-secondary ui-btn-xs"
+            >
+              Load first 30
+            </button>
           </div>
         )}
 
@@ -227,13 +407,13 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           <div className="p-4 flex flex-col items-center gap-2 text-center">
             <AlertTriangle size={18} style={{ color: 'var(--danger)' }} />
             <span className="text-xs" style={{ color: 'var(--danger-text)' }}>{error}</span>
-            <button onClick={fetchAccounts} className="ui-btn ui-btn-ghost ui-btn-xs" style={{ color: 'var(--accent-text)' }}>
+            <button onClick={handleRefresh} className="ui-btn ui-btn-ghost ui-btn-xs" style={{ color: 'var(--accent-text)' }}>
               Retry
             </button>
           </div>
         )}
 
-        {isAuthenticated && !loading && !error && (
+        {isAuthenticated && !loading && !error && hasRequestedAccounts && (
           <table className="ui-grid">
             <thead>
               <tr>

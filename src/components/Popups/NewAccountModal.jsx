@@ -27,17 +27,24 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
 
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
-  const { groups, loading: loadingGroups } = useGroupList();
+  const [groupSearch, setGroupSearch] = useState('');
+  const { groups, hasMore: hasMoreGroups, loading: loadingGroups } = useGroupList({
+    limit: 100,
+    offset: 0,
+    search: groupSearch,
+    sort_by: 'name',
+    sort_dir: 'asc',
+  });
   const { canAct } = usePermissions();
   const canCreate = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
 
   useEffect(() => {
-    if (!loadingGroups && groups && groups.length > 0) {
+    if (!groupSearch && !loadingGroups && groups && groups.length > 0) {
       if (!groups.find(g => g.name === form.Group)) {
         setForm(prev => ({ ...prev, Group: groups[0].name }));
       }
     }
-  }, [groups, loadingGroups, form.Group]);
+  }, [groups, loadingGroups, form.Group, groupSearch]);
 
   if (!isOpen) return null;
 
@@ -145,11 +152,22 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-3.5">
                   <Field label="Group">
+                    <input
+                      className="ui-input ui-input-sm mb-2"
+                      value={groupSearch}
+                      onChange={e => setGroupSearch(e.target.value)}
+                      placeholder="Search groups..."
+                    />
                     <select className="ui-select" value={form.Group} onChange={e => set('Group', e.target.value)}>
                       {loadingGroups
                         ? <option value="">Loading groups…</option>
                         : groups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
                     </select>
+                    {hasMoreGroups && (
+                      <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
+                        Showing first 100 matches. Search to narrow results.
+                      </div>
+                    )}
                   </Field>
                   <Field label="Leverage">
                     <select className="ui-select" value={form.Leverage} onChange={e => set('Leverage', Number(e.target.value))}>

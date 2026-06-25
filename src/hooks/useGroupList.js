@@ -1,29 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import useNotificationStore from '../store/notificationStore';
-import { fetchManagerApi } from '../services/managerFetch';
+import { getGroupsPage } from '../services/api';
 
-export const useGroupList = () => {
+export const useGroupList = (params = {}) => {
   const addNotification = useNotificationStore((state) => state.addNotification);
 
-  const { data: groups = [], isLoading: loading, error, isError } = useQuery({
-    queryKey: ['groups'],
-    queryFn: async () => {
-      const res = await fetchManagerApi('/GroupList', {
-        headers: { 'accept': 'application/json' }
-      });
-      
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error('Invalid JSON response');
-      }
-      
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch groups');
-      
-      return Array.isArray(data) ? data : [];
-    },
+  const queryParams = {
+    limit: 100,
+    offset: 0,
+    sort_by: 'name',
+    sort_dir: 'asc',
+    ...params,
+  };
+
+  const { data, isLoading: loading, error, isError } = useQuery({
+    queryKey: ['groups', queryParams],
+    queryFn: ({ signal }) => getGroupsPage(queryParams, { signal }),
+    placeholderData: (previousData) => previousData,
     // Show notification on error
     meta: {
       onError: (err) => {
@@ -33,7 +26,9 @@ export const useGroupList = () => {
   });
 
   return { 
-    groups, 
+    groups: data?.rows ?? [],
+    total: data?.total ?? null,
+    hasMore: Boolean(data?.hasMore),
     loading, 
     error: isError ? error.message : null 
   };

@@ -42,6 +42,12 @@ test('manager API path keeps proxy prefix for web/public backend mode', () => {
   assert.equal(buildManagerApiPath('/api/manager/IBUpdate', true), '/manager/IBUpdate');
 });
 
+test('native auth API paths never receive the manager proxy prefix', () => {
+  assert.equal(buildManagerApiPath('/api/v2/auth/login', true), '/api/v2/auth/login');
+  assert.equal(buildManagerApiPath('/api/v2/admin/login', true), '/api/v2/admin/login');
+  assert.equal(buildManagerApiPath('/api/v1/auth/refresh', true), '/api/v1/auth/refresh');
+});
+
 test('manager API path removes proxy prefix for direct backend mode', () => {
   assert.equal(buildManagerApiPath('/AccountCreate', false), '/AccountCreate');
   assert.equal(buildManagerApiPath('/manager/UserPasswordCheck', false), '/UserPasswordCheck');

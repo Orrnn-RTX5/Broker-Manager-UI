@@ -32,7 +32,7 @@ const INITIAL_PANELS = {
     title: 'Accounts',
     icon: '👥',
     defaultPosition: 'right',
-    visible: true,
+    visible: false,
     size: { width: 280, height: '100%' },
   },
   [PANEL_MARKET_DATA]: {
