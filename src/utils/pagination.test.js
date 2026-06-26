@@ -130,6 +130,24 @@ test('paged text fallback extracts only the requested page from a full backend p
   assert.equal(normalizedCount, 50);
 });
 
+test('paged text fallback does not offset rows twice for server-paged payloads', async () => {
+  const serverPage = Array.from({ length: 30 }, (_, index) => ({ login: index + 31 }));
+
+  const page = await normalizePagedTextResult(
+    JSON.stringify({ answer: serverPage }),
+    { limit: 30, offset: 30 },
+    (row) => ({ login: row.login }),
+    ['answer'],
+    { serverPaged: true }
+  );
+
+  assert.equal(page.rows.length, 30);
+  assert.equal(page.rows[0].login, 31);
+  assert.equal(page.rows.at(-1).login, 60);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.nextOffset, 60);
+});
+
 test('paged stream fallback normalizes only the requested 30 rows', async () => {
   const fullDataset = Array.from({ length: 40_000 }, (_, index) => ({ login: index + 1, name: `Account ${index + 1}` }));
   const response = new Response(JSON.stringify({ answer: fullDataset }));
@@ -144,6 +162,30 @@ test('paged stream fallback normalizes only the requested 30 rows', async () => 
   assert.equal(page.rows[0].login, 1);
   assert.equal(page.rows.at(-1).login, 30);
   assert.equal(page.hasMore, true);
+  assert.equal(normalizedCount, 30);
+});
+
+test('paged stream fallback does not offset rows twice for server-paged payloads', async () => {
+  const serverPage = Array.from({ length: 30 }, (_, index) => ({ login: index + 31 }));
+  const response = new Response(JSON.stringify({ answer: serverPage }));
+  let normalizedCount = 0;
+
+  const page = await normalizePagedStreamResult(
+    response,
+    { limit: 30, offset: 30 },
+    (row) => {
+      normalizedCount += 1;
+      return { login: row.login };
+    },
+    ['answer'],
+    { serverPaged: true }
+  );
+
+  assert.equal(page.rows.length, 30);
+  assert.equal(page.rows[0].login, 31);
+  assert.equal(page.rows.at(-1).login, 60);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.nextOffset, 60);
   assert.equal(normalizedCount, 30);
 });
 

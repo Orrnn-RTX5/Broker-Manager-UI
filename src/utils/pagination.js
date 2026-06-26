@@ -187,6 +187,7 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
   throwIfAborted(options.signal);
   const limit = normalizeLimit(query.limit);
   const offset = normalizeOffset(query.offset);
+  const rowOffset = options.serverPaged ? 0 : offset;
   const arrayStart = findArrayStart(text, preferredKeys);
   if (arrayStart < 0) {
     return normalizePagedResult(JSON.parse(text), query, normalizeRow, preferredKeys);
@@ -229,7 +230,7 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
       continue;
     }
 
-    if (matched >= offset) rows.push(normalizeRow(rawRow));
+    if (matched >= rowOffset) rows.push(normalizeRow(rawRow));
     matched += 1;
 
     if (Date.now() - lastYield > PARTIAL_PARSE_YIELD_MS) {
@@ -241,7 +242,11 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
 
   const total = readTotalFromText(text);
   const hasKnownTotal = total !== null;
-  const hasMore = hasKnownTotal ? offset + rows.length < total : !reachedEnd && rows.length === limit;
+  const hasMore = hasKnownTotal
+    ? offset + rows.length < total
+    : options.serverPaged
+      ? rows.length === limit
+      : !reachedEnd && rows.length === limit;
 
   return {
     rows,
@@ -275,6 +280,7 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
 
   const limit = normalizeLimit(query.limit);
   const offset = normalizeOffset(query.offset);
+  const rowOffset = options.serverPaged ? 0 : offset;
   const filters = query.filters && typeof query.filters === 'object' ? query.filters : {};
   const reader = response.body.getReader();
   const decoder = new globalThis.TextDecoder();
@@ -323,7 +329,7 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
         continue;
       }
 
-      if (matched >= offset) rows.push(normalizeRow(rawRow));
+      if (matched >= rowOffset) rows.push(normalizeRow(rawRow));
       matched += 1;
       await maybeYield();
     }
@@ -402,7 +408,11 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
   }
 
   const hasKnownTotal = total !== null;
-  const hasMore = hasKnownTotal ? offset + rows.length < total : !reachedEnd && rows.length === limit;
+  const hasMore = hasKnownTotal
+    ? offset + rows.length < total
+    : options.serverPaged
+      ? rows.length === limit
+      : !reachedEnd && rows.length === limit;
 
   return {
     rows,

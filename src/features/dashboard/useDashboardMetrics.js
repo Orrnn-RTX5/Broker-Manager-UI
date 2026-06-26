@@ -1,9 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { getDashboardSummary, getPositionsPage, getTradingAccountsPage } from '../../services/api';
+import {
+  getAccountLimitStatus,
+  getDashboardSummary,
+  getPositionsPage,
+  getTradingAccountsPage,
+} from '../../services/api';
 import { buildDashboardFallbackMetrics, normalizeDashboardSummary } from './dashboardMetrics';
+
+const DASHBOARD_SNAPSHOT_LIMIT = 100_000;
 
 const getErrorMessage = (error) => (
   error instanceof Error ? error.message : String(error || 'Request failed')
+);
+
+const hasAnyMetric = (metrics) => (
+  Boolean(metrics) &&
+  [metrics.realAccounts, metrics.openPositions, metrics.equity, metrics.deposits24h]
+    .some((value) => value !== null && value !== undefined)
 );
 
 const settleDashboardPage = async (key, request) => {
@@ -16,35 +29,36 @@ const settleDashboardPage = async (key, request) => {
 };
 
 const loadPagedFallbackMetrics = async (summaryError, signal) => {
-  const [accounts, positions] = await Promise.all([
+  const [accountLimit, accounts, positions] = await Promise.all([
+    settleDashboardPage('accountLimit', () => getAccountLimitStatus({ signal })),
     settleDashboardPage('accounts', () => getTradingAccountsPage({
-      limit: 1,
+      limit: DASHBOARD_SNAPSHOT_LIMIT,
       offset: 0,
-      sort_by: 'login',
-      sort_dir: 'asc',
     }, { signal })),
     settleDashboardPage('positions', () => getPositionsPage({
-      limit: 1,
+      limit: DASHBOARD_SNAPSHOT_LIMIT,
       offset: 0,
-      sort_by: 'position',
-      sort_dir: 'desc',
     }, { signal })),
   ]);
 
   const metrics = buildDashboardFallbackMetrics({
+    accountLimitStatus: accountLimit.data,
     accountsPage: accounts.data,
     positionsPage: positions.data,
   });
+  const summary = { key: 'summary', ok: false, data: null, error: getErrorMessage(summaryError) };
+  const fallbackErrors = [accountLimit, accounts, positions].filter((source) => !source.ok);
 
   return {
     metrics,
     sourceMode: 'paged-fallback',
     sources: {
-      summary: { key: 'summary', ok: false, data: null, error: getErrorMessage(summaryError) },
+      summary,
+      accountLimit,
       accounts,
       positions,
     },
-    errors: [accounts, positions].filter((source) => !source.ok),
+    errors: hasAnyMetric(metrics) ? fallbackErrors : [summary, ...fallbackErrors],
     asOf: Date.now(),
   };
 };

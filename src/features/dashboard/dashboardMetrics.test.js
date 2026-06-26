@@ -5,6 +5,7 @@ import {
   buildDashboardFallbackMetrics,
   isDemoAccount,
   isRealAccount,
+  normalizeAccountLimitStatus,
   normalizeDashboardSummary,
   toFiniteNumber,
 } from './dashboardMetrics.js';
@@ -75,21 +76,57 @@ test('dashboard summary normalizer rejects unsupported payloads', () => {
   assert.equal(normalizeDashboardSummary(null), null);
 });
 
-test('dashboard fallback metrics use paged totals without requiring page rows', () => {
+test('account limit normalizer accepts broker account count fields', () => {
+  assert.deepEqual(normalizeAccountLimitStatus({
+    real_account_count: '12,500',
+    demo_account_count: 300,
+  }), {
+    realAccounts: 12500,
+    demoAccounts: 300,
+  });
+  assert.equal(normalizeAccountLimitStatus({ status: 'ok' }), null);
+});
+
+test('dashboard fallback metrics prefer explicit totals and account limit counts', () => {
   assert.deepEqual(buildDashboardFallbackMetrics({
+    accountLimitStatus: { real_account_count: 50000 },
     accountsPage: { rows: [{ login: 1 }], total: 40000 },
     positionsPage: { rows: [], total: '125' },
   }), {
-    realAccounts: 40000,
+    realAccounts: 50000,
     openPositions: 125,
     equity: null,
     deposits24h: null,
   });
 });
 
-test('dashboard fallback metrics reject pages without totals', () => {
+test('dashboard fallback metrics compute from complete endpoint rows when totals are absent', () => {
+  assert.deepEqual(buildDashboardFallbackMetrics({
+    accountsPage: {
+      rows: [
+        { login: '1001', group: 'Real\\Standard', equity: 1000 },
+        { login: '1002', group: 'demo\\STD', equity: 999999 },
+        { login: '1003', Group: 'Real\\Raw', Equity: 250 },
+      ],
+      total: null,
+      hasMore: false,
+    },
+    positionsPage: {
+      rows: [{ position: 1 }, { position: 2 }],
+      total: null,
+      hasMore: false,
+    },
+  }), {
+    realAccounts: 2,
+    openPositions: 2,
+    equity: 1250,
+    deposits24h: null,
+  });
+});
+
+test('dashboard fallback metrics do not report partial row snapshots as complete KPIs', () => {
   assert.equal(buildDashboardFallbackMetrics({
-    accountsPage: { rows: [{ login: 1 }], total: null },
-    positionsPage: { rows: [{ position: 1 }], total: null },
+    accountsPage: { rows: [{ login: 1, equity: 100 }], total: null, hasMore: true },
+    positionsPage: { rows: [{ position: 1 }], total: null, hasMore: true },
   }), null);
 });

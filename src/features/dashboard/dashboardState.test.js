@@ -8,7 +8,12 @@ import {
 
 test('dashboard declares the existing backend endpoints used for live KPI values', () => {
   assert.equal(DASHBOARD_PLACEHOLDER_MODE, false);
-  assert.deepEqual([...DASHBOARD_BACKEND_ENDPOINTS], ['/DashboardSummary']);
+  assert.deepEqual([...DASHBOARD_BACKEND_ENDPOINTS], [
+    '/DashboardSummary',
+    '/AccountLimitStatus',
+    '/AccountDetailsMany',
+    '/PositionsAll',
+  ]);
 });
 
 test('dashboard tracks aggregation endpoints still required for chart and cashflow metrics', () => {

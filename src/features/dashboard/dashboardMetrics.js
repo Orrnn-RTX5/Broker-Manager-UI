@@ -71,22 +71,60 @@ export const normalizeDashboardSummary = (summary = {}) => {
   };
 };
 
+export const normalizeAccountLimitStatus = (status = {}) => {
+  if (!status || typeof status !== 'object') return null;
+
+  const realAccounts = toFiniteNumber(status.real_account_count) ??
+    toFiniteNumber(status.realAccountCount) ??
+    toFiniteNumber(status.real_accounts) ??
+    toFiniteNumber(status.realAccounts);
+  const demoAccounts = toFiniteNumber(status.demo_account_count) ??
+    toFiniteNumber(status.demoAccountCount) ??
+    toFiniteNumber(status.demo_accounts) ??
+    toFiniteNumber(status.demoAccounts);
+
+  if (realAccounts === null && demoAccounts === null) return null;
+
+  return {
+    realAccounts,
+    demoAccounts,
+  };
+};
+
 export const pagedTotal = (page = {}) => {
   if (page?.total === undefined || page?.total === null || page?.total === '') return null;
   const total = Number(page?.total);
   return Number.isFinite(total) && total >= 0 ? total : null;
 };
 
-export const buildDashboardFallbackMetrics = ({ accountsPage, positionsPage } = {}) => {
-  const realAccounts = pagedTotal(accountsPage);
-  const openPositions = pagedTotal(positionsPage);
+const hasCompleteRows = (page = {}) => (
+  Array.isArray(page?.rows) && page.hasMore === false
+);
 
-  if (realAccounts === null && openPositions === null) return null;
+export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage, positionsPage } = {}) => {
+  const accountLimit = normalizeAccountLimitStatus(accountLimitStatus);
+  const accountsComplete = hasCompleteRows(accountsPage);
+  const positionsComplete = hasCompleteRows(positionsPage);
+  const rowMetrics = buildDashboardMetrics({
+    accounts: accountsComplete ? accountsPage.rows : [],
+    positions: positionsComplete ? positionsPage.rows : [],
+  });
+
+  const realAccounts =
+    accountLimit?.realAccounts ??
+    pagedTotal(accountsPage) ??
+    (accountsComplete ? rowMetrics.realAccounts : null);
+  const openPositions =
+    pagedTotal(positionsPage) ??
+    (positionsComplete ? rowMetrics.openPositions : null);
+  const equity = accountsComplete ? rowMetrics.equity : null;
+
+  if (realAccounts === null && openPositions === null && equity === null) return null;
 
   return {
     realAccounts,
     openPositions,
-    equity: null,
+    equity,
     deposits24h: null,
   };
 };

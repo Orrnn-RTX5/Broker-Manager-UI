@@ -234,7 +234,10 @@ const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options =
   const pagedEndpoint = buildPagedEndpoint(endpoint, params);
   if (endpoint === '/AccountDetailsMany') {
     const response = await apiClient.getRaw(pagedEndpoint, options);
-    return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, options);
+    return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, {
+      ...options,
+      serverPaged: true,
+    });
   }
 
   try {
@@ -449,6 +452,10 @@ export const getDashboardSummary = async (options = {}) => {
   return apiClient.get('/DashboardSummary', options);
 };
 
+export const getAccountLimitStatus = async (options = {}) => {
+  return apiClient.get('/AccountLimitStatus', options);
+};
+
 export const getGroupsPage = async (params = {}, options = {}) => {
   const response = await fetchManagerApi(buildPagedEndpoint('/GroupList', params), {
     headers: { accept: 'application/json' },
@@ -590,6 +597,7 @@ export default {
   getBrokerDealsPage,
   getOpenPositions,
   getDashboardSummary,
+  getAccountLimitStatus,
   getGroupsPage,
   getActiveGroupsPage,
   getAdvertisingCampaigns,

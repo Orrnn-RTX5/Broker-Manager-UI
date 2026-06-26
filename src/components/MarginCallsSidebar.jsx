@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { User, RefreshCw, AlertTriangle, Loader, WifiOff, Search } from 'lucide-react';
+import { User, RefreshCw, AlertTriangle, Loader, WifiOff, Search, ChevronDown } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
@@ -67,11 +67,15 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const inFlightKeyRef = useRef(null);
   const [accounts, setAccounts] = useState([]);
   const [totalAccounts, setTotalAccounts] = useState(null);
+  const [hasMoreAccounts, setHasMoreAccounts] = useState(false);
+  const [nextAccountsOffset, setNextAccountsOffset] = useState(0);
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
   const [hasRequestedAccounts, setHasRequestedAccounts] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [loadMoreError, setLoadMoreError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
   const [summaryAccount, setSummaryAccount] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -91,11 +95,16 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     return () => clearTimeout(timer);
   }, [accountSearch]);
 
-  const fetchAccounts = useCallback(async ({ query = debouncedAccountSearch, allowEmpty = false } = {}) => {
+  const fetchAccounts = useCallback(async ({
+    query = debouncedAccountSearch,
+    allowEmpty = false,
+    offset = 0,
+    append = false,
+  } = {}) => {
     const searchValue = query.trim();
     if (!allowEmpty && searchValue.length < MIN_ACCOUNT_SEARCH_LENGTH) return;
 
-    const requestKey = searchValue || '__first_page__';
+    const requestKey = `${searchValue || '__first_page__'}:${offset}:${append ? 'append' : 'replace'}`;
     if (abortRef.current && inFlightKeyRef.current === requestKey) return;
 
     abortRef.current?.abort();
@@ -104,8 +113,16 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     inFlightKeyRef.current = requestKey;
 
     setHasRequestedAccounts(true);
-    setLoading(true);
-    setError(null);
+    if (append) {
+      setLoadingMore(true);
+      setLoadMoreError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+      setLoadMoreError(null);
+      setHasMoreAccounts(false);
+      setNextAccountsOffset(0);
+    }
     try {
       const isExactLoginSearch = /^\d+$/.test(searchValue) && searchValue.length > 0;
       const params = new URLSearchParams();
@@ -116,7 +133,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         params.set('login', searchValue);
       } else {
         params.set('limit', String(SIDEBAR_ACCOUNT_PAGE_SIZE));
-        params.set('offset', '0');
+        params.set('offset', String(offset));
         if (searchValue) params.set('search', searchValue);
       }
 
@@ -129,13 +146,19 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       if (!isExactLoginSearch) {
         const page = await normalizePagedStreamResult(
           response,
-          { limit: SIDEBAR_ACCOUNT_PAGE_SIZE, offset: 0, search: searchValue },
+          { limit: SIDEBAR_ACCOUNT_PAGE_SIZE, offset, search: searchValue },
           normalizeAccount,
           ['accounts'],
-          { signal: controller.signal }
+          { signal: controller.signal, serverPaged: true }
         );
         setTotalAccounts(page.total);
-        setAccounts(page.rows);
+        setHasMoreAccounts(page.hasMore);
+        setNextAccountsOffset(page.nextOffset ?? offset + page.rows.length);
+        setAccounts((current) => (
+          append
+            ? [...current, ...page.rows]
+            : page.rows
+        ));
         return;
       }
 
@@ -150,16 +173,20 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       const list = raw.slice(0, SIDEBAR_ACCOUNT_PAGE_SIZE).map(normalizeAccount);
 
       setTotalAccounts(list.length);
+      setHasMoreAccounts(false);
+      setNextAccountsOffset(list.length);
       setAccounts(list);
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('[MarginCallsSidebar] fetch error:', err);
-      setError(err.message || 'Failed to load accounts.');
+      if (append) setLoadMoreError(err.message || 'Failed to load more accounts.');
+      else setError(err.message || 'Failed to load accounts.');
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
         inFlightKeyRef.current = null;
-        setLoading(false);
+        if (append) setLoadingMore(false);
+        else setLoading(false);
       }
     }
   }, [debouncedAccountSearch]);
@@ -189,9 +216,13 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     inFlightKeyRef.current = null;
     setAccounts([]);
     setTotalAccounts(null);
+    setHasMoreAccounts(false);
+    setNextAccountsOffset(0);
     setHasRequestedAccounts(true);
     setLoading(false);
+    setLoadingMore(false);
     setError(null);
+    setLoadMoreError(null);
   }, []);
 
   const handleSearchChange = (event) => {
@@ -207,6 +238,15 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     fetchAccounts({
       query: debouncedAccountSearch,
       allowEmpty: !debouncedAccountSearch,
+    });
+  };
+
+  const handleLoadMore = () => {
+    fetchAccounts({
+      query: debouncedAccountSearch,
+      allowEmpty: !debouncedAccountSearch,
+      offset: nextAccountsOffset,
+      append: true,
     });
   };
 
@@ -437,6 +477,32 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           </table>
         )}
       </div>
+
+      {isAuthenticated && !loading && !error && hasRequestedAccounts && accounts.length > 0 && (hasMoreAccounts || loadingMore || loadMoreError) && (
+        <div
+          className="shrink-0 px-2 py-2 flex flex-col gap-1.5"
+          style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}
+        >
+          {loadMoreError && (
+            <div className="text-[11px] text-center" style={{ color: 'var(--danger-text)' }}>
+              {loadMoreError}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={loadingMore || !hasMoreAccounts}
+            className="ui-btn ui-btn-secondary ui-btn-sm w-full flex items-center justify-center gap-1.5"
+          >
+            {loadingMore ? (
+              <Loader size={13} className="animate-spin" />
+            ) : (
+              <ChevronDown size={13} />
+            )}
+            {loadingMore ? 'Loading more...' : `Load next ${SIDEBAR_ACCOUNT_PAGE_SIZE}`}
+          </button>
+        </div>
+      )}
 
       {/* Popups */}
       {selectedAccountDetails && (

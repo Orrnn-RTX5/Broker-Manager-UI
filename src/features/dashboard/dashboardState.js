@@ -1,5 +1,8 @@
 export const DASHBOARD_BACKEND_ENDPOINTS = Object.freeze([
   '/DashboardSummary',
+  '/AccountLimitStatus',
+  '/AccountDetailsMany',
+  '/PositionsAll',
 ]);
 
 export const DASHBOARD_REQUIRED_AGGREGATION_ENDPOINTS = Object.freeze([

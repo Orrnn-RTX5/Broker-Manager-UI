@@ -22,9 +22,10 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 
 const HeaderCell = ({ col, label, align = 'left', sortCol, sortDir, onSort }) => (
   <th
+    scope="col"
     onClick={() => onSort(col)}
     style={{ textAlign: align }}
-    className="cursor-pointer hover:bg-var(--surface-3) transition-colors"
+    className="cursor-pointer select-none whitespace-nowrap transition-colors"
   >
     {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
   </th>
@@ -84,19 +85,51 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={15} className="text-center py-24">
+                <td colSpan={15} className="text-center py-28">
                   <div className="flex flex-col items-center gap-3">
-                    <Loader size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-                    <span style={{ color: 'var(--text-3)' }}>Searching history record...</span>
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      style={{
+                        background: 'var(--accent-soft)',
+                        border: '1px solid var(--accent-border)',
+                        color: 'var(--accent-text)',
+                      }}
+                    >
+                      <Loader size={20} className="animate-spin" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                        Loading position history
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                        Fetching closed trade records for this login.
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>
             ) : sortedData.length === 0 ? (
               <tr>
-                <td colSpan={15} className="text-center py-24 text-sm" style={{ color: 'var(--muted)' }}>
-                  <div className="flex flex-col items-center gap-2 opacity-50">
-                    <History size={40} strokeWidth={1} />
-                    <span>No history found for this account</span>
+                <td colSpan={15} className="text-center py-28">
+                  <div className="flex flex-col items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      style={{
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border-3)',
+                        color: 'var(--text-3)',
+                      }}
+                    >
+                      <History size={20} strokeWidth={1.8} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                        No history found
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                        This account has no closed position records.
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>
