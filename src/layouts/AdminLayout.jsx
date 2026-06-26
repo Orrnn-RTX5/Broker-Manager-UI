@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
@@ -13,6 +12,7 @@ import DockLayout from '../components/docking/DockLayout';
 import { useDockingContext } from '../components/docking/DockingContext';
 import GlobalLoader from '../components/GlobalLoader';
 import ToastContainer from '../components/ToastContainer';
+import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 
 // ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
@@ -48,7 +48,7 @@ const INITIAL_PANELS = {
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
   const { togglePanel, panels, resetLayout } = useDockingContext();
-  const navigate = useNavigate();
+  const navigate = useWorkspaceNavigation();
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;

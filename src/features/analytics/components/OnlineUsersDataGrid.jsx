@@ -47,6 +47,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: 5_000,
+    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {

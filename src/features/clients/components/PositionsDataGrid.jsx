@@ -55,6 +55,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     params,
     pageSize,
     enabled: hasRequestedData,
+    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {

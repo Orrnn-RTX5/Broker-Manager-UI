@@ -64,6 +64,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
     params,
     pageSize,
     enabled: hasRequestedData,
+    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {

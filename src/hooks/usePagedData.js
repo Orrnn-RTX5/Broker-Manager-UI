@@ -27,6 +27,7 @@ export default function usePagedData({
   refetchOnMount = false,
   refetchOnWindowFocus = false,
   refetchOnReconnect = false,
+  keepRunningOnUnmount = false,
 }) {
   const [pageState, setPageState] = useState(() => ({ page: 0, key: stableParamsKey(params) }));
   const rawSearch = params.search ?? '';
@@ -44,7 +45,7 @@ export default function usePagedData({
 
   const query = useQuery({
     queryKey: [...queryKey, pagedParams],
-    queryFn: ({ signal }) => queryFn(pagedParams, { signal }),
+    queryFn: ({ signal }) => queryFn(pagedParams, keepRunningOnUnmount ? {} : { signal }),
     enabled,
     staleTime,
     refetchInterval,

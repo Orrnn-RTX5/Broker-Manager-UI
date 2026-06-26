@@ -69,7 +69,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const [totalAccounts, setTotalAccounts] = useState(null);
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
-  const [hasRequestedAccounts, setHasRequestedAccounts] = useState(false);
+  const [hasRequestedAccounts, setHasRequestedAccounts] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
@@ -166,8 +166,11 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-    if (debouncedAccountSearch.length < MIN_ACCOUNT_SEARCH_LENGTH) return undefined;
-    fetchAccounts({ query: debouncedAccountSearch, allowEmpty: false });
+    if (debouncedAccountSearch && debouncedAccountSearch.length < MIN_ACCOUNT_SEARCH_LENGTH) return undefined;
+    fetchAccounts({
+      query: debouncedAccountSearch,
+      allowEmpty: !debouncedAccountSearch,
+    });
     return undefined;
   }, [isAuthenticated, debouncedAccountSearch, fetchAccounts]);
 
@@ -176,9 +179,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     inFlightKeyRef.current = null;
   }, []);
 
-  const loadedLabel = !hasRequestedAccounts
-    ? 'Accounts idle'
-    : totalAccounts === null
+  const loadedLabel = totalAccounts === null
       ? `${accounts.length} accounts loaded`
       : `${accounts.length} of ${totalAccounts} accounts`;
 
@@ -188,7 +189,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     inFlightKeyRef.current = null;
     setAccounts([]);
     setTotalAccounts(null);
-    setHasRequestedAccounts(false);
+    setHasRequestedAccounts(true);
     setLoading(false);
     setError(null);
   }, []);
@@ -196,13 +197,10 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const handleSearchChange = (event) => {
     const nextValue = event.target.value;
     setAccountSearch(nextValue);
-    if (!nextValue.trim()) resetAccounts();
-  };
-
-  const handleLoadFirstPage = () => {
-    setAccountSearch('');
-    setDebouncedAccountSearch('');
-    fetchAccounts({ query: '', allowEmpty: true });
+    if (!nextValue.trim()) {
+      resetAccounts();
+      setDebouncedAccountSearch('');
+    }
   };
 
   const handleRefresh = () => {
@@ -327,21 +325,10 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           </span>
           {isAuthenticated && (
             <div className="flex items-center gap-1">
-              {!hasRequestedAccounts && (
-                <button
-                  type="button"
-                  onClick={handleLoadFirstPage}
-                  disabled={loading}
-                  title="Load first 30 accounts"
-                  className="ui-btn ui-btn-ghost ui-btn-xs"
-                >
-                  Load
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleRefresh}
-                disabled={loading || !hasRequestedAccounts}
+                disabled={loading}
                 title="Refresh accounts"
                 className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
               >
@@ -379,20 +366,6 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: 'var(--muted)' }}>
             <WifiOff size={18} />
             <span className="text-xs">Not connected</span>
-          </div>
-        )}
-
-        {isAuthenticated && !loading && !error && !hasRequestedAccounts && (
-          <div className="flex flex-col items-center justify-center h-40 gap-3 px-4 text-center" style={{ color: 'var(--text-3)' }}>
-            <Search size={20} style={{ color: 'var(--accent)' }} />
-            <span className="text-xs">Search login or load first 30.</span>
-            <button
-              type="button"
-              onClick={handleLoadFirstPage}
-              className="ui-btn ui-btn-secondary ui-btn-xs"
-            >
-              Load first 30
-            </button>
           </div>
         )}
 

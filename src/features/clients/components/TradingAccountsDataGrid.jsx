@@ -51,6 +51,7 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
     params,
     pageSize,
     enabled: hasRequestedData,
+    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {

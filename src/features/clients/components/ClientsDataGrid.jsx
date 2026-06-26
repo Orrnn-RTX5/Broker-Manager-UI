@@ -66,6 +66,7 @@ const ClientsDataGrid = ({
     params,
     pageSize,
     enabled: hasRequestedData,
+    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {

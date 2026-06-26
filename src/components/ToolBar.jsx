@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Activity,
   AppWindow,
@@ -31,6 +31,7 @@ import {
 import NewAccountModal from './Popups/NewAccountModal';
 import AccountLimitModal from './Popups/AccountLimitModal';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
+import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 
 const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
@@ -141,7 +142,7 @@ const ToolBar = ({
   const [activeSearchedAccount, setActiveSearchedAccount] = useState(null);
   const queryClient = useQueryClient();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useWorkspaceNavigation();
 
   const navigateTo = (path) => () => navigate(path);
 

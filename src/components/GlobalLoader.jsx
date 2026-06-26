@@ -7,7 +7,7 @@ const GlobalLoader = () => {
   if (isFetching === 0) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[10000] h-1 bg-transparent overflow-hidden">
+    <div className="fixed top-0 left-0 right-0 z-[10000] h-1 bg-transparent overflow-hidden pointer-events-none">
       <div 
         className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] animate-pulse"
         style={{

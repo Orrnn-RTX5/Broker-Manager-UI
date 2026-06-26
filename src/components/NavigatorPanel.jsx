@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useGroupList } from '../hooks/useGroupList';
+import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
@@ -9,17 +8,6 @@ import { PERMISSIONS } from '../utils/permissions';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
 } from 'lucide-react';
-
-const HEAVY_GRID_QUERY_KEYS = new Set([
-  'accounts-online',
-  'analytics-online-users',
-  'clients',
-  'deals',
-  'online-users',
-  'orders',
-  'positions',
-  'trading-accounts',
-]);
 
 // Reusable Tree Node Component
 const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode }) => {
@@ -72,8 +60,7 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 };
 
 const NavigatorPanel = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const navigate = useWorkspaceNavigation();
   const { groups, total: groupsTotal, hasMore: groupsHasMore, loading: groupsLoading } = useGroupList({
     limit: 100,
     offset: 0,
@@ -86,12 +73,7 @@ const NavigatorPanel = () => {
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
 
-  const navigateTo = (path) => {
-    void queryClient.cancelQueries({
-      predicate: (query) => HEAVY_GRID_QUERY_KEYS.has(query.queryKey?.[0]),
-    });
-    navigate(path);
-  };
+  const navigateTo = (path) => navigate(path);
 
   const openNewGroup = (event) => {
     event?.stopPropagation();
