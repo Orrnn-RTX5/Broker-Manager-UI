@@ -4,6 +4,7 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
+import { getGroupDetailsPath } from '../features/groups/groupRoutes';
 import { PERMISSIONS } from '../utils/permissions';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
@@ -134,7 +135,7 @@ const NavigatorPanel = () => {
                 onClickNode={() => navigateTo('/groups')}
               >
                 {groups?.map(g => (
-                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigateTo(`/groups/${g.name}`)} />
+                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigateTo(getGroupDetailsPath(g.name))} />
                 ))}
                 {groupsHasMore && <TreeNode label="View all groups" iconColor="text-gray-400" onClickNode={() => navigateTo('/groups')} />}
                 {canManageGroups && <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={openNewGroup} />}

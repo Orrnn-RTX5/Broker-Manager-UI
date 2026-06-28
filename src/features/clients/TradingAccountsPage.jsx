@@ -3,10 +3,13 @@ import { ChevronDown, Search, User } from 'lucide-react';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
+import AccountDetailsModal from '../../components/Popups/AccountDetailsModal';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useGroupList } from '../../hooks/useGroupList';
+import { usePermissions } from '../../hooks/usePermissions';
 import { ALL_COUNTRIES } from '../../utils/countries';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const ACCOUNT_COLUMNS = [
   { key: 'login',    label: 'Login' },
@@ -40,7 +43,11 @@ const TradingAccountsPage = () => {
   const [countryFilter, setCountryFilter] = useState('All Countries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [restrictLogin, setRestrictLogin] = useState(null);
+  const [editAccount, setEditAccount] = useState(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const { groups } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
+  const { canAct } = usePermissions();
+  const canEditAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
   const groupOptions = groups.map((group) => group.name).filter(Boolean);
 
   const ctl = useGridPageController({
@@ -60,7 +67,7 @@ const TradingAccountsPage = () => {
           <User size={18} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions</p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
@@ -85,6 +92,9 @@ const TradingAccountsPage = () => {
         search={search}
         groupFilter={groupFilter}
         countryFilter={countryFilter}
+        onEditAccount={setEditAccount}
+        canEditAccounts={canEditAccounts}
+        refreshVersion={refreshVersion}
         {...ctl.gridProps}
       />
 
@@ -98,6 +108,15 @@ const TradingAccountsPage = () => {
 
       {restrictLogin && (
         <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
+      )}
+
+      {editAccount && (
+        <AccountDetailsModal
+          account={editAccount}
+          initialTab="Personal"
+          onClose={() => setEditAccount(null)}
+          onAccountUpdated={() => setRefreshVersion((version) => version + 1)}
+        />
       )}
 
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />

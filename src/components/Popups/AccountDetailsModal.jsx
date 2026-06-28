@@ -36,13 +36,27 @@ const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHea
 
 const TradeContextMenuSeparator = () => <div className="h-[1px] bg-[var(--border)] my-1 opacity-50" />;
 
+const LANGUAGE_OPTIONS = [
+  'English (en)',
+  'Arabic (ar)',
+  'Chinese (zh)',
+  'French (fr)',
+  'German (de)',
+  'Hindi (hi)',
+  'Japanese (ja)',
+  'Russian (ru)',
+  'Spanish (es)',
+  'Turkish (tr)',
+];
+
 // Whitelist of fields the UserUpdate form is allowed to submit. Anything not in
 // this set (e.g. balance, equity, password_hash, broker_id, is_admin injected
 // via dev-tools into formData) is stripped before the request is built so the
 // client cannot be coaxed into pushing arbitrary columns to the backend.
 const USER_UPDATE_ALLOWED_FIELDS = new Set([
-  'FirstName', 'LastName', 'Company', 'Status', 'MQID',
-  'Email', 'Phone', 'Country', 'City', 'ZipCode', 'Address', 'Comment',
+  'FirstName', 'LastName', 'MiddleName', 'Company', 'Language', 'Status',
+  'IDNumber', 'LeadCampaign', 'MQID', 'LeadSource',
+  'Email', 'Phone', 'Country', 'State', 'City', 'ZipCode', 'Address', 'Comment',
   'Group', 'Leverage', 'MarginCallLevel', 'StopOutLevel',
 ]);
 
@@ -51,6 +65,94 @@ const pickAllowedFields = (source, allowed) =>
     if (allowed.has(key)) acc[key] = value;
     return acc;
   }, {});
+
+const hasDisplayValue = (value) =>
+  value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
+
+const normalizeLanguageOption = (value) => {
+  if (!hasDisplayValue(value)) return LANGUAGE_OPTIONS[0];
+  const raw = String(value).trim();
+  const normalized = raw.toLowerCase();
+  return LANGUAGE_OPTIONS.find((option) =>
+    option.toLowerCase() === normalized || option.toLowerCase().endsWith(`(${normalized})`)
+  ) || raw;
+};
+
+const pickFirstValue = (sources, keys, fallback = '') => {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (hasDisplayValue(value)) return value;
+    }
+  }
+  return fallback;
+};
+
+const getAccountDetailSources = (payload) => {
+  if (!payload || typeof payload !== 'object') return [];
+  return [
+    payload,
+    payload.account,
+    payload.Account,
+    payload.user,
+    payload.User,
+    payload.answer,
+    payload.Answer,
+    payload.data,
+    payload.Data,
+    payload.raw,
+    payload.Raw,
+    payload.details,
+    payload.Details,
+    payload.profile,
+    payload.Profile,
+    payload.client,
+    payload.Client,
+  ]
+    .map((source) => Array.isArray(source)
+      ? source.find((item) => item && typeof item === 'object' && !Array.isArray(item))
+      : source)
+    .filter((source) => source && typeof source === 'object' && !Array.isArray(source));
+};
+
+const ACCOUNT_FIELD_KEYS = {
+  FirstName: ['FirstName', 'firstName', 'Name', 'name'],
+  LastName: ['LastName', 'lastName'],
+  MiddleName: ['MiddleName', 'middleName', 'Middle', 'middle', 'SecondName', 'secondName'],
+  Company: ['Company', 'company', 'Organization', 'organization'],
+  Language: ['Language', 'language', 'Lang', 'lang'],
+  Status: ['Status', 'status'],
+  IDNumber: ['IDNumber', 'idNumber', 'IdNumber', 'id_number', 'ID', 'Id', 'id', 'Document', 'document', 'Passport', 'passport', 'NationalID', 'nationalId', 'national_id'],
+  LeadCampaign: ['LeadCampaign', 'leadCampaign', 'LeadCampaignName', 'leadCampaignName', 'lead_campaign', 'Campaign', 'campaign', 'CampaignId', 'campaignId'],
+  LeadSource: ['LeadSource', 'leadSource', 'lead_source', 'Source', 'source', 'LeadSourceId', 'leadSourceId'],
+  MQID: ['MQID', 'mqid', 'MetaQuotesID', 'MetaQuotesId', 'metaQuotesID', 'metaQuotesId'],
+  Email: ['Email', 'email'],
+  Phone: ['Phone', 'phone', 'PhoneNumber', 'phoneNumber', 'phone_number', 'Mobile', 'mobile', 'MobilePhone', 'mobilePhone', 'CellPhone', 'cellPhone', 'Telephone', 'telephone'],
+  Country: ['Country', 'country', 'CountryName', 'countryName', 'country_name', 'ClientCountry', 'clientCountry', 'client_country'],
+  State: ['State', 'state', 'StateName', 'stateName', 'state_name', 'Province', 'province', 'Region', 'region'],
+  City: ['City', 'city', 'CityName', 'cityName', 'city_name'],
+  ZipCode: ['ZipCode', 'zipCode', 'Zip', 'zip', 'zip_code', 'PostalCode', 'postalCode', 'postal_code'],
+  Address: ['Address', 'address', 'Address1', 'address1', 'Address2', 'address2', 'Street', 'street'],
+  Comment: ['Comment', 'comment', 'Notes', 'notes', 'Note', 'note'],
+  Group: ['Group', 'group'],
+  Currency: ['Currency', 'currency'],
+  Leverage: ['Leverage', 'leverage'],
+  Registration: ['Registration', 'registration', 'Registered', 'registered'],
+  LastAccess: ['LastAccess', 'lastAccess', 'last_access'],
+  LastIP: ['LastIP', 'lastIP', 'last_ip'],
+  AccountMode: ['AccountMode', 'accountMode', 'mode'],
+  Balance: ['Balance', 'balance'],
+  Equity: ['Equity', 'equity'],
+  Margin: ['Margin', 'margin'],
+  MarginFree: ['MarginFree', 'marginFree'],
+  MarginLevel: ['MarginLevel', 'marginLevel'],
+  Credit: ['Credit', 'credit'],
+  Profit: ['Profit', 'profit'],
+  Swap: ['Swap', 'swap'],
+  MarginCallLevel: ['MarginCallLevel', 'marginCallLevel'],
+  StopOutLevel: ['StopOutLevel', 'stopOutLevel'],
+};
 
 const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canManipulateTrades }) => {
   const style = {
@@ -87,7 +189,7 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canMani
   );
 };
 
-const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position' }) => {
+const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position', onAccountUpdated }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
   const { canAct } = usePermissions();
   const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
@@ -642,11 +744,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
 
-  const activeData = accountData || (typeof account === 'object' ? account : {});
+  const rowData = account && typeof account === 'object' ? account : {};
+  const fieldSources = [...getAccountDetailSources(accountData), rowData];
+  const getFieldValue = (field, fallback = '') =>
+    pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
 
   const getValue = (field, fallback = '') => {
     if (formData[field] !== undefined) return formData[field];
-    return accountData ? (accountData[field] ?? fallback) : (activeData[field] || fallback);
+    return getFieldValue(field, fallback);
   };
 
   const handleInputChange = (field, value) => {
@@ -677,6 +782,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
       setAccountData(prev => ({ ...prev, ...allowedUpdates }));
       setFormData({});
+      if (onAccountUpdated) onAccountUpdated(loginId, allowedUpdates);
     } catch (err) {
       console.error(err);
       alert("Error updating: " + err.message);
@@ -814,29 +920,47 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
   };
 
-  const name = accountData ? (accountData.Name || [accountData.FirstName, accountData.LastName].filter(Boolean).join(' '))
-    : (activeData.Name || [activeData.FirstName, activeData.LastName].filter(Boolean).join(' ') || 'Hassanbm Mukerd');
+  const firstNameValue = pickFirstValue(fieldSources, ['FirstName', 'firstName']);
+  const lastNameValue = pickFirstValue(fieldSources, ['LastName', 'lastName']);
+  const fullNameValue = pickFirstValue(fieldSources, ['Name', 'name', 'FullName', 'fullName']);
+  const name = [firstNameValue, lastNameValue].filter(Boolean).join(' ') ||
+    fullNameValue ||
+    `Account ${loginId}`;
 
-  const groupValue = accountData ? (accountData.Group ?? '') : (activeData.Group || 'demo\\forex-hedge-usd-01');
-  const currencyValue = accountData ? (accountData.Currency ?? '') : (activeData.Currency || 'USD');
-  const leverageValue = accountData ? (accountData.Leverage ? `1:${accountData.Leverage}` : '') : (activeData.Leverage ? `1:${activeData.Leverage}` : '1:1000');
-  const modeRaw = activeData.AccountMode || 'hedge';
+  const groupValue = getFieldValue('Group');
+  const currencyValue = getFieldValue('Currency', 'USD');
+  const rawLeverageValue = getFieldValue('Leverage');
+  const leverageValue = rawLeverageValue ? `1:${String(rawLeverageValue).replace(/^1:/, '')}` : '';
+  const modeRaw = String(getFieldValue('AccountMode', 'hedge'));
   const modeVal = modeRaw.charAt(0).toUpperCase() + modeRaw.slice(1);
+  const statusValue = String(getFieldValue('Status', 'active')).toLowerCase();
+  const statusLabel = statusValue.charAt(0).toUpperCase() + statusValue.slice(1);
+  const languageValue = normalizeLanguageOption(getValue('Language', LANGUAGE_OPTIONS[0]));
+  const registrationValue = getFieldValue('Registration');
+  const lastAccessValue = getFieldValue('LastAccess');
+  const lastIpValue = getFieldValue('LastIP');
+  const countryCityValue = [getFieldValue('Country'), getFieldValue('City')].filter(Boolean).join(', ');
 
   const formatNumber = (val) => {
     if (val === null || val === undefined || isNaN(Number(val))) return '0.00';
     return Number(val).toFixed(2);
   };
 
-  const balanceVal = liveMetrics?.balance !== undefined ? formatNumber(liveMetrics.balance) : formatNumber(activeData.balance);
-  const equityVal = liveMetrics?.equity !== undefined ? formatNumber(liveMetrics.equity) : formatNumber(activeData.equity);
-  const marginVal = liveMetrics?.used_margin !== undefined ? formatNumber(liveMetrics.used_margin) : formatNumber(activeData.margin);
-  const freeMarginVal = liveMetrics?.free_margin !== undefined ? formatNumber(liveMetrics.free_margin) : formatNumber(activeData.marginFree);
-  const marginLevelVal = liveMetrics?.margin_level !== undefined ? formatNumber(liveMetrics.margin_level) : formatNumber(activeData.marginLevel);
+  const balanceVal = liveMetrics?.balance !== undefined ? formatNumber(liveMetrics.balance) : formatNumber(getFieldValue('Balance'));
+  const equityVal = liveMetrics?.equity !== undefined ? formatNumber(liveMetrics.equity) : formatNumber(getFieldValue('Equity'));
+  const marginVal = liveMetrics?.used_margin !== undefined ? formatNumber(liveMetrics.used_margin) : formatNumber(getFieldValue('Margin'));
+  const freeMarginVal = liveMetrics?.free_margin !== undefined ? formatNumber(liveMetrics.free_margin) : formatNumber(getFieldValue('MarginFree'));
+  const marginLevelVal = liveMetrics?.margin_level !== undefined ? formatNumber(liveMetrics.margin_level) : formatNumber(getFieldValue('MarginLevel'));
+  const creditVal = formatNumber(getFieldValue('Credit', 0));
+  const profitVal = getFieldValue('Profit', 0);
 
-  const formatDate = (unix) => {
-    if (!unix) return 'N/A';
-    const d = new Date(unix * 1000);
+  const formatDate = (value) => {
+    if (!hasDisplayValue(value)) return '';
+    const raw = String(value).trim();
+    if (!/^-?\d+(\.\d+)?$/.test(raw)) return raw;
+    const numericValue = Number(raw);
+    const d = new Date(numericValue > 100000000000 ? numericValue : numericValue * 1000);
+    if (Number.isNaN(d.getTime())) return '';
     return d.toISOString().replace('T', ' ').slice(0, 19).replace(/-/g, '.');
   };
 
@@ -911,11 +1035,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     <a href="#" className="text-[#3794ff] hover:underline cursor-pointer font-bold">{groupValue}</a>
                     <span className="mx-1 h-3 w-px bg-gray-700"></span>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                      (accountData?.status || activeData.status || 'active').toLowerCase() === 'active' 
+                      statusValue === 'active' 
                       ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
                       : 'bg-red-500/20 text-red-500 border border-red-500/30'
                     }`}>
-                      {accountData?.status || activeData.status || 'active'}
+                      {statusLabel}
                     </span>
                     <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-[10px] font-bold">
                       {leverageValue}
@@ -923,24 +1047,24 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
 
                   <div className="text-gray-300">
-                    {[accountData?.firstName, accountData?.lastName].filter(Boolean).join(' ') || name} 
+                    {name} 
                     <span className="mx-2 text-gray-600">|</span> 
-                    {[accountData?.Country || activeData.Country, accountData?.City || activeData.City].filter(Boolean).join(', ') || 'France, Sanaa'}
+                    {countryCityValue || '-'}
                   </div>
 
                   <div className="flex gap-4">
-                    <span className="text-gray-300">{accountData?.Phone || activeData.Phone || '+967775529929'}</span>
-                    <span className="text-gray-300 font-mono">RTX5 ID: {accountData?.MQID || activeData.MQID || '04BA44AF'}</span>
+                    <span className="text-gray-300">{getFieldValue('Phone') || '-'}</span>
+                    <span className="text-gray-300 font-mono">RTX5 ID: {getFieldValue('MQID') || '-'}</span>
                   </div>
 
                   <div>
-                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{accountData?.Email || activeData.Email || 'hassanbm801@gmail.com'}</a>
+                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{getFieldValue('Email') || '-'}</a>
                   </div>
 
                   <div className="flex gap-4 text-gray-500 text-[11px] pt-2 border-t border-white/5 mt-2">
-                    <span>Registered: {accountData ? formatDate(accountData.Registration) : (activeData.Registration ? formatDate(activeData.Registration) : '2023.08.15 14:30')}</span>
-                    <span>Last access: {accountData ? formatDate(accountData.LastAccess) : (activeData.LastAccess ? formatDate(activeData.LastAccess) : '2023.10.22 09:15')}</span>
-                    <span>Last IP: {accountData?.last_ip || accountData?.LastIP || activeData.LastIP || '127.0.0.1'}</span>
+                    <span>Registered: {formatDate(registrationValue) || '-'}</span>
+                    <span>Last access: {formatDate(lastAccessValue) || '-'}</span>
+                    <span>Last IP: {lastIpValue || '-'}</span>
                   </div>
                 </div>
 
@@ -1033,7 +1157,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <div className="flex-1 p-3 px-4 flex items-center gap-3 text-[var(--text-2)] overflow-x-auto custom-scrollbar no-scrollbar">
                         <PlusSquare size={14} className="text-blue-500" />
                         <span className="opacity-60 font-normal">Balance:</span> <span className="text-[var(--text)]">{balanceVal}</span>
-                        <span className="opacity-60 font-normal ml-3">Credit:</span> <span className="text-amber-500">{formatNumber(accountData?.credit || activeData.credit || 0)}</span>
+                        <span className="opacity-60 font-normal ml-3">Credit:</span> <span className="text-amber-500">{creditVal}</span>
                         <span className="opacity-60 font-normal ml-3">Equity:</span> <span className="text-[var(--text)] font-black">{equityVal}</span>
                         <span className="opacity-60 font-normal ml-3">Margin:</span> <span className="text-[var(--text)]">{marginVal}</span>
                         <span className="opacity-60 font-normal ml-3 text-green-500">Free:</span> <span className="text-green-500">{freeMarginVal}</span>
@@ -1042,8 +1166,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <div className="w-[100px] p-3 text-right text-[var(--text-3)] font-mono">
                         {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
                       </div>
-                      <div className={`w-[120px] p-3 px-4 text-right font-black font-mono text-sm ${Number(liveMetrics?.floating_pnl ?? activeData.profit ?? 0) >= 0 ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
-                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : (activeData.profit !== undefined ? formatNumber(activeData.profit) : '0.00')}
+                      <div className={`w-[120px] p-3 px-4 text-right font-black font-mono text-sm ${Number(liveMetrics?.floating_pnl ?? profitVal ?? 0) >= 0 ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
+                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : formatNumber(profitVal)}
                       </div>
                     </div>
                     {Number(marginLevelVal) < 100 && (
@@ -1106,8 +1230,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <div className="w-[80px] p-1 px-2 text-right">
                         {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
                       </div>
-                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(liveMetrics?.floating_pnl ?? activeData.profit ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : (activeData.profit !== undefined ? formatNumber(activeData.profit) : '0.00')}
+                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(liveMetrics?.floating_pnl ?? profitVal ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : formatNumber(profitVal)}
                       </div>
                     </div>
                     <div className="p-1 px-6 text-[12px] font-bold font-sans text-gray-900 dark:text-white">
@@ -1128,25 +1252,25 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Name:</span>
-                  <input type="text" value={getValue('FirstName', accountData?.firstName || 'Hassanbm')} onChange={(e) => handleInputChange('FirstName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('FirstName', fullNameValue)} onChange={(e) => handleInputChange('FirstName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Last name:</span>
-                  <input type="text" value={getValue('LastName', accountData?.lastName || 'Mukerd')} onChange={(e) => handleInputChange('LastName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('LastName')} onChange={(e) => handleInputChange('LastName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                   <span className="text-gray-700 dark:text-gray-300 text-right">Middle name:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('MiddleName')} onChange={(e) => handleInputChange('MiddleName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Company:</span>
-                  <input type="text" value={getValue('Company', accountData?.Company || '')} onChange={(e) => handleInputChange('Company', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="text" value={getValue('Company')} onChange={(e) => handleInputChange('Company', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Registered:</span>
                   <div className="flex w-full">
-                    <input type="text" readOnly defaultValue={accountData?.Registration ? formatDate(accountData.Registration) : (activeData.Registration ? formatDate(activeData.Registration) : '2026.02.06 19:12:35')} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-l-sm px-2 text-gray-500 focus:outline-none flex-1 border-r-0 cursor-not-allowed" />
+                    <input type="text" readOnly value={formatDate(registrationValue)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-l-sm px-2 text-gray-500 focus:outline-none flex-1 border-r-0 cursor-not-allowed" />
                     <button className="h-[22px] bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-r-sm px-1 flex items-center justify-center hover:bg-[#3e3e42]"><Square size={12} className="text-[#3794ff]" /></button>
                   </div>
 
@@ -1154,15 +1278,18 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   <span></span>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Language:</span>
-                  <select className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
-                    {['English (en)', 'Arabic (ar)', 'Chinese (zh)', 'French (fr)', 'German (de)', 'Hindi (hi)', 'Japanese (ja)', 'Russian (ru)', 'Spanish (es)', 'Turkish (tr)'].map((l) => (
+                  <select value={languageValue} onChange={(e) => handleInputChange('Language', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
+                    {!LANGUAGE_OPTIONS.includes(languageValue) && (
+                      <option value={languageValue}>{languageValue}</option>
+                    )}
+                    {LANGUAGE_OPTIONS.map((l) => (
                       <option key={l} value={l}>{l}</option>
                     ))}
                   </select>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Status:</span>
                   <select 
-                    value={getValue('Status', accountData?.status || activeData.status || 'active')} 
+                    value={String(getValue('Status', statusValue)).toLowerCase()} 
                     onChange={(e) => handleInputChange('Status', e.target.value)}
                     className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none"
                   >
@@ -1172,51 +1299,51 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </select>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">ID number:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('IDNumber')} onChange={(e) => handleInputChange('IDNumber', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Lead campaign:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('LeadCampaign')} onChange={(e) => handleInputChange('LeadCampaign', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">MetaQuotes ID:</span>
                   <div className="flex gap-2 w-full">
-                    <input type="text" value={getValue('MQID', accountData?.MQID || activeData.MQID || "04BA44AF")} onChange={(e) => handleInputChange('MQID', e.target.value)} className="h-[22px] flex-1 bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <input type="text" value={getValue('MQID')} onChange={(e) => handleInputChange('MQID', e.target.value)} className="h-[22px] flex-1 bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
                     <button className="h-[22px] px-2 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-sm hover:bg-[#3e3e42] flex items-center justify-center text-[10px] whitespace-nowrap">&gt;&gt;</button>
                   </div>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Lead source:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('LeadSource')} onChange={(e) => handleInputChange('LeadSource', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Email:</span>
-                  <input type="text" value={getValue('Email', accountData?.email || activeData.Email || "hassanbm801@gmail.com")} onChange={(e) => handleInputChange('Email', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Email')} onChange={(e) => handleInputChange('Email', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Phone:</span>
-                  <input type="text" value={getValue('Phone', accountData?.phone || activeData.Phone || "+967775529929")} onChange={(e) => handleInputChange('Phone', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
+                  <input type="text" value={getValue('Phone')} onChange={(e) => handleInputChange('Phone', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
                 </div>
 
                 <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Country:</span>
-                  <input type="text" value={getValue('Country', accountData?.country || activeData.Country || 'France')} onChange={(e) => handleInputChange('Country', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Country')} onChange={(e) => handleInputChange('Country', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">State:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('State')} onChange={(e) => handleInputChange('State', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">City:</span>
-                  <input type="text" value={getValue('City', accountData?.city || activeData.City || 'Sanaa')} onChange={(e) => handleInputChange('City', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('City')} onChange={(e) => handleInputChange('City', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Zip code:</span>
-                  <input type="text" value={getValue('ZipCode', accountData?.zipCode || activeData.ZipCode || '')} onChange={(e) => handleInputChange('ZipCode', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('ZipCode')} onChange={(e) => handleInputChange('ZipCode', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Address:</span>
-                  <input type="text" value={getValue('Address', accountData?.address || activeData.Address || '')} onChange={(e) => handleInputChange('Address', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Address')} onChange={(e) => handleInputChange('Address', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
                 <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Comment:</span>
-                  <input type="text" value={getValue('Comment', accountData?.comment || activeData.Comment || 'Android 11, samsung a50...')} onChange={(e) => handleInputChange('Comment', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
+                  <input type="text" value={getValue('Comment')} onChange={(e) => handleInputChange('Comment', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
                 </div>
 
               </div>
@@ -1342,13 +1469,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 <div className="grid grid-cols-[180px_1fr] items-center gap-x-2 gap-y-3 mt-4 w-[420px] mx-auto ml-8">
                   <span className="text-gray-700 dark:text-gray-300 text-right">Margin call level:</span>
                   <div className="flex items-center gap-2">
-                    <input type="text" value={getValue('MarginCallLevel', accountData?.marginCallLevel || '100')} onChange={(e) => handleInputChange('MarginCallLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <input type="text" value={getValue('MarginCallLevel', '100')} onChange={(e) => handleInputChange('MarginCallLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
                     <span className="text-gray-700 dark:text-gray-300">%</span>
                   </div>
 
                   <span className="text-gray-700 dark:text-gray-300 text-right">Stop out level:</span>
                   <div className="flex items-center gap-2">
-                    <input type="text" value={getValue('StopOutLevel', accountData?.stopOutLevel || '50')} onChange={(e) => handleInputChange('StopOutLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
+                    <input type="text" value={getValue('StopOutLevel', '50')} onChange={(e) => handleInputChange('StopOutLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
                     <span className="text-gray-700 dark:text-gray-300">%</span>
                   </div>
 

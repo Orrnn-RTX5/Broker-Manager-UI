@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw, Edit2 } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getTradingAccountsPage } from '../../../services/api';
@@ -13,10 +13,21 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
     : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
-const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', countryFilter = 'All Countries', onRowsChange, onRowContext }) => {
+const TradingAccountsDataGrid = ({
+  search = '',
+  groupFilter = 'All Groups',
+  countryFilter = 'All Countries',
+  onRowsChange,
+  onRowContext,
+  onEditAccount,
+  canEditAccounts = true,
+  refreshVersion = 0,
+}) => {
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
+  const lastRefreshVersionRef = useRef(refreshVersion);
+  const lastTapRef = useRef({ rowKey: null, time: 0 });
   const [hasRequestedData, markDataRequested] = useManualGridLoad('trading-accounts');
   const pageSize = 30;
 
@@ -58,6 +69,18 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
     if (onRowsChange) onRowsChange(rows);
   }, [rows, onRowsChange]);
 
+  useEffect(() => {
+    if (refreshVersion === lastRefreshVersionRef.current) return;
+    lastRefreshVersionRef.current = refreshVersion;
+
+    if (!hasRequestedData) {
+      markDataRequested();
+      return;
+    }
+
+    refetch();
+  }, [refreshVersion, hasRequestedData, markDataRequested, refetch]);
+
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
     else {
@@ -87,6 +110,26 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
   const rangeEnd = offset + rows.length;
   const isIdle = !hasRequestedData;
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
+  const canUseEditAction = canEditAccounts && typeof onEditAccount === 'function';
+  const editTitle = typeof onEditAccount !== 'function'
+    ? 'Edit unavailable'
+    : canEditAccounts ? 'Edit Account' : 'No permission to update accounts';
+  const handleEditAccount = (row) => {
+    if (!canUseEditAction) return;
+    onEditAccount(row);
+  };
+  const handleRowTap = (row, rowKey) => {
+    const now = Date.now();
+    const lastTap = lastTapRef.current;
+
+    if (lastTap.rowKey === rowKey && now - lastTap.time < 350) {
+      lastTapRef.current = { rowKey: null, time: 0 };
+      handleEditAccount(row);
+      return;
+    }
+
+    lastTapRef.current = { rowKey, time: now };
+  };
 
   return (
     <div className="ui-card flex flex-col w-full overflow-hidden">
@@ -112,12 +155,13 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
               {renderHeader('credit', 'Credit', 'right')}
               {renderHeader('profit', 'Profit', 'right')}
               {renderHeader('currency', 'Cu.')}
+              <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Trading accounts are not loaded.</span>
@@ -137,6 +181,8 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
                 <tr
                   key={rowKey}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
+                  onDoubleClick={() => handleEditAccount(row)}
+                  onTouchEnd={() => handleRowTap(row, rowKey)}
                   onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
@@ -162,6 +208,26 @@ const TradingAccountsDataGrid = ({ search = '', groupFilter = 'All Groups', coun
                   <td className="tabular" style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmt(row.credit || 0)}</td>
                   <td className="tabular" style={{ textAlign: 'right', color: profitTone, fontWeight: 500 }}>{fmt(row.profit)}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.currency}</td>
+                  <td
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => e.stopPropagation()}
+                    style={{ textAlign: 'right' }}
+                  >
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
+                      title={editTitle}
+                      aria-label={`Edit account ${row.login}`}
+                      disabled={!canUseEditAction}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditAccount(row);
+                      }}
+                    >
+                      <Edit2 size={13} style={{ color: canUseEditAction ? 'var(--accent)' : 'var(--muted)' }} />
+                    </button>
+                  </td>
                 </tr>
               );
             })}

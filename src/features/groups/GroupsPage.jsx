@@ -8,6 +8,7 @@ import { getActiveGroupsPage, getGroupsPage } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
 import usePagedData from '../../hooks/usePagedData';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getGroupDetailsPath } from './groupRoutes';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
@@ -162,7 +163,7 @@ const GroupsPage = () => {
                   ) : groups.map((group) => (
                     <tr
                       key={group.name}
-                      onClick={() => navigate(`/groups/${group.name}`)}
+                      onClick={() => navigate(getGroupDetailsPath(group.name))}
                       style={{ cursor: 'pointer' }}
                     >
                       <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>

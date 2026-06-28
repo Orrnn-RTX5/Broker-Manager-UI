@@ -121,6 +121,7 @@ export const normalizeClientRow = (p = {}) => ({
 });
 
 export const normalizeTradingAccountRow = (p = {}) => ({
+  raw: p,
   login: String(p.login || p.Login || ''),
   name: p.Name || p.name || '',
   group: p.Group || p.group || '',
@@ -137,8 +138,21 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   marginFree: p.marginFree || p.MarginFree || 0,
   marginLevel: p.marginLevel || p.MarginLevel || 0,
   email: p.email || p.Email || '',
+  phone: p.phone || p.Phone || p.PhoneNumber || p.phoneNumber || '',
+  company: p.company || p.Company || '',
   firstName: p.firstName || p.FirstName || '',
   lastName: p.lastName || p.LastName || '',
+  middleName: p.middleName || p.MiddleName || '',
+  language: p.language || p.Language || p.lang || p.Lang || '',
+  idNumber: p.idNumber || p.IDNumber || p.IdNumber || p.id_number || '',
+  leadCampaign: p.leadCampaign || p.LeadCampaign || p.lead_campaign || '',
+  leadSource: p.leadSource || p.LeadSource || p.lead_source || '',
+  mqid: p.mqid || p.MQID || p.MetaQuotesID || p.metaQuotesId || '',
+  state: p.state || p.State || p.province || p.Province || p.region || p.Region || '',
+  city: p.city || p.City || '',
+  zipCode: p.zipCode || p.ZipCode || p.zip || p.Zip || p.PostalCode || p.postalCode || '',
+  address: p.address || p.Address || '',
+  comment: p.comment || p.Comment || '',
 });
 
 export const normalizePositionRow = (p = {}) => {

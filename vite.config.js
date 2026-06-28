@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import process from 'node:process'
 
-const ignoredWsProxyErrorCodes = new Set(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT'])
+const ignoredWsProxyErrorCodes = new Set(['ECONNABORTED', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT'])
 const viteLogger = createLogger()
 const defaultLoggerError = viteLogger.error
 

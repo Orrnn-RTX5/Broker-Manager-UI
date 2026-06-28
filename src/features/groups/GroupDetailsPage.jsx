@@ -5,9 +5,11 @@ import { ArrowLeft, Users2, Activity, Settings, Database, Clock, BarChart2, Arro
 import { fetchManagerApi } from '../../services/managerFetch';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getGroupNameFromRouteParam } from './groupRoutes';
 
 const GroupDetailsPage = () => {
-  const { groupName } = useParams();
+  const { groupName: groupNameParam } = useParams();
+  const groupName = getGroupNameFromRouteParam(groupNameParam);
   const navigate = useNavigate();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
