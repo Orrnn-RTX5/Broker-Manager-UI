@@ -1,60 +1,134 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  X, User, BarChart3, List, DollarSign, Link, Plus, Trash2,
-  RefreshCw, Loader, AlertTriangle, CheckCircle2, Download
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  DollarSign,
+  Download,
+  GitBranch,
+  Link,
+  Loader,
+  Plus,
+  RefreshCw,
+  Trash2,
+  User,
+  X,
 } from 'lucide-react';
-import {
-  ibGet, ibUpdate, ibStats, ibPlanList, ibPlanCreate,
-  ibClientListAll, ibCommissions,
-} from '../../../services/api';
-import IBPayoutModal from './IBPayoutModal';
-import IBClientLinker from './IBClientLinker';
+import ibApi from '../../../services/ibApi';
 import { rowsToCSV, downloadBlob, stampedFilename } from '../../../utils/gridUtils';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { PERMISSIONS } from '../../../utils/permissions';
+import IBClientLinker from './IBClientLinker';
+import IBCreateModal from './IBCreateModal';
+import IBPayoutModal from './IBPayoutModal';
+import {
+  IB_COMMISSION_TYPES,
+  MUTABLE_COMMISSION_STATUSES,
+  buildCommissionPlanPayload,
+  canRemoveIB,
+  canSetCommissionStatus,
+  emptyToNull,
+  getIBStatusActions,
+  isEligibleIBParent,
+  normalizeIBAccount,
+  normalizeIBCommission,
+  normalizeIBPlan,
+  normalizeIBTreeNode,
+  normalizeObject,
+  normalizeRecords,
+  validateCommissionPlanInput,
+} from '../ibDomain';
 
-const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (unix) => unix ? new Date(unix * 1000).toLocaleDateString() : '—';
-const fmtTs   = (unix) => unix ? new Date(unix * 1000).toLocaleString()    : '—';
+const TABS = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'tree', label: 'Tree' },
+  { id: 'clients', label: 'Clients' },
+  { id: 'plans', label: 'Plans' },
+  { id: 'ledger', label: 'Ledger' },
+  { id: 'payout', label: 'Payout' },
+  { id: 'stats', label: 'Stats' },
+];
 
 const STATUS_BADGE = {
-  active:   'ui-badge-success',
+  active: 'ui-badge-success',
   approved: 'ui-badge-info',
-  pending:  'ui-badge-warn',
-  removed:  'ui-badge-danger',
+  pending: 'ui-badge-warn',
+  suspended: 'ui-badge-neutral',
+  rejected: 'ui-badge-danger',
+  removed: 'ui-badge-danger',
+  accrued: 'ui-badge-neutral',
+  pending_review: 'ui-badge-warn',
+  paid: 'ui-badge-success',
 };
 
-const today      = () => new Date().toISOString().slice(0, 10);
-const monthStart = () => today().slice(0, 8) + '01';
+const today = () => new Date().toISOString().slice(0, 10);
+const monthStart = () => `${today().slice(0, 8)}01`;
 
-const TABS = ['Overview', 'Plans', 'Clients', 'Commissions'];
+const fmt = (value) => Number(value || 0).toLocaleString(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+const fmtDate = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return '-';
+  return new Date(number > 1_000_000_000_000 ? number : number * 1000).toLocaleString();
+};
+
+const StatusBadge = ({ status }) => (
+  <span className={`ui-badge text-[9px] px-1 ${STATUS_BADGE[status] || 'ui-badge-neutral'}`}>
+    {String(status || '-').toUpperCase()}
+  </span>
+);
+
+const AlertBox = ({ tone = 'danger', children }) => (
+  <div
+    className="text-xs px-3 py-2 rounded flex items-start gap-2"
+    style={{
+      background: tone === 'success' ? 'var(--ok-soft)' : 'var(--danger-soft)',
+      color: tone === 'success' ? 'var(--ok-text)' : 'var(--danger-text)',
+    }}
+  >
+    {tone === 'success' ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+    <span>{children}</span>
+  </div>
+);
 
 const KV = ({ label, value }) => (
   <div className="flex flex-col gap-0.5">
     <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{label}</span>
-    <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{value ?? '—'}</span>
+    <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{value ?? '-'}</span>
   </div>
 );
 
-const SectionHeader = ({ title }) => (
-  <div className="text-[10px] font-semibold uppercase tracking-wider pb-1 mb-2"
-    style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
-    {title}
+const SectionTitle = ({ children }) => (
+  <div className="text-[10px] font-semibold uppercase pb-1 mb-2" style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+    {children}
   </div>
 );
 
-// ── Overview Tab ──────────────────────────────────────────────────────────────
-const OverviewTab = ({ ib, stats, statsLoading, onUpdate, onRefresh }) => {
+const EmptyState = ({ children }) => (
+  <div className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>{children}</div>
+);
+
+const normalizeStats = (response) => normalizeObject(response, ['stats']) || {};
+const defaultLedgerFilters = () => ({ from: monthStart(), to: today(), paid: '', status: '', client_login: '', symbol: '' });
+const defaultStatsFilters = () => ({ from: monthStart(), to: today() });
+
+const ProfileTab = ({ ib, actionBusy, canManageIB, onStatusAction, onRemove, onSaveNotes }) => {
   const [notes, setNotes] = useState(ib?.notes || '');
   const [saving, setSaving] = useState(false);
+  const actions = getIBStatusActions(ib?.status);
+  const removable = canRemoveIB(ib);
+
+  useEffect(() => {
+    setNotes(ib?.notes || '');
+  }, [ib?.notes, ib?.login]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await ibUpdate({ login: ib.login, notes });
-      onRefresh();
-    } catch (err) {
-      alert('Error: ' + err.message);
+      await onSaveNotes(notes);
     } finally {
       setSaving(false);
     }
@@ -63,48 +137,58 @@ const OverviewTab = ({ ib, stats, statsLoading, onUpdate, onRefresh }) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="ui-card p-3">
-        <SectionHeader title="IB Info" />
+        <SectionTitle>IB info</SectionTitle>
         <div className="grid grid-cols-2 gap-3">
-          <KV label="Login"         value={<span className="tabular font-mono">{ib?.login}</span>} />
-          <KV label="Parent IB"     value={ib?.parent_ib_login ?? 'Top-level'} />
-          <KV label="Level"         value={ib?.level} />
-          <KV label="Status"        value={<span className={`ui-badge ${STATUS_BADGE[ib?.status] || 'ui-badge-neutral'}`}>{ib?.status}</span>} />
-          <KV label="Company"       value={ib?.company_name} />
-          <KV label="Website"       value={ib?.website} />
-          <KV label="Referral Code" value={<span className="tabular font-mono">{ib?.referral_code}</span>} />
-          <KV label="Clients"       value={ib?.client_count} />
-          <KV label="Unpaid Total"  value={<span style={{ color: ib?.unpaid_total > 0 ? 'var(--warn-text)' : 'var(--text)' }}>{fmt(ib?.unpaid_total)}</span>} />
-          <KV label="Approved At"   value={fmtDate(ib?.approved_at)} />
-          <KV label="Created At"    value={fmtDate(ib?.created_at)} />
+          <KV label="Login" value={<span className="tabular font-mono">{ib?.login}</span>} />
+          <KV label="Status" value={<StatusBadge status={ib?.status} />} />
+          <KV label="Parent IB" value={ib?.parent_ib_login || 'Top-level'} />
+          <KV label="Level" value={ib?.level} />
+          <KV label="Company" value={ib?.company_name || '-'} />
+          <KV label="Website" value={ib?.website || '-'} />
+          <KV label="Referral Code" value={<span className="tabular font-mono">{ib?.referral_code || '-'}</span>} />
+          <KV label="Clients" value={ib?.client_count ?? 0} />
+          <KV label="Unpaid Total" value={<span className="tabular">{fmt(ib?.unpaid_total)}</span>} />
+          <KV label="Approved At" value={fmtDate(ib?.approved_at)} />
+          <KV label="Created At" value={fmtDate(ib?.created_at)} />
         </div>
       </div>
 
       <div className="ui-card p-3">
-        <SectionHeader title="Stats (this month)" />
-        {statsLoading ? (
-          <div className="flex justify-center py-4"><Loader size={16} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
+        <SectionTitle>Status actions</SectionTitle>
+        {actions.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>No normal workflow actions are available for this status.</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <KV label="Total Clients"   value={stats?.client_count} />
-            <KV label="Active Clients"  value={stats?.active_clients} />
-            <KV label="Total Lots"      value={stats?.total_lots != null ? fmt(stats.total_lots) : '—'} />
-            <KV label="Total Commission" value={<span style={{ color: 'var(--ok-text)' }}>{stats?.total_commissions != null ? fmt(stats.total_commissions) : '—'}</span>} />
+          <div className="flex flex-wrap gap-2">
+            {actions.map((action) => (
+              <button key={action} className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => onStatusAction(action)} disabled={actionBusy}>
+                {actionBusy ? <Loader size={13} className="animate-spin" /> : null}
+                {action}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
+      {removable && (
+        <div className="ui-card p-3">
+          <SectionTitle>Remove IB</SectionTitle>
+          <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
+            Soft remove archives this IB and keeps historical records visible for audit.
+          </p>
+          <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={onRemove} disabled={!canManageIB || actionBusy}>
+            {actionBusy ? <Loader size={13} className="animate-spin" /> : <Trash2 size={13} style={{ color: 'var(--danger-text)' }} />}
+            Remove IB
+          </button>
+        </div>
+      )}
+
       <div className="ui-card p-3">
-        <SectionHeader title="Notes" />
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          className="ui-input ui-input-sm w-full"
-          rows={3}
-          style={{ resize: 'vertical' }}
-        />
+        <SectionTitle>Notes</SectionTitle>
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="ui-input ui-input-sm w-full" rows={4} />
         <div className="flex justify-end mt-2">
           <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Notes'}
+            {saving ? <Loader size={13} className="animate-spin" /> : null}
+            Save notes
           </button>
         </div>
       </div>
@@ -112,377 +196,671 @@ const OverviewTab = ({ ib, stats, statsLoading, onUpdate, onRefresh }) => {
   );
 };
 
-// ── Plans Tab ─────────────────────────────────────────────────────────────────
-const PlansTab = ({ login }) => {
-  const [plans, setPlans] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({
-    plan_name: '', commission_type: 'per_lot', rate: '', override_rate: '',
-    symbol_filter: '', group_filter: '', min_lots: '0.01', max_lots: '100', enabled: true,
-  });
-  const [saving, setSaving] = useState(false);
+const TreeNode = ({ node, onCreateChild }) => {
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+  const canCreateChild = isEligibleIBParent(node);
 
-  const load = async () => {
+  return (
+    <div className="pl-3" style={{ borderLeft: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-2 py-1.5">
+        <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-xs" onClick={() => setExpanded((value) => !value)} disabled={!hasChildren}>
+          {hasChildren ? (expanded ? '-' : '+') : ''}
+        </button>
+        <GitBranch size={13} style={{ color: 'var(--accent)' }} />
+        <span className="tabular font-mono text-xs">{node.login}</span>
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>{node.company_name || '-'}</span>
+        <StatusBadge status={node.status} />
+        <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Lv.{node.level} - {node.client_count} clients</span>
+        {canCreateChild && (
+          <button className="ui-btn ui-btn-ghost ui-btn-xs" onClick={() => onCreateChild(node.login)}>
+            <Plus size={11} /> Sub-IB
+          </button>
+        )}
+      </div>
+      {hasChildren && expanded && (
+        <div className="ml-3">
+          {node.children.map((child) => <TreeNode key={child.login} node={child} onCreateChild={onCreateChild} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TreeTab = ({ login, onCreateChild }) => {
+  const [tree, setTree] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const data = await ibPlanList(login);
-      setPlans(Array.isArray(data) ? data : data?.answer || []);
+      const response = await ibApi.tree(login);
+      setTree(normalizeIBTreeNode(normalizeObject(response, ['tree']) || response));
     } catch (err) {
-      setPlans([]);
+      setTree(null);
+      setError(err.message || 'Failed to load IB tree.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [login]);
 
-  useEffect(() => { load(); }, [login]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const handleCreate = async () => {
-    if (!form.plan_name) { alert('Plan name is required.'); return; }
-    setSaving(true);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}>
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh tree
+        </button>
+      </div>
+      {error && <AlertBox>{error}</AlertBox>}
+      <div className="ui-card p-3 overflow-auto">
+        {loading ? <EmptyState>Loading tree...</EmptyState> : tree ? <TreeNode node={tree} onCreateChild={onCreateChild} /> : <EmptyState>No tree data.</EmptyState>}
+      </div>
+    </div>
+  );
+};
+
+const ClientsTab = ({ login, onOpenLinker }) => {
+  const [mode, setMode] = useState('direct');
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      await ibPlanCreate({
-        ib_login: login,
-        plan_name: form.plan_name,
-        commission_type: form.commission_type,
-        rate: Number(form.rate),
-        override_rate: Number(form.override_rate),
-        symbol_filter: form.symbol_filter,
-        group_filter: form.group_filter,
-        min_lots: Number(form.min_lots),
-        max_lots: Number(form.max_lots),
-        enabled: form.enabled,
-      });
-      setShowCreate(false);
+      const response = mode === 'all' ? await ibApi.allClients(login) : await ibApi.directClients(login);
+      setClients(normalizeRecords(response, ['clients']));
+    } catch (err) {
+      setClients([]);
+      setError(err.message || 'Failed to load clients.');
+    } finally {
+      setLoading(false);
+    }
+  }, [login, mode]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          {[
+            ['direct', 'Direct clients'],
+            ['all', 'All downline clients'],
+          ].map(([value, label]) => (
+            <button key={value} className={`ui-btn ui-btn-sm ${mode === value ? 'ui-btn-primary' : 'ui-btn-ghost'}`} onClick={() => setMode(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</button>
+          <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={onOpenLinker}><Link size={13} /> Manage links</button>
+        </div>
+      </div>
+      {error && <AlertBox>{error}</AlertBox>}
+      <div className="overflow-x-auto">
+        <table className="ui-grid min-w-max">
+          <thead>
+            <tr><th>Client Login</th><th>IB Login</th><th>Source</th><th>Linked At</th></tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={4}><EmptyState>Loading clients...</EmptyState></td></tr>
+            ) : clients.length === 0 ? (
+              <tr><td colSpan={4}><EmptyState>No linked clients.</EmptyState></td></tr>
+            ) : clients.map((client, index) => (
+              <tr key={`${client.client_login}-${index}`}>
+                <td className="tabular font-mono">{client.client_login}</td>
+                <td className="tabular">{client.ib_login}</td>
+                <td><span className="ui-badge ui-badge-neutral text-[9px]">{client.link_source || '-'}</span></td>
+                <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(client.linked_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const planFormDefaults = (login, plan = null) => ({
+  id: plan?.id || '',
+  ib_login: login,
+  plan_name: plan?.plan_name || '',
+  commission_type: plan?.commission_type || 'per_lot',
+  rate: plan?.rate ?? '',
+  override_rate: plan?.override_rate ?? 0,
+  symbol_filter: plan?.symbol_filter || '',
+  group_filter: plan?.group_filter || '',
+  min_lots: plan?.min_lots ?? 0,
+  max_lots: plan?.max_lots ?? 0,
+  enabled: plan?.enabled !== false,
+});
+
+const PlansTab = ({ login }) => {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await ibApi.listPlans(login);
+      setPlans(normalizeRecords(response, ['plans']).map(normalizeIBPlan));
+    } catch (err) {
+      setPlans([]);
+      setError(err.message || 'Failed to load commission plans.');
+    } finally {
+      setLoading(false);
+    }
+  }, [login]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const savePlan = async () => {
+    const errors = validateCommissionPlanInput(form);
+    if (errors.length) {
+      setError(errors[0]);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const payload = buildCommissionPlanPayload(form, login);
+      if (payload.id) await ibApi.updatePlan(payload);
+      else await ibApi.createPlan(payload);
+      setForm(null);
+      setNotice('Commission plan saved.');
       load();
     } catch (err) {
-      alert('Error: ' + err.message);
+      setError(err.message || 'Failed to save commission plan.');
     } finally {
       setSaving(false);
     }
   };
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const planAction = async (plan, action) => {
+    if (action === 'delete' && !window.confirm(`Archive plan "${plan.plan_name}"? Historical references are preserved.`)) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      if (action === 'enable') await ibApi.enablePlan(plan.id);
+      if (action === 'disable') await ibApi.disablePlan(plan.id);
+      if (action === 'delete') await ibApi.deletePlan(plan.id);
+      setNotice('Plan updated.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to update plan.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
+      {error && <AlertBox>{error}</AlertBox>}
+      {notice && <AlertBox tone="success">{notice}</AlertBox>}
       <div className="flex justify-end">
-        <button className="ui-btn ui-btn-primary ui-btn-sm flex items-center gap-1" onClick={() => setShowCreate(s => !s)}>
-          <Plus size={12} /> {showCreate ? 'Cancel' : 'New Plan'}
-        </button>
+        <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={() => setForm(planFormDefaults(login))}><Plus size={13} /> New plan</button>
       </div>
 
-      {showCreate && (
-        <div className="ui-card p-3 flex flex-col gap-3" style={{ borderColor: 'var(--accent-soft)' }}>
-          <h4 className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Create Commission Plan</h4>
+      {form && (
+        <div className="ui-card p-3 flex flex-col gap-3">
+          <SectionTitle>{form.id ? 'Edit plan' : 'Create plan'}</SectionTitle>
           <div className="grid grid-cols-2 gap-2">
-            {[
-              ['Plan Name', 'plan_name', 'text'],
-              ['Rate', 'rate', 'number'],
-              ['Override Rate', 'override_rate', 'number'],
-              ['Symbol Filter (CSV)', 'symbol_filter', 'text'],
-              ['Group Filter', 'group_filter', 'text'],
-              ['Min Lots', 'min_lots', 'number'],
-              ['Max Lots', 'max_lots', 'number'],
-            ].map(([label, key, type]) => (
-              <div key={key} className="flex flex-col gap-1">
-                <label className="text-[10px]" style={{ color: 'var(--text-3)' }}>{label}</label>
-                <input type={type} value={form[key]} onChange={e => set(key, e.target.value)} className="ui-input ui-input-sm" />
-              </div>
-            ))}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px]" style={{ color: 'var(--text-3)' }}>Commission Type</label>
-              <select value={form.commission_type} onChange={e => set('commission_type', e.target.value)} className="ui-input ui-input-sm">
-                <option value="per_lot">per_lot</option>
-                <option value="per_deal">per_deal</option>
-                <option value="percentage">percentage</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2 pt-4">
-              <input type="checkbox" checked={form.enabled} onChange={e => set('enabled', e.target.checked)} id="plan-enabled" />
-              <label htmlFor="plan-enabled" className="text-xs" style={{ color: 'var(--text-2)' }}>Enabled</label>
-            </div>
+            <input className="ui-input ui-input-sm" placeholder="Plan name" value={form.plan_name} onChange={(event) => setField('plan_name', event.target.value)} />
+            <select className="ui-input ui-input-sm" value={form.commission_type} onChange={(event) => setField('commission_type', event.target.value)}>
+              {IB_COMMISSION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <input className="ui-input ui-input-sm" type="number" placeholder="Rate" value={form.rate} onChange={(event) => setField('rate', event.target.value)} />
+            <input className="ui-input ui-input-sm" type="number" placeholder="Override rate" value={form.override_rate} onChange={(event) => setField('override_rate', event.target.value)} />
+            <input className="ui-input ui-input-sm" placeholder="Symbol filter" value={form.symbol_filter} onChange={(event) => setField('symbol_filter', event.target.value)} />
+            <input className="ui-input ui-input-sm" placeholder="Group filter" value={form.group_filter} onChange={(event) => setField('group_filter', event.target.value)} />
+            <input className="ui-input ui-input-sm" type="number" placeholder="Min lots" value={form.min_lots} onChange={(event) => setField('min_lots', event.target.value)} />
+            <input className="ui-input ui-input-sm" type="number" placeholder="Max lots" value={form.max_lots} onChange={(event) => setField('max_lots', event.target.value)} />
+            <label className="text-xs flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+              <input type="checkbox" checked={form.enabled} onChange={(event) => setField('enabled', event.target.checked)} />
+              Enabled
+            </label>
           </div>
-          <div className="flex justify-end">
-            <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleCreate} disabled={saving}>
-              {saving ? 'Creating…' : 'Create Plan'}
-            </button>
+          <div className="flex justify-end gap-2">
+            <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setForm(null)} disabled={saving}>Cancel</button>
+            <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={savePlan} disabled={saving}>{saving ? 'Saving...' : 'Save plan'}</button>
           </div>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-8"><Loader size={16} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
-      ) : !plans || plans.length === 0 ? (
-        <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>No plans configured.</div>
-      ) : (
-        <table className="ui-grid">
+      <div className="overflow-x-auto">
+        <table className="ui-grid min-w-max">
           <thead>
-            <tr>
-              <th>Plan</th>
-              <th>Type</th>
-              <th style={{ textAlign: 'right' }}>Rate</th>
-              <th style={{ textAlign: 'right' }}>Override</th>
-              <th>Symbols</th>
-              <th>Status</th>
-            </tr>
+            <tr><th>Plan</th><th>Type</th><th>Rate</th><th>Override</th><th>Symbols</th><th>Groups</th><th>Lots</th><th>Status</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
           </thead>
           <tbody>
-            {plans.map(p => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: 500 }}>{p.plan_name}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{p.commission_type}</span></td>
-                <td className="tabular" style={{ textAlign: 'right' }}>{fmt(p.rate)}</td>
-                <td className="tabular" style={{ textAlign: 'right' }}>{fmt(p.override_rate)}</td>
-                <td style={{ color: 'var(--text-3)' }}>{p.symbol_filter || 'All'}</td>
-                <td>
-                  <span className={`ui-badge text-[9px] ${p.enabled ? 'ui-badge-success' : 'ui-badge-neutral'}`}>
-                    {p.enabled ? 'ON' : 'OFF'}
-                  </span>
+            {loading ? (
+              <tr><td colSpan={9}><EmptyState>Loading plans...</EmptyState></td></tr>
+            ) : plans.length === 0 ? (
+              <tr><td colSpan={9}><EmptyState>No commission plans configured.</EmptyState></td></tr>
+            ) : plans.map((plan) => (
+              <tr key={plan.id}>
+                <td style={{ fontWeight: 500 }}>{plan.plan_name}</td>
+                <td><span className="ui-badge ui-badge-neutral text-[9px]">{plan.commission_type}</span></td>
+                <td className="tabular">{fmt(plan.rate)}</td>
+                <td className="tabular">{fmt(plan.override_rate)}</td>
+                <td>{plan.symbol_filter || 'All'}</td>
+                <td>{plan.group_filter || 'All'}</td>
+                <td className="tabular">{fmt(plan.min_lots)} - {plan.max_lots > 0 ? fmt(plan.max_lots) : 'unlimited'}</td>
+                <td><span className={`ui-badge text-[9px] ${plan.enabled ? 'ui-badge-success' : 'ui-badge-neutral'}`}>{plan.enabled ? 'ENABLED' : 'DISABLED'}</span></td>
+                <td style={{ textAlign: 'right' }}>
+                  <div className="inline-flex gap-1">
+                    <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => setForm(planFormDefaults(login, plan))}>Edit</button>
+                    <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => planAction(plan, plan.enabled ? 'disable' : 'enable')} disabled={saving}>
+                      {plan.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={() => planAction(plan, 'delete')} disabled={saving} title="Archive">
+                      <Trash2 size={13} style={{ color: 'var(--danger-text)' }} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      )}
-    </div>
-  );
-};
-
-// ── Clients Tab ───────────────────────────────────────────────────────────────
-const ClientsTab = ({ login, onOpenLinker }) => {
-  const [clients, setClients] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [includeAll, setIncludeAll] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = includeAll ? await ibClientListAll(login) : await ibClientListAll(login);
-      setClients(Array.isArray(data) ? data : data?.answer || []);
-    } catch {
-      setClients([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [login, includeAll]);
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <label className="text-xs flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-2)' }}>
-            <input type="checkbox" checked={includeAll} onChange={e => setIncludeAll(e.target.checked)} />
-            Include sub-IB clients
-          </label>
-        </div>
-        <div className="flex gap-1">
-          <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1" onClick={load} disabled={loading}>
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button className="ui-btn ui-btn-primary ui-btn-sm flex items-center gap-1" onClick={onOpenLinker}>
-            <Link size={11} /> Manage Links
-          </button>
-        </div>
       </div>
-
-      {loading ? (
-        <div className="flex justify-center py-8"><Loader size={16} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
-      ) : !clients || clients.length === 0 ? (
-        <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>No linked clients.</div>
-      ) : (
-        <table className="ui-grid">
-          <thead>
-            <tr>
-              <th>Client Login</th>
-              <th>IB Login</th>
-              <th>Source</th>
-              <th>Linked At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((c, i) => (
-              <tr key={`${c.client_login}-${i}`}>
-                <td>
-                  <span className="inline-flex items-center gap-1.5">
-                    <User size={12} style={{ color: 'var(--accent)' }} />
-                    <span className="tabular font-mono">{c.client_login}</span>
-                  </span>
-                </td>
-                <td className="tabular" style={{ color: 'var(--text-3)' }}>{c.ib_login}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{c.link_source}</span></td>
-                <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(c.linked_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </div>
   );
 };
 
-// ── Commissions Tab ───────────────────────────────────────────────────────────
-const CommissionsTab = ({ login, onOpenPayout }) => {
-  const [rows, setRows]   = useState(null);
-  const [from, setFrom]   = useState(monthStart());
-  const [to, setTo]       = useState(today());
-  const [paidFilter, setPaidFilter] = useState('');
+const LedgerTab = ({ login, onRefreshRelated }) => {
+  const [filters, setFilters] = useState(defaultLedgerFilters);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [mutatingId, setMutatingId] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const load = async () => {
+  const paidLabel = filters.paid === 'true' ? 'paid' : filters.paid === 'false' ? 'unpaid' : 'all';
+  const activeFilterText = [
+    `Date: ${filters.from || 'any'} to ${filters.to || 'any'}`,
+    `Paid: ${paidLabel}`,
+    `Status: ${filters.status || 'all'}`,
+    ...(emptyToNull(filters.client_login) ? [`Client: ${String(filters.client_login).trim()}`] : []),
+    ...(emptyToNull(filters.symbol) ? [`Symbol: ${String(filters.symbol).trim()}`] : []),
+  ].join(' | ');
+
+  const query = useMemo(() => ({
+    login,
+    ...(filters.from ? { from: filters.from } : {}),
+    ...(filters.to ? { to: filters.to } : {}),
+    ...(filters.paid ? { paid: filters.paid } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+  }), [filters.from, filters.paid, filters.status, filters.to, login]);
+
+  const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const data = await ibCommissions({ login, from, to, paid: paidFilter === '' ? undefined : paidFilter === 'true' });
-      setRows(Array.isArray(data) ? data : data?.answer || []);
-    } catch {
+      const response = await ibApi.commissions(query);
+      let nextRows = normalizeRecords(response, ['commissions']).map(normalizeIBCommission);
+      if (emptyToNull(filters.client_login)) nextRows = nextRows.filter((row) => String(row.client_login).includes(String(filters.client_login).trim()));
+      if (emptyToNull(filters.symbol)) nextRows = nextRows.filter((row) => row.symbol.toLowerCase().includes(String(filters.symbol).trim().toLowerCase()));
+      setRows(nextRows);
+    } catch (err) {
       setRows([]);
+      setError(err.message || 'Failed to load commission ledger.');
     } finally {
       setLoading(false);
     }
+  }, [filters.client_login, filters.symbol, query]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+  const clearFilters = () => setFilters(defaultLedgerFilters());
+
+  const setStatus = async (commission, status) => {
+    if (!canSetCommissionStatus(commission, status)) return;
+    if ((status === 'approved' || status === 'rejected') && !window.confirm(`${status} commission #${commission.id}?`)) return;
+
+    setMutatingId(commission.id);
+    setError('');
+    setNotice('');
+    try {
+      await ibApi.setCommissionStatus(commission.id, status);
+      setNotice(`Commission #${commission.id} set to ${status}.`);
+      await load();
+      onRefreshRelated?.();
+    } catch (err) {
+      setError(err.message || 'Failed to update commission status.');
+    } finally {
+      setMutatingId(null);
+    }
   };
 
-  const handleExport = () => {
-    if (!rows?.length) return;
+  const exportCsv = () => {
+    if (!rows.length) return;
     const cols = [
-      { key: 'id' }, { key: 'client_login' }, { key: 'deal_ticket' }, { key: 'symbol' },
-      { key: 'lots' }, { key: 'commission_type' }, { key: 'commission_amount' },
-      { key: 'override_amount' }, { key: 'total_amount' }, { key: 'paid' }, { key: 'paid_at' },
+      { key: 'id' }, { key: 'ib_login' }, { key: 'client_login' }, { key: 'deal_ticket' }, { key: 'symbol' },
+      { key: 'lots' }, { key: 'commission_type' }, { key: 'commission_amount' }, { key: 'override_amount' },
+      { key: 'total_amount' }, { key: 'status' }, { key: 'paid' }, { key: 'paid_at' }, { key: 'pay_ticket' },
+      { key: 'calculated_at' },
     ];
-    const csv = rowsToCSV(rows, cols);
-    downloadBlob(csv, stampedFilename(`ib-${login}-commissions`, 'csv'));
+    downloadBlob(rowsToCSV(rows, cols), stampedFilename(`ib-${login}-ledger`, 'csv'));
   };
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px]" style={{ color: 'var(--text-3)' }}>From</label>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="ui-input ui-input-sm" style={{ width: 130 }} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px]" style={{ color: 'var(--text-3)' }}>To</label>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="ui-input ui-input-sm" style={{ width: 130 }} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px]" style={{ color: 'var(--text-3)' }}>Paid</label>
-          <select value={paidFilter} onChange={e => setPaidFilter(e.target.value)} className="ui-input ui-input-sm" style={{ width: 100 }}>
-            <option value="">All</option>
-            <option value="false">Unpaid</option>
-            <option value="true">Paid</option>
-          </select>
-        </div>
-        <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1" onClick={load} disabled={loading}>
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Load
-        </button>
-        {rows?.length > 0 && (
-          <button className="ui-btn ui-btn-ghost ui-btn-sm flex items-center gap-1" onClick={handleExport}>
-            <Download size={11} /> CSV
-          </button>
-        )}
-        <button className="ui-btn ui-btn-primary ui-btn-sm flex items-center gap-1 ml-auto"
-          style={{ background: 'var(--ok)', color: 'white' }} onClick={onOpenPayout}>
-          <DollarSign size={11} /> Pay Out
-        </button>
+      {error && <AlertBox>{error}</AlertBox>}
+      {notice && <AlertBox tone="success">{notice}</AlertBox>}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+        <input type="date" value={filters.from} onChange={(event) => setFilter('from', event.target.value)} className="ui-input ui-input-sm" />
+        <input type="date" value={filters.to} onChange={(event) => setFilter('to', event.target.value)} className="ui-input ui-input-sm" />
+        <select value={filters.paid} onChange={(event) => setFilter('paid', event.target.value)} className="ui-input ui-input-sm">
+          <option value="">All paid states</option>
+          <option value="false">Unpaid</option>
+          <option value="true">Paid</option>
+        </select>
+        <select value={filters.status} onChange={(event) => setFilter('status', event.target.value)} className="ui-input ui-input-sm">
+          <option value="">All statuses</option>
+          {MUTABLE_COMMISSION_STATUSES.concat('paid').map((status) => <option key={status} value={status}>{status}</option>)}
+        </select>
+        <input placeholder="Client login" value={filters.client_login} onChange={(event) => setFilter('client_login', event.target.value)} className="ui-input ui-input-sm" />
+        <input placeholder="Symbol" value={filters.symbol} onChange={(event) => setFilter('symbol', event.target.value)} className="ui-input ui-input-sm" />
       </div>
-
-      {loading ? (
-        <div className="flex justify-center py-8"><Loader size={16} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
-      ) : rows === null ? (
-        <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>Select a date range and click Load.</div>
-      ) : rows.length === 0 ? (
-        <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>No commissions found.</div>
-      ) : (
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Active filters: {activeFilterText}</span>
+        <div className="flex justify-end gap-2">
+          <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={clearFilters} disabled={loading}>Clear filters</button>
+          <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Load</button>
+          <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={13} /> CSV</button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Client</th>
-              <th>Deal</th>
-              <th>Symbol</th>
-              <th style={{ textAlign: 'right' }}>Lots</th>
-              <th>Type</th>
-              <th style={{ textAlign: 'right' }}>Commission</th>
-              <th style={{ textAlign: 'right' }}>Override</th>
-              <th style={{ textAlign: 'right' }}>Total</th>
-              <th>Status</th>
-              <th>Date</th>
+              <th>ID</th><th>Client</th><th>Deal</th><th>Symbol</th><th>Lots</th><th>Type</th><th>Commission</th><th>Override</th><th>Total</th><th>Status</th><th>Paid</th><th>Calculated</th><th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td className="tabular" style={{ color: 'var(--text-3)' }}>{r.id}</td>
-                <td className="tabular font-mono">{r.client_login}</td>
-                <td className="tabular" style={{ color: 'var(--text-3)' }}>{r.deal_ticket}</td>
-                <td style={{ fontWeight: 500 }}>{r.symbol}</td>
-                <td className="tabular" style={{ textAlign: 'right' }}>{fmt(r.lots)}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{r.commission_type}</span></td>
-                <td className="tabular" style={{ textAlign: 'right' }}>{fmt(r.commission_amount)}</td>
-                <td className="tabular" style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmt(r.override_amount)}</td>
-                <td className="tabular font-semibold" style={{ textAlign: 'right', color: 'var(--ok-text)' }}>{fmt(r.total_amount)}</td>
-                <td>
-                  <span className={`ui-badge text-[9px] ${r.paid ? 'ui-badge-success' : 'ui-badge-warn'}`}>
-                    {r.paid ? 'PAID' : 'UNPAID'}
-                  </span>
+            {loading ? (
+              <tr><td colSpan={13}><EmptyState>Loading commissions...</EmptyState></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={13}><EmptyState>No commissions match the active filters. Check the date range or clear optional filters.</EmptyState></td></tr>
+            ) : rows.map((row) => (
+              <tr key={row.id}>
+                <td className="tabular">{row.id}</td>
+                <td className="tabular font-mono">{row.client_login}</td>
+                <td className="tabular">{row.deal_ticket}</td>
+                <td>{row.symbol}</td>
+                <td className="tabular">{fmt(row.lots)}</td>
+                <td><span className="ui-badge ui-badge-neutral text-[9px]">{row.commission_type}</span></td>
+                <td className="tabular">{fmt(row.commission_amount)}</td>
+                <td className="tabular">{fmt(row.override_amount)}</td>
+                <td className="tabular font-semibold">{fmt(row.total_amount)}</td>
+                <td><StatusBadge status={row.status} /></td>
+                <td><span className={`ui-badge text-[9px] ${row.paid ? 'ui-badge-success' : 'ui-badge-warn'}`}>{row.paid ? 'PAID' : 'UNPAID'}</span></td>
+                <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(row.calculated_at)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <div className="inline-flex gap-1">
+                    {MUTABLE_COMMISSION_STATUSES.map((status) => (
+                      <button key={status} className="ui-btn ui-btn-secondary ui-btn-xs" disabled={!canSetCommissionStatus(row, status) || mutatingId === row.id} onClick={() => setStatus(row, status)}>
+                        {status}
+                      </button>
+                    ))}
+                  </div>
                 </td>
-                <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(r.calculated_at)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+const StatsTab = ({ login }) => {
+  const [filters, setFilters] = useState(defaultStatsFilters);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await ibApi.stats({
+        login,
+        ...(filters.from ? { from: filters.from } : {}),
+        ...(filters.to ? { to: filters.to } : {}),
+      });
+      setStats(normalizeStats(response));
+    } catch (err) {
+      setStats(null);
+      setError(err.message || 'Failed to load IB stats.');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, login]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const activeFilterText = `Date: ${filters.from || 'any'} to ${filters.to || 'any'}`;
+  const clearFilters = () => setFilters(defaultStatsFilters());
+
+  const cards = [
+    ['Client Count', stats?.client_count],
+    ['Active Clients', stats?.active_clients],
+    ['Total Lots', stats?.total_lots],
+    ['Total Commissions', stats?.total_commissions],
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {error && <AlertBox>{error}</AlertBox>}
+      <div className="flex flex-wrap gap-2">
+        <input type="date" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} className="ui-input ui-input-sm" />
+        <input type="date" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} className="ui-input ui-input-sm" />
+        <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={clearFilters} disabled={loading}>Clear filters</button>
+        <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</button>
+      </div>
+      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Active filters: {activeFilterText}</span>
+      {loading ? <EmptyState>Loading stats...</EmptyState> : (
+        <div className="grid grid-cols-2 gap-3">
+          {cards.map(([label, value]) => (
+            <div key={label} className="ui-card p-4">
+              <div className="text-[10px] uppercase" style={{ color: 'var(--text-3)' }}>{label}</div>
+              <div className="text-xl font-semibold tabular mt-1" style={{ color: 'var(--text)' }}>{Number(value || 0).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 };
 
-// ── Main Drawer ───────────────────────────────────────────────────────────────
-const IBDetailDrawer = ({ login, onClose, onRefresh }) => {
-  const [ib, setIb]               = useState(null);
-  const [stats, setStats]         = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
-  const [activeTab, setActiveTab] = useState('Overview');
-  const [showPayout, setShowPayout]   = useState(false);
-  const [showLinker, setShowLinker]   = useState(false);
+const IBDetailDrawer = ({ login, initialTab = 'profile', onClose, onNavigateTab, onRefresh }) => {
+  const { canAct } = usePermissions();
+  const canManageIB = canAct(PERMISSIONS.MANAGE_IB);
+  const [activeTab, setActiveTab] = useState(TABS.some((tab) => tab.id === initialTab) ? initialTab : 'profile');
+  const [ib, setIb] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [showLinker, setShowLinker] = useState(false);
+  const [childParentLogin, setChildParentLogin] = useState('');
 
-  const load = async () => {
+  useEffect(() => {
+    const safeTab = TABS.some((tab) => tab.id === initialTab) ? initialTab : 'profile';
+    setActiveTab(safeTab);
+  }, [initialTab]);
+
+  const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setError('');
     try {
-      const data = await ibGet(login);
-      setIb(data);
+      const response = await ibApi.get(login);
+      setIb(normalizeIBAccount(normalizeObject(response, ['account']) || response));
     } catch (err) {
-      setError(err.message);
+      setIb(null);
+      setError(err.message || 'Failed to load IB details.');
     } finally {
       setLoading(false);
     }
+  }, [login]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const selectTab = (tabId) => {
+    setActiveTab(tabId);
+    onNavigateTab?.(tabId);
   };
 
-  const loadStats = async () => {
-    setStatsLoading(true);
+  const refreshAll = async () => {
+    await load();
+    onRefresh?.();
+  };
+
+  const handleStatusAction = async (action) => {
+    const notes = action === 'reject'
+      ? window.prompt(`Reason for rejecting IB ${login}:`, '')
+      : window.prompt(`Optional notes for ${action} IB ${login}:`, '');
+    if (notes === null) return;
+    if (!window.confirm(`Confirm ${action} for IB ${login}?`)) return;
+
+    setStatusBusy(true);
+    setError('');
+    setNotice('');
     try {
-      const s = await ibStats({ login, from: monthStart(), to: today() });
-      setStats(s);
-    } catch { /* non-critical */ }
-    finally { setStatsLoading(false); }
+      if (action === 'approve') await ibApi.approve(login, notes);
+      if (action === 'reject') await ibApi.reject(login, notes);
+      if (action === 'suspend') await ibApi.suspend(login, notes);
+      if (action === 'activate') await ibApi.activate(login, notes);
+      setNotice(`IB ${login} ${action} completed.`);
+      refreshAll();
+    } catch (err) {
+      setError(err.message || `Failed to ${action} IB.`);
+    } finally {
+      setStatusBusy(false);
+    }
   };
 
-  useEffect(() => { load(); loadStats(); }, [login]);
+  const handleRemove = async () => {
+    if (!canManageIB) {
+      setError('Your role does not have permission to manage IB accounts.');
+      return;
+    }
+    if (!canRemoveIB(ib)) {
+      setError('This IB account cannot be removed.');
+      return;
+    }
+
+    const loginText = String(login);
+    const typedLogin = window.prompt(`Type ${loginText} to remove IB ${loginText}. This archives the IB and keeps audit history.`, '');
+    if (typedLogin === null) return;
+    if (typedLogin.trim() !== loginText) {
+      setNotice('');
+      setError('Typed IB login did not match. Remove cancelled.');
+      return;
+    }
+
+    setStatusBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await ibApi.remove(login, false);
+      setNotice(`IB ${login} remove request completed.`);
+      await refreshAll();
+    } catch (err) {
+      setError(err.message || 'Failed to remove IB.');
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  const saveNotes = async (notes) => {
+    setError('');
+    setNotice('');
+    try {
+      await ibApi.update({ login, notes });
+      setNotice('Notes saved.');
+      await refreshAll();
+    } catch (err) {
+      setError(err.message || 'Failed to save notes.');
+    }
+  };
+
+  const tabContent = useMemo(() => {
+    if (loading) return <EmptyState>Loading IB details...</EmptyState>;
+    if (!ib) return <EmptyState>No IB detail found.</EmptyState>;
+
+    if (activeTab === 'profile') {
+      return (
+        <ProfileTab
+          ib={ib}
+          actionBusy={statusBusy}
+          canManageIB={canManageIB}
+          onStatusAction={handleStatusAction}
+          onRemove={handleRemove}
+          onSaveNotes={saveNotes}
+        />
+      );
+    }
+    if (activeTab === 'tree') {
+      return <TreeTab login={login} onCreateChild={setChildParentLogin} />;
+    }
+    if (activeTab === 'clients') {
+      return <ClientsTab login={login} onOpenLinker={() => setShowLinker(true)} />;
+    }
+    if (activeTab === 'plans') {
+      return <PlansTab login={login} />;
+    }
+    if (activeTab === 'ledger') {
+      return <LedgerTab login={login} onRefreshRelated={refreshAll} />;
+    }
+    if (activeTab === 'payout') {
+      return <IBPayoutModal login={login} embedded onSuccess={refreshAll} />;
+    }
+    if (activeTab === 'stats') {
+      return <StatsTab login={login} />;
+    }
+    return null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, ib, loading, login, statusBusy]);
 
   return (
     <>
-      {/* Drawer backdrop */}
       <div className="fixed inset-0 z-[8000]" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onClose} />
-
-      {/* Drawer panel */}
       <div
         className="fixed top-0 right-0 h-full flex flex-col z-[8001]"
-        style={{ width: 560, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-2xl)' }}
+        style={{ width: 'min(980px, 92vw)', background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-2xl)' }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
           <div className="flex items-center gap-2">
             <User size={16} style={{ color: 'var(--accent)' }} />
@@ -491,11 +869,13 @@ const IBDetailDrawer = ({ login, onClose, onRefresh }) => {
                 IB {login}
                 {ib?.company_name && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>{ib.company_name}</span>}
               </div>
-              {ib && <div className="text-[10px]" style={{ color: 'var(--muted)' }}>Referral: {ib.referral_code}</div>}
+              <div className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                {ib?.referral_code ? `Referral: ${ib.referral_code}` : 'Broker-scoped detail'}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={() => { load(); loadStats(); }} title="Refresh">
+            <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={refreshAll} title="Refresh">
               <RefreshCw size={13} />
             </button>
             <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={onClose}>
@@ -504,47 +884,50 @@ const IBDetailDrawer = ({ login, onClose, onRefresh }) => {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-          {TABS.map(t => (
+        <div className="flex shrink-0 overflow-x-auto" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+          {TABS.map((tab) => (
             <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className="px-4 py-2.5 text-xs font-medium transition-colors"
+              key={tab.id}
+              onClick={() => selectTab(tab.id)}
+              className="px-4 py-2.5 text-xs font-medium transition-colors whitespace-nowrap"
               style={{
-                color: activeTab === t ? 'var(--accent-text)' : 'var(--text-3)',
-                borderBottom: activeTab === t ? '2px solid var(--accent)' : '2px solid transparent',
+                color: activeTab === tab.id ? 'var(--accent-text)' : 'var(--text-3)',
+                borderBottom: activeTab === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
                 background: 'transparent',
               }}
             >
-              {t}
+              {tab.id === 'stats' && <BarChart3 size={12} className="inline mr-1" />}
+              {tab.id === 'payout' && <DollarSign size={12} className="inline mr-1" />}
+              {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading && (
-            <div className="flex justify-center py-16"><Loader size={20} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
-          )}
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded text-xs" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
-              <AlertTriangle size={14} /> {error}
-            </div>
-          )}
-          {!loading && !error && (
-            <>
-              {activeTab === 'Overview'    && <OverviewTab ib={ib} stats={stats} statsLoading={statsLoading} onRefresh={load} />}
-              {activeTab === 'Plans'       && <PlansTab login={login} />}
-              {activeTab === 'Clients'     && <ClientsTab login={login} onOpenLinker={() => setShowLinker(true)} />}
-              {activeTab === 'Commissions' && <CommissionsTab login={login} onOpenPayout={() => setShowPayout(true)} />}
-            </>
-          )}
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
+          {error && <AlertBox>{error}</AlertBox>}
+          {notice && <AlertBox tone="success">{notice}</AlertBox>}
+          {tabContent}
         </div>
       </div>
 
-      {showPayout && <IBPayoutModal login={login} onClose={() => setShowPayout(false)} onSuccess={() => { setShowPayout(false); load(); }} />}
-      {showLinker && <IBClientLinker ibLogin={login} onClose={() => setShowLinker(false)} onSuccess={onRefresh} />}
+      {showLinker && (
+        <IBClientLinker
+          ibLogin={login}
+          onClose={() => setShowLinker(false)}
+          onSuccess={refreshAll}
+        />
+      )}
+
+      {childParentLogin && (
+        <IBCreateModal
+          parentLogin={childParentLogin}
+          onClose={() => setChildParentLogin('')}
+          onSuccess={() => {
+            setChildParentLogin('');
+            refreshAll();
+          }}
+        />
+      )}
     </>
   );
 };

@@ -6,7 +6,6 @@ import {
 } from '../config/backendTarget.js';
 import { buildManagerApiUrl, updateDynamicEndpoints } from '../config/endpoints.js';
 import { normalizeTokenExpiresAt, setSession } from './authService.js';
-import { desktopFetch } from './desktopHttp.js';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
@@ -405,7 +404,7 @@ export const normalizeBrokerId = (value) => value.trim().toLowerCase();
 const postJson = async (url, body) => {
   let response;
   try {
-    response = await desktopFetch(url, {
+    response = await fetch(url, {
       method: 'POST',
       credentials: 'omit',
       headers: {

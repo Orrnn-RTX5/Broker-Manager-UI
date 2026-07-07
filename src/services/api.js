@@ -1,4 +1,5 @@
 import apiClient from './apiClient';
+import ibApi from './ibApi';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
 import { API_HOST, updateDynamicEndpoints } from '../config/endpoints';
@@ -496,23 +497,34 @@ export const getAdvertisingCampaigns = async () => {
 };
 
 // ─── IB Management ───────────────────────────────────────────────────────────
-export const ibList = () => apiClient.get('/IBList');
-export const ibGet = (login) => apiClient.get(`/IBGet?${query({ login })}`);
-export const ibCreate = (body) => apiClient.post('/IBCreate', body);
-export const ibUpdate = (body) => apiClient.post('/IBUpdate', body);
-export const ibDelete = (login) => apiClient.post('/IBDelete', { login });
-export const ibLinkClient = (body) => apiClient.post('/IBLinkClient', body);
-export const ibUnlinkClient = (body) => apiClient.post('/IBUnlinkClient',
-  body && typeof body === 'object' ? body : { client_login: body }
-);
-export const ibClientList = (login) => apiClient.get(`/IBClientList?${query({ login })}`);
-export const ibClientListAll = (login) => apiClient.get(`/IBClientListAll?${query({ login })}`);
-export const ibPlanCreate = (body) => apiClient.post('/IBPlanCreate', body);
-export const ibPlanList = (login) => apiClient.get(`/IBPlanList?${query({ login })}`);
-export const ibCommissions = (params) => apiClient.get(`/IBCommissions?${new URLSearchParams(params).toString()}`);
-export const ibCommissionPay = (body) => apiClient.post('/IBCommissionPay', body);
-export const ibStats = (params) => apiClient.get(`/IBStats?${new URLSearchParams(params).toString()}`);
-export const ibTree = (login) => apiClient.get(`/IBTree?${query({ login })}`);
+export const ibList = () => ibApi.list();
+export const ibGet = (login) => ibApi.get(login);
+export const ibCreate = (body) => ibApi.create(body);
+export const ibUpdate = (params) => ibApi.update(params);
+export const ibApprove = (login, notes) => ibApi.approve(login, notes);
+export const ibReject = (login, notes) => ibApi.reject(login, notes);
+export const ibSuspend = (login, notes) => ibApi.suspend(login, notes);
+export const ibDelete = (login, force = false) => ibApi.remove(login, force);
+export const ibLinkClient = (body) => ibApi.linkClient(body);
+export const ibUnlinkClient = (body) => ibApi.unlinkClient(body && typeof body === 'object' ? body.client_login : body);
+export const ibClientList = (login) => ibApi.directClients(login);
+export const ibClientListAll = (login) => ibApi.allClients(login);
+export const ibPlanCreate = (body) => ibApi.createPlan(body);
+export const ibPlanUpdate = (body) => ibApi.updatePlan(body);
+export const ibPlanEnable = (id) => ibApi.enablePlan(id);
+export const ibPlanDisable = (id) => ibApi.disablePlan(id);
+export const ibPlanDelete = (id) => ibApi.deletePlan(id);
+export const ibPlanList = (login) => ibApi.listPlans(login);
+export const ibCommissions = (params) => ibApi.commissions(params);
+export const ibCommissionStatus = (commissionId, status) => ibApi.setCommissionStatus(commissionId, status);
+export const ibPayoutRequest = (params) => ibApi.payoutRequest(params);
+export const ibPayoutApprove = (params) => ibApi.payoutApprove(params);
+export const ibPayoutReject = (params) => ibApi.payoutReject(params);
+export const ibCommissionPay = () => {
+  throw new Error('Legacy direct IB payout is disabled in the manager UI. Use the payout request workflow.');
+};
+export const ibStats = (params) => ibApi.stats(params);
+export const ibTree = (login) => ibApi.tree(login);
 
 // ─── Symbol Management ────────────────────────────────────────────────────────
 export const symbolsList = () => apiClient.get('/SymbolsList');

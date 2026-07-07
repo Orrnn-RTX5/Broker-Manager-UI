@@ -1,41 +1,73 @@
-import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
-import { ibCreate } from '../../../services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Loader, Plus, X } from 'lucide-react';
+import ibApi from '../../../services/ibApi';
+import {
+  buildIBCreatePayload,
+  isEligibleIBParent,
+  normalizeIBAccount,
+  normalizeRecords,
+  validateIBCreateInput,
+} from '../ibDomain';
 
 const Field = ({ label, children, hint }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>{label}</label>
+  <label className="flex flex-col gap-1">
+    <span className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>{label}</span>
     {children}
     {hint && <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{hint}</span>}
-  </div>
+  </label>
 );
 
-const IBCreateModal = ({ onClose, onSuccess }) => {
+const IBCreateModal = ({ parentLogin = '', onClose, onSuccess }) => {
   const [form, setForm] = useState({
-    login: '', parent_ib_login: '', company_name: '', referral_code: '', notes: '',
+    login: '',
+    parent_ib_login: parentLogin ? String(parentLogin) : '',
+    company_name: '',
+    referral_code: '',
+    notes: '',
   });
+  const [ibOptions, setIbOptions] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  useEffect(() => {
+    let alive = true;
+    setLoadingOptions(true);
+    ibApi.list()
+      .then((data) => {
+        if (!alive) return;
+        setIbOptions(normalizeRecords(data, ['accounts']).map(normalizeIBAccount));
+      })
+      .catch(() => {
+        if (alive) setIbOptions([]);
+      })
+      .finally(() => {
+        if (alive) setLoadingOptions(false);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const usableParentOptions = useMemo(() => (
+    ibOptions.filter(isEligibleIBParent)
+  ), [ibOptions]);
+
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   const handleSubmit = async () => {
-    if (!form.login) { setError('Login is required.'); return; }
+    const errors = validateIBCreateInput(form);
+    if (errors.length) {
+      setError(errors[0]);
+      return;
+    }
+
     setSaving(true);
-    setError(null);
+    setError('');
     try {
-      const body = {
-        login: Number(form.login),
-        ...(form.parent_ib_login ? { parent_ib_login: Number(form.parent_ib_login) } : { parent_ib_login: null }),
-        ...(form.company_name  ? { company_name: form.company_name }   : {}),
-        ...(form.referral_code ? { referral_code: form.referral_code } : {}),
-        ...(form.notes         ? { notes: form.notes }                 : {}),
-      };
-      const result = await ibCreate(body);
+      const result = await ibApi.create(buildIBCreatePayload(form));
       onSuccess?.(result);
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to create IB.');
     } finally {
       setSaving(false);
     }
@@ -43,40 +75,58 @@ const IBCreateModal = ({ onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
-      <div className="ui-card flex flex-col" style={{ width: 420, boxShadow: 'var(--shadow-lg)' }}>
+      <div className="ui-card flex flex-col" style={{ width: 460, maxHeight: '88vh', boxShadow: 'var(--shadow-lg)' }}>
         <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
           <div className="flex items-center gap-2">
             <Plus size={15} style={{ color: 'var(--accent)' }} />
-            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>New IB Account</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Create IB account</span>
           </div>
           <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={onClose}><X size={14} /></button>
         </div>
 
-        <div className="p-4 flex flex-col gap-3">
+        <div className="p-4 flex flex-col gap-3 overflow-y-auto">
           {error && (
-            <div className="text-xs px-3 py-2 rounded" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>{error}</div>
+            <div className="text-xs px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
+              <AlertTriangle size={13} /> {error}
+            </div>
           )}
-          <Field label="Login *">
-            <input type="number" value={form.login} onChange={e => set('login', e.target.value)} className="ui-input ui-input-sm" placeholder="e.g. 5001" autoFocus />
+
+          <Field label="Trading account login *" hint="The account must already exist in the current broker.">
+            <input type="number" value={form.login} onChange={(event) => setField('login', event.target.value)} className="ui-input ui-input-sm" autoFocus />
           </Field>
-          <Field label="Parent IB Login" hint="Leave blank for top-level IB">
-            <input type="number" value={form.parent_ib_login} onChange={e => set('parent_ib_login', e.target.value)} className="ui-input ui-input-sm" placeholder="optional" />
+
+          <Field label="Parent IB" hint="Leave blank for a top-level IB. Only approved or active IBs can be selected as parents.">
+            <select
+              value={form.parent_ib_login}
+              onChange={(event) => setField('parent_ib_login', event.target.value)}
+              className="ui-input ui-input-sm"
+              disabled={loadingOptions}
+            >
+              <option value="">Top-level IB</option>
+              {usableParentOptions.map((ib) => (
+                <option key={ib.login} value={ib.login}>
+                  {ib.login} {ib.company_name ? `- ${ib.company_name}` : ''}
+                </option>
+              ))}
+            </select>
           </Field>
-          <Field label="Company Name">
-            <input type="text" value={form.company_name} onChange={e => set('company_name', e.target.value)} className="ui-input ui-input-sm" placeholder="e.g. Acme Partners" />
+
+          <Field label="Company name">
+            <input value={form.company_name} onChange={(event) => setField('company_name', event.target.value)} className="ui-input ui-input-sm" />
           </Field>
-          <Field label="Referral Code" hint="Auto-generated if blank (8-char hex)">
-            <input type="text" value={form.referral_code} onChange={e => set('referral_code', e.target.value)} className="ui-input ui-input-sm" placeholder="optional" />
+          <Field label="Referral code" hint="Backend generates a code when blank.">
+            <input value={form.referral_code} onChange={(event) => setField('referral_code', event.target.value)} className="ui-input ui-input-sm" />
           </Field>
           <Field label="Notes">
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} className="ui-input ui-input-sm" rows={2} placeholder="optional" style={{ resize: 'vertical' }} />
+            <textarea value={form.notes} onChange={(event) => setField('notes', event.target.value)} className="ui-input ui-input-sm" rows={3} />
           </Field>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-4 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
           <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Creating…' : 'Create IB'}
+            {saving ? <Loader size={13} className="animate-spin" /> : <Plus size={13} />}
+            Create IB
           </button>
         </div>
       </div>

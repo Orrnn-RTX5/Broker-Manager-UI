@@ -27,23 +27,14 @@ import GroupsPage from './features/groups/GroupsPage';
 import GroupDetailsPage from './features/groups/GroupDetailsPage';
 import DealerQueuePage from './features/dealer/DealerQueuePage';
 import RestrictedAccountsPage from './features/dealer/RestrictedAccountsPage';
+import IBListPage from './features/ib/IBListPage';
+import IBTreePage from './features/ib/IBTreePage';
 import SymbolsOverviewPage from './features/symbols/SymbolsOverviewPage';
 import SymbolListPage from './features/symbols/SymbolListPage';
 import SymbolManagementPage from './features/symbols/SymbolManagementPage';
-import ComingSoon from './components/ComingSoon';
 
 const AUTH_STORAGE_POLL_MS = 2000;
 const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
-
-const IBComingSoonPage = ({ title }) => (
-  <div className="p-4">
-    <ComingSoon
-      title={title}
-      description="This module is coming soon."
-      height={360}
-    />
-  </div>
-);
 
 const SessionExpiryRedirect = ({ isAuthenticated }) => {
   const location = useLocation();
@@ -230,8 +221,9 @@ function App() {
               <Route path="/dealing" element={<DealsPage />} />
               <Route path="/dealer/queue" element={<RequirePermission permission="dealer_queue"><DealerQueuePage /></RequirePermission>} />
               <Route path="/dealer/restrictions" element={<RequirePermission permission="view_accounts"><RestrictedAccountsPage /></RequirePermission>} />
-              <Route path="/ib" element={<RequirePermission permission="manage_ib"><IBComingSoonPage title="IB Accounts" /></RequirePermission>} />
-              <Route path="/ib/tree" element={<RequirePermission permission="manage_ib"><IBComingSoonPage title="IB Tree" /></RequirePermission>} />
+              <Route path="/ib" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
+              <Route path="/ib/tree" element={<RequirePermission permission="manage_ib"><IBTreePage /></RequirePermission>} />
+              <Route path="/ib/:login/:tab?" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
               <Route path="/groups" element={<RequirePermission permission="manage_groups"><GroupsPage /></RequirePermission>} />
               <Route path="/groups/:groupName" element={<RequirePermission permission="manage_groups"><GroupDetailsPage /></RequirePermission>} />
               <Route path="/symbols" element={<RequirePermission permission="manage_groups"><SymbolsOverviewPage /></RequirePermission>} />
