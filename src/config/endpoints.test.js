@@ -2,6 +2,7 @@ import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendFeedAuthToWsUrl,
+  buildBrokerApiUrl,
   buildFeedStatusUrl,
   buildFeedWsUrl,
   buildManagerApiUrl,
@@ -9,6 +10,7 @@ import {
   buildManagerApiPath,
   resolveFeedAuthRequired,
   resolveFeedWsAuth,
+  shouldUseManagerDevProxy,
   shouldUseManagerProxyPrefix,
 } from './endpoints.js';
 
@@ -67,6 +69,44 @@ test('direct broker backend URLs bypass the /manager proxy prefix', () => {
   assert.equal(
     shouldUseManagerProxyPrefix('https://testbrokerbackend.orrnn.com', { server_ip: 'testbrokerbackend.orrnn.com' }),
     true
+  );
+});
+
+test('configured root-route backends bypass the /manager prefix', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX: 'true',
+  };
+
+  assert.equal(
+    shouldUseManagerProxyPrefix('https://fxtrustbrokerbackend.orrnn.com'),
+    false
+  );
+  assert.equal(buildManagerApiPath('/ConnectionStatus', false), '/ConnectionStatus');
+});
+
+test('manager dev proxy is enabled only for local Vite development', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_MANAGER_USE_DEV_PROXY: 'true',
+  };
+
+  assert.equal(shouldUseManagerDevProxy(true, true), true);
+  assert.equal(shouldUseManagerDevProxy(false, true), false);
+  assert.equal(shouldUseManagerDevProxy(true, false), false);
+});
+
+test('manager dev proxy remains opt-in', () => {
+  assert.equal(shouldUseManagerDevProxy(true, true), false);
+});
+
+test('broker v2 API paths never receive the legacy /manager prefix', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'test',
+    backend_url: 'https://fxtrustbrokerbackend.orrnn.com',
+  }));
+
+  assert.equal(
+    buildBrokerApiUrl('/api/v2/positions/history'),
+    'https://fxtrustbrokerbackend.orrnn.com/api/v2/positions/history'
   );
 });
 
@@ -176,6 +216,26 @@ test('feed websocket URL allows tokenless feeds when auth is not required', () =
   assert.equal(url.searchParams.has('token'), false);
 });
 
+test('runtime feed URL overrides stale discovery websocket routes', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_FEED_WS_URL: 'wss://fxtrustsuperbackned.orrnn.com/central-market-data/ws/feed?broker_id=TEST',
+    VITE_FEED_BROKER_TOKEN: 'broker-local-only-token',
+    VITE_FEED_AUTH_REQUIRED: 'false',
+    VITE_FEED_SEND_TOKEN: 'false',
+  };
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'TEST',
+    feed_wss_url: 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed',
+  }));
+
+  const url = new URL(buildFeedWsUrl());
+  assert.equal(url.protocol, 'wss:');
+  assert.equal(url.hostname, 'fxtrustsuperbackned.orrnn.com');
+  assert.equal(url.pathname, '/central-market-data/ws/feed');
+  assert.equal(url.searchParams.get('broker_id'), 'TEST');
+  assert.equal(url.searchParams.has('token'), false);
+});
+
 test('feed websocket URL prefers secure discovery feed URLs over plain ws_url', () => {
   sessionStorage.setItem('broker_info', JSON.stringify({
     broker_id: 'testorrnn',
@@ -223,6 +283,9 @@ test('feed auth required flag is parsed from broker info or runtime config', () 
 
   globalThis.__RTX_RUNTIME_CONFIG__ = { FEED_AUTH_REQUIRED: 'true' };
   assert.equal(resolveFeedAuthRequired({}), true);
+
+  globalThis.__RTX_RUNTIME_CONFIG__ = { FEED_AUTH_REQUIRED: 'false' };
+  assert.equal(resolveFeedAuthRequired({ feed_auth_required: true }), false);
 });
 
 test('feed websocket URL fails closed when auth is required and only manager session tokens are present', () => {

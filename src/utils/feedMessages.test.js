@@ -22,3 +22,15 @@ test('extractFeedTicks accepts batched ticks frames', () => {
   assert.equal(ticks[0].symbol, '1000XBONK');
   assert.equal(ticks[1].ask, 63310.34);
 });
+
+test('extractFeedTicks accepts the central market-data newline frame', () => {
+  const ticks = extractFeedTicks(
+    '{"broker_id":"TEST","symbol":"ZARJPY","bid":9.939,"ask":9.949,"source_timestamp":1787573419,"receive_timestamp":1787573419915,"sequence":12759610,"provider":"equinix"}\n'
+  );
+
+  assert.equal(ticks.length, 1);
+  assert.equal(ticks[0].broker_id, 'TEST');
+  assert.equal(ticks[0].symbol, 'ZARJPY');
+  assert.equal(ticks[0].bid, 9.939);
+  assert.equal(ticks[0].ask, 9.949);
+});

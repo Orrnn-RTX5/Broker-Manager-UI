@@ -488,7 +488,8 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
         'wsUrl',
       ];
 
-  const explicit = getValue(brokerInfo, explicitKeys) || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']);
+  const runtimeFeedOverride = getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']);
+  const explicit = runtimeFeedOverride || getValue(brokerInfo, explicitKeys) || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']);
   if (explicit) {
     const resolvedExplicit = isDesktopBackendTarget()
       ? toDesktopWsUrl(explicit)

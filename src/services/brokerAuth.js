@@ -11,7 +11,10 @@ const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
 const PLATFORM_DISCOVERY_BASE_URL = 'https://superbackend.orrnn.com';
 
-export const DISCOVERY_BASE_URL = PLATFORM_DISCOVERY_BASE_URL;
+export const DISCOVERY_BASE_URL = getRuntimeConfigValue(
+  ['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'],
+  PLATFORM_DISCOVERY_BASE_URL
+);
 
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
 const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';

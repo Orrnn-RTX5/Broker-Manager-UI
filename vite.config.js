@@ -24,9 +24,22 @@ export default defineConfig(({ mode, command }) => {
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
   const wsHost = env.VITE_WS_HOST || apiHost
+  const feedWsUrl = env.VITE_FEED_WS_URL || env.FEED_WS_URL || ''
+  const wsFeedPath = env.VITE_WS_FEED_PATH || '/ws/feed'
   const proxySecure = env.VITE_PROXY_INSECURE !== 'true'
+  const stripManagerPrefix = env.VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX === 'true'
   const isDesktopMode = mode === 'electron' || mode === 'desktop'
-  const wsProxyTarget = wsHost.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:')
+  const wsProxySource = feedWsUrl || wsHost
+  const wsProxyUrl = new URL(wsProxySource.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:'))
+  const wsProxyTarget = wsProxyUrl.origin
+  const wsProxyPath = feedWsUrl ? wsProxyUrl.pathname : wsFeedPath
+  const stripFeedProxyOrigin = env.VITE_FEED_PROXY_STRIP_ORIGIN === 'true'
+  const rewriteManagerProxyPath = (path) => stripManagerPrefix
+    ? path.replace(/^\/api\/manager(?=\/|\?|$)/i, '') || '/'
+    : path.replace(/^\/api/i, '')
+  const rewriteLegacyManagerPath = (path) => stripManagerPrefix
+    ? path.replace(/^\/manager/i, '') || '/'
+    : path
 
   return {
     base: isDesktopMode ? './' : '/',
@@ -42,27 +55,28 @@ export default defineConfig(({ mode, command }) => {
     esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
     server: {
       proxy: {
-        '/api/manager': {
+        '^/api/manager(?:/|\\?|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
-          rewrite: (path) => path.replace(/^\/api/, ''),
+          rewrite: rewriteManagerProxyPath,
         },
-        '/api/v2': {
+        '^/api/v\\d+(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
-          rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '^/manager(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          rewrite: rewriteLegacyManagerPath,
         },
         '^/Manager(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          rewrite: rewriteLegacyManagerPath,
         },
         // Port 8091 APIs: MarketDepth, SessionOverride, SpreadSchedule
         '/ext-api': {
@@ -71,15 +85,19 @@ export default defineConfig(({ mode, command }) => {
           secure: proxySecure,
           rewrite: (path) => path.replace(/^\/ext-api/, ''),
         },
-        '/ws/feed': {
+        [wsProxyPath]: {
           target: wsProxyTarget,
           changeOrigin: true,
           secure: proxySecure,
           ws: true,
-          rewriteWsOrigin: true,
-          headers: {
-            Origin: wsProxyTarget,
-          },
+          rewriteWsOrigin: !stripFeedProxyOrigin,
+          configure: stripFeedProxyOrigin
+            ? (proxy) => {
+                proxy.on('proxyReqWs', (proxyRequest) => {
+                  proxyRequest.removeHeader('origin')
+                })
+              }
+            : undefined,
         },
       }
     }

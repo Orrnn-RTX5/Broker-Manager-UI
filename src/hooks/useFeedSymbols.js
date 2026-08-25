@@ -3,6 +3,7 @@ import {
   buildFeedWsUrl,
   FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE,
   getFeedWsDisabledMessage,
+  resolveFeedAuthRequired,
 } from '../config/endpoints';
 import { fetchSymbolMetadataFallback, getSymbolName } from '../services/symbolMetadata';
 import { extractFeedTicks } from '../utils/feedMessages';
@@ -82,7 +83,7 @@ export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbol
         return;
       }
 
-      if (fallback?.feedAuthRequired && !hasFeedQueryToken(wsUrl)) {
+      if (resolveFeedAuthRequired({ feed_auth_required: fallback?.feedAuthRequired }) && !hasFeedQueryToken(wsUrl)) {
         finish(FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE);
         return;
       }

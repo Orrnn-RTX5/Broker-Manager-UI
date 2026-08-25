@@ -117,8 +117,39 @@ const joinUrl = (base, path = '') => {
   return `${trimTrailingSlash(base)}/${normalizedPath.replace(/^\/+/, '')}`;
 };
 
-export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) =>
-  !isDirectBrokerBackendUrl(backendUrl, brokerInfo);
+const isLocalHttpOrigin = () => {
+  if (typeof window === 'undefined' || !window.location?.origin) return false;
+  try {
+    const url = new URL(window.location.origin);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const shouldUseManagerDevProxy = (
+  isDev = import.meta.env?.DEV === true,
+  isLocalOrigin = isLocalHttpOrigin()
+) => {
+  const explicit = getRuntimeConfigValue([
+    'MANAGER_USE_DEV_PROXY',
+    'VITE_MANAGER_USE_DEV_PROXY',
+  ], 'false');
+
+  return isDev && isLocalOrigin && explicit.toLowerCase() === 'true';
+};
+
+export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) => {
+  const stripManagerPrefix = getRuntimeConfigValue([
+    'MANAGER_PROXY_STRIP_MANAGER_PREFIX',
+    'VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX',
+  ]).toLowerCase() === 'true';
+
+  return !stripManagerPrefix && !isDirectBrokerBackendUrl(backendUrl, brokerInfo);
+};
 
 const isNativeAuthApiPath = (path = '') =>
   /^\/api\/v\d+\/(?:auth|admin)(?:\/|\?|$)/i.test(path);
@@ -152,7 +183,22 @@ export const buildManagerApiUrl = (endpoint = '') => {
   const useProxyPrefix = shouldUseManagerProxyPrefix(API_HOST, brokerInfo);
   const managerPath = buildManagerApiPath(raw, useProxyPrefix);
 
+  if (shouldUseManagerDevProxy()) {
+    if (isNativeAuthApiPath(managerPath)) return managerPath;
+    const rootPath = buildManagerApiPath(raw, false);
+    return `/api/manager${rootPath}`;
+  }
+
   return joinUrl(API_HOST, managerPath);
+};
+
+export const buildBrokerApiUrl = (endpoint = '') => {
+  const raw = String(endpoint || '');
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  updateDynamicEndpoints();
+  const path = raw.startsWith('/') ? raw : `/${raw}`;
+  return shouldUseManagerDevProxy() ? path : joinUrl(API_HOST, path);
 };
 
 export const buildExtApiUrl = (endpoint = '') => {
@@ -166,6 +212,7 @@ export const buildExtApiUrl = (endpoint = '') => {
     ? path.startsWith('/') || path.startsWith('?') ? path : `/${path}`
     : '';
 
+  if (shouldUseManagerDevProxy()) return `/ext-api${extPath}`;
   return API_HOST_EXT ? joinUrl(API_HOST_EXT, extPath) : `/ext-api${extPath}`;
 };
 
@@ -289,10 +336,10 @@ export const resolveFeedWsAuth = (brokerInfo = {}) => {
 
 const isTruthyConfigValue = (value = '') => /^(1|true|yes|on|required)$/i.test(String(value || '').trim());
 
-export const resolveFeedAuthRequired = (brokerInfo = {}) => isTruthyConfigValue(firstValue(
-  firstBrokerValue(brokerInfo, FEED_AUTH_REQUIRED_KEYS),
-  getRuntimeConfigValue(['FEED_AUTH_REQUIRED', 'VITE_FEED_AUTH_REQUIRED'])
-));
+export const resolveFeedAuthRequired = (brokerInfo = {}) => {
+  const runtimeOverride = getRuntimeConfigValue(['FEED_AUTH_REQUIRED', 'VITE_FEED_AUTH_REQUIRED']);
+  return isTruthyConfigValue(runtimeOverride || firstBrokerValue(brokerInfo, FEED_AUTH_REQUIRED_KEYS));
+};
 
 export const appendFeedAuthToWsUrl = (wsUrl, auth = {}) => {
   const token = String(auth.token || '').trim();
@@ -332,19 +379,6 @@ const getExistingFeedQueryToken = (wsUrl = '') => {
     } catch {
       return '';
     }
-  }
-};
-
-const isLocalHttpOrigin = () => {
-  if (typeof window === 'undefined' || !window.location?.origin) return false;
-  try {
-    const url = new URL(window.location.origin);
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname)
-    );
-  } catch {
-    return false;
   }
 };
 
@@ -397,8 +431,8 @@ export const buildFeedStatusUrl = () => {
   const storedInfo = readBrokerInfo();
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
   const explicit = firstValue(
-    firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS),
-    getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL'])
+    getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL']),
+    firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS)
   );
 
   if (explicit) return normalizeFeedStatusUrl(explicit);
@@ -418,7 +452,11 @@ export const buildFeedWsUrl = () => {
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
   const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
   const auth = resolveFeedWsAuth(brokerInfo);
-  const token = auth.token || getExistingFeedQueryToken(wsUrl);
+  const sendToken = getRuntimeConfigValue(
+    ['FEED_SEND_TOKEN', 'VITE_FEED_SEND_TOKEN'],
+    'true'
+  ).toLowerCase() !== 'false';
+  const token = sendToken ? (auth.token || getExistingFeedQueryToken(wsUrl)) : '';
   if (!token && resolveFeedAuthRequired(brokerInfo)) {
     throw new FeedWsAuthConfigError();
   }

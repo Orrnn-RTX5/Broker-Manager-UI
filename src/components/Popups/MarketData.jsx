@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
+import {
+  sortMarketWatchQuotes,
+  summarizeMarketWatchQuotes,
+} from '../../utils/marketWatchQuotes';
 
 const MAX_TICKS = 1000;
 
@@ -55,11 +59,15 @@ const MarketData = () => {
   }, [initWebSocket]);
 
   const liveQuotes = useMemo(() => (
-    Object.values(symbols || {})
+    sortMarketWatchQuotes(Object.values(symbols || {})
       .map(normalizeQuote)
-      .filter((quote) => quote.symbol)
-      .sort((a, b) => a.symbol.localeCompare(b.symbol))
+      .filter((quote) => quote.symbol))
   ), [symbols]);
+
+  const quoteSummary = useMemo(
+    () => summarizeMarketWatchQuotes(liveQuotes),
+    [liveQuotes]
+  );
 
   const selectedQuote = useMemo(
     () => liveQuotes.find((quote) => quote.symbol === selectedSymbol) || null,
@@ -123,6 +131,20 @@ const MarketData = () => {
           </tr>
         </thead>
         <tbody className="text-sm">
+          <tr>
+            <td colSpan={3} className="px-3 py-2 text-[11px]" style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ background: isConnected ? 'var(--ok-text)' : 'var(--muted)' }}
+                  aria-hidden="true"
+                />
+                {isConnected
+                  ? `Live feed connected · ${quoteSummary.live} updating · ${quoteSummary.cached} without a fresh tick`
+                  : 'Connecting to live feed…'}
+              </span>
+            </td>
+          </tr>
           {feedError && liveQuotes.length > 0 && (
             <tr>
               <td colSpan={3} className="px-3 py-2 text-[11px]" style={{ color: 'var(--warning, var(--muted))', borderBottom: '1px solid var(--border)' }}>
@@ -142,13 +164,17 @@ const MarketData = () => {
               onClick={() => selectQuote(quote, activeTab)}
               onDoubleClick={() => selectQuote(quote, 'Ticks')}
               className={`market-row cursor-pointer ${selectedSymbol === quote.symbol ? 'is-selected' : ''}`}
-              title={quote.isStale ? 'Cached symbol data; live feed is not connected.' : 'Live market feed'}
+              title={quote.isStale
+                ? (isConnected ? 'Feed connected; this symbol has no fresh tick.' : 'Cached symbol data; live feed is not connected.')
+                : 'Live market feed'}
             >
               <td className="px-3 py-2 flex items-center gap-1.5 font-medium" style={{ borderRight: '1px solid var(--border)' }}>
                 {renderDirectionIcon(quote)}
                 <span>{quote.symbol}</span>
                 {quote.isStale && (
-                  <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>Cached</span>
+                  <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>
+                    {isConnected ? 'No fresh tick' : 'Cached'}
+                  </span>
                 )}
               </td>
               <td className="px-3 py-2 text-right font-mono tabular-nums" style={{ borderRight: '1px solid var(--border)', color: quote.dir === 'up' ? 'var(--ok-text)' : 'var(--danger-text)' }}>

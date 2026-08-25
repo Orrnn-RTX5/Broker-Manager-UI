@@ -2,7 +2,7 @@ import apiClient from './apiClient';
 import ibApi from './ibApi';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
-import { API_HOST, updateDynamicEndpoints } from '../config/endpoints';
+import { buildBrokerApiUrl } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 import { buildPagedEndpoint, normalizePagedResult, normalizePagedStreamResult, normalizePagedTextResult } from '../utils/pagination';
 
@@ -46,17 +46,18 @@ const expireAndThrow = (reason) => {
 };
 
 const buildBrokerV2Url = (path, params = {}) => {
-  updateDynamicEndpoints();
-  if (!API_HOST) throw new Error('Broker backend URL is not configured.');
-
   const normalizedPath = String(path || '').replace(/^\/+/, '');
-  const url = new URL(`${API_HOST.replace(/\/+$/, '')}/api/v2/${normalizedPath}`);
+  const baseUrl = buildBrokerApiUrl(`/api/v2/${normalizedPath}`);
+  const browserOrigin = typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin
+    : 'http://localhost';
+  const url = new URL(baseUrl, browserOrigin);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
       url.searchParams.set(key, String(value));
     }
   });
-  return url.toString();
+  return baseUrl.startsWith('/') ? `${url.pathname}${url.search}` : url.toString();
 };
 
 const getBrokerV2Json = async (path, params = {}) => {
