@@ -134,7 +134,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       {/* ── Main dockable workspace ── */}
       <div className="flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout panelContents={panelContents}>
-          <div className="h-full w-full overflow-auto relative" style={{ background: 'var(--bg)' }}>
+          <div className="flex-1 min-h-0 w-full overflow-auto relative" style={{ background: 'var(--bg)' }}>
             {children}
           </div>
         </DockLayout>

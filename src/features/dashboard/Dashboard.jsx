@@ -139,7 +139,7 @@ const Dashboard = () => {
 
       <DashboardNotice errors={errors} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Kpi
           icon={<Users size={18} />}
           label="Real Accounts"
@@ -147,6 +147,14 @@ const Dashboard = () => {
           loading={isLoading}
           unavailable={!isLoading && metrics?.realAccounts == null}
           hint={metrics?.realAccounts != null ? accountHint : 'Account total unavailable'}
+        />
+        <Kpi
+          icon={<Users size={18} />}
+          label="Demo Accounts"
+          value={metrics?.demoAccounts != null ? formatInteger(metrics.demoAccounts) : null}
+          loading={isLoading}
+          unavailable={!isLoading && metrics?.demoAccounts == null}
+          hint={metrics?.demoAccounts != null ? accountHint : 'Demo account total unavailable'}
         />
         <Kpi
           icon={<DollarSign size={18} />}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
 import {
   sortMarketWatchQuotes,
@@ -41,6 +41,7 @@ const MarketData = () => {
   const [tickHistory, setTickHistory] = useState([]);
   const chartRef = useRef(null);
   const selectedSymbolRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const {
     feedError,
@@ -58,11 +59,26 @@ const MarketData = () => {
     initWebSocket();
   }, [initWebSocket]);
 
-  const liveQuotes = useMemo(() => (
-    sortMarketWatchQuotes(Object.values(symbols || {})
+  const liveQuotes = useMemo(() => {
+    let searchRegex = null;
+    if (searchQuery.trim()) {
+      try {
+        searchRegex = new RegExp(searchQuery.trim(), 'i');
+      } catch {
+        searchRegex = new RegExp(searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      }
+    }
+
+    return sortMarketWatchQuotes(Object.values(symbols || {})
       .map(normalizeQuote)
-      .filter((quote) => quote.symbol))
-  ), [symbols]);
+      .filter((quote) => {
+        if (!quote.symbol) return false;
+        if (searchRegex) {
+          return searchRegex.test(quote.symbol);
+        }
+        return true;
+      }));
+  }, [symbols, searchQuery]);
 
   const quoteSummary = useMemo(
     () => summarizeMarketWatchQuotes(liveQuotes),
@@ -111,6 +127,12 @@ const MarketData = () => {
     setActiveTab(nextTab);
   };
 
+  const handleSearchSymbol = () => {
+    if (liveQuotes && liveQuotes.length > 0) {
+      selectQuote(liveQuotes[0], activeTab);
+    }
+  };
+
   const renderDirectionIcon = (quote, size = 14) => (
     quote.dir === 'up'
       ? <ArrowUpRight size={size} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
@@ -128,6 +150,42 @@ const MarketData = () => {
             <th className="px-3 py-2 font-medium w-1/3" style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
             <th className="px-3 py-2 font-medium w-1/3 text-right" style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
             <th className="px-3 py-2 font-medium w-1/3 text-right">Ask</th>
+          </tr>
+          <tr>
+            <th colSpan={3} className="px-3 py-2">
+              <div
+                className="flex items-center h-7 w-full rounded-md transition-colors"
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-3)',
+                  boxShadow: 'var(--shadow-xs)',
+                }}
+              >
+                <Search size={13} style={{ color: 'var(--muted)' }} className="ml-2" aria-hidden="true" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleSearchSymbol();
+                  }}
+                  placeholder="Search symbols..."
+                  aria-label="Search symbols"
+                  className="h-full w-full px-2 text-[12px] focus:outline-none focus-visible:shadow-none!"
+                  style={{ background: 'transparent', color: 'var(--text)' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchSymbol}
+                  title="Search symbols"
+                  aria-label="Search symbols"
+                  className="px-2 h-full flex items-center rounded-r-md transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
+                  style={{ color: 'var(--muted)', cursor: 'pointer' }}
+                >
+                  <span className="text-[11px] font-medium">Go</span>
+                </button>
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody className="text-sm">

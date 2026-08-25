@@ -26,7 +26,7 @@ test('dashboard account classification treats demo groups as non-real accounts',
   assert.equal(isRealAccount({ group: 'Real\\VIP' }), true);
 });
 
-test('dashboard metrics use real account count, real equity, and open position count', () => {
+test('dashboard metrics use real account count, demo account count, real equity, and open position count', () => {
   const metrics = buildDashboardMetrics({
     accounts: [
       { login: '1001', group: 'Real\\Standard', equity: 1000 },
@@ -44,6 +44,7 @@ test('dashboard metrics use real account count, real equity, and open position c
 
   assert.deepEqual(metrics, {
     realAccounts: 4,
+    demoAccounts: 1,
     openPositions: 3,
     equity: 3800.75,
   });
@@ -52,6 +53,7 @@ test('dashboard metrics use real account count, real equity, and open position c
 test('dashboard metrics handle missing backend arrays without fake values', () => {
   assert.deepEqual(buildDashboardMetrics(), {
     realAccounts: 0,
+    demoAccounts: 0,
     openPositions: 0,
     equity: 0,
   });
@@ -60,11 +62,13 @@ test('dashboard metrics handle missing backend arrays without fake values', () =
 test('dashboard summary normalizer accepts aggregate KPI fields', () => {
   assert.deepEqual(normalizeDashboardSummary({
     real_accounts: '40,000',
+    demo_accounts: '5,000',
     open_positions: 125,
     total_equity: '1,250,500.25',
     deposits_24h: '10000',
   }), {
     realAccounts: 40000,
+    demoAccounts: 5000,
     openPositions: 125,
     equity: 1250500.25,
     deposits24h: 10000,
@@ -89,11 +93,12 @@ test('account limit normalizer accepts broker account count fields', () => {
 
 test('dashboard fallback metrics prefer explicit totals and account limit counts', () => {
   assert.deepEqual(buildDashboardFallbackMetrics({
-    accountLimitStatus: { real_account_count: 50000 },
+    accountLimitStatus: { real_account_count: 50000, demo_account_count: 300 },
     accountsPage: { rows: [{ login: 1 }], total: 40000 },
     positionsPage: { rows: [], total: '125' },
   }), {
     realAccounts: 50000,
+    demoAccounts: 300,
     openPositions: 125,
     equity: null,
     deposits24h: null,
@@ -118,6 +123,7 @@ test('dashboard fallback metrics compute from complete endpoint rows when totals
     },
   }), {
     realAccounts: 2,
+    demoAccounts: 1,
     openPositions: 2,
     equity: 1250,
     deposits24h: null,

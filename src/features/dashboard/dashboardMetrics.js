@@ -29,6 +29,7 @@ export const buildDashboardMetrics = ({ accounts = [], positions = [] } = {}) =>
   const accountRows = asArray(accounts);
   const positionRows = asArray(positions);
   const realAccounts = accountRows.filter(isRealAccount);
+  const demoAccounts = accountRows.filter(isDemoAccount);
   const equity = realAccounts.reduce((total, account) => {
     const value = getAccountEquity(account);
     return value === null ? total : total + value;
@@ -36,6 +37,7 @@ export const buildDashboardMetrics = ({ accounts = [], positions = [] } = {}) =>
 
   return {
     realAccounts: realAccounts.length,
+    demoAccounts: demoAccounts.length,
     openPositions: positionRows.length,
     equity,
   };
@@ -48,6 +50,9 @@ export const normalizeDashboardSummary = (summary = {}) => {
     toFiniteNumber(summary.real_accounts) ??
     toFiniteNumber(summary.realAccountCount) ??
     toFiniteNumber(summary.account_count);
+  const demoAccounts = toFiniteNumber(summary.demoAccounts) ??
+    toFiniteNumber(summary.demo_accounts) ??
+    toFiniteNumber(summary.demoAccountCount);
   const openPositions = toFiniteNumber(summary.openPositions) ??
     toFiniteNumber(summary.open_positions) ??
     toFiniteNumber(summary.openPositionCount) ??
@@ -59,12 +64,13 @@ export const normalizeDashboardSummary = (summary = {}) => {
     toFiniteNumber(summary.deposits_24h) ??
     toFiniteNumber(summary.cashflow24h);
 
-  if (realAccounts === null && openPositions === null && equity === null && deposits24h === null) {
+  if (realAccounts === null && demoAccounts === null && openPositions === null && equity === null && deposits24h === null) {
     return null;
   }
 
   return {
     realAccounts,
+    demoAccounts,
     openPositions,
     equity,
     deposits24h,
@@ -114,15 +120,19 @@ export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage
     accountLimit?.realAccounts ??
     pagedTotal(accountsPage) ??
     (accountsComplete ? rowMetrics.realAccounts : null);
+  const demoAccounts =
+    accountLimit?.demoAccounts ??
+    (accountsComplete ? rowMetrics.demoAccounts : null);
   const openPositions =
     pagedTotal(positionsPage) ??
     (positionsComplete ? rowMetrics.openPositions : null);
   const equity = accountsComplete ? rowMetrics.equity : null;
 
-  if (realAccounts === null && openPositions === null && equity === null) return null;
+  if (realAccounts === null && demoAccounts === null && openPositions === null && equity === null) return null;
 
   return {
     realAccounts,
+    demoAccounts,
     openPositions,
     equity,
     deposits24h: null,

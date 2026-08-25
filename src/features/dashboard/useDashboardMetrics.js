@@ -15,7 +15,7 @@ const getErrorMessage = (error) => (
 
 const hasAnyMetric = (metrics) => (
   Boolean(metrics) &&
-  [metrics.realAccounts, metrics.openPositions, metrics.equity, metrics.deposits24h]
+  [metrics.realAccounts, metrics.demoAccounts, metrics.openPositions, metrics.equity, metrics.deposits24h]
     .some((value) => value !== null && value !== undefined)
 );
 

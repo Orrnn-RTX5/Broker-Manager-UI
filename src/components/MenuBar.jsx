@@ -181,7 +181,9 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
           style={{ background: 'transparent', color: 'var(--text-2)' }}
         >
           {['English (EN)', 'Arabic (AR)', 'Chinese (ZH)', 'French (FR)', 'German (DE)', 'Hindi (HI)', 'Japanese (JA)', 'Russian (RU)', 'Spanish (ES)', 'Turkish (TR)'].map(code => (
-            <option key={code}>{code}</option>
+            <option key={code} value={code} style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+              {code}
+            </option>
           ))}
         </select>
 

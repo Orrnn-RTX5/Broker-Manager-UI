@@ -4,10 +4,17 @@ import {
   AppWindow, LayoutPanelTop, Maximize, Moon
 } from 'lucide-react';
 import useThemeStore from '../../store/themeStore';
+import { useDockingContext } from '../../components/docking/DockingContext';
+
+// Panel IDs
+const PANEL_NAVIGATOR = 'navigator';
+const PANEL_MARKET_DATA = 'market_data';
 
 const ViewMenu = ({ onClose }) => {
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
+  const { togglePanel } = useDockingContext();
+
   
   const handleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -34,8 +41,8 @@ const ViewMenu = ({ onClose }) => {
       />
       <MenuDivider />
       <MenuItem text="Depth Of Market" hasSubmenu />
-      <MenuItem icon={ArrowUpDown} text="Market Watch" shortcut="Ctrl+M" iconColor="text-red-500" />
-      <MenuItem icon={Folders} text="Navigator" shortcut="Ctrl+N" iconColor="text-yellow-500" />
+      <MenuItem icon={ArrowUpDown} text="Market Watch" shortcut="Ctrl+M" iconColor="text-red-500" onClick={() => { onClose(); togglePanel(PANEL_MARKET_DATA); }} />
+      <MenuItem icon={Folders} text="Navigator" shortcut="Ctrl+N" iconColor="text-yellow-500" onClick={() => { onClose(); togglePanel(PANEL_NAVIGATOR); }} />
       <MenuItem icon={BarChart2} text="Margin Calls" shortcut="Ctrl+L" iconColor="text-red-500" />
       <MenuItem icon={Layers} text="Queue" shortcut="Ctrl+Q" iconColor="text-blue-500" />
       <MenuItem icon={AppWindow} text="Toolbar" iconColor="text-blue-500" />

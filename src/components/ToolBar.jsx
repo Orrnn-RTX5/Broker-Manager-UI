@@ -3,11 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import {
   Activity,
-  AppWindow,
   ArrowUpDown,
   BarChart2,
   ClipboardList,
   Copy,
+  Expand,
   Folder,
   FolderOpen,
   Gavel,
@@ -252,7 +252,7 @@ const ToolBar = ({
       { id: 'symbol-management', label: 'Symbol Management', icon: Settings2, tone: 'info', path: '/symbol-management' },
     ],
     [
-      { id: 'fullscreen', label: 'Fullscreen', icon: AppWindow, onClick: handleFullscreen },
+      { id: 'fullscreen', label: 'Fullscreen', icon: Expand, onClick: handleFullscreen },
       { id: 'print', label: 'Print', icon: Printer, onClick: handlePrint },
       { id: 'copy-url', label: 'Copy URL', icon: Copy, tone: 'accent', onClick: handleCopyUrl },
       { id: 'refresh-data', label: 'Refresh Data', icon: RefreshCw, onClick: handleRefreshData },

@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { X, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, CheckCircle2, AlertCircle, Loader2, UserPlus, ChevronDown, Check } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
 import { fetchManagerApi } from '../../services/managerFetch';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
-const LEVERAGES  = [1, 10, 25, 50, 100, 200, 300, 400, 500];
-const COUNTRIES  = ['India', 'United States', 'United Kingdom', 'Australia', 'Canada', 'Germany', 'France', 'Japan'];
+const LEVERAGES = [1, 10, 25, 50, 100, 200, 300, 400, 500];
+const COUNTRIES = ['India', 'United States', 'United Kingdom', 'Australia', 'Canada', 'Germany', 'France', 'Japan'];
 
 const Field = ({ label, children }) => (
   <div>
@@ -15,6 +15,109 @@ const Field = ({ label, children }) => (
     {children}
   </div>
 );
+
+const GroupCombobox = ({ value, onChange, groups = [], loading = false, hasMore = false, onSearchChange, searchValue }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = (groupName) => {
+    onChange(groupName);
+    onSearchChange('');
+    setIsOpen(false);
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    onSearchChange(val);
+    onChange(val);
+    setIsOpen(true);
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          className="ui-input ui-input-sm w-full pr-8"
+          value={isOpen ? searchValue : value}
+          onFocus={() => setIsOpen(true)}
+          onChange={handleInputChange}
+          placeholder="Search or select group..."
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="absolute right-2 text-xs flex items-center justify-center p-1"
+          style={{ color: 'var(--muted)', cursor: 'pointer' }}
+        >
+          <ChevronDown size={14} className={`transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {isOpen && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 z-50 rounded-md border max-h-56 overflow-auto py-1 text-xs"
+          style={{
+            background: 'var(--surface)',
+            borderColor: 'var(--border)',
+            boxShadow: 'var(--shadow-md)',
+          }}
+        >
+          {loading ? (
+            <div className="px-3 py-2 flex items-center gap-2" style={{ color: 'var(--muted)' }}>
+              <Loader2 size={13} className="animate-spin" />
+              <span>Loading groups…</span>
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="px-3 py-2 text-center" style={{ color: 'var(--muted)' }}>
+              No groups found
+            </div>
+          ) : (
+            groups.map((g) => {
+              const isSelected = g.name === value;
+              return (
+                <div
+                  key={g.name}
+                  onClick={() => handleSelect(g.name)}
+                  className="px-3 py-2 cursor-pointer flex items-center justify-between transition-colors"
+                  style={{
+                    background: isSelected ? 'var(--accent-soft)' : 'transparent',
+                    color: isSelected ? 'var(--accent-text)' : 'var(--text)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = 'var(--surface-3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <span className="truncate font-medium">{g.name}</span>
+                  {isSelected && <Check size={13} style={{ color: 'var(--accent-text)' }} />}
+                </div>
+              );
+            })
+          )}
+          {hasMore && (
+            <div className="px-3 py-1.5 border-t text-[11px]" style={{ borderColor: 'var(--border-2)', color: 'var(--muted)' }}>
+              Showing first 100 matches. Search to narrow.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
   const [form, setForm] = useState({
@@ -26,7 +129,7 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
   });
 
   const [loading, setLoading] = useState(false);
-  const [result, setResult]   = useState(null);
+  const [result, setResult] = useState(null);
   const [groupSearch, setGroupSearch] = useState('');
   const { groups, hasMore: hasMoreGroups, loading: loadingGroups } = useGroupList({
     limit: 100,
@@ -148,26 +251,19 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
               )}
             </div>
           ) : (
-            <form id="new-account-form" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-2 gap-5">
-                <div className="space-y-3.5">
+            <form id="new-account-form" onSubmit={handleSubmit} autoComplete="off">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
                   <Field label="Group">
-                    <input
-                      className="ui-input ui-input-sm mb-2"
-                      value={groupSearch}
-                      onChange={e => setGroupSearch(e.target.value)}
-                      placeholder="Search groups..."
+                    <GroupCombobox
+                      value={form.Group}
+                      onChange={(selectedGroup) => set('Group', selectedGroup)}
+                      groups={groups}
+                      loading={loadingGroups}
+                      hasMore={hasMoreGroups}
+                      searchValue={groupSearch}
+                      onSearchChange={setGroupSearch}
                     />
-                    <select className="ui-select" value={form.Group} onChange={e => set('Group', e.target.value)}>
-                      {loadingGroups
-                        ? <option value="">Loading groups…</option>
-                        : groups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
-                    </select>
-                    {hasMoreGroups && (
-                      <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-                        Showing first 100 matches. Search to narrow results.
-                      </div>
-                    )}
                   </Field>
                   <Field label="Leverage">
                     <select className="ui-select" value={form.Leverage} onChange={e => set('Leverage', Number(e.target.value))}>
@@ -181,12 +277,12 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
                     <input className="ui-input" value={form.LastName} onChange={e => set('LastName', e.target.value)} required />
                   </Field>
                   <Field label="Email">
-                    <input type="email" className="ui-input" value={form.Email} onChange={e => set('Email', e.target.value)} required />
+                    <input type="email" name="new_user_email" className="ui-input" value={form.Email} onChange={e => set('Email', e.target.value)} required autoComplete="off" />
                   </Field>
                 </div>
-                <div className="space-y-3.5">
+                <div className="space-y-3">
                   <Field label="Phone">
-                    <input className="ui-input" value={form.Phone} onChange={e => set('Phone', e.target.value)} />
+                    <input className="ui-input" value={form.Phone} onChange={e => set('Phone', e.target.value)} autoComplete="off" />
                   </Field>
                   <Field label="Country">
                     <select className="ui-select" value={form.Country} onChange={e => set('Country', e.target.value)}>
@@ -199,15 +295,15 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess }) => {
                     </select>
                   </Field>
                   <div
-                    className="rounded-lg p-3.5 space-y-3"
+                    className="rounded-lg p-3 space-y-2.5"
                     style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
                   >
                     <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Passwords</div>
                     <Field label="Master">
-                      <input type="password" className="ui-input" value={form.master_pass} onChange={e => set('master_pass', e.target.value)} required />
+                      <input type="password" name="master_pass" className="ui-input" value={form.master_pass} onChange={e => set('master_pass', e.target.value)} required autoComplete="new-password" />
                     </Field>
                     <Field label="Investor">
-                      <input type="password" className="ui-input" value={form.investor_pass} onChange={e => set('investor_pass', e.target.value)} required />
+                      <input type="password" name="investor_pass" className="ui-input" value={form.investor_pass} onChange={e => set('investor_pass', e.target.value)} required autoComplete="new-password" />
                     </Field>
                   </div>
                 </div>
