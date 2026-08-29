@@ -10,8 +10,10 @@ import {
   buildManagerApiPath,
   resolveFeedAuthRequired,
   resolveFeedWsAuth,
+  shouldUseFeedDevProxy,
   shouldUseManagerDevProxy,
   shouldUseManagerProxyPrefix,
+  toLocalDevFeedProxyUrl,
 } from './endpoints.js';
 
 const createStorage = () => {
@@ -175,6 +177,19 @@ test('feed status URL derives from feed websocket URL', () => {
   }));
 
   assert.equal(buildFeedStatusUrl(), 'https://services.myprop.trade/ws/feed/status');
+});
+
+test('feed development proxy keeps status and websocket requests same-origin', () => {
+  const origin = 'http://localhost:5174';
+  assert.equal(shouldUseFeedDevProxy(true, true), true);
+  assert.equal(
+    toLocalDevFeedProxyUrl('https://services.growtradingacademy.com/ws/feed/status', true, origin),
+    'http://localhost:5174/ws/feed/status'
+  );
+  assert.equal(
+    toLocalDevFeedProxyUrl('wss://services.growtradingacademy.com/ws/feed?broker_id=gta_broker', true, origin),
+    'http://localhost:5174/ws/feed?broker_id=gta_broker'
+  );
 });
 
 test('feed websocket URL uses explicit runtime feed token and ignores manager session tokens', () => {

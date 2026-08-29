@@ -1,10 +1,7 @@
 import { 
   HelpCircle, 
   Lightbulb, 
-  MessageCircle, 
-  GraduationCap, 
   Globe, 
-  Headphones, 
   Send,
   Monitor,
   CheckCircle2,
@@ -18,10 +15,7 @@ const HelpMenu = () => {
       <MenuItem icon={HelpCircle} text="Help Topics" shortcut="F1" iconColor="text-blue-500" />
       <MenuItem icon={Lightbulb} text="What's New" iconColor="text-green-500" />
       <MenuDivider />
-      <MenuItem icon={MessageCircle} text="MetaQuotes Ltd." iconColor="text-blue-500" />
-      <MenuItem icon={GraduationCap} text="MQL5.community" iconColor="text-blue-600" />
       <MenuItem icon={Globe} text="RTX5 Platform" iconColor="text-green-600" />
-      <MenuItem icon={Headphones} text="MetaQuotes Support Center" iconColor="text-blue-700" />
       <MenuItem icon={Send} text="Official News Channel" iconColor="text-blue-400" />
       <MenuDivider />
       {/* Mocking the Mac/Linux icons with Lucide equivalents */}

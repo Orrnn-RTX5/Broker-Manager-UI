@@ -2,7 +2,6 @@
 // Authorization headers; REST token query parameters are intentionally avoided.
 
 import apiClient from './apiClient';
-import { getSessionClaims } from './authService';
 import { fetchManagerApi } from './managerFetch';
 
 const TRADE_BASE = '/ext-api';
@@ -51,6 +50,23 @@ const getRecords = (data, key) => {
     data?.restrictions ||
     [];
   return Array.isArray(records) ? records : [];
+};
+
+// DealerQueueList has been returned by broker backends in both flat and nested
+// envelopes (for example { answer: [...] } and { answer: { queue: [...] } }).
+// Keep this normalizer local to the dealer workflow so a valid nested queue is
+// never rendered as a misleading empty state.
+const getDealerQueueRecords = (data, depth = 0) => {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== 'object' || depth > 3) return [];
+
+  const keys = ['answer', 'data', 'queue', 'requests', 'orders', 'items', 'records', 'result', 'list'];
+  for (const key of keys) {
+    const records = getDealerQueueRecords(data[key], depth + 1);
+    if (records.length > 0) return records;
+  }
+
+  return [];
 };
 
 const asBoolean = (value) => value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
@@ -121,6 +137,8 @@ const normalizeDealerQueueRow = (row = {}, index = 0) => ({
     row.Price,
     row.price_open,
     row.priceOpen,
+    row.price_requested,
+    row.price_request,
     0
   )),
   reason: firstDefined(row.reason, row.Reason, row.requestType, row.request_type, row.type, row.Type, ''),
@@ -139,19 +157,6 @@ const normalizeDealerQueueRow = (row = {}, index = 0) => ({
   comment: firstDefined(row.comment, row.Comment, row.message, row.Message, row.note, row.notes, ''),
   raw: row,
 });
-
-const getCurrentManagerLogin = () => {
-  const sessionLogin = getSessionClaims()?.login;
-  if (sessionLogin !== undefined && sessionLogin !== null && sessionLogin !== '') {
-    return String(sessionLogin);
-  }
-
-  try {
-    return localStorage.getItem('brokerLogin') || '';
-  } catch {
-    return '';
-  }
-};
 
 const fetchManagerJson = async (endpoint, options = {}) => {
   const response = await fetchManagerApi(endpoint, {
@@ -233,12 +238,11 @@ export const orderApprove = ({ ticket, comment }) => {
 };
 
 export const getDealerQueue = async () => {
-  const managerLogin = getCurrentManagerLogin();
-  const endpoint = managerLogin
-    ? `/DealerQueueList?${qs({ id: managerLogin })}`
-    : '/DealerQueueList';
-  const data = await fetchManagerJson(endpoint, { preserveQueryId: Boolean(managerLogin) });
-  return getRecords(data, 'answer').map(normalizeDealerQueueRow);
+  // This endpoint authenticates with the Bearer token. `id` is a legacy token
+  // query parameter, not a manager-login filter; sending a numeric login there
+  // can cause valid queued orders to be omitted by the backend.
+  const data = await fetchManagerJson('/DealerQueueList');
+  return getDealerQueueRecords(data).map(normalizeDealerQueueRow);
 };
 
 export const dealRollback = ({ deal, comment }) => {

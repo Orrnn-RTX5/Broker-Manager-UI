@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
@@ -49,6 +49,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
   const { togglePanel, panels, resetLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
+  const [isToolBarVisible, setIsToolBarVisible] = useState(true);
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
@@ -61,6 +62,40 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   useEffect(() => {
     useSymbolStore.getState().initWebSocket();
   }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(console.error);
+      return;
+    }
+    document.exitFullscreen?.().catch?.(console.error);
+  }, []);
+
+  const handleViewAction = useCallback((action) => {
+    switch (action) {
+      case 'market-watch':
+        togglePanel(PANEL_MARKET_DATA);
+        break;
+      case 'navigator':
+        togglePanel(PANEL_NAVIGATOR);
+        break;
+      case 'margin-calls':
+        togglePanel(PANEL_ACCOUNTS);
+        break;
+      case 'queue':
+        navigate('/dealer/queue');
+        break;
+      case 'toolbar':
+      case 'toolbox':
+        setIsToolBarVisible((visible) => !visible);
+        break;
+      case 'fullscreen':
+        toggleFullscreen();
+        break;
+      default:
+        break;
+    }
+  }, [navigate, toggleFullscreen, togglePanel]);
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -76,10 +111,32 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       const key = e.key?.toLowerCase() || '';
       const ctrlKey = e.ctrlKey || e.metaKey;
 
-      // Ctrl + O -> Toggle Market Data
-      if (ctrlKey && key === 'o') {
+      // Ctrl+N is reserved by Chrome for a new window and cannot be safely
+      // overridden by a web page, so Navigator uses Alt+N instead.
+      if (e.altKey && !ctrlKey && !e.shiftKey && key === 'n') {
         e.preventDefault();
-        togglePanel(PANEL_MARKET_DATA);
+        handleViewAction('navigator');
+        return;
+      }
+
+      if (ctrlKey) {
+        const viewShortcutActions = {
+          m: 'market-watch',
+          l: 'margin-calls',
+          q: 'queue',
+          t: 'toolbox',
+        };
+        const action = viewShortcutActions[key];
+        if (action) {
+          e.preventDefault();
+          handleViewAction(action);
+          return;
+        }
+      }
+
+      if (key === 'F11'.toLowerCase() && !ctrlKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        handleViewAction('fullscreen');
         return;
       }
 
@@ -101,9 +158,11 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, togglePanel]);
+    // Capture the event before browser/default handlers so Ctrl+N, Ctrl+L,
+    // Ctrl+Q and Ctrl+T do not trigger their browser-level behaviours.
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [handleViewAction, navigate]);
 
   // ── panel content map ──────────────────────────────────────────────────────
   const panelContents = {
@@ -120,16 +179,23 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       <GlobalLoader />
       <ToastContainer />
       {/* ── Top bars ── */}
-      <MenuBar isAuthenticated={isAuthenticated} onLogin={onLogin} onLogout={onLogout} />
-      <ToolBar
-        toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
-        isSidebarOpen={isNavigatorOpen}
-        toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
-        isRightSidebarOpen={isAccountsOpen}
-        toggleMarketData={() => togglePanel(PANEL_MARKET_DATA)}
-        resetLayout={resetLayout}
+      <MenuBar
+        isAuthenticated={isAuthenticated}
+        onLogin={onLogin}
         onLogout={onLogout}
+        onViewAction={handleViewAction}
       />
+      {isToolBarVisible && (
+        <ToolBar
+          toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
+          isSidebarOpen={isNavigatorOpen}
+          toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
+          isRightSidebarOpen={isAccountsOpen}
+          toggleMarketData={() => togglePanel(PANEL_MARKET_DATA)}
+          resetLayout={resetLayout}
+          onLogout={onLogout}
+        />
+      )}
 
       {/* ── Main dockable workspace ── */}
       <div className="flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>

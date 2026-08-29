@@ -1,7 +1,14 @@
 import { Link2, Unplug, Play, Square, Plus, LogOut, FolderOpen, Printer, Search, Settings as SettingsIcon } from 'lucide-react';
 import { MenuItem, MenuDivider } from './MenuItem';
 
-const FileMenu = ({ isAuthenticated, onConnectClick, onDisconnectClick, onNewAccountClick, onPrintClick }) => {
+const FileMenu = ({
+  isAuthenticated,
+  onConnectClick,
+  onDisconnectClick,
+  onNewAccountClick,
+  onPrintClick,
+  onExitClick,
+}) => {
   return (
     <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[240px] z-[60] transition-colors">
       <MenuItem 
@@ -37,7 +44,7 @@ const FileMenu = ({ isAuthenticated, onConnectClick, onDisconnectClick, onNewAcc
       <MenuItem icon={Search} text="Print Preview" iconColor="text-blue-600" />
       <MenuItem icon={SettingsIcon} text="Print Setup" iconColor="text-blue-600" />
       <MenuDivider />
-      <MenuItem icon={LogOut} text="Exit" iconColor="text-red-500" />
+      <MenuItem icon={LogOut} text="Exit" iconColor="text-red-500" onClick={onExitClick} />
     </div>
   );
 };

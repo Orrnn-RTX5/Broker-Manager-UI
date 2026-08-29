@@ -4,7 +4,11 @@ import {
   resolveBrokerBackendUrl,
   resolveBrokerDefaultMt5Server,
 } from '../config/backendTarget.js';
-import { buildManagerApiUrl, updateDynamicEndpoints } from '../config/endpoints.js';
+import {
+  buildManagerApiUrl,
+  shouldUseManagerDevProxy,
+  updateDynamicEndpoints,
+} from '../config/endpoints.js';
 import { normalizeTokenExpiresAt, setSession } from './authService.js';
 
 const BROKER_INFO_KEY = 'broker_info';
@@ -60,6 +64,14 @@ const getResponseMessage = (data) =>
   data?.title ||
   '';
 
+export const buildBrokerDiscoveryUrl = (useDevProxy = shouldUseManagerDevProxy()) => {
+  const path = '/api/v2/broker/servers';
+  // Vite forwards this same-origin path to DISCOVERY_BASE_URL in local web
+  // development. Production continues to use the configured public host.
+  if (useDevProxy) return `/discovery-api${path}`;
+  return `${DISCOVERY_BASE_URL.replace(/\/+$/, '')}${path}`;
+};
+
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
 // Calls:  GET https://superbackend.orrnn.com/api/v2/broker/servers
@@ -73,7 +85,7 @@ export const fetchBrokerList = async () => {
   let response;
   try {
     response = await fetch(
-      `${DISCOVERY_BASE_URL.replace(/\/+$/, '')}/api/v2/broker/servers`,
+      buildBrokerDiscoveryUrl(),
       {
         method: 'GET',
         credentials: 'omit',

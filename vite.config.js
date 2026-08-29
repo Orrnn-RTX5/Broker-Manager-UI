@@ -23,6 +23,7 @@ export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
+  const discoveryHost = env.VITE_DISCOVERY_BASE_URL || 'https://superbackend.orrnn.com'
   const wsHost = env.VITE_WS_HOST || apiHost
   const feedWsUrl = env.VITE_FEED_WS_URL || env.FEED_WS_URL || ''
   const wsFeedPath = env.VITE_WS_FEED_PATH || '/ws/feed'
@@ -55,6 +56,15 @@ export default defineConfig(({ mode, command }) => {
     esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
     server: {
       proxy: {
+        // Broker discovery does not consistently send browser CORS headers.
+        // Keep the browser request same-origin during local development while
+        // forwarding the original /api/v2 path to the discovery service.
+        '/discovery-api': {
+          target: discoveryHost,
+          changeOrigin: true,
+          secure: proxySecure,
+          rewrite: (path) => path.replace(/^\/discovery-api/, ''),
+        },
         '^/api/manager(?:/|\\?|$)': {
           target: apiHost,
           changeOrigin: true,

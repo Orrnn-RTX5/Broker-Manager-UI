@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Wifi, WifiOff, Activity } from 'lucide-react';
 import FileMenu from './menus/FileMenu';
+import EditMenu from './menus/EditMenu';
 import ViewMenu from './menus/ViewMenu';
 import ToolsMenu from './menus/ToolsMenu';
 import WindowMenu from './menus/WindowMenu';
@@ -12,7 +13,7 @@ import DesktopUpdateButton from './DesktopUpdateButton';
 import apiClient from '../services/apiClient';
 import { isDesktopBackendTarget } from '../config/backendTarget.js';
 
-const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
+const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
@@ -93,19 +94,26 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout }) => {
       if (onLogout) onLogout();
     };
 
+    const handleExitClick = () => {
+      setActiveMenu(null);
+      if (onLogout) onLogout();
+    };
+
     switch (item) {
       case 'File': return <FileMenu 
         isAuthenticated={isAuthenticated}
         onConnectClick={handleConnectClick} 
         onDisconnectClick={handleDisconnectClick}
         onNewAccountClick={handleNewAccountClick} 
+        onExitClick={handleExitClick}
         onPrintClick={() => {
           setActiveMenu(null);
           window.print();
         }}
         onClose={() => setActiveMenu(null)}
       />;
-      case 'View': return <ViewMenu onClose={() => setActiveMenu(null)} />;
+      case 'Edit': return <EditMenu onClose={() => setActiveMenu(null)} />;
+      case 'View': return <ViewMenu onClose={() => setActiveMenu(null)} onViewAction={onViewAction} />;
       case 'Tools': return <ToolsMenu onClose={() => setActiveMenu(null)} />;
       case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} />;
       case 'Help': return <HelpMenu onClose={() => setActiveMenu(null)} />;

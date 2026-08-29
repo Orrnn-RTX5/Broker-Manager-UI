@@ -382,18 +382,24 @@ const getExistingFeedQueryToken = (wsUrl = '') => {
   }
 };
 
-const shouldUseFeedDevProxy = () => {
+export const shouldUseFeedDevProxy = (
+  isDev = import.meta.env?.DEV === true,
+  isLocalOrigin = isLocalHttpOrigin()
+) => {
   const explicit = getRuntimeConfigValue(['FEED_USE_DEV_PROXY', 'VITE_FEED_USE_DEV_PROXY'], 'true');
-  return import.meta.env?.DEV === true && explicit !== 'false' && isLocalHttpOrigin();
+  return isDev && explicit !== 'false' && isLocalOrigin;
 };
 
-const toLocalDevWsProxyUrl = (feedUrl = '') => {
-  if (!shouldUseFeedDevProxy()) return feedUrl;
+export const toLocalDevFeedProxyUrl = (
+  feedUrl = '',
+  useProxy = shouldUseFeedDevProxy(),
+  localOrigin = typeof window !== 'undefined' ? window.location?.origin : ''
+) => {
+  if (!useProxy || !localOrigin) return feedUrl;
 
   try {
     const upstream = new URL(feedUrl);
-    const local = new URL(window.location.origin);
-    local.protocol = local.protocol === 'https:' ? 'wss:' : 'ws:';
+    const local = new URL(localOrigin);
     local.pathname = upstream.pathname;
     local.search = upstream.search;
     local.hash = '';
@@ -435,10 +441,10 @@ export const buildFeedStatusUrl = () => {
     firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS)
   );
 
-  if (explicit) return normalizeFeedStatusUrl(explicit);
+  if (explicit) return toLocalDevFeedProxyUrl(normalizeFeedStatusUrl(explicit));
 
   const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
-  return normalizeFeedStatusUrl(wsUrl);
+  return toLocalDevFeedProxyUrl(normalizeFeedStatusUrl(wsUrl));
 };
 
 export const getFeedWsDisabledMessage = (error) => (
@@ -460,7 +466,15 @@ export const buildFeedWsUrl = () => {
   if (!token && resolveFeedAuthRequired(brokerInfo)) {
     throw new FeedWsAuthConfigError();
   }
-  return toLocalDevWsProxyUrl(appendFeedAuthToWsUrl(wsUrl, { ...auth, token }));
+  const proxiedUrl = toLocalDevFeedProxyUrl(appendFeedAuthToWsUrl(wsUrl, { ...auth, token }));
+  try {
+    const url = new URL(proxiedUrl);
+    if (url.protocol === 'https:') url.protocol = 'wss:';
+    if (url.protocol === 'http:') url.protocol = 'ws:';
+    return url.toString();
+  } catch {
+    return proxiedUrl.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
+  }
 };
 
 const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));

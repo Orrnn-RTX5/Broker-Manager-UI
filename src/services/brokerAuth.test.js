@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   discoverBrokerById,
   fetchBrokerList,
+  buildBrokerDiscoveryUrl,
   getBrokerDisplayServerName,
   getBrokerSelectionId,
   loginManager,
@@ -78,6 +79,14 @@ test('fetchBrokerList uses the v2 public broker discovery contract and preserves
   assert.equal(brokers[0].broker_id, 'testorrnn');
   assert.equal(brokers[0].server, 'broker-server-42');
   assert.equal(getBrokerSelectionId(brokers[0]), 'broker-server-42');
+});
+
+test("broker discovery uses Vite's same-origin proxy when enabled", () => {
+  assert.equal(buildBrokerDiscoveryUrl(true), '/discovery-api/api/v2/broker/servers');
+  assert.equal(
+    buildBrokerDiscoveryUrl(false),
+    'https://superbackend.orrnn.com/api/v2/broker/servers'
+  );
 });
 
 test('discoverBrokerById can resolve by the opaque server handle', () => {

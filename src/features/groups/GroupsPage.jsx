@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, Plus, Trash2, Edit2, Filter, Loader2 } from 'lucide-react';
@@ -9,6 +9,14 @@ import { usePermissions } from '../../hooks/usePermissions';
 import usePagedData from '../../hooks/usePagedData';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getGroupDetailsPath } from './groupRoutes';
+import { copyToClipboard, rowsToCSV, rowsToJSON, rowsToTSV } from '../../utils/gridUtils';
+import { EDIT_MENU_ACTION_EVENT, isEditableElement, publishEditMenuContext } from '../../utils/editMenuActions';
+
+const GROUP_EXPORT_COLUMNS = [
+  { key: 'name', label: 'Group Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'routingMode', label: 'Routing' },
+];
 
 const GroupsPage = () => {
   const navigate = useNavigate();
@@ -18,7 +26,10 @@ const GroupsPage = () => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editGroup, setEditGroup] = useState(null);
+  const [duplicateGroup, setDuplicateGroup] = useState(null);
   const [activeOnly, setActiveOnly] = useState(false);
+  const [selectedGroupNames, setSelectedGroupNames] = useState(() => new Set());
+  const searchInputRef = useRef(null);
   const pageSize = 100;
 
   const params = useMemo(() => ({
@@ -66,6 +77,7 @@ const GroupsPage = () => {
   const handleEdit = (e, group) => {
     e.stopPropagation();
     if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    setDuplicateGroup(null);
     setEditGroup(group);
     setIsModalOpen(true);
   };
@@ -76,10 +88,142 @@ const GroupsPage = () => {
     setIsModalOpen(true);
   };
 
+  const selectedGroups = useMemo(
+    () => groups.filter((group) => selectedGroupNames.has(group.name)),
+    [groups, selectedGroupNames],
+  );
+
+  const clearSelectedGroups = useCallback(() => {
+    setSelectedGroupNames(new Set());
+  }, []);
+
+  const selectVisibleGroups = useCallback(() => {
+    setSelectedGroupNames(new Set(groups.map((group) => group.name)));
+  }, [groups]);
+
+  const toggleGroupSelection = useCallback((groupName) => {
+    setSelectedGroupNames((previous) => {
+      const next = new Set(previous);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  }, []);
+
+  const handleEditSelected = useCallback(() => {
+    if (selectedGroups.length !== 1) return;
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    setDuplicateGroup(null);
+    setEditGroup(selectedGroups[0]);
+    setIsModalOpen(true);
+  }, [canManageGroups, selectedGroups]);
+
+  const handleDuplicateSelected = useCallback(() => {
+    if (selectedGroups.length !== 1) return;
+    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    setEditGroup(null);
+    setDuplicateGroup(null);
+    setDuplicateGroup(selectedGroups[0]);
+    setIsModalOpen(true);
+  }, [canManageGroups, selectedGroups]);
+
+  const copySelectedGroups = useCallback(async (format = 'tsv') => {
+    if (selectedGroups.length === 0) return;
+    const normalizedGroups = selectedGroups.map((group) => ({
+      ...group,
+      routingMode: group.routingMode === 'a_book' ? 'A-Book' : group.routingMode === 'hybrid' ? 'Hybrid' : 'B-Book',
+    }));
+    const text = format === 'csv'
+      ? rowsToCSV(normalizedGroups, GROUP_EXPORT_COLUMNS)
+      : format === 'json'
+        ? rowsToJSON(normalizedGroups, GROUP_EXPORT_COLUMNS)
+        : rowsToTSV(normalizedGroups, GROUP_EXPORT_COLUMNS);
+    await copyToClipboard(text);
+  }, [selectedGroups]);
+
   const handleActiveGroupsFilter = () => {
     resetPage();
     setActiveOnly((value) => !value);
   };
+
+  // Keep the top-level Edit menu aware of the Groups grid selection.
+  useEffect(() => {
+    publishEditMenuContext({ selectedCount: selectedGroups.length, view: 'groups' });
+    return () => publishEditMenuContext({ selectedCount: 0 });
+  }, [selectedGroups.length]);
+
+  // Drop selections which are no longer displayed after a search, filter, or page change.
+  useEffect(() => {
+    const visibleNames = new Set(groups.map((group) => group.name));
+    setSelectedGroupNames((previous) => {
+      const next = new Set([...previous].filter((name) => visibleNames.has(name)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [groups]);
+
+  useEffect(() => {
+    const handleEditMenuAction = (event) => {
+      const { action } = event.detail || {};
+      const hasEditableFocus = isEditableElement();
+
+      if (action === 'select-all' && !hasEditableFocus) {
+        selectVisibleGroups();
+        event.detail.handled = true;
+      } else if (action === 'clear-selection' && !hasEditableFocus) {
+        clearSelectedGroups();
+        event.detail.handled = true;
+      } else if (action === 'copy' && selectedGroups.length > 0 && !hasEditableFocus) {
+        copySelectedGroups().catch(() => alert('Unable to copy the selected groups.'));
+        event.detail.handled = true;
+      } else if (action === 'copy-csv' && selectedGroups.length > 0) {
+        copySelectedGroups('csv').catch(() => alert('Unable to copy the selected groups.'));
+        event.detail.handled = true;
+      } else if (action === 'copy-excel' && selectedGroups.length > 0) {
+        copySelectedGroups('tsv').catch(() => alert('Unable to copy the selected groups.'));
+        event.detail.handled = true;
+      } else if (action === 'copy-json' && selectedGroups.length > 0) {
+        copySelectedGroups('json').catch(() => alert('Unable to copy the selected groups.'));
+        event.detail.handled = true;
+      } else if (action === 'edit-selected') {
+        handleEditSelected();
+        event.detail.handled = true;
+      } else if (action === 'duplicate-group') {
+        handleDuplicateSelected();
+        event.detail.handled = true;
+      } else if (action === 'find-current-view') {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        event.detail.handled = true;
+      }
+    };
+
+    window.addEventListener(EDIT_MENU_ACTION_EVENT, handleEditMenuAction);
+    return () => window.removeEventListener(EDIT_MENU_ACTION_EVENT, handleEditMenuAction);
+  }, [clearSelectedGroups, copySelectedGroups, handleDuplicateSelected, handleEditSelected, selectVisibleGroups, selectedGroups.length]);
+
+  useEffect(() => {
+    const handleKeyboardShortcut = (event) => {
+      if (isEditableElement()) return;
+      const key = event.key.toLowerCase();
+
+      if ((event.ctrlKey || event.metaKey) && key === 'a') {
+        event.preventDefault();
+        selectVisibleGroups();
+      } else if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedGroups.length > 0) {
+        event.preventDefault();
+        copySelectedGroups().catch(() => alert('Unable to copy the selected groups.'));
+      } else if (event.key === 'Escape' && selectedGroups.length > 0) {
+        event.preventDefault();
+        clearSelectedGroups();
+      } else if (event.key === 'Enter' && selectedGroups.length === 1) {
+        event.preventDefault();
+        handleEditSelected();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyboardShortcut, true);
+    return () => window.removeEventListener('keydown', handleKeyboardShortcut, true);
+  }, [clearSelectedGroups, copySelectedGroups, handleEditSelected, selectVisibleGroups, selectedGroups.length]);
 
   const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = groups.length === 0 ? 0 : offset + 1;
@@ -109,6 +253,7 @@ const GroupsPage = () => {
         <div className="relative w-full max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search group names..."
             value={search}
@@ -147,6 +292,15 @@ const GroupsPage = () => {
               <table className="ui-grid">
                 <thead>
                   <tr>
+                    <th className="w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all visible groups"
+                        checked={groups.length > 0 && selectedGroups.length === groups.length}
+                        onChange={(event) => event.target.checked ? selectVisibleGroups() : clearSelectedGroups()}
+                        className="accent-[var(--accent)]"
+                      />
+                    </th>
                     <th>Group Name</th>
                     <th>Description</th>
                     <th>Routing</th>
@@ -156,16 +310,27 @@ const GroupsPage = () => {
                 <tbody>
                   {groups.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
+                      <td colSpan={5} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
                         No groups match your search.
                       </td>
                     </tr>
-                  ) : groups.map((group) => (
+                  ) : groups.map((group) => {
+                    const isSelected = selectedGroupNames.has(group.name);
+                    return (
                     <tr
                       key={group.name}
                       onClick={() => navigate(getGroupDetailsPath(group.name))}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', background: isSelected ? 'var(--accent-soft)' : undefined }}
                     >
+                      <td className="text-center" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          aria-label={`Select ${group.name}`}
+                          onChange={() => toggleGroupSelection(group.name)}
+                          className="accent-[var(--accent)]"
+                        />
+                      </td>
                       <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{group.name}</td>
                       <td style={{ color: 'var(--text-2)' }}>{group.description}</td>
                       <td>
@@ -201,7 +366,7 @@ const GroupsPage = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -227,7 +392,8 @@ const GroupsPage = () => {
       {isModalOpen && (
         <NewGroupModal
           initialData={editGroup}
-          onClose={() => { setIsModalOpen(false); setEditGroup(null); }}
+          duplicateData={duplicateGroup}
+          onClose={() => { setIsModalOpen(false); setEditGroup(null); setDuplicateGroup(null); }}
           onSuccess={() => {
             alert(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
             queryClient.invalidateQueries({ queryKey: ['groups'] });

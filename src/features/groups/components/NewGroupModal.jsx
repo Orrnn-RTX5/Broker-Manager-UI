@@ -82,11 +82,14 @@ const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
   </div>
 );
 
-const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
+const NewGroupModal = ({ initialData, duplicateData, onClose, onSuccess }) => {
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
+  const isEditing = Boolean(initialData);
   const [formData, setFormData] = useState(() => {
-    const data = { ...(initialData || defaultPayload) };
+    const source = initialData || duplicateData;
+    const data = { ...defaultPayload, ...(source || {}) };
+    if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
     if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
     if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
     return data;
@@ -123,10 +126,10 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
     try {
       setLoading(true);
       setError(null);
-      const params = initialData
+      const params = isEditing
         ? new URLSearchParams({ group: String(initialData.name) })
         : null;
-      const url = initialData 
+      const url = isEditing
         ? `/GroupUpdate?${params.toString()}`
         : '/GroupCreate';
 
@@ -176,7 +179,7 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
         <div className="h-8 bg-gradient-to-b from-[#f9f9f9] to-[#e4e4e4] dark:from-[#2d2d30] dark:to-[#252526] border-b border-[#cccccc] dark:border-[#333333] flex justify-between items-center px-3">
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-black dark:text-gray-200 font-semibold tracking-wide">
-               {initialData ? `Edit Group: ${initialData.name}` : 'Create New Group'}
+               {isEditing ? `Edit Group: ${initialData.name}` : duplicateData ? `Duplicate Group: ${duplicateData.name}` : 'Create New Group'}
             </span>
           </div>
           <button onClick={onClose} className="hover:bg-red-500 hover:text-white text-gray-600 dark:text-gray-400 p-0.5 rounded-sm transition-colors mt-0.5">
@@ -279,7 +282,7 @@ const NewGroupModal = ({ initialData, onClose, onSuccess }) => {
             className="px-4 py-1.5 min-w-[80px] text-[12px] bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 rounded-sm flex justify-center items-center gap-2 transition-colors disabled:opacity-50"
           >
             <Save size={13} />
-            {loading ? (initialData ? 'Updating...' : 'Creating...') : (initialData ? 'Update' : 'Create')}
+            {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update' : 'Create')}
           </button>
         </div>
       </div>

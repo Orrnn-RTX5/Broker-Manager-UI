@@ -5,6 +5,8 @@ import useDataSource from '../../hooks/useDataSource';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
+const DEALER_QUEUE_REFRESH_MS = 4000;
+
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const fmtTime = (unix) => {
   if (!unix) return '—';
@@ -41,7 +43,11 @@ const PromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
 };
 
 const DealerQueuePage = () => {
-  const { data: rawData, isLoading, error, reload: refetch } = useDataSource(getDealerQueue, []);
+  const { data: rawData, isLoading, error, reload: refetch } = useDataSource(
+    getDealerQueue,
+    [],
+    { pollingInterval: DEALER_QUEUE_REFRESH_MS },
+  );
   const { canAct } = usePermissions();
   const canDeal = canAct(PERMISSIONS.DEALER_QUEUE);
   const [search, setSearch] = useState('');
@@ -109,7 +115,7 @@ const DealerQueuePage = () => {
           <Gavel size={18} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval</p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
           </div>
         </div>
         <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5 mt-2 md:mt-0" onClick={refetch} disabled={isLoading}>
@@ -150,7 +156,18 @@ const DealerQueuePage = () => {
               {isLoading && filtered.length === 0 ? (
                 <tr><td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading queue…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Queue is empty</td></tr>
+                <tr>
+                  <td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                    {rawData.length === 0 ? (
+                      'Queue is empty'
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        No queued orders match “{search}”.
+                        <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => setSearch('')}>Clear search</button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
               ) : (
                 filtered.map((row, idx) => {
                   const isBuy = (row.side || '').toLowerCase() === 'buy';

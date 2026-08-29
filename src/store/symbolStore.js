@@ -256,7 +256,6 @@ const useSymbolStore = create(
             wsUrl = buildFeedWsUrl();
           } catch (err) {
             const message = getFeedWsDisabledMessage(err);
-            console.warn(`[SymbolStore] ${message}`);
             set((state) => ({
               ...markCachedSymbolData(state, message),
               isConnected: false,
@@ -264,6 +263,7 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
+            get().loadSymbolFallback(message, { setFeedError: true });
             return;
           }
 
