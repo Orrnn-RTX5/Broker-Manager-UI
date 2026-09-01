@@ -1,0 +1,193 @@
+{
+  "label": "after-fix-immediate-warm-1",
+  "baseUrl": "http://localhost:5174",
+  "capturedAt": "2026-09-01T13:06:33.351Z",
+  "results": [
+    {
+      "view": "/analytics/online-users",
+      "urlChangedMs": 101,
+      "headingVisibleMs": 731,
+      "contentSettledMs": 761,
+      "settleOutcome": "settled",
+      "requests": [
+        {
+          "view": "online-users",
+          "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+          "status": 200,
+          "responseMs": 2083
+        }
+      ],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7045.10000000149,
+            "dataCommitted": 7645.300000000745,
+            "routeCommitted": 7645.400000002235,
+            "routeVisible": 7700.70000000298,
+            "dataVisible": 7707.800000000745
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 655.6000000014901,
+            "clickToDataVisible": 662.6999999992549
+          },
+          "metadata": {
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-positions",
+      "urlChangedMs": 94,
+      "headingVisibleMs": 628,
+      "contentSettledMs": 643,
+      "settleOutcome": "settled",
+      "requests": [],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7045.10000000149,
+            "dataCommitted": 7645.300000000745,
+            "routeCommitted": 7645.400000002235,
+            "routeVisible": 7700.70000000298,
+            "dataVisible": 7707.800000000745
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 655.6000000014901,
+            "clickToDataVisible": 662.6999999992549
+          },
+          "metadata": {
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 9001.900000002235,
+            "dataCommitted": 9217,
+            "routeCommitted": 9217,
+            "routeVisible": 9271.10000000149,
+            "dataVisible": 9274.10000000149
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 269.19999999925494,
+            "clickToDataVisible": 272.19999999925494
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-orders",
+      "urlChangedMs": 168,
+      "headingVisibleMs": 670,
+      "contentSettledMs": 670,
+      "settleOutcome": "route-only",
+      "requests": [],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7045.10000000149,
+            "dataCommitted": 7645.300000000745,
+            "routeCommitted": 7645.400000002235,
+            "routeVisible": 7700.70000000298,
+            "dataVisible": 7707.800000000745
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 655.6000000014901,
+            "clickToDataVisible": 662.6999999992549
+          },
+          "metadata": {
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 9001.900000002235,
+            "dataCommitted": 9217,
+            "routeCommitted": 9217,
+            "routeVisible": 9271.10000000149,
+            "dataVisible": 9274.10000000149
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 269.19999999925494,
+            "clickToDataVisible": 272.19999999925494
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 3,
+          "view": "open-orders",
+          "interaction": "navigation",
+          "outcome": "route-ready",
+          "marks": {
+            "interactionStarted": 10920.5,
+            "routeCommitted": 11392.10000000149,
+            "routeVisible": 11404.300000000745
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 483.80000000074506,
+            "clickToDataVisible": null
+          },
+          "metadata": {
+            "dataRequestRequired": false
+          }
+        }
+      ]
+    }
+  ],
+  "videoPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\after-fix-immediate-warm-1.webm",
+  "screenshotPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\after-fix-immediate-warm-1-final.png"
+}

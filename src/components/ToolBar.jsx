@@ -5,7 +5,7 @@ import {
   Activity, ArrowUpDown, BarChart2, ChevronDown, ClipboardList, Command, Copy,
   Expand, Folder, FolderOpen, Gavel, Handshake, History, Info, LayoutGrid,
   LogOut, MoreHorizontal, Plus, Printer, RefreshCw, Search, Settings2,
-  Shield, TrendingUp, User, Users, Users2, X,
+  Shield, TrendingUp, User, Users, X,
 } from 'lucide-react';
 
 import NewAccountModal from './Popups/NewAccountModal';
@@ -220,9 +220,20 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
     setSearchLoginId('');
   };
 
+  const accountPanelAction = {
+    id: 'accounts-panel',
+    label: `${isRightSidebarOpen ? 'Hide' : 'Show'} account panel`,
+    icon: Users,
+    tone: 'accent',
+    shortcut: 'Ctrl L',
+    active: Boolean(isRightSidebarOpen),
+    onClick: toggleRightSidebar,
+  };
   const primaryActions = [
     { id: 'dashboard', label: 'Overview', icon: BarChart2, category: 'Navigation', match: (path) => path === '/' || path === '/dashboard' || path === '/admin-dashboard', onClick: go('/dashboard') },
-    { id: 'clients', label: 'Clients', icon: Users2, path: '/clients', onClick: go('/clients') },
+    // The account panel replaces the top-level Clients link. Opening it mounts
+    // the panel and triggers its account-data request.
+    { ...accountPanelAction, id: 'accounts-panel-primary' },
     { id: 'accounts', label: 'Accounts', icon: User, path: '/clients/trading-accounts', onClick: go('/clients/trading-accounts') },
     {
       id: 'market-watch',
@@ -236,7 +247,6 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
   ];
   const workspaceActions = [
     { id: 'navigator', label: `${isSidebarOpen ? 'Hide' : 'Show'} navigator`, icon: FolderOpen, tone: 'accent', shortcut: 'Alt N', onClick: toggleSidebar },
-    { id: 'accounts-panel', label: `${isRightSidebarOpen ? 'Hide' : 'Show'} account panel`, icon: Users, tone: 'accent', shortcut: 'Ctrl L', onClick: toggleRightSidebar },
     { id: 'reset-layout', label: 'Reset workspace layout', icon: LayoutGrid, tone: 'default', onClick: resetLayout },
   ];
   const operations = [
@@ -291,7 +301,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
 
   return (
     <>
-      <nav className="manager-toolbar" aria-label="Primary workspace navigation">
+      <nav className="manager-toolbar workspace-ui" aria-label="Primary workspace navigation">
         <div className="manager-toolbar-left">
           <ActionMenu label="Workspace" icon={LayoutGrid} actions={workspaceActions} pathname={location.pathname} />
           <span className="manager-toolbar-divider" />

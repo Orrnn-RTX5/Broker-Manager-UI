@@ -1,0 +1,220 @@
+{
+  "label": "final-verification-1",
+  "baseUrl": "http://localhost:5174",
+  "capturedAt": "2026-09-01T13:08:19.535Z",
+  "results": [
+    {
+      "view": "/analytics/online-users",
+      "urlChangedMs": 109,
+      "headingVisibleMs": 446,
+      "contentSettledMs": 2190,
+      "settleOutcome": "settled",
+      "requests": [
+        {
+          "view": "open-positions",
+          "path": "/api/manager/PositionsAll?limit&offset&sort_by&sort_dir",
+          "status": 200,
+          "responseMs": 2286
+        },
+        {
+          "view": "online-users",
+          "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+          "status": 200,
+          "responseMs": 1753
+        }
+      ],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7280.39999999851,
+            "routeCommitted": 7571.29999999702,
+            "requestStarted": 7575.099999997765,
+            "routeVisible": 7608.599999997765,
+            "responseReceived": 9304.199999999255,
+            "dataProcessed": 9304.699999999255,
+            "dataCommitted": 9334.699999999255,
+            "dataVisible": 9364.89999999851
+          },
+          "durations": {
+            "clickToRequest": 294.69999999925494,
+            "requestToResponse": 1729.1000000014901,
+            "responseToProcessed": 0.5,
+            "processedToVisible": 60.19999999925494,
+            "clickToRouteVisible": 328.19999999925494,
+            "clickToDataVisible": 2084.5
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-positions",
+      "urlChangedMs": 152,
+      "headingVisibleMs": 1168,
+      "contentSettledMs": 1173,
+      "settleOutcome": "settled",
+      "requests": [],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7280.39999999851,
+            "routeCommitted": 7571.29999999702,
+            "requestStarted": 7575.099999997765,
+            "routeVisible": 7608.599999997765,
+            "responseReceived": 9304.199999999255,
+            "dataProcessed": 9304.699999999255,
+            "dataCommitted": 9334.699999999255,
+            "dataVisible": 9364.89999999851
+          },
+          "durations": {
+            "clickToRequest": 294.69999999925494,
+            "requestToResponse": 1729.1000000014901,
+            "responseToProcessed": 0.5,
+            "processedToVisible": 60.19999999925494,
+            "clickToRouteVisible": 328.19999999925494,
+            "clickToDataVisible": 2084.5
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 10760.099999997765,
+            "dataCommitted": 11329.89999999851,
+            "routeCommitted": 11329.89999999851,
+            "routeVisible": 11354.79999999702,
+            "dataVisible": 11363.099999997765
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 594.6999999992549,
+            "clickToDataVisible": 603
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-orders",
+      "urlChangedMs": 171,
+      "headingVisibleMs": 680,
+      "contentSettledMs": 680,
+      "settleOutcome": "route-only",
+      "requests": [],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 7280.39999999851,
+            "routeCommitted": 7571.29999999702,
+            "requestStarted": 7575.099999997765,
+            "routeVisible": 7608.599999997765,
+            "responseReceived": 9304.199999999255,
+            "dataProcessed": 9304.699999999255,
+            "dataCommitted": 9334.699999999255,
+            "dataVisible": 9364.89999999851
+          },
+          "durations": {
+            "clickToRequest": 294.69999999925494,
+            "requestToResponse": 1729.1000000014901,
+            "responseToProcessed": 0.5,
+            "processedToVisible": 60.19999999925494,
+            "clickToRouteVisible": 328.19999999925494,
+            "clickToDataVisible": 2084.5
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 10760.099999997765,
+            "dataCommitted": 11329.89999999851,
+            "routeCommitted": 11329.89999999851,
+            "routeVisible": 11354.79999999702,
+            "dataVisible": 11363.099999997765
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 594.6999999992549,
+            "clickToDataVisible": 603
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 3,
+          "view": "open-orders",
+          "interaction": "navigation",
+          "outcome": "route-ready",
+          "marks": {
+            "interactionStarted": 13145.199999999255,
+            "routeCommitted": 13526.599999997765,
+            "routeVisible": 13540.5
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 395.30000000074506,
+            "clickToDataVisible": null
+          },
+          "metadata": {
+            "dataRequestRequired": false
+          }
+        }
+      ]
+    }
+  ],
+  "videoPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\final-verification-1.webm",
+  "screenshotPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\final-verification-1-final.png"
+}

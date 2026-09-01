@@ -1,18 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings } from 'lucide-react';
 import { getPositionsPage } from '../../services/api';
+import { subscribeToPositionSync } from '../../services/positionSync';
 import { buildFeedWsUrl, buildMetricsWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { closeManagerPosition } from '../../services/managerTradeApi';
 import apiClient from '../../services/apiClient';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
 import { extractFeedTicks } from '../../utils/feedMessages';
-import { canMutateAccountTrades, TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
+import {
+  canCloseAccountTrades,
+  canMutateAccountTrades,
+  TRADE_CLOSE_DENIED_MESSAGE,
+  TRADE_MUTATION_DENIED_MESSAGE,
+} from './accountTradePermissions';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
@@ -206,7 +213,7 @@ const ACCOUNT_FIELD_KEYS = {
   StopOutLevel: ['StopOutLevel', 'stopOutLevel'],
 };
 
-const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canManipulateTrades }) => {
+const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canCloseTrades, canManipulateTrades }) => {
   const style = {
     top: Math.min(y, window.innerHeight - 400),
     left: Math.min(x, window.innerWidth - 240),
@@ -220,7 +227,7 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canMani
     >
       <TradeContextMenuItem text={`TRADE #${data?.position || '---'}`} isHeader />
       <TradeContextMenuItem icon={Plus} text="New Order" color="var(--ok-text)" />
-      <TradeContextMenuItem icon={CheckCircle2} text="Close Position" color="var(--danger-text)" disabled={!canManipulateTrades} onClick={() => { onCloseTrade(data.position); onClose(); }} />
+      <TradeContextMenuItem icon={CheckCircle2} text="Close Position" color="var(--danger-text)" disabled={!canCloseTrades} onClick={() => { onCloseTrade(data.position); onClose(); }} />
       <TradeContextMenuItem icon={Edit3} text="Modify or Cancel" color="var(--accent)" disabled={!canManipulateTrades} onClick={() => { onModify(data); onClose(); }} />
       <TradeContextMenuItem icon={Play} text="Activate" />
       <TradeContextMenuSeparator />
@@ -248,6 +255,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const canDeposit = canAct(PERMISSIONS.MANAGE_FINANCES);
   const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
   const canManipulateTrades = canMutateAccountTrades(canAct);
+  const canCloseTrades = canCloseAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accountData, setAccountData] = useState(null);
   const [, setLoading] = useState(false);
@@ -268,12 +276,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [depositSuccess, setDepositSuccess] = useState(null);
 
   const [positions, setPositions] = useState([]);
+  const [positionSyncRevision, setPositionSyncRevision] = useState(0);
   const [selectedTicketRow, setSelectedTicketRow] = useState(null);
   const [modalTradeSymbol, setModalTradeSymbol] = useState('EURUSD');
   const [tradeSL, setTradeSL] = useState('0.00000');
   const [tradeTP, setTradeTP] = useState('0.00000');
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [pendingTradeClose, setPendingTradeClose] = useState(null);
   const [tradeTickHistory, setTradeTickHistory] = useState([]);
   const [tradeFeedError, setTradeFeedError] = useState('');
   const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
@@ -427,16 +437,25 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return false;
   };
 
-  // Entity-aware close/cancel. For Position we cancel via OrderClose (legacy
-  // behaviour kept); Order cancels via adapter; Deals cannot be deleted.
-  const handleDeleteTrade = async (ticket) => {
-    if (!requireTradeMutationPermission()) return;
+  const requireTradeClosePermission = () => {
+    if (canCloseTrades) return true;
+    alert(TRADE_CLOSE_DENIED_MESSAGE);
+    return false;
+  };
+
+  // Entity-aware close/cancel. Positions use the versioned POST manager API;
+  // orders cancel via their adapter; deals are historical and cannot be deleted.
+  const requestTradeClose = (trade) => {
+    if (!requireTradeClosePermission()) return;
     if (entity === 'deal') {
       alert('Deals are historical records and cannot be deleted from this view.');
       return;
     }
-    const verb = entity === 'order' ? 'cancel order' : 'close position';
-    if (!window.confirm(`Are you sure you want to ${verb} #${ticket}?`)) return;
+    setPendingTradeClose(trade);
+  };
+
+  const handleDeleteTrade = async (ticket) => {
+    if (!requireTradeClosePermission()) return;
     setIsDeleting(true);
     const label = entity === 'order' ? `Cancel Order #${ticket}` : `Close Position #${ticket}`;
     try {
@@ -444,14 +463,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       if (entity === 'order') {
         result = await orderDelete(ticket);
       } else {
-        const params = new URLSearchParams({ ticket: String(ticket) });
-        const res = await fetchManagerApi(`/OrderClose?${params.toString()}`, {
-          method: 'GET',
-          headers: { 'accept': 'application/json' }
-        });
-        const text = await res.text();
-        try { result = JSON.parse(text); } catch { result = { message: text }; }
-        if (!res.ok) throw Object.assign(new Error(result?.message || 'Failed to close position'), { status: res.status });
+        result = await closeManagerPosition(ticket);
       }
       console.log(`[${label}] response:`, redactSensitive(result));
       const status = result?.retcode || result?.status || 'OK';
@@ -464,6 +476,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       alert(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
     } finally {
       setIsDeleting(false);
+      setPendingTradeClose(null);
     }
   };
 
@@ -473,6 +486,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // Null-safe: `typeof null === 'object'`, so guard against a falsy `account`
   // (the modal may now run its hooks before the `if (!account)` early return).
   const loginId = account && typeof account === 'object' ? account.login : account;
+
+  useEffect(() => subscribeToPositionSync((event) => {
+    const update = event?.payload?.data || event?.payload?.position || event?.payload || {};
+    const updateLogin = update.login ?? update.Login ?? update.account_login ?? update.accountLogin;
+    if (updateLogin === undefined || String(updateLogin) === String(loginId)) {
+      setPositionSyncRevision((revision) => revision + 1);
+    }
+  }), [loginId]);
 
   useEffect(() => {
     if (!loginId) return;
@@ -800,7 +821,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
     fetchDetails();
     fetchPositions();
-  }, [loginId, targetTicket]);
+  }, [loginId, targetTicket, positionSyncRevision]);
 
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
@@ -1028,6 +1049,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const titleText = `Account: ${loginId}, ${name}, ${currencyValue}, ${leverageValue}, ${modeVal}`;
 
   return (
+    <>
+    <div className="account-details-backdrop" aria-hidden="true" />
     <div
       style={{
         position: 'fixed',
@@ -1037,7 +1060,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         height: isMaximized ? '100vh' : (isMinimized ? 32 : size.height),
         zIndex: 100000
       }}
-      className="legacy-popup flex flex-col shadow-2xl rounded-xl font-sans select-none overflow-hidden"
+      className="account-details-window legacy-popup flex flex-col shadow-2xl rounded-xl font-sans select-none overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Account details for ${loginId}`}
     >
       {!isMaximized && !isMinimized && (
         <>
@@ -1051,31 +1077,28 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       {/* Title Bar */}
       <div
         onMouseDown={handleHeaderMouseDown}
-        className="h-8 bg-[#2d212f] bg-gradient-to-r from-[#2a1b2d] to-[#1e1e1e] flex items-center justify-between px-3 border-b border-[#333] cursor-move flex-shrink-0"
+        className="account-details-titlebar flex items-center justify-between cursor-move flex-shrink-0"
       >
-        <div className="flex items-center gap-2 text-[13px] truncate">
-          <User size={14} className="text-green-500 shrink-0" />
-          <span className="truncate pr-2">{titleText}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <User size={16} className="account-details-title-icon shrink-0" />
+          <span className="account-details-title truncate">{titleText}</span>
         </div>
-        <div className="flex items-center gap-3 text-gray-500 window-controls ml-2 shrink-0">
-          <Minus size={14} onClick={toggleMinimize} className="hover:text-gray-700 dark:text-gray-300 cursor-pointer" />
-          <Square size={12} onClick={toggleMaximize} className="hover:text-gray-700 dark:text-gray-300 cursor-pointer" />
-          <X size={16} onClick={onClose} className="hover:text-red-400 cursor-pointer" />
+        <div className="account-details-window-controls ml-2 shrink-0">
+          <button type="button" onClick={toggleMinimize} aria-label="Minimize account details"><Minus size={15} /></button>
+          <button type="button" onClick={toggleMaximize} aria-label="Maximize account details"><Square size={13} /></button>
+          <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={16} /></button>
         </div>
       </div>
 
       {!isMinimized && (
         <>
           {/* Tab Bar */}
-          <div className="h-8 bg-[#1e1e1e] flex items-center px-1 border-b border-[#333] flex-shrink-0">
+          <div className="account-details-tabs flex items-center flex-shrink-0">
             {TABS.map(tab => (
               <div
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 h-full flex items-center text-[13px] cursor-pointer transition-colors ${activeTab === tab
-                  ? 'border-t-2 border-t-blue-500 bg-[#252526] text-gray-900 dark:text-white'
-                  : 'text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-[#2a2a2b] border-t-2 border-t-transparent'
-                  }`}
+                className={`account-details-tab ${activeTab === tab ? 'is-active' : ''}`}
               >
                 {tab}
               </div>
@@ -1083,18 +1106,22 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-auto bg-[#1e1e1e] p-4 flex flex-col gap-4">
+          <div className="account-details-content flex-1 overflow-auto flex flex-col">
 
             {activeTab === 'Overview' ? (
               <>
                 {/* Top Info Section */}
-                <div className="space-y-1.5 text-[13px] font-sans px-1">
-                  <div className="flex gap-1.5 items-center">
-                    <span className="text-white font-black text-sm">{name}</span>
-                    <span className="text-gray-400">({loginId})</span>
-                    <span className="mx-1 h-3 w-px bg-gray-700"></span>
-                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer font-bold">{groupValue}</a>
-                    <span className="mx-1 h-3 w-px bg-gray-700"></span>
+                <section className="account-overview-summary">
+                  <div className="account-overview-heading">
+                    <div className="min-w-0">
+                      <p className="account-overview-eyebrow">Trading account</p>
+                      <div className="flex gap-2 items-baseline flex-wrap">
+                        <h2>{name}</h2>
+                        <span className="account-overview-login">#{loginId}</span>
+                      </div>
+                    </div>
+                    <div className="account-overview-badges">
+                      <a href="#" className="account-overview-group">{groupValue}</a>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
                       statusValue === 'active' 
                       ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
@@ -1106,33 +1133,26 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       {leverageValue}
                     </span>
                   </div>
-
-                  <div className="text-gray-300">
-                    {name} 
-                    <span className="mx-2 text-gray-600">|</span> 
-                    {countryCityValue || '-'}
                   </div>
 
-                  <div className="flex gap-4">
-                    <span className="text-gray-300">{getFieldValue('Phone') || '-'}</span>
-                    <span className="text-gray-300 font-mono">RTX5 ID: {getFieldValue('MQID') || '-'}</span>
+                  <div className="account-overview-details">
+                    <div><span>Location</span><strong>{countryCityValue || '-'}</strong></div>
+                    <div><span>RTX5 ID</span><strong className="tabular">{getFieldValue('MQID') || '-'}</strong></div>
+                    <div><span>Phone</span><strong>{getFieldValue('Phone') || '-'}</strong></div>
+                    <div><span>Email</span><a href="#">{getFieldValue('Email') || '-'}</a></div>
                   </div>
 
-                  <div>
-                    <a href="#" className="text-[#3794ff] hover:underline cursor-pointer">{getFieldValue('Email') || '-'}</a>
-                  </div>
-
-                  <div className="flex gap-4 text-gray-500 text-[11px] pt-2 border-t border-white/5 mt-2">
+                  <div className="account-overview-timestamps">
                     <span>Registered: {formatDate(registrationValue) || '-'}</span>
                     <span>Last access: {formatDate(lastAccessValue) || '-'}</span>
                     <span>Last IP: {lastIpValue || '-'}</span>
                   </div>
-                </div>
+                </section>
 
                 {/* Data Grid Section Modernized */}
-                <div className="flex-1 flex flex-col ui-card overflow-hidden shadow-xl" style={{ border: '1px solid var(--border)' }}>
+                <div className="account-positions-card flex-1 flex flex-col overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_60px] bg-[var(--surface-3)] border-b border-[var(--border)] text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  <div className="account-positions-grid account-positions-header">
                     <div className="p-3 border-r border-[var(--border)]">Symbol</div>
                     <div className="p-3 border-r border-[var(--border)]">Type</div>
                     <div className="p-3 border-r border-[var(--border)] text-right">Volume</div>
@@ -1159,7 +1179,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                               e.preventDefault();
                               setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
                             }}
-                            className="grid grid-cols-[120px_60px_60px_80px_80px_80px_80px_80px_1fr_60px] border-b border-[var(--border)] hover:bg-white/5 cursor-pointer transition-colors group"
+                            className="account-positions-grid account-positions-row cursor-pointer transition-colors group"
                           >
                             <div className="p-2 px-3 border-r border-[var(--border)] flex items-center gap-2 text-[var(--text)] font-medium">
                               <MinusSquare size={12} className="text-blue-500" />
@@ -1196,10 +1216,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             </div>
                             <div className="p-2 flex items-center justify-center">
                               <button
-                                onClick={() => handleDeleteTrade(pos.position)}
-                                disabled={isDeleting || !canManipulateTrades}
-                                title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white px-2 py-0.5 rounded text-[10px] font-bold"
+                                onClick={() => requestTradeClose(pos)}
+                                disabled={isDeleting || !canCloseTrades}
+                                title={!canCloseTrades ? TRADE_CLOSE_DENIED_MESSAGE : undefined}
+                                className="account-position-close-button"
                               >
                                 CLOSE
                               </button>
@@ -1207,13 +1227,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                           </div>
                         );
                       }) : (
-                        <div className="p-10 text-center text-gray-500 italic text-sm">No open positions matching ticket</div>
+                        <div className="account-positions-empty">No open positions matching this account.</div>
                       );
                     })()}
                   </div>
 
                   {/* Summary Footer Modernized */}
-                  <div className="bg-[var(--surface-3)] border-t border-[var(--border)] mt-auto">
+                  <div className="account-balance-summary mt-auto">
                     <div className="flex border-b border-[var(--border)] text-[12px] font-bold">
                       <div className="flex-1 p-3 px-4 flex items-center gap-3 text-[var(--text-2)] overflow-x-auto custom-scrollbar no-scrollbar">
                         <PlusSquare size={14} className="text-blue-500" />
@@ -2009,7 +2029,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Footer */}
-          <div className="h-12 bg-[#252526] border-t border-[#333] flex items-center justify-between px-4 flex-shrink-0">
+          <div className="account-details-footer flex items-center justify-between flex-shrink-0">
             
             <div className="flex gap-2">
               <button onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
@@ -2031,11 +2051,38 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           {...ctxMenu}
           onClose={() => setCtxMenu(prev => ({ ...prev, isOpen: false }))}
           onModify={handleModifySLTP}
-          onCloseTrade={handleDeleteTrade}
+          onCloseTrade={(ticket) => requestTradeClose({ position: ticket })}
+          canCloseTrades={canCloseTrades}
           canManipulateTrades={canManipulateTrades}
         />
       )}
+
+      {pendingTradeClose && (
+        <div className="trade-close-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="trade-close-confirmation-title" aria-describedby="trade-close-confirmation-description">
+          <div className="trade-close-confirmation-card">
+            <div className="trade-close-confirmation-header">
+              <div>
+                <p className="trade-close-confirmation-eyebrow">Trade confirmation</p>
+                <h2 id="trade-close-confirmation-title">Close this position?</h2>
+              </div>
+              <button type="button" onClick={() => setPendingTradeClose(null)} aria-label="Cancel closing position" className="trade-close-confirmation-dismiss">
+                <X size={18} />
+              </button>
+            </div>
+            <p id="trade-close-confirmation-description" className="trade-close-confirmation-message">
+              Close {pendingTradeClose.type ? `${String(pendingTradeClose.type).toUpperCase()} ` : ''}{pendingTradeClose.symbol || 'this'} position #{pendingTradeClose.position} at the current market price? This action cannot be undone.
+            </p>
+            <div className="trade-close-confirmation-actions">
+              <button type="button" onClick={() => setPendingTradeClose(null)} className="trade-close-confirmation-cancel">Cancel</button>
+              <button type="button" onClick={() => handleDeleteTrade(pendingTradeClose.position)} disabled={isDeleting} className="trade-close-confirmation-confirm">
+                {isDeleting ? 'Closing…' : 'Close position'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </>
   );
 };
 

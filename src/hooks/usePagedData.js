@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_PAGE_LIMIT } from '../utils/pagination';
+import { getPagedRows } from '../utils/pagedQueryState.js';
 
 const useDebouncedValue = (value, delayMs) => {
   const [debounced, setDebounced] = useState(value);
@@ -28,6 +29,7 @@ export default function usePagedData({
   refetchOnWindowFocus = false,
   refetchOnReconnect = false,
   keepRunningOnUnmount = false,
+  meta,
 }) {
   const [pageState, setPageState] = useState(() => ({ page: 0, key: stableParamsKey(params) }));
   const rawSearch = params.search ?? '';
@@ -53,9 +55,10 @@ export default function usePagedData({
     refetchOnWindowFocus,
     refetchOnReconnect,
     placeholderData: (previousData) => previousData,
+    meta,
   });
 
-  const rows = enabled ? query.data?.rows ?? [] : [];
+  const rows = getPagedRows(query.data, enabled);
   const total = enabled ? query.data?.total ?? null : null;
   const hasMore = enabled ? Boolean(query.data?.hasMore) : false;
 

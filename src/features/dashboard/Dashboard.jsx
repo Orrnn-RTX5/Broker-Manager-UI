@@ -124,10 +124,10 @@ const Dashboard = () => {
     >
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>
+          <h1 className="dashboard-page-title text-2xl font-semibold" style={{ color: 'var(--text)' }}>
             Dashboard
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+          <p className="dashboard-page-subtitle text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
             Live account and trading metrics from manager APIs.
           </p>
         </div>

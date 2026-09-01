@@ -8,47 +8,70 @@ import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
 import { clearBrokerInfo } from './services/brokerAuth';
+import { preloadFrequentWorkspaceRoutes, workspaceRouteLoaders } from './utils/workspaceRouteModules';
+import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQueries.js';
+import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
 
 import Dashboard from './features/dashboard/Dashboard';
+import OnlineUsersDashboard from './features/analytics/OnlineUsersDashboard';
+import OpenOrdersDashboard from './features/analytics/OpenOrdersDashboard';
+import OpenPositionsPage from './features/clients/OpenPositionsPage';
+import ClientsDashboard from './features/clients/ClientsDashboard';
+import OrdersPage from './features/clients/OrdersPage';
+import GroupsPage from './features/groups/GroupsPage';
 
 // Keep the dashboard and workspace shell in the initial bundle. Every other
 // workspace view is loaded only when it is opened, so its data/UI code cannot
 // delay the first dashboard render.
-const TradingAccountsDashboard = lazy(() => import('./features/analytics/TradingAccountsDashboard'));
-const OnlineUsersDashboard = lazy(() => import('./features/analytics/OnlineUsersDashboard'));
-const AdvertisingCampaignsDashboard = lazy(() => import('./features/analytics/AdvertisingCampaignsDashboard'));
-const ByCountryDashboard = lazy(() => import('./features/analytics/ByCountryDashboard'));
-const OpenOrdersDashboard = lazy(() => import('./features/analytics/OpenOrdersDashboard'));
-const ClientsDashboard = lazy(() => import('./features/clients/ClientsDashboard'));
-const OnlineUsersPage = lazy(() => import('./features/clients/OnlineUsersPage'));
-const TradingAccountsPage = lazy(() => import('./features/clients/TradingAccountsPage'));
-const PositionsPage = lazy(() => import('./features/clients/PositionsPage'));
-const OpenPositionsPage = lazy(() => import('./features/clients/OpenPositionsPage'));
-const OrdersPage = lazy(() => import('./features/clients/OrdersPage'));
-const DealsPage = lazy(() => import('./features/clients/DealsPage'));
-const GroupsPage = lazy(() => import('./features/groups/GroupsPage'));
-const GroupDetailsPage = lazy(() => import('./features/groups/GroupDetailsPage'));
-const DealerQueuePage = lazy(() => import('./features/dealer/DealerQueuePage'));
-const RestrictedAccountsPage = lazy(() => import('./features/dealer/RestrictedAccountsPage'));
-const IBListPage = lazy(() => import('./features/ib/IBListPage'));
-const IBTreePage = lazy(() => import('./features/ib/IBTreePage'));
-const SymbolsOverviewPage = lazy(() => import('./features/symbols/SymbolsOverviewPage'));
-const SymbolListPage = lazy(() => import('./features/symbols/SymbolListPage'));
-const SymbolManagementPage = lazy(() => import('./features/symbols/SymbolManagementPage'));
+const TradingAccountsDashboard = lazy(workspaceRouteLoaders.tradingAccountsDashboard);
+const AdvertisingCampaignsDashboard = lazy(workspaceRouteLoaders.advertisingCampaignsDashboard);
+const ByCountryDashboard = lazy(workspaceRouteLoaders.byCountryDashboard);
+const OnlineUsersPage = lazy(workspaceRouteLoaders.onlineUsersPage);
+const TradingAccountsPage = lazy(workspaceRouteLoaders.tradingAccountsPage);
+const PositionsPage = lazy(workspaceRouteLoaders.positionsPage);
+const DealsPage = lazy(workspaceRouteLoaders.dealsPage);
+const GroupDetailsPage = lazy(workspaceRouteLoaders.groupDetailsPage);
+const DealerQueuePage = lazy(workspaceRouteLoaders.dealerQueuePage);
+const RestrictedAccountsPage = lazy(workspaceRouteLoaders.restrictedAccountsPage);
+const IBListPage = lazy(workspaceRouteLoaders.ibListPage);
+const IBTreePage = lazy(workspaceRouteLoaders.ibTreePage);
+const SymbolsOverviewPage = lazy(workspaceRouteLoaders.symbolsOverviewPage);
+const SymbolListPage = lazy(workspaceRouteLoaders.symbolListPage);
+const SymbolManagementPage = lazy(workspaceRouteLoaders.symbolManagementPage);
 
 const AUTH_STORAGE_POLL_MS = 2000;
 const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
 
-const WorkspaceRouteFallback = () => (
-  <div
-    role="status"
-    aria-live="polite"
-    className="flex min-h-full items-center justify-center p-6 text-sm"
-    style={{ color: 'var(--muted)' }}
-  >
-    Loading workspace…
-  </div>
-);
+const ROUTE_LOADING_LABELS = Object.freeze({
+  '/analytics/online-users': 'Online Users',
+  '/analytics/open-positions': 'Open Positions',
+  '/analytics/open-orders': 'Open Orders',
+});
+
+const WorkspaceRouteFallback = () => {
+  const location = useLocation();
+  const label = ROUTE_LOADING_LABELS[location.pathname] || 'Workspace';
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-full w-full flex-col gap-4 p-6"
+      style={{ color: 'var(--muted)' }}
+    >
+      <div>
+        <div className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{label}</div>
+        <div className="mt-1 text-[10px]">Opening view…</div>
+      </div>
+      <div className="ui-card min-h-48 animate-pulse p-4">
+        <div className="h-3 w-40 rounded" style={{ background: 'var(--surface-3)' }} />
+        <div className="mt-4 h-8 w-full rounded" style={{ background: 'var(--surface-2)' }} />
+        <div className="mt-3 h-8 w-full rounded" style={{ background: 'var(--surface-2)' }} />
+        <div className="mt-3 h-8 w-4/5 rounded" style={{ background: 'var(--surface-2)' }} />
+      </div>
+    </div>
+  );
+};
 
 const SessionExpiryRedirect = ({ isAuthenticated }) => {
   const location = useLocation();
@@ -89,6 +112,13 @@ function App() {
       authService.expireSession(initialSessionStatus.reason || 'session_invalid');
     }
   }, [initialSessionStatus]);
+
+  useEffect(() => {
+    // These three small chunks are safe to fetch before authentication. By
+    // warming them while the user is on the login screen, the first possible
+    // Navigator click cannot be blocked by module download/evaluation.
+    preloadFrequentWorkspaceRoutes();
+  }, []);
 
   useEffect(() => {
     const handleSessionExpired = () => {
@@ -151,6 +181,18 @@ function App() {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
+
+    // Start warming as soon as the authenticated shell commits. A live market
+    // feed means the main thread may never become truly idle, which used to
+    // postpone requestIdleCallback until after the user had already clicked.
+    preloadFrequentWorkspaceRoutes();
+    prefetchInitialAnalyticsData(queryClient);
+    prefetchInitialWorkspaceData(queryClient);
+    return undefined;
+  }, [isAuthenticated, queryClient]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
     if (!validateCurrentSession('expiry_timer_check')) return undefined;
 
     const expiresAt = authService.getTokenExpiresAt();
@@ -177,6 +219,10 @@ function App() {
       return;
     }
     rememberValidSession(status);
+    // Start authenticated data warming before the dashboard transition. React
+    // Query deduplicates this with the authenticated effect below.
+    prefetchInitialAnalyticsData(queryClient);
+    prefetchInitialWorkspaceData(queryClient);
     setSessionVersion((value) => value + 1);
     setIsAuthenticated(true);
   };
@@ -191,7 +237,10 @@ function App() {
   };
 
   return (
-    <Router>
+    // Workspace navigation is direct user input and must outrank the continuous
+    // market-feed updates. React Router otherwise wraps every location change
+    // in a transition, which can be postponed repeatedly by quote-store work.
+    <Router unstable_useTransitions={false}>
       <GlobalErrorBoundary>
         <DesktopWindowControls variant={isAuthenticated ? 'workspace' : 'auth'} />
         <SessionExpiryRedirect isAuthenticated={isAuthenticated} />

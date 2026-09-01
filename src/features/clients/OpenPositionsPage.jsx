@@ -7,6 +7,8 @@ import AccountRestrictionsModal from '../../components/Popups/AccountRestriction
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
+import { useAnalyticsRouteTiming } from '../../hooks/useAnalyticsTiming.js';
+import { ANALYTICS_VIEWS } from '../../utils/analyticsQueryOptions.js';
 
 const POSITION_COLUMNS = [
   { key: 'position',     label: 'Ticket' },
@@ -26,6 +28,7 @@ const POSITION_COLUMNS = [
 ];
 
 const OpenPositionsPage = () => {
+  useAnalyticsRouteTiming(ANALYTICS_VIEWS.openPositions);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
@@ -54,20 +57,20 @@ const OpenPositionsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getPositionActions]);
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-5 overflow-y-auto" {...ctl.pageProps}>
+    <div className="open-positions-page p-6 w-full h-full flex flex-col gap-5 overflow-y-auto" {...ctl.pageProps}>
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
           <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Open Positions</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
+            <h1 className="open-positions-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Open Positions</h1>
+            <p className="open-positions-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-xs w-full">
+      <div className="open-positions-filters flex flex-wrap items-center gap-3">
+        <div className="open-positions-search relative max-w-xs w-full">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"

@@ -25,7 +25,7 @@ export default function useGridPageController({
 
   const handleRowsChange = useCallback((rows) => {
     rowsRef.current = rows;
-    setCurrentRows(rows);
+    setCurrentRows((current) => current === rows ? current : rows);
   }, []);
 
   const handlePageContext = useCallback((e) => {

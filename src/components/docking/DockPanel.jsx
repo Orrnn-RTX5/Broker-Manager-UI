@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import { ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, Maximize2, Minimize2, Users } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
 import styles from './DockPanel.module.css';
@@ -24,6 +24,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   const pos     = panel?.position;
   const isFloat = pos === DOCK_POSITIONS.FLOAT;
   const isMaximized = Boolean(panel?.maximized);
+  const PanelIcon = panel?.icon === 'users' ? Users : null;
 
   // ─── Drag to float ──────────────────────────────────────────────────────────
   const onTitleMouseDown = useCallback((e) => {
@@ -147,7 +148,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
 
   // ─── Container style ─────────────────────────────────────────────────────────
   let containerStyle = {};
-  let containerClass = styles.panel;
+  let containerClass = `${styles.panel} ${styles.workspaceUi}`;
 
   if (pos === DOCK_POSITIONS.FLOAT) {
     containerStyle = {
@@ -185,7 +186,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
         className={`${styles.titleBar}${isMaximized ? ` ${styles.titleBarStatic}` : ''}`}
         onMouseDown={onTitleMouseDown}
       >
-        <span className={styles.panelIcon}>{panel.icon}</span>
+        <span className={styles.panelIcon}>{PanelIcon ? <PanelIcon size={15} strokeWidth={1.9} /> : panel.icon}</span>
         <span className={styles.titleText}>{panel.title}</span>
         <div className={styles.titleActions}>
           {canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (

@@ -21,7 +21,9 @@ import {
 const WS_CONNECT_TIMEOUT_MS = 10_000;
 const WS_RECONNECT_DELAY_MS = 5_000;
 const WS_METADATA_FALLBACK_DELAY_MS = 3_000;
-const MARKET_TICK_BATCH_MS = 100;
+// Two visual quote updates per second remain live to the eye while leaving
+// deterministic scheduler space for direct Navigator input and route commits.
+const MARKET_TICK_BATCH_MS = 500;
 const SYMBOL_CACHE_WRITE_DELAY_MS = 2_000;
 const REHYDRATED_SYMBOL_REASON = 'Cached quote awaiting a tick from the current feed connection.';
 

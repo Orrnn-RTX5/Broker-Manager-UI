@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
-import { getOnlineUsersPage } from '../../../services/api';
+import GridLoadingState from '../../../components/GridLoadingState';
+import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
+import { fetchOnlineUsersAnalyticsPage } from '../analyticsQueries.js';
+import { ANALYTICS_VIEWS, ONLINE_USERS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -36,17 +39,30 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     isFetching,
     isError,
     error,
+    dataUpdatedAt,
     refetch,
     nextPage,
     prevPage,
   } = usePagedData({
     queryKey: ['online-users', 'page'],
-    queryFn: getOnlineUsersPage,
+    queryFn: fetchOnlineUsersAnalyticsPage,
     params,
     pageSize,
     enabled: hasRequestedData,
     refetchInterval: 10_000,
-    staleTime: 5_000,
+    staleTime: ONLINE_USERS_STALE_MS,
+    refetchOnMount: true,
+  });
+
+  const timingMetadata = useMemo(() => ({
+    rowCount: rows.length,
+    cacheAvailable: dataUpdatedAt > 0,
+  }), [dataUpdatedAt, rows.length]);
+  useAnalyticsDataTiming(ANALYTICS_VIEWS.onlineUsers, {
+    settled: hasRequestedData && !isLoading && (dataUpdatedAt > 0 || isError),
+    outcome: isError ? 'error' : rows.length > 0 ? 'success' : 'empty',
+    dataVersion: dataUpdatedAt,
+    metadata: timingMetadata,
   });
 
   useEffect(() => {
@@ -84,13 +100,13 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col w-full overflow-hidden">
+    <div className="online-users-grid ui-card flex flex-col w-full overflow-hidden">
       <div
-        className="flex items-center justify-between px-4 py-3"
+        className="online-users-grid-header flex items-center justify-between px-4 py-3"
         style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}
       >
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+          <div className="online-users-grid-title text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
             {isIdle ? 'Online users not loaded' : `${total ?? rows.length} online users`}
           </div>
         </div>
@@ -106,12 +122,15 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
       </div>
       {isError && (
         <div
-          className="px-4 py-2 text-xs break-all"
+          className="online-users-grid-error px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
           <strong>API Error.</strong> {error?.message || 'Failed to load online users.'}
         </div>
       )}
+      {isLoading && rows.length === 0 ? (
+        <GridLoadingState label="Loading online users…" />
+      ) : (
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
@@ -129,7 +148,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={8} className="online-users-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Online users are not loaded.</span>
@@ -167,9 +186,10 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
           </tbody>
         </table>
       </div>
+      )}
 
       <div
-        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="online-users-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-2">

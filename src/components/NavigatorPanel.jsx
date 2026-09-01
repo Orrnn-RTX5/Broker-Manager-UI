@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useGroupList } from '../hooks/useGroupList';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
@@ -6,12 +7,14 @@ import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import { getGroupDetailsPath } from '../features/groups/groupRoutes';
 import { PERMISSIONS } from '../utils/permissions';
+import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
+import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
 import {
   Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
 } from 'lucide-react';
 
 // Reusable Tree Node Component
-const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode, onExpandedChange }) => {
+const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode, onExpandedChange, onIntent }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const hasChildren = React.Children.count(children) > 0;
 
@@ -24,11 +27,22 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
     if (onClickNode) onClickNode(event);
   };
 
+  const handleKeyDown = (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleClick(event);
+  };
+
   return (
-    <div className="flex flex-col text-[13px] select-none" style={{ color: 'var(--text-2)' }}>
+    <div className={`tree-node ${hasChildren ? 'tree-node--branch' : 'tree-node--leaf'} flex flex-col text-[13px] select-none`} style={{ color: 'var(--text-2)' }}>
       <div
         className="flex items-center py-1 px-1 cursor-pointer rounded-md transition-colors"
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        onPointerEnter={onIntent}
+        onFocus={onIntent}
+        role="treeitem"
+        tabIndex={hasChildren || onClickNode ? 0 : -1}
         onMouseOver={(e) => e.currentTarget.style.background = 'var(--accent-soft)'}
         onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
       >
@@ -65,6 +79,7 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 };
 
 const NavigatorPanel = () => {
+  const queryClient = useQueryClient();
   const navigate = useWorkspaceNavigation();
   const [shouldLoadGroups, setShouldLoadGroups] = useState(false);
   const { groups, total: groupsTotal, hasMore: groupsHasMore, loading: groupsLoading } = useGroupList({
@@ -95,6 +110,8 @@ const NavigatorPanel = () => {
   }, []);
 
   const navigateTo = (path) => navigate(path);
+  const preloadAnalytics = (path) => preloadAnalyticsDestination(queryClient, path);
+  const preloadDataWorkspace = (path) => preloadWorkspaceDestination(queryClient, path);
 
   const openNewGroup = (event) => {
     event?.stopPropagation();
@@ -106,7 +123,7 @@ const NavigatorPanel = () => {
   };
 
   return (
-    <div className="h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
+    <div className="workspace-ui navigator-type h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         <TreeNode label="RTX5 Manager" icon={Server} iconColor="text-blue-400" defaultExpanded>
 
@@ -115,19 +132,19 @@ const NavigatorPanel = () => {
 
               <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
 
-                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/online-users')} />
-                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/open-positions')} />
-                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onClickNode={() => navigateTo('/analytics/open-orders')} />
+                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/online-users')} onClickNode={() => navigateTo('/analytics/online-users')} />
+                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/open-positions')} onClickNode={() => navigateTo('/analytics/open-positions')} />
+                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/open-orders')} onClickNode={() => navigateTo('/analytics/open-orders')} />
 
 
               </TreeNode>
 
               <TreeNode label="Clients & Orders" icon={Users} iconColor="text-blue-500" defaultExpanded>
                 <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/online-users')} />
-                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients')} />
+                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onIntent={() => preloadDataWorkspace('/clients')} onClickNode={() => navigateTo('/clients')} />
                 <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/trading-accounts')} />
                 <TreeNode label="Position History" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/positions')} />
-                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/orders')} />
+                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onIntent={() => preloadDataWorkspace('/clients/orders')} onClickNode={() => navigateTo('/clients/orders')} />
               </TreeNode>
 
               <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigateTo('/dealing')} />
@@ -152,6 +169,7 @@ const NavigatorPanel = () => {
                 count={shouldLoadGroups ? (groupsLoading ? '...' : (groupsTotal ?? groups?.length ?? 0).toString()) : null}
                 icon={Users2}
                 iconColor="text-blue-500"
+                onIntent={() => preloadDataWorkspace('/groups')}
                 onClickNode={() => navigateTo('/groups')}
                 onExpandedChange={(expanded) => {
                   if (expanded) setShouldLoadGroups(true);

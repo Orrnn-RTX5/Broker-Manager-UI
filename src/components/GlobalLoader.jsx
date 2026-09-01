@@ -1,8 +1,9 @@
 import React from 'react';
 import { useIsFetching } from '@tanstack/react-query';
+import { shouldShowInGlobalLoader } from '../utils/queryLoading.js';
 
 const GlobalLoader = () => {
-  const isFetching = useIsFetching();
+  const isFetching = useIsFetching({ predicate: shouldShowInGlobalLoader });
 
   if (isFetching === 0) return null;
 

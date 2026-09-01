@@ -31,7 +31,7 @@ const HeaderCell = ({ col, label, align = 'left', sortCol, sortDir, onSort }) =>
   </th>
 );
 
-const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
+const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
   const [sortCol, setSortCol] = useState('openTime');
   const [sortDir, setSortDir] = useState('desc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -53,6 +53,8 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
     return rows;
   }, [data, sortCol, sortDir]);
 
+  const hasNoHistory = !isLoading && sortedData.length === 0;
+
   return (
     <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
       {error && (
@@ -61,6 +63,53 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
         </div>
       )}
 
+      {isLoading ? (
+        <div className="flex-1 min-h-[300px] flex items-center justify-center px-6 text-center">
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'var(--accent-soft)',
+                border: '1px solid var(--accent-border)',
+                color: 'var(--accent-text)',
+              }}
+            >
+              <Loader size={20} className="animate-spin" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                Loading position history
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                Fetching closed trade records for this account.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : hasNoHistory ? (
+        <div className="flex-1 min-h-[300px] flex items-center justify-center px-6 text-center">
+          <div className="max-w-sm flex flex-col items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-3)',
+                color: 'var(--text-3)',
+              }}
+            >
+              <History size={20} strokeWidth={1.8} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                No closed positions
+              </div>
+              <div className="text-xs mt-1 leading-5" style={{ color: 'var(--text-3)' }}>
+                Account <span className="tabular" style={{ color: 'var(--text-2)' }}>{login}</span> has no closed trade history.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="w-full overflow-x-auto flex-1">
         <table className="ui-grid min-w-max">
           <thead>
@@ -83,57 +132,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={15} className="text-center py-28">
-                  <div className="flex flex-col items-center gap-3">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{
-                        background: 'var(--accent-soft)',
-                        border: '1px solid var(--accent-border)',
-                        color: 'var(--accent-text)',
-                      }}
-                    >
-                      <Loader size={20} className="animate-spin" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                        Loading position history
-                      </div>
-                      <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                        Fetching closed trade records for this login.
-                      </div>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ) : sortedData.length === 0 ? (
-              <tr>
-                <td colSpan={15} className="text-center py-28">
-                  <div className="flex flex-col items-center gap-3">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{
-                        background: 'var(--surface-2)',
-                        border: '1px solid var(--border-3)',
-                        color: 'var(--text-3)',
-                      }}
-                    >
-                      <History size={20} strokeWidth={1.8} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                        No history found
-                      </div>
-                      <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                        This account has no closed position records.
-                      </div>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ) : sortedData.map((row, idx) => {
+            {sortedData.map((row, idx) => {
               const rowKey = `${row.order}-${idx}`;
               const isBuy = row.type === 'buy';
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
@@ -172,6 +171,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error }) => {
           </tbody>
         </table>
       </div>
+      )}
       
       {!isLoading && data.length > 0 && (
         <div className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--muted)' }}>

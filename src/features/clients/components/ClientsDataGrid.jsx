@@ -4,6 +4,12 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getClientsPage } from '../../../services/api';
 import ClientDetailsModal from '../../../components/Popups/ClientDetailsModal';
+import GridLoadingState from '../../../components/GridLoadingState';
+import {
+  CLIENTS_INITIAL_PARAMS,
+  WORKSPACE_DATA_STALE_MS,
+  WORKSPACE_QUERY_META,
+} from '../../../utils/workspaceQueryOptions.js';
 
 const STATUS_BADGE = {
   Active: 'ui-badge-success',
@@ -28,11 +34,11 @@ const ClientsDataGrid = ({
   onRowsChange,
   onRowContext,
 }) => {
-  const [sortCol, setSortCol] = useState('id');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortCol, setSortCol] = useState(CLIENTS_INITIAL_PARAMS.sort_by);
+  const [sortDir, setSortDir] = useState(CLIENTS_INITIAL_PARAMS.sort_dir);
   const [detailsClient, setDetailsClient] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('clients');
-  const pageSize = 30;
+  const pageSize = CLIENTS_INITIAL_PARAMS.limit;
 
   const filters = useMemo(() => ({
     ...(typeFilter !== 'All Types' ? { type: typeFilter } : {}),
@@ -66,6 +72,8 @@ const ClientsDataGrid = ({
     params,
     pageSize,
     enabled: hasRequestedData,
+    staleTime: WORKSPACE_DATA_STALE_MS,
+    meta: WORKSPACE_QUERY_META,
   });
 
   useEffect(() => {
@@ -119,6 +127,9 @@ const ClientsDataGrid = ({
           <strong>API Error.</strong> {error?.message || 'Failed to load clients.'}
         </div>
       )}
+      {isLoading && pageRows.length === 0 ? (
+        <GridLoadingState label="Loading clients…" />
+      ) : (
       <div className="grid-scroll-area w-full min-h-0 overflow-auto flex-1">
         <table className={`ui-grid min-w-max ${grid?.showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
@@ -203,6 +214,7 @@ const ClientsDataGrid = ({
           </tbody>
         </table>
       </div>
+      )}
 
       <div
         className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"

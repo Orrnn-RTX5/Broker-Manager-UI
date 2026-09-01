@@ -1,20 +1,18 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { History, Search, RefreshCw, X, Clock3 } from 'lucide-react';
 import PositionHistoryGrid from './components/PositionHistoryGrid';
 import { getPositionHistory } from '../../services/api';
 
-const PositionHistoryEmptyState = () => (
+const PositionHistoryEmptyState = ({ onSelectAccount }) => (
   <div
-    className="ui-card flex-1 min-h-[520px] flex items-center justify-center overflow-hidden"
+    className="ui-card flex-1 min-h-[380px] flex items-center justify-center overflow-hidden"
     style={{
       background: 'linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)',
-      borderColor: 'var(--border-3)',
-      borderStyle: 'dashed',
     }}
   >
-    <div className="w-full max-w-lg px-6 text-center">
+    <div className="w-full max-w-md px-6 text-center">
       <div
-        className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm"
+        className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm"
         style={{
           background: 'var(--accent-soft)',
           border: '1px solid var(--accent-border)',
@@ -23,45 +21,33 @@ const PositionHistoryEmptyState = () => (
       >
         <Search size={26} strokeWidth={1.8} />
       </div>
-      <div className="mt-5">
-        <div className="text-[11px] uppercase font-semibold tracking-wider" style={{ color: 'var(--text-3)' }}>
-          No account selected
-        </div>
-        <h2 className="mt-1 text-base font-semibold" style={{ color: 'var(--text)' }}>
-          Position history is ready
+      <div className="mt-4">
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
+          Choose an account to get started
         </h2>
-        <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-3)' }}>
-          Closed position records will appear here after a login search.
+        <p className="mt-1.5 text-sm leading-6" style={{ color: 'var(--text-3)' }}>
+          Enter the account login ID above to view its position history.
         </p>
       </div>
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
-        {[
-          ['Login ID', 'Account lookup'],
-          ['Orders', 'Closed trades'],
-          ['P/L', 'Swap and commission'],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-lg px-3 py-2"
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            <div className="text-[10px] uppercase font-semibold tracking-wider" style={{ color: 'var(--muted)' }}>
-              {label}
-            </div>
-            <div className="mt-0.5 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
-              {value}
-            </div>
-          </div>
-        ))}
+      <button type="button" onClick={onSelectAccount} className="ui-btn ui-btn-primary ui-btn-sm mt-5 inline-flex items-center gap-1.5">
+        <Search size={13} /> Enter login ID
+      </button>
+      <div className="mt-6 pt-4 text-xs" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-3)' }}>
+        <span className="font-medium" style={{ color: 'var(--text-2)' }}>You’ll see:</span>
+        <div className="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-1">
+          <span>Closed trades</span>
+          <span aria-hidden="true">•</span>
+          <span>Profit &amp; loss</span>
+          <span aria-hidden="true">•</span>
+          <span>Swaps &amp; commission</span>
+        </div>
       </div>
     </div>
   </div>
 );
 
 const PositionsPage = () => {
+  const loginInputRef = useRef(null);
   const [loginInput, setLoginInput] = useState('');
   const [currentLogin, setCurrentLogin] = useState('');
   const [historyData, setHistoryData] = useState([]);
@@ -130,9 +116,10 @@ const PositionsPage = () => {
               style={{ color: 'var(--muted)' }}
             />
             <input
+              ref={loginInputRef}
               type="text"
               inputMode="numeric"
-              placeholder="Enter Login ID..."
+              placeholder="Enter account login ID"
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
               className="ui-input ui-input-sm w-full"
@@ -156,7 +143,7 @@ const PositionsPage = () => {
             className="ui-btn ui-btn-primary ui-btn-sm flex items-center justify-center gap-1.5 min-w-[132px]"
           >
             {isLoading ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
-            Search History
+            View history
           </button>
         </form>
 
@@ -175,7 +162,7 @@ const PositionsPage = () => {
               <span className="tabular" style={{ color: 'var(--text)' }}>{currentLogin}</span>
             </div>
           ) : (
-            <span className="text-xs" style={{ color: 'var(--muted)' }}>No login selected</span>
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>Select an account</span>
           )}
           <div className="flex items-center gap-1.5">
             {currentLogin && (
@@ -207,9 +194,10 @@ const PositionsPage = () => {
             data={historyData}
             isLoading={isLoading}
             error={error}
+            login={currentLogin}
           />
         ) : (
-          <PositionHistoryEmptyState />
+          <PositionHistoryEmptyState onSelectAccount={() => loginInputRef.current?.focus()} />
         )}
       </div>
     </div>

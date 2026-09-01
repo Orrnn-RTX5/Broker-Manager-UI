@@ -1,0 +1,273 @@
+{
+  "label": "zero-wait-smoke",
+  "baseUrl": "http://localhost:5174",
+  "capturedAt": "2026-09-01T13:14:29.941Z",
+  "milestones": {
+    "dashboardReadyAtMs": 6428
+  },
+  "results": [
+    {
+      "view": "/analytics/online-users",
+      "clickStartedAtMs": 6433,
+      "urlChangedMs": 492,
+      "headingVisibleMs": 715,
+      "contentSettledMs": 2662,
+      "settleOutcome": "settled",
+      "requests": [
+        {
+          "view": "online-users",
+          "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+          "startedAtMs": 7091,
+          "status": 200,
+          "responseMs": 1948
+        }
+      ],
+      "longTasks": [
+        {
+          "startTime": 5617.5,
+          "duration": 68
+        },
+        {
+          "startTime": 6108.39999999851,
+          "duration": 51
+        },
+        {
+          "startTime": 8172.099999997765,
+          "duration": 51
+        }
+      ],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 5961.099999997765,
+            "routeCommitted": 6121,
+            "requestStarted": 6125.199999999255,
+            "routeVisible": 6191.29999999702,
+            "responseReceived": 8106.89999999851,
+            "dataProcessed": 8107.199999999255,
+            "dataCommitted": 8118.39999999851,
+            "dataVisible": 8162.099999997765
+          },
+          "durations": {
+            "clickToRequest": 164.10000000149012,
+            "requestToResponse": 1981.699999999255,
+            "responseToProcessed": 0.30000000074505806,
+            "processedToVisible": 54.899999998509884,
+            "clickToRouteVisible": 230.19999999925494,
+            "clickToDataVisible": 2201
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-positions",
+      "clickStartedAtMs": 10303,
+      "urlChangedMs": 294,
+      "headingVisibleMs": 469,
+      "contentSettledMs": 667,
+      "settleOutcome": "settled",
+      "requests": [],
+      "longTasks": [
+        {
+          "startTime": 9648.29999999702,
+          "duration": 64
+        },
+        {
+          "startTime": 9737,
+          "duration": 90
+        },
+        {
+          "startTime": 9836.699999999255,
+          "duration": 54
+        }
+      ],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 5961.099999997765,
+            "routeCommitted": 6121,
+            "requestStarted": 6125.199999999255,
+            "routeVisible": 6191.29999999702,
+            "responseReceived": 8106.89999999851,
+            "dataProcessed": 8107.199999999255,
+            "dataCommitted": 8118.39999999851,
+            "dataVisible": 8162.099999997765
+          },
+          "durations": {
+            "clickToRequest": 164.10000000149012,
+            "requestToResponse": 1981.699999999255,
+            "responseToProcessed": 0.30000000074505806,
+            "processedToVisible": 54.899999998509884,
+            "clickToRouteVisible": 230.19999999925494,
+            "clickToDataVisible": 2201
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 9420.39999999851,
+            "dataCommitted": 9662.29999999702,
+            "routeCommitted": 9662.29999999702,
+            "routeVisible": 9723.699999999255,
+            "dataVisible": 9736.699999999255
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 303.30000000074506,
+            "clickToDataVisible": 316.30000000074506
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        }
+      ]
+    },
+    {
+      "view": "/analytics/open-orders",
+      "clickStartedAtMs": 12292,
+      "urlChangedMs": 554,
+      "headingVisibleMs": 781,
+      "contentSettledMs": 781,
+      "settleOutcome": "route-only",
+      "requests": [],
+      "longTasks": [],
+      "appTimings": [
+        {
+          "id": 1,
+          "view": "online-users",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 5961.099999997765,
+            "routeCommitted": 6121,
+            "requestStarted": 6125.199999999255,
+            "routeVisible": 6191.29999999702,
+            "responseReceived": 8106.89999999851,
+            "dataProcessed": 8107.199999999255,
+            "dataCommitted": 8118.39999999851,
+            "dataVisible": 8162.099999997765
+          },
+          "durations": {
+            "clickToRequest": 164.10000000149012,
+            "requestToResponse": 1981.699999999255,
+            "responseToProcessed": 0.30000000074505806,
+            "processedToVisible": 54.899999998509884,
+            "clickToRouteVisible": 230.19999999925494,
+            "clickToDataVisible": 2201
+          },
+          "metadata": {
+            "status": 200,
+            "ok": true,
+            "bytes": 652,
+            "serverTiming": null,
+            "rowCount": 3,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 2,
+          "view": "open-positions",
+          "interaction": "navigation",
+          "outcome": "success",
+          "marks": {
+            "interactionStarted": 9420.39999999851,
+            "dataCommitted": 9662.29999999702,
+            "routeCommitted": 9662.29999999702,
+            "routeVisible": 9723.699999999255,
+            "dataVisible": 9736.699999999255
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 303.30000000074506,
+            "clickToDataVisible": 316.30000000074506
+          },
+          "metadata": {
+            "rowCount": 11,
+            "cacheAvailable": true
+          }
+        },
+        {
+          "id": 3,
+          "view": "open-orders",
+          "interaction": "navigation",
+          "outcome": "route-ready",
+          "marks": {
+            "interactionStarted": 11606.89999999851,
+            "routeCommitted": 12071.39999999851,
+            "routeVisible": 12082.5
+          },
+          "durations": {
+            "clickToRequest": null,
+            "requestToResponse": null,
+            "responseToProcessed": null,
+            "processedToVisible": null,
+            "clickToRouteVisible": 475.6000000014901,
+            "clickToDataVisible": null
+          },
+          "metadata": {
+            "dataRequestRequired": false
+          }
+        }
+      ]
+    }
+  ],
+  "allRequests": [
+    {
+      "view": "online-users",
+      "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 6111,
+      "status": null,
+      "responseMs": null
+    },
+    {
+      "view": "open-positions",
+      "path": "/api/manager/PositionsAll?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 6123,
+      "status": 200,
+      "responseMs": 1241
+    },
+    {
+      "view": "online-users",
+      "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 7091,
+      "status": 200,
+      "responseMs": 1948
+    }
+  ],
+  "videoPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\zero-wait-smoke.webm",
+  "screenshotPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\zero-wait-smoke-final.png"
+}

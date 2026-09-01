@@ -3,6 +3,7 @@ import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw,
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getTradingAccountsPage } from '../../../services/api';
+import GridLoadingState from '../../../components/GridLoadingState';
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -131,15 +132,18 @@ const TradingAccountsDataGrid = ({
   };
 
   return (
-    <div className="ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+    <div className="trading-accounts-grid ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {isError && (
         <div
-          className="px-4 py-2 text-xs break-all"
+          className="trading-accounts-grid-error px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
           <strong>API Error.</strong> {error?.message || 'Failed to load accounts.'}
         </div>
       )}
+      {isLoading && rows.length === 0 ? (
+        <GridLoadingState label="Loading trading accounts…" />
+      ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
         <table className="ui-grid min-w-max">
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
@@ -160,7 +164,7 @@ const TradingAccountsDataGrid = ({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={11} className="trading-accounts-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Trading accounts are not loaded.</span>
@@ -233,9 +237,10 @@ const TradingAccountsDataGrid = ({
           </tbody>
         </table>
       </div>
+      )}
 
       <div
-        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="trading-accounts-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-2">

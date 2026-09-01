@@ -98,6 +98,12 @@
   cursor: grabbing;
 }
 
+.workspaceUi {
+  font-size: var(--workspace-ui-font-size, 13px) !important;
+  font-weight: var(--workspace-ui-font-weight, 400) !important;
+  line-height: 1.35;
+}
+
 .titleBarStatic,
 .titleBarStatic:active {
   cursor: default;
@@ -105,13 +111,13 @@
 
 .panelIcon {
   font-size: 14px;
-  color: var(--dock-icon-color, #7f56d9);
+  color: var(--dock-icon-color, var(--accent, #1570ef));
   flex-shrink: 0;
 }
 
 .titleText {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--workspace-ui-font-size, 13px);
+  font-weight: var(--workspace-ui-title-font-weight, 600);
   color: var(--dock-title-text, #101828);
   letter-spacing: -0.01em;
   flex: 1;

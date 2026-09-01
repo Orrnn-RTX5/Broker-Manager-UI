@@ -6,6 +6,7 @@ import {
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getAccountsOnlinePage } from '../../../services/api';
+import GridLoadingState from '../../../components/GridLoadingState';
 
 const formatDateTime = (ts) => {
   if (!ts) return '-';
@@ -117,6 +118,9 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </button>
       </div>
 
+      {isLoading && rows.length === 0 ? (
+        <GridLoadingState label="Loading active sessions…" />
+      ) : (
       <div className="w-full overflow-x-auto flex-1">
         <table className="ui-grid min-w-max">
           <thead>
@@ -215,6 +219,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
           </tbody>
         </table>
       </div>
+      )}
 
       <div
         className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"

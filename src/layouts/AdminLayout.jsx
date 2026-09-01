@@ -13,6 +13,7 @@ import { useDockingContext } from '../components/docking/DockingContext';
 import GlobalLoader from '../components/GlobalLoader';
 import ToastContainer from '../components/ToastContainer';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
+import { startPositionSync, stopPositionSync } from '../services/positionSync';
 
 // ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
@@ -31,7 +32,7 @@ const INITIAL_PANELS = {
   },
   [PANEL_ACCOUNTS]: {
     title: 'Accounts',
-    icon: '👥',
+    icon: 'users',
     defaultPosition: 'right',
     visible: false,
     size: { width: 280, height: '100%' },
@@ -66,6 +67,16 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   useEffect(() => {
     useSymbolStore.getState().initWebSocket();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      stopPositionSync();
+      return undefined;
+    }
+
+    startPositionSync();
+    return () => stopPositionSync();
+  }, [isAuthenticated]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {

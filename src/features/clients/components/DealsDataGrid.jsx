@@ -4,6 +4,7 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getBrokerDealsPage } from '../../../services/api';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
+import GridLoadingState from '../../../components/GridLoadingState';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtDate = (ts) => {
@@ -110,6 +111,9 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           <strong>API Error.</strong> {error?.message || 'Failed to load deals.'}
         </div>
       )}
+      {isLoading && rows.length === 0 ? (
+        <GridLoadingState label="Loading deals…" />
+      ) : (
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
@@ -189,6 +193,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           </tbody>
         </table>
       </div>
+      )}
 
       <div
         className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"

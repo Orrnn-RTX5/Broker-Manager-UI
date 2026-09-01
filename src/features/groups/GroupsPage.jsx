@@ -11,6 +11,11 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getGroupDetailsPath } from './groupRoutes';
 import { copyToClipboard, rowsToCSV, rowsToJSON, rowsToTSV } from '../../utils/gridUtils';
 import { EDIT_MENU_ACTION_EVENT, isEditableElement, publishEditMenuContext } from '../../utils/editMenuActions';
+import {
+  GROUPS_INITIAL_PARAMS,
+  WORKSPACE_DATA_STALE_MS,
+  WORKSPACE_QUERY_META,
+} from '../../utils/workspaceQueryOptions.js';
 
 const GROUP_EXPORT_COLUMNS = [
   { key: 'name', label: 'Group Name' },
@@ -30,12 +35,12 @@ const GroupsPage = () => {
   const [activeOnly, setActiveOnly] = useState(false);
   const [selectedGroupNames, setSelectedGroupNames] = useState(() => new Set());
   const searchInputRef = useRef(null);
-  const pageSize = 100;
+  const pageSize = GROUPS_INITIAL_PARAMS.limit;
 
   const params = useMemo(() => ({
     search,
-    sort_by: 'name',
-    sort_dir: 'asc',
+    sort_by: GROUPS_INITIAL_PARAMS.sort_by,
+    sort_dir: GROUPS_INITIAL_PARAMS.sort_dir,
   }), [search]);
 
   const {
@@ -56,6 +61,8 @@ const GroupsPage = () => {
     queryFn: activeOnly ? getActiveGroupsPage : getGroupsPage,
     params,
     pageSize,
+    staleTime: WORKSPACE_DATA_STALE_MS,
+    meta: WORKSPACE_QUERY_META,
   });
 
   const handleDelete = async (e, groupName) => {

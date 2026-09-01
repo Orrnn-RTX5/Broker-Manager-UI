@@ -41,18 +41,18 @@ const formatDate = (timestamp) => {
 };
 
 const DetailItem = ({ icon: Icon, label, value, description, color = 'var(--text)' }) => (
-  <div className="min-w-0">
+  <div className="opened-order-detail min-w-0">
     <div
-      className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold"
+      className="opened-order-detail-label flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold"
       style={{ color: 'var(--text-3)' }}
     >
       {Icon && <Icon size={12} style={{ color: 'var(--accent)' }} />}
       {label}
     </div>
-    <div className="text-[14px] font-semibold tabular font-mono mt-1 truncate" style={{ color }}>
+    <div className="opened-order-detail-value text-[14px] font-semibold tabular font-mono mt-1 truncate" style={{ color }}>
       {value}
     </div>
-    <div className="text-[11px] leading-snug mt-1" style={{ color: 'var(--muted)' }}>
+    <div className="opened-order-detail-description text-[11px] leading-snug mt-1" style={{ color: 'var(--muted)' }}>
       {description}
     </div>
   </div>
@@ -71,7 +71,7 @@ const OpenedOrderCard = ({ order }) => {
   const state = String(order.state || 'active').toUpperCase();
 
   return (
-    <div className="ui-card flex flex-col p-5 gap-5 transition-all hover:shadow-md">
+    <div className="opened-order-card ui-card flex flex-col p-5 gap-5 transition-all hover:shadow-md">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pb-4 border-b border-[var(--border-2)]">
         <div className="flex items-start gap-3 min-w-0">
           <span className={`ui-badge ${badgeClass} px-2 py-1 shrink-0`}>
@@ -80,10 +80,10 @@ const OpenedOrderCard = ({ order }) => {
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[15px] font-bold tabular" style={{ color: 'var(--text)' }}>
+              <span className="opened-order-ticket text-[15px] font-bold tabular" style={{ color: 'var(--text)' }}>
                 #{order.ticket || '-'}
               </span>
-              <span className="text-[13px] font-semibold" style={{ color: 'var(--accent-text)' }}>
+              <span className="opened-order-symbol text-[13px] font-semibold" style={{ color: 'var(--accent-text)' }}>
                 {order.symbol || '-'}
               </span>
               <span className="ui-badge ui-badge-neutral">{state}</span>
@@ -95,10 +95,10 @@ const OpenedOrderCard = ({ order }) => {
         </div>
 
         <div className="md:text-right">
-          <div className="text-xl font-bold tabular font-mono" style={{ color: profitTone }}>
+          <div className="opened-order-profit text-xl font-bold tabular font-mono" style={{ color: profitTone }}>
             {formatMoney(profit)}
           </div>
-          <div className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>
+          <div className="opened-order-profit-label text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--muted)' }}>
             Floating P/L
           </div>
         </div>
@@ -144,7 +144,7 @@ const OpenedOrderCard = ({ order }) => {
         />
       </div>
 
-      <div className="flex items-center gap-2 pt-4 border-t border-[var(--border-2)] text-[11px]" style={{ color: 'var(--text-3)' }}>
+      <div className="opened-order-footer flex items-center gap-2 pt-4 border-t border-[var(--border-2)] text-[11px]" style={{ color: 'var(--text-3)' }}>
         <Info size={12} style={{ color: 'var(--accent)' }} />
         <span>
           Showing the fields that matter for monitoring: ownership, direction, exposure, entry/current price, P/L, costs, and state.

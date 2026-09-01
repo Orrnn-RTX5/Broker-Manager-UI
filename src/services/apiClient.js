@@ -70,6 +70,20 @@ const readResponseText = async (response, maxResponseBytes) => {
   return text;
 };
 
+const notifyResponseReceived = (callback, response, text) => {
+  if (typeof callback !== 'function') return;
+  try {
+    callback({
+      status: response.status,
+      ok: response.ok,
+      bytes: typeof text === 'string' ? text.length : null,
+      serverTiming: response.headers.get('server-timing') || null,
+    });
+  } catch {
+    // Performance diagnostics must never change API behavior.
+  }
+};
+
 /**
  * Fetch wrapper that handles:
  * 1. Authorization header attachment
@@ -82,6 +96,7 @@ const apiClient = {
     const {
       maxResponseBytes: _maxResponseBytes,
       responseType: _responseType,
+      onResponseReceived: _onResponseReceived,
       ...requestOptions
     } = options;
     const url = endpoint.startsWith('/ext-api')
@@ -139,6 +154,7 @@ const apiClient = {
     const {
       maxResponseBytes,
       responseType = 'json',
+      onResponseReceived,
       ...requestOptions
     } = options;
     const url = endpoint.startsWith('/ext-api')
@@ -186,20 +202,21 @@ const apiClient = {
         if (newToken) {
           const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
           return await desktopFetch(retryUrl, { ...requestOptions, headers: retryHeaders })
-            .then((res) => this.handleResponse(res, { maxResponseBytes, responseType }));
+            .then((res) => this.handleResponse(res, { maxResponseBytes, responseType, onResponseReceived }));
         }
         expireAndThrow('refresh_failed');
       }
 
-      return await this.handleResponse(response, { maxResponseBytes, responseType });
+      return await this.handleResponse(response, { maxResponseBytes, responseType, onResponseReceived });
     } catch (error) {
       console.error('API request failed:', redactSensitive(error));
       throw error;
     }
   },
 
-  async handleResponse(response, { maxResponseBytes, responseType = 'json' } = {}) {
+  async handleResponse(response, { maxResponseBytes, responseType = 'json', onResponseReceived } = {}) {
     const text = await readResponseText(response, maxResponseBytes);
+    notifyResponseReceived(onResponseReceived, response, text);
 
     if (responseType === 'text') {
       if (!response.ok) {

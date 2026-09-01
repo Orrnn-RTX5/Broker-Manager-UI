@@ -1,5 +1,5 @@
-import { buildManagerApiUrl } from '../config/endpoints';
-import authService from './authService';
+import { buildManagerApiUrl } from '../config/endpoints.js';
+import authService from './authService.js';
 import { desktopFetch } from './desktopHttp.js';
 import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
 

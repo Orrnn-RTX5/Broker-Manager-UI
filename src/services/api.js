@@ -413,9 +413,9 @@ export const getPositionHistory = async (loginId) => {
   return getRecords(data, 'answer').map(normalizePositionHistoryRow);
 };
 
-export const getOpenedOrders = async (login) => {
+export const getOpenedOrders = async (login, options = {}) => {
   if (!login) return [];
-  const data = await apiClient.get(`/OpenedOrders?${arrayQuery('logins[]', [login])}`);
+  const data = await apiClient.get(`/OpenedOrders?${arrayQuery('logins[]', [login])}`, options);
   const records = Array.isArray(data) ? data : data.answer || [];
 
   return records.map(p => ({

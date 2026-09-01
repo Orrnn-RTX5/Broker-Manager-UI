@@ -4,6 +4,7 @@ import { getDealerQueue, orderApprove, orderReject } from '../../services/tradeA
 import useDataSource from '../../hooks/useDataSource';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
+import GridLoadingState from '../../components/GridLoadingState';
 
 const DEALER_QUEUE_REFRESH_MS = 4000;
 
@@ -135,6 +136,9 @@ const DealerQueuePage = () => {
             <AlertTriangle size={12} className="inline mr-1" /> {error}
           </div>
         )}
+        {isLoading && filtered.length === 0 ? (
+          <GridLoadingState label="Loading dealer queue…" />
+        ) : (
         <div className="w-full overflow-x-auto flex-1">
           <table className="ui-grid min-w-max">
             <thead>
@@ -226,6 +230,7 @@ const DealerQueuePage = () => {
             </tbody>
           </table>
         </div>
+        )}
 
         <div className="flex items-center px-4 py-2.5 text-xs shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           {filtered.length} item{filtered.length !== 1 ? 's' : ''} in queue

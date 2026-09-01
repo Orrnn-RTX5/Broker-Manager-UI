@@ -6,6 +6,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import IBCreateModal from './components/IBCreateModal';
 import IBDetailDrawer from './components/IBDetailDrawer';
+import GridLoadingState from '../../components/GridLoadingState';
 import {
   canRemoveIB,
   getIBStatusActions,
@@ -214,6 +215,9 @@ const IBListPage = () => {
       </div>
 
       <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+        {loading ? (
+          <GridLoadingState label="Loading IB accounts…" />
+        ) : (
         <div className="w-full overflow-x-auto flex-1">
           <table className="ui-grid min-w-max">
             <thead>
@@ -296,6 +300,7 @@ const IBListPage = () => {
             </tbody>
           </table>
         </div>
+        )}
         <div className="px-4 py-2 text-xs shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           <span>{filtered.length} IB account{filtered.length === 1 ? '' : 's'}</span>
           {!canManageIB && <span>No permission to perform IB actions</span>}

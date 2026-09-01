@@ -8,6 +8,9 @@ import {
 } from '../../utils/marketWatchQuotes';
 
 const MAX_TICKS = 1000;
+const COMPACT_QUOTE_ROW_HEIGHT = 27;
+const COMPACT_QUOTE_OVERSCAN = 10;
+const COMPACT_QUOTE_FALLBACK_VIEWPORT_HEIGHT = 540;
 
 const toNumber = (value) => {
   const number = Number(value);
@@ -42,7 +45,7 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
       onDoubleClick={() => onOpenTicks(quote)}
       className={`market-row cursor-pointer ${selected ? 'is-selected' : ''}`}
     >
-      <td className={compact ? 'px-2 py-1.5 text-center font-medium' : 'px-3 py-2 font-medium'} style={{ borderRight: '1px solid var(--border)' }}>
+      <td className={`${compact ? 'px-2 py-1.5 text-center font-medium' : 'px-3 py-2 font-medium'} market-quote-symbol`} style={{ borderRight: '1px solid var(--border)' }}>
         <div className={compact ? 'flex items-center justify-center gap-1 whitespace-nowrap' : 'flex items-center gap-1.5'}>
           {isUp
             ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
@@ -55,18 +58,18 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
           )}
         </div>
       </td>
-      <td className={compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
         <span key={`${quote.symbol}-bid-${quote.bid}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.bid}
         </span>
       </td>
-      <td className={compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
         <span key={`${quote.symbol}-ask-${quote.ask}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.ask}
         </span>
       </td>
       {compact && (
-        <td className="px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
+        <td className="market-quote-price px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
           {formatSpread(quote.bid, quote.ask)}
         </td>
       )}
@@ -80,7 +83,9 @@ const MarketData = ({ compact = false }) => {
   const [tickHistory, setTickHistory] = useState([]);
   const chartRef = useRef(null);
   const selectedSymbolRef = useRef(null);
+  const symbolsViewportRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [symbolsViewport, setSymbolsViewport] = useState({ height: 0, scrollTop: 0 });
 
   const {
     feedError,
@@ -123,6 +128,41 @@ const MarketData = ({ compact = false }) => {
   );
   const columnCount = compact ? 4 : 3;
 
+  const compactQuoteWindow = useMemo(() => {
+    if (!compact) {
+      return {
+        quotes: liveQuotes,
+        start: 0,
+        end: liveQuotes.length,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      };
+    }
+
+    const viewportHeight = symbolsViewport.height || COMPACT_QUOTE_FALLBACK_VIEWPORT_HEIGHT;
+    const visibleCount = Math.max(1, Math.ceil(viewportHeight / COMPACT_QUOTE_ROW_HEIGHT));
+    const maxStart = Math.max(0, liveQuotes.length - visibleCount);
+    const start = Math.min(
+      maxStart,
+      Math.max(
+        0,
+        Math.floor(symbolsViewport.scrollTop / COMPACT_QUOTE_ROW_HEIGHT) - COMPACT_QUOTE_OVERSCAN
+      )
+    );
+    const end = Math.min(
+      liveQuotes.length,
+      start + visibleCount + (COMPACT_QUOTE_OVERSCAN * 2)
+    );
+
+    return {
+      quotes: liveQuotes.slice(start, end),
+      start,
+      end,
+      topSpacerHeight: start * COMPACT_QUOTE_ROW_HEIGHT,
+      bottomSpacerHeight: (liveQuotes.length - end) * COMPACT_QUOTE_ROW_HEIGHT,
+    };
+  }, [compact, liveQuotes, symbolsViewport.height, symbolsViewport.scrollTop]);
+
   const selectedQuote = useMemo(
     () => liveQuotes.find((quote) => quote.symbol === selectedSymbol) || null,
     [liveQuotes, selectedSymbol]
@@ -131,6 +171,54 @@ const MarketData = ({ compact = false }) => {
   useEffect(() => {
     selectedSymbolRef.current = selectedSymbol;
   }, [selectedSymbol]);
+
+  useEffect(() => {
+    if (!compact || activeTab !== 'Symbols') return undefined;
+
+    const viewport = symbolsViewportRef.current;
+    if (!viewport) return undefined;
+
+    let frameId = null;
+    const measureViewport = () => {
+      frameId = null;
+      const next = {
+        height: viewport.clientHeight,
+        scrollTop: viewport.scrollTop,
+      };
+      setSymbolsViewport((current) => (
+        current.height === next.height && current.scrollTop === next.scrollTop
+          ? current
+          : next
+      ));
+    };
+    const scheduleMeasurement = () => {
+      if (frameId !== null) return;
+      frameId = typeof globalThis.requestAnimationFrame === 'function'
+        ? globalThis.requestAnimationFrame(measureViewport)
+        : globalThis.setTimeout(measureViewport, 0);
+    };
+
+    measureViewport();
+    viewport.addEventListener('scroll', scheduleMeasurement, { passive: true });
+    const resizeObserver = typeof globalThis.ResizeObserver === 'function'
+      ? new globalThis.ResizeObserver(scheduleMeasurement)
+      : null;
+    resizeObserver?.observe(viewport);
+    if (!resizeObserver) globalThis.addEventListener?.('resize', scheduleMeasurement);
+
+    return () => {
+      viewport.removeEventListener('scroll', scheduleMeasurement);
+      resizeObserver?.disconnect();
+      if (!resizeObserver) globalThis.removeEventListener?.('resize', scheduleMeasurement);
+      if (frameId !== null) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') {
+          globalThis.cancelAnimationFrame(frameId);
+        } else {
+          globalThis.clearTimeout(frameId);
+        }
+      }
+    };
+  }, [activeTab, compact]);
 
   useEffect(() => useSymbolStore.subscribe((state, previousState) => {
     const symbol = selectedSymbolRef.current;
@@ -175,6 +263,15 @@ const MarketData = ({ compact = false }) => {
     [selectQuote]
   );
 
+  const handleTabChange = useCallback((tab) => {
+    if (tab === 'Symbols' && activeTab !== 'Symbols') {
+      // The symbols viewport is remounted when returning from Details/Ticks,
+      // so its native scroll position starts at the top as well.
+      setSymbolsViewport((current) => ({ ...current, scrollTop: 0 }));
+    }
+    setActiveTab(tab);
+  }, [activeTab]);
+
   const handleSearchSymbol = useCallback(() => {
     if (liveQuotes && liveQuotes.length > 0) {
       selectQuote(liveQuotes[0], activeTab);
@@ -212,7 +309,7 @@ const MarketData = ({ compact = false }) => {
   const renderSymbols = () => (
     <div className="flex-1 min-h-0 flex flex-col">
       {compact && renderCompactSearch()}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div ref={symbolsViewportRef} className="flex-1 min-h-0 overflow-auto">
       <table className={`w-full text-left border-collapse table-fixed ${compact ? 'min-w-[320px]' : ''}`}>
         <thead>
           <tr
@@ -295,17 +392,37 @@ const MarketData = ({ compact = false }) => {
                 {searchQuery.trim() ? 'No market symbols match your search.' : 'Waiting for market prices…'}
               </td>
             </tr>
-          ) : liveQuotes.map((quote) => (
-            <MarketQuoteRow
-              key={quote.symbol}
-              compact={compact}
-              isConnected={isConnected}
-              onOpenTicks={handleOpenTicks}
-              onSelect={handleSelectQuote}
-              quote={quote}
-              selected={selectedSymbol === quote.symbol}
-            />
-          ))}
+          ) : (
+            <>
+              {compactQuoteWindow.topSpacerHeight > 0 && (
+                <tr aria-hidden="true">
+                  <td
+                    colSpan={columnCount}
+                    style={{ height: compactQuoteWindow.topSpacerHeight, padding: 0, border: 0 }}
+                  />
+                </tr>
+              )}
+              {compactQuoteWindow.quotes.map((quote) => (
+                <MarketQuoteRow
+                  key={quote.symbol}
+                  compact={compact}
+                  isConnected={isConnected}
+                  onOpenTicks={handleOpenTicks}
+                  onSelect={handleSelectQuote}
+                  quote={quote}
+                  selected={selectedSymbol === quote.symbol}
+                />
+              ))}
+              {compactQuoteWindow.bottomSpacerHeight > 0 && (
+                <tr aria-hidden="true">
+                  <td
+                    colSpan={columnCount}
+                    style={{ height: compactQuoteWindow.bottomSpacerHeight, padding: 0, border: 0 }}
+                  />
+                </tr>
+              )}
+            </>
+          )}
         </tbody>
       </table>
       </div>
@@ -430,8 +547,19 @@ const MarketData = ({ compact = false }) => {
   };
 
   return (
-    <div className={`market-data flex flex-col h-full w-full overflow-hidden text-sm ${compact ? 'market-data-compact' : ''}`} style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+    <div className={`market-data market-watch-type workspace-ui flex flex-col h-full w-full overflow-hidden text-sm ${compact ? 'market-data-compact' : ''}`} style={{ background: 'var(--surface)', color: 'var(--text)' }}>
       <style>{`
+        /* The compact panel is scanned as one data grid, so all of its
+           labels, values and controls share the same visual weight. */
+        .market-watch-type {
+          --market-watch-font-size: var(--workspace-ui-small-font-size, 10px);
+        }
+        .market-watch-type,
+        .market-watch-type * {
+          font-size: var(--market-watch-font-size) !important;
+          font-weight: var(--workspace-ui-font-weight, 400) !important;
+          line-height: 1.35;
+        }
         @keyframes flashTextUp {
           0% { color: var(--ok-text); text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
           100% { color: var(--ok-text); text-shadow: none; }
@@ -462,7 +590,7 @@ const MarketData = ({ compact = false }) => {
           {['Symbols', 'Details', 'Ticks'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`
                 ${compact ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
                 ${activeTab === tab

@@ -1,0 +1,119 @@
+{
+  "label": "workspace-after-sequenced",
+  "suite": "workspace",
+  "baseUrl": "http://localhost:5174",
+  "capturedAt": "2026-09-01T13:44:56.886Z",
+  "milestones": {
+    "dashboardReadyAtMs": 9707
+  },
+  "results": [
+    {
+      "view": "/clients",
+      "clickStartedAtMs": 11231,
+      "urlChangedMs": 167,
+      "headingVisibleMs": 1653,
+      "contentSettledMs": 1710,
+      "settleOutcome": "settled",
+      "requests": [
+        {
+          "view": "orders",
+          "path": "/api/manager/BrokerOrders?limit&offset&sort_by&sort_dir",
+          "startedAtMs": 12827,
+          "status": 200,
+          "responseMs": 3154,
+          "failure": null
+        }
+      ],
+      "longTasks": [
+        {
+          "startTime": 9658.10000000149,
+          "duration": 114
+        },
+        {
+          "startTime": 10668.400000002235,
+          "duration": 110
+        }
+      ],
+      "appTimings": []
+    },
+    {
+      "view": "/clients/orders",
+      "clickStartedAtMs": 14166,
+      "urlChangedMs": 144,
+      "headingVisibleMs": 765,
+      "contentSettledMs": 3345,
+      "settleOutcome": "settled",
+      "requests": [],
+      "longTasks": [
+        {
+          "startTime": 12831.800000000745,
+          "duration": 57
+        },
+        {
+          "startTime": 15342.699999999255,
+          "duration": 95
+        },
+        {
+          "startTime": 15464.199999999255,
+          "duration": 79
+        }
+      ],
+      "appTimings": []
+    },
+    {
+      "view": "/groups",
+      "clickStartedAtMs": 18747,
+      "urlChangedMs": 387,
+      "headingVisibleMs": 581,
+      "contentSettledMs": 593,
+      "settleOutcome": "settled",
+      "requests": [],
+      "longTasks": [],
+      "appTimings": []
+    }
+  ],
+  "allRequests": [
+    {
+      "view": "online-users",
+      "path": "/api/manager/OnlineUsers?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 9451,
+      "status": 200,
+      "responseMs": 1227,
+      "failure": null
+    },
+    {
+      "view": "open-positions",
+      "path": "/api/manager/PositionsAll?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 9452,
+      "status": 200,
+      "responseMs": 2271,
+      "failure": null
+    },
+    {
+      "view": "clients",
+      "path": "/api/manager/AccountDetailsMany?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 9490,
+      "status": 200,
+      "responseMs": 3225,
+      "failure": null
+    },
+    {
+      "view": "groups",
+      "path": "/api/manager/GroupList?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 10208,
+      "status": 200,
+      "responseMs": 2507,
+      "failure": null
+    },
+    {
+      "view": "orders",
+      "path": "/api/manager/BrokerOrders?limit&offset&sort_by&sort_dir",
+      "startedAtMs": 12827,
+      "status": 200,
+      "responseMs": 3154,
+      "failure": null
+    }
+  ],
+  "videoPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\workspace-after-sequenced.webm",
+  "screenshotPath": "C:\\Users\\ADMIN\\OneDrive - yoaccount (1)\\Documents\\Desktop\\dipankar\\rtx5-broker-manager-ui\\tmp\\performance-evidence\\workspace-after-sequenced-final.png"
+}

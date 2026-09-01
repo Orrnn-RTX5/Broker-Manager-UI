@@ -4,6 +4,12 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getOrdersPage } from '../../../services/api';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
+import GridLoadingState from '../../../components/GridLoadingState';
+import {
+  ORDERS_INITIAL_PARAMS,
+  WORKSPACE_DATA_STALE_MS,
+  WORKSPACE_QUERY_META,
+} from '../../../utils/workspaceQueryOptions.js';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtDate = (ts) => {
@@ -24,13 +30,13 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
-  const [sortCol, setSortCol] = useState('ticket');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortCol, setSortCol] = useState(ORDERS_INITIAL_PARAMS.sort_by);
+  const [sortDir, setSortDir] = useState(ORDERS_INITIAL_PARAMS.sort_dir);
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
   const [activeAccountTicket, setActiveAccountTicket] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('orders');
-  const pageSize = 30;
+  const pageSize = ORDERS_INITIAL_PARAMS.limit;
 
   const filters = useMemo(() => ({
     ...(typeFilter !== 'All Types' ? { type: typeFilter.toLowerCase() } : {}),
@@ -64,6 +70,8 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     params,
     pageSize,
     enabled: hasRequestedData,
+    staleTime: WORKSPACE_DATA_STALE_MS,
+    meta: WORKSPACE_QUERY_META,
   });
 
   useEffect(() => {
@@ -103,15 +111,18 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+    <div className="orders-grid ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {isError && (
         <div
-          className="px-4 py-2 text-xs break-all"
+          className="orders-grid-error px-4 py-2 text-xs break-all"
           style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}
         >
           <strong>API Error.</strong> {error?.message || 'Failed to load orders.'}
         </div>
       )}
+      {isLoading && rows.length === 0 ? (
+        <GridLoadingState label="Loading orders…" />
+      ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
         <table className="ui-grid min-w-max">
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
@@ -136,7 +147,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={15} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={15} className="orders-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Orders are not loaded.</span>
@@ -193,9 +204,10 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           </tbody>
         </table>
       </div>
+      )}
 
       <div
-        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="orders-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-3">

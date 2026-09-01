@@ -480,6 +480,17 @@ export const buildFeedWsUrl = () => {
 
 const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));
 
+export const buildPositionUpdatesWsUrl = (ticket) => {
+  if (!ticket) throw new Error('A one-time websocket ticket is required.');
+  const configuredPath = getRuntimeConfigValue(
+    ['POSITION_UPDATES_WS_PATH', 'VITE_POSITION_UPDATES_WS_PATH'],
+    '/OnPositionUpdate'
+  );
+  const url = new URL(`${getBaseWsHost()}${configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`}`);
+  url.searchParams.set('ticket', String(ticket));
+  return url.toString();
+};
+
 export const buildMetricsWsUrl = (token, login) => {
   // Browser WebSocket calls cannot attach Authorization headers, so this
   // legacy endpoint is the only remaining token-in-query path.

@@ -14,6 +14,14 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace;
   --feature-sans: normal;
   --feature-num: "tnum", "lnum", "zero";
+  /* Terminal workspace type: shared by the menu, docked panels and quote grid. */
+  --workspace-ui-font-size: 13px;
+  --workspace-ui-font-weight: 400;
+  --workspace-ui-small-font-size: 10px;
+  --workspace-ui-small-font-weight: 400;
+  --workspace-ui-control-font-size: 12px;
+  --workspace-ui-title-font-size: 13px;
+  --workspace-ui-title-font-weight: 600;
   /* tabular, lining, slashed zero */
 
   /* Surfaces — cool slate light theme */
@@ -154,6 +162,8 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
   font-feature-settings: var(--feature-sans);
   color: var(--text);
   background: var(--bg);
@@ -161,6 +171,49 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   letter-spacing: -0.005em;
+}
+
+/* Manager-wide type system: keep everyday UI text readable and consistent.
+   Historical screens used several 6px–12px utility values, which made the
+   manager feel like separate applications. Page and dialog headings remain
+   distinct, while all supporting text shares one 13px working size. */
+#root :where(.text-xs, .text-sm,
+  .text-\[6px\], .text-\[8px\], .text-\[9px\], .text-\[10px\],
+  .text-\[11px\], .text-\[12px\]) {
+  font-size: 13px !important;
+  line-height: 1.45;
+}
+
+#root :where(h1, h2, h3) {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root :where(button, input, select, textarea) {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Keep the dense terminal workspace visually coherent.  Components in this
+   area used to mix 10px--13px labels and medium/semibold weights, so adjacent
+   controls read as though they belonged to different products. */
+.workspace-ui {
+  font-size: var(--workspace-ui-font-size);
+  font-weight: var(--workspace-ui-font-weight);
+  line-height: 1.35;
+}
+
+/* Match the Navigator tree to the compact Market Watch data density. */
+.navigator-type,
+.navigator-type * {
+  font-size: var(--workspace-ui-small-font-size) !important;
+  font-weight: var(--workspace-ui-small-font-weight) !important;
+  line-height: 1.35;
+}
+.navigator-type .tree-node--branch > div:first-child > span {
+  font-size: var(--workspace-ui-title-font-size) !important;
+  font-weight: var(--workspace-ui-title-font-weight) !important;
 }
 
 .desktop-window-drag-strip {
@@ -270,14 +323,19 @@ body {
 }
 
 .manager-menu-brand { min-width: 96px; padding-inline: 4px !important; }
+.manager-menu-brand > div:first-child { font-size: var(--workspace-ui-small-font-size) !important; font-weight: 600 !important; }
+.manager-menu-brand-name { font-size: var(--workspace-ui-title-font-size) !important; font-weight: var(--workspace-ui-title-font-weight) !important; }
+.manager-menu-brand-subtitle { font-size: var(--workspace-ui-small-font-size) !important; font-weight: 500 !important; }
 .manager-menu-items { margin-left: 12px !important; gap: 2px !important; }
 .manager-menu-item {
   height: 30px !important;
   padding-inline: 10px !important;
   border-radius: var(--radius-sm) !important;
-  font-size: 12px;
+  font-size: var(--workspace-ui-small-font-size) !important;
+  font-weight: var(--workspace-ui-small-font-weight) !important;
 }
-.manager-menu-status { gap: 10px !important; padding-inline: 0 !important; font-size: 11px !important; }
+.manager-menu-status { gap: 10px !important; padding-inline: 0 !important; font-size: var(--workspace-ui-small-font-size) !important; }
+.manager-menu-status :where(button, select, span) { font-size: var(--workspace-ui-small-font-size) !important; font-weight: var(--workspace-ui-small-font-weight) !important; }
 
 @media (max-width: 760px) {
   .manager-menu-brand > div:last-child,
@@ -290,13 +348,13 @@ body {
    The manager has a large feature set.  These rules keep its high-frequency
    destinations visible while grouping secondary actions into compact menus. */
 .manager-toolbar {
-  height: 52px;
-  min-height: 52px;
+  height: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px 16px;
+  padding: 6px 16px;
   background: color-mix(in srgb, var(--surface) 94%, var(--accent-soft-2));
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
@@ -311,7 +369,14 @@ body {
 }
 
 .manager-toolbar-left { gap: 6px; }
-.manager-toolbar-right { gap: 8px; margin-left: auto; }
+.manager-toolbar-right { position: relative; gap: 4px; margin-left: auto; padding-left: 10px; }
+.manager-toolbar-right::before {
+  content: '';
+  width: 1px;
+  height: 20px;
+  margin-right: 4px;
+  background: var(--border);
+}
 .manager-primary-navigation { gap: 4px; }
 
 .manager-toolbar-divider {
@@ -328,16 +393,16 @@ body {
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-3);
-  min-height: 34px;
+  color: var(--text-2);
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 9px;
-  border-radius: var(--radius-md);
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--workspace-ui-control-font-size);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -353,8 +418,9 @@ body {
 .manager-primary-link.is-active,
 .manager-toolbar-trigger.is-active {
   color: var(--accent-text);
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 16%, transparent);
 }
 
 .manager-action-menu { position: relative; flex: 0 0 auto; }
@@ -386,8 +452,8 @@ body {
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--workspace-ui-small-font-size);
+  font-weight: var(--workspace-ui-small-font-weight);
   text-align: left;
   cursor: pointer;
 }
@@ -405,23 +471,23 @@ body {
 
 .manager-account-lookup { position: relative; }
 .manager-account-lookup-trigger {
-  min-height: 34px;
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 10px;
-  border: 1px solid var(--border-3);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text-3);
-  box-shadow: var(--shadow-xs);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: none;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--workspace-ui-control-font-size);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
-.manager-account-lookup-trigger:hover { color: var(--accent-text); border-color: var(--accent-border); background: var(--accent-soft-2); }
+.manager-account-lookup-trigger:hover { color: var(--text); border-color: transparent; background: var(--surface-3); }
 .manager-account-lookup-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -434,18 +500,18 @@ body {
   box-shadow: var(--shadow-xl);
   z-index: 100;
 }
-.manager-account-lookup-popover label { display: block; margin-bottom: 7px; color: var(--text-2); font-size: 11px; font-weight: 700; }
+.manager-account-lookup-popover label { display: block; margin-bottom: 7px; color: var(--text-2); font-size: var(--workspace-ui-small-font-size); font-weight: 500; }
 .manager-account-lookup-popover > div { display: flex; overflow: hidden; border: 1px solid var(--border-3); border-radius: var(--radius-md); }
 .manager-account-lookup-popover > div:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
-.manager-account-lookup-popover input { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 0; outline: 0; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.manager-account-lookup-popover input { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 0; outline: 0; background: var(--surface); color: var(--text); font: inherit; font-size: var(--workspace-ui-small-font-size); }
 .manager-account-lookup-popover input::placeholder { color: var(--muted); }
-.manager-account-lookup-popover button { padding: 0 11px; border: 0; border-left: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-text); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.manager-account-lookup-popover button { padding: 0 11px; border: 0; border-left: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-text); font: inherit; font-size: var(--workspace-ui-small-font-size); font-weight: 500; cursor: pointer; }
 .manager-account-lookup-popover button:hover { background: var(--accent); color: #fff; }
 
 .manager-new-account {
-  min-height: 34px; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px;
-  border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--accent); color: #fff;
-  box-shadow: var(--shadow-xs); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer;
+  min-height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent); color: #fff;
+  box-shadow: none; font: inherit; font-size: var(--workspace-ui-control-font-size); font-weight: 500; white-space: nowrap; cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
 }
 .manager-new-account:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
@@ -461,23 +527,23 @@ body {
 }
 
 .manager-command-trigger {
-  min-height: 34px;
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 8px 0 10px;
-  color: var(--text-3);
-  border: 1px solid var(--border-3);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  padding: 0 7px 0 8px;
+  color: var(--text-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--workspace-ui-control-font-size);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
-.manager-command-trigger:hover { color: var(--accent-text); border-color: var(--accent-border); background: var(--accent-soft-2); }
+.manager-command-trigger:hover { color: var(--text); border-color: transparent; background: var(--surface-3); }
 .manager-command-trigger kbd,
 .manager-command-palette kbd {
   padding: 2px 5px;
@@ -958,6 +1024,20 @@ h4 {
    remains balanced even when permanent left-side panels are open. */
 .dashboard-page {
   box-sizing: border-box;
+  font-size: var(--workspace-ui-small-font-size);
+  font-weight: var(--workspace-ui-small-font-weight);
+}
+
+#root .dashboard-page .dashboard-page-title {
+  font-size: var(--workspace-ui-title-font-size) !important;
+  font-weight: var(--workspace-ui-title-font-weight) !important;
+  line-height: 1.3;
+}
+
+#root .dashboard-page .dashboard-page-subtitle,
+.dashboard-page .ui-btn-sm {
+  font-size: var(--workspace-ui-small-font-size) !important;
+  font-weight: var(--workspace-ui-small-font-weight);
 }
 
 .dashboard-kpi-grid {
@@ -995,9 +1075,9 @@ h4 {
 .dashboard-kpi-label {
   display: flex;
   align-items: flex-start;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 16px;
+  font-size: var(--workspace-ui-small-font-size);
+  font-weight: 600;
+  line-height: 14px;
   letter-spacing: 0.045em;
   text-transform: uppercase;
 }
@@ -1013,8 +1093,8 @@ h4 {
 }
 
 .dashboard-kpi-hint {
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--workspace-ui-small-font-size);
+  line-height: 14px;
 }
 
 @media (max-width: 620px) {
@@ -1828,6 +1908,298 @@ h4 {
   border-bottom: 0;
 }
 
+/* Trading Accounts keeps dense account information at the compact workspace
+   scale, while retaining a clear 12px page title. */
+#root .trading-accounts-page .trading-accounts-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root .trading-accounts-page .trading-accounts-subtitle,
+#root .trading-accounts-page .trading-accounts-search .ui-input,
+#root .trading-accounts-page .trading-accounts-filters :where(button, input, span) {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .trading-accounts-grid .ui-grid,
+#root .trading-accounts-grid .ui-grid tbody td,
+#root .trading-accounts-grid .trading-accounts-grid-error,
+#root .trading-accounts-grid .trading-accounts-grid-empty,
+#root .trading-accounts-grid .trading-accounts-grid-footer,
+#root .trading-accounts-grid .trading-accounts-grid-footer :where(button, span),
+#root .trading-accounts-grid .ui-btn,
+#root .trading-accounts-grid .ui-badge {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .trading-accounts-grid .ui-grid thead th {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+}
+
+#root .trading-accounts-grid .ui-badge {
+  font-weight: 500 !important;
+}
+
+/* Online Users uses the same 12px heading and 10px data scale. */
+#root .online-users-page .online-users-metric-card {
+  min-height: 112px !important;
+  padding: 12px !important;
+  gap: 10px !important;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+#root .online-users-page .online-users-metric-icon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+#root .online-users-page .online-users-metric-content {
+  gap: 3px;
+  padding-block: 1px;
+}
+
+#root .online-users-page .online-users-title,
+#root .online-users-grid .online-users-grid-title,
+#root .online-users-page .online-users-metric-label,
+#root .online-users-page .online-users-metric-value {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root .online-users-page .online-users-metric-label {
+  min-height: 28px !important;
+  line-height: 14px !important;
+  letter-spacing: 0.03em;
+}
+
+#root .online-users-page .online-users-metric-value {
+  margin-top: 0 !important;
+  line-height: 16px !important;
+}
+
+#root .online-users-page .online-users-subtitle,
+#root .online-users-page .online-users-search .ui-input,
+#root .online-users-page .online-users-metric-hint,
+#root .online-users-grid .ui-grid,
+#root .online-users-grid .ui-grid tbody td,
+#root .online-users-grid .online-users-grid-error,
+#root .online-users-grid .online-users-grid-empty,
+#root .online-users-grid .online-users-grid-footer,
+#root .online-users-grid .online-users-grid-footer :where(button, span),
+#root .online-users-grid .ui-btn,
+#root .online-users-grid .ui-badge {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .online-users-page .online-users-metric-hint {
+  min-height: 14px !important;
+  line-height: 14px !important;
+}
+
+#root .online-users-grid .ui-grid thead th {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+}
+
+#root .online-users-grid .ui-badge {
+  font-weight: 500 !important;
+}
+
+/* Open Positions follows the same compact 12px/10px workspace hierarchy. */
+#root .open-positions-page .open-positions-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root .open-positions-page .open-positions-subtitle,
+#root .open-positions-page .open-positions-search .ui-input,
+#root .open-positions-page .open-positions-filters :where(button, input, span),
+#root .open-positions-grid .ui-grid,
+#root .open-positions-grid .ui-grid tbody td,
+#root .open-positions-grid .open-positions-grid-error,
+#root .open-positions-grid .open-positions-grid-empty,
+#root .open-positions-grid .open-positions-grid-footer,
+#root .open-positions-grid .open-positions-grid-footer :where(button, span),
+#root .open-positions-grid .ui-btn,
+#root .open-positions-grid .ui-badge {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .open-positions-grid .ui-grid thead th {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+}
+
+#root .open-positions-grid .ui-badge {
+  font-weight: 500 !important;
+}
+
+/* Orders uses the same 12px page title and 10px dense-data treatment. */
+#root .orders-page .orders-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root .orders-page .orders-subtitle,
+#root .orders-page .orders-search .ui-input,
+#root .orders-page .orders-filters :where(button, input, span),
+#root .orders-grid .ui-grid,
+#root .orders-grid .ui-grid tbody td,
+#root .orders-grid .orders-grid-error,
+#root .orders-grid .orders-grid-empty,
+#root .orders-grid .orders-grid-footer,
+#root .orders-grid .orders-grid-footer :where(button, span),
+#root .orders-grid .ui-btn,
+#root .orders-grid .ui-badge {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .orders-grid .ui-grid thead th {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+}
+
+#root .orders-grid .ui-badge {
+  font-weight: 500 !important;
+}
+
+/* Opened Orders uses the shared 12px primary and 10px supporting scale. */
+#root .opened-orders-page .opened-orders-title,
+#root .opened-orders-page .opened-orders-state-title,
+#root .opened-orders-page .opened-orders-section-title,
+#root .opened-orders-page .opened-orders-metric-value,
+#root .opened-orders-page .opened-order-ticket,
+#root .opened-orders-page .opened-order-symbol,
+#root .opened-orders-page .opened-order-profit,
+#root .opened-orders-page .opened-order-detail-value,
+#root .opened-orders-page .orders-by-reason-title,
+#root .opened-orders-page .orders-by-reason-total-value {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+#root .opened-orders-page .opened-orders-subtitle,
+#root .opened-orders-page .opened-orders-search :where(input, button, span),
+#root .opened-orders-page .opened-orders-metric-description,
+#root .opened-orders-page .opened-orders-state-copy,
+#root .opened-orders-page .opened-orders-loading-label,
+#root .opened-orders-page .opened-order-detail-label,
+#root .opened-orders-page .opened-order-detail-description,
+#root .opened-orders-page .opened-order-profit-label,
+#root .opened-orders-page .opened-order-footer,
+#root .opened-orders-page .orders-by-reason-description,
+#root .opened-orders-page .orders-by-reason-item-value,
+#root .opened-orders-page .orders-by-reason-total-label,
+#root .opened-orders-page .ui-btn {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.35;
+}
+
+#root .opened-orders-page .opened-orders-metric {
+  min-height: 90px;
+  padding: 10px !important;
+  gap: 8px !important;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+#root .opened-orders-page .opened-orders-metric-icon {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+#root .opened-orders-page .opened-orders-metric-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#root .opened-orders-page .opened-orders-metric-value {
+  margin-top: 0 !important;
+  line-height: 16px !important;
+}
+
+#root .opened-orders-page .opened-orders-metric-label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 12px !important;
+  letter-spacing: 0.025em;
+}
+
+#root .opened-orders-page .opened-orders-metric-description {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: auto !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+#root .opened-orders-page .opened-orders-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+  gap: 10px !important;
+}
+
+#root .opened-orders-page .orders-by-reason {
+  padding: 12px !important;
+}
+
+#root .opened-orders-page .orders-by-reason-layout {
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: 10px !important;
+}
+
+#root .opened-orders-page .orders-by-reason-summary {
+  flex: 1 1 150px;
+}
+
+#root .opened-orders-page .orders-by-reason-items {
+  flex: 2 1 240px;
+  gap: 6px !important;
+}
+
+#root .opened-orders-page .orders-by-reason-total {
+  flex: 0 0 auto;
+  min-width: auto !important;
+}
+
+#root .opened-orders-page .orders-by-reason-item-name {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+#root .opened-orders-page .ui-badge {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1.35;
+}
+
 /* Modal */
 .ui-modal-backdrop {
   position: fixed;
@@ -2219,37 +2591,39 @@ h4 {
 }
 
 /* Scrollbars — subtle, Untitled UI style */
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* Data-table scrollbars share the header/footer surface so the right gutter
-   does not look like a detached dark column while rows are being scrolled. */
-.grid-scroll-area {
+/* A fixed gutter prevents the content width from jumping when scrolling
+   becomes necessary, and makes every scrollable box feel consistent. */
+.overflow-auto,
+.overflow-x-auto,
+.overflow-y-auto,
+.grid-scroll-area,
+.custom-scrollbar {
+  scrollbar-width: thin;
   scrollbar-color: var(--border-3) var(--surface-2);
+  scrollbar-gutter: stable;
 }
 
-.grid-scroll-area::-webkit-scrollbar-track,
-.grid-scroll-area::-webkit-scrollbar-corner {
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
   background: var(--surface-2);
 }
 
 *::-webkit-scrollbar-thumb {
   background: var(--border-3);
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 1px solid var(--surface-2);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
   background-clip: padding-box;
-  border: 2px solid transparent;
+  border: 1px solid var(--surface-2);
 }
 
 /* P/L colors */
@@ -2282,6 +2656,24 @@ h4 {
   border: 1px solid var(--border) !important;
   color: var(--text) !important;
   box-shadow: var(--shadow-2xl) !important;
+}
+
+/* Account details is a true modal window: the workspace stays visible for
+   context but is dimmed and blurred, while the dialog uses app typography. */
+.account-details-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: color-mix(in srgb, var(--text) 34%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.account-details-window {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
 }
 
 /* Backgrounds */
@@ -2535,4 +2927,148 @@ h4 {
 .legacy-popup .text-\[\#888\],
 .legacy-popup .text-\[\#999\] {
   color: var(--muted) !important;
+}
+
+/* Account details — focused professional trading workspace ---------------- */
+.account-details-window {
+  --account-ui-base: 13px;
+  --account-ui-heading: 16px;
+  border-radius: var(--radius-xl) !important;
+  font-family: var(--sans) !important;
+  font-size: var(--account-ui-base) !important;
+  font-weight: 400;
+  background: var(--surface) !important;
+}
+
+.account-details-titlebar {
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.account-details-title-icon { color: var(--accent); }
+.account-details-title { color: var(--text); font-size: 16px; font-weight: 600; }
+.account-details-window-controls { display: flex; align-items: center; gap: 2px; }
+.account-details-window-controls button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3) !important;
+  cursor: pointer;
+}
+.account-details-window-controls button:hover { background: var(--surface-3); color: var(--text) !important; }
+.account-details-window-controls button.is-close:hover { background: var(--danger-soft); color: var(--danger-text) !important; }
+
+.account-details-tabs {
+  min-height: 42px;
+  gap: 2px;
+  padding: 0 10px;
+  overflow-x: auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.account-details-tab {
+  position: relative;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.account-details-tab:hover { color: var(--text); background: var(--surface-2); }
+.account-details-tab.is-active { color: var(--accent-text); }
+.account-details-tab.is-active::after { content: ''; position: absolute; left: 11px; right: 11px; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+
+.account-details-content { gap: 20px; padding: 20px; background: var(--bg); }
+.account-overview-summary { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.account-overview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.account-overview-eyebrow { margin: 0 0 4px; color: var(--text-3); font-size: var(--account-ui-base); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.account-overview-heading h2 { margin: 0; color: var(--text); font-size: var(--account-ui-heading); font-weight: 600; line-height: 1.25; }
+.account-overview-login { color: var(--text-3); font-size: 13px; font-weight: 500; }
+.account-overview-badges { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.account-overview-group { color: var(--accent-text) !important; font-size: 13px; font-weight: 600; text-decoration: none; }
+.account-overview-badges > span { font-size: var(--account-ui-base) !important; font-weight: 600 !important; line-height: 1.2; }
+.account-overview-group:hover { text-decoration: underline; }
+.account-overview-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 20px; margin-top: 18px; }
+.account-overview-details > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.account-overview-details span { color: var(--text-3); font-size: var(--account-ui-base); font-weight: 500; }
+.account-overview-details strong,
+.account-overview-details a { overflow: hidden; color: var(--text); font-size: var(--account-ui-base); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.account-overview-details a { color: var(--accent-text) !important; text-decoration: none; }
+.account-overview-timestamps { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; color: var(--text-3); font-size: var(--account-ui-base); }
+
+.account-positions-card { min-height: 280px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
+.account-positions-grid { display: grid; grid-template-columns: minmax(88px, 1.3fr) 58px 68px 80px 80px 80px 88px 62px minmax(64px, 1fr) 76px; min-width: 744px; }
+.account-positions-header { background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-3); font-size: var(--account-ui-base); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.account-positions-header > div { padding: 11px 12px !important; border-right: 0 !important; }
+.account-positions-row { border-bottom: 1px solid var(--border-2); background: var(--surface); font-size: 13px; }
+.account-positions-row:hover { background: var(--accent-soft-2); }
+.account-positions-row > div { padding: 12px !important; border-right: 0 !important; }
+.account-positions-grid [title*="Double-click"] { background: transparent !important; border: 0 !important; border-radius: 0 !important; }
+.account-positions-empty { min-height: 184px; display: flex; align-items: center; justify-content: center; padding: 24px; color: var(--text-3); font-size: 14px; }
+.account-position-close-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger-text); font-size: var(--account-ui-base); font-weight: 600; letter-spacing: .01em; cursor: pointer; }
+.account-position-close-button:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
+.account-position-close-button:disabled { cursor: not-allowed; opacity: .45; }
+.account-balance-summary { background: var(--surface-2); border-top: 1px solid var(--border); font-size: var(--account-ui-base); }
+.account-balance-summary > div { border-bottom: 0 !important; }
+.account-balance-summary [class*="text-[10px]"],
+.account-balance-summary [class*="text-[12px]"] { font-size: var(--account-ui-base) !important; }
+
+.account-details-footer { min-height: 64px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--border); }
+.account-details-footer button { min-height: 36px; border-radius: var(--radius-md) !important; font-size: var(--account-ui-base) !important; font-weight: 500; }
+.account-details-footer button:first-child { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
+.account-details-footer button:first-child:disabled { background: var(--surface-3) !important; border-color: var(--border) !important; color: var(--muted) !important; }
+.account-details-footer button:not(:first-child) { background: var(--surface) !important; border-color: var(--border-3) !important; color: var(--text-2) !important; }
+.account-details-footer button:not(:first-child):hover { background: var(--surface-2) !important; color: var(--text) !important; }
+.trade-close-confirmation {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.trade-close-confirmation-card {
+  width: min(100%, 400px);
+  overflow: hidden;
+  border: 1px solid var(--border-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.trade-close-confirmation-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
+.trade-close-confirmation-eyebrow { margin: 0 0 4px; color: var(--text-3); font-size: var(--account-ui-base); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.trade-close-confirmation-header h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 700; }
+.trade-close-confirmation-dismiss { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer; }
+.trade-close-confirmation-dismiss:hover { background: var(--surface-3); color: var(--text); }
+.trade-close-confirmation-message { margin: 0; padding: 18px 20px; color: var(--text-2); font-size: var(--account-ui-base); line-height: 1.55; }
+.trade-close-confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px 20px; border-top: 1px solid var(--border); }
+.trade-close-confirmation-actions button { min-height: 36px; padding: 0 14px; border-radius: var(--radius-md); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.trade-close-confirmation-cancel { border: 1px solid var(--border-3); background: var(--surface); color: var(--text-2); }
+.trade-close-confirmation-cancel:hover { background: var(--surface-2); color: var(--text); }
+.trade-close-confirmation-confirm { border: 1px solid var(--danger-border); background: var(--danger); color: #fff; }
+.trade-close-confirmation-confirm:hover { filter: brightness(1.08); }
+.trade-close-confirmation-confirm:disabled { cursor: wait; opacity: .65; }
+
+@media (max-width: 760px) {
+  .account-details-content { padding: 14px; }
+  .account-overview-heading { flex-direction: column; }
+  .account-overview-badges { justify-content: flex-start; }
+  .account-overview-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

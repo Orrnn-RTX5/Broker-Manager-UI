@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   CREDIT: 'credit',
   EDIT_ACCOUNTS: 'edit_accounts',
   MANIPULATE_TRADES: 'manipulate_trades',
+  MANAGE_TRADES: 'manage_trades',
   MANAGE_GROUPS: 'manage_groups',
   MANAGE_IB: 'manage_ib',                 // IB create/update/delete, commission payout, plans, links
   VIEW_ACCOUNTS: 'view_accounts',

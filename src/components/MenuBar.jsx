@@ -150,7 +150,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
 
   return (
     <div
-      className="app-menu-bar manager-menu-bar flex items-center justify-between text-[13px] select-none relative"
+      className="app-menu-bar manager-menu-bar workspace-ui flex items-center justify-between text-[13px] select-none relative"
       style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
@@ -177,8 +177,8 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
             R5
           </div>
           <div className="ml-2 leading-tight">
-            <div className="text-[12px] font-bold" style={{ color: 'var(--text)' }}>RTX5</div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Manager</div>
+            <div className="manager-menu-brand-name text-[12px] font-bold" style={{ color: 'var(--text)' }}>RTX5</div>
+            <div className="manager-menu-brand-subtitle text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Manager</div>
           </div>
         </button>
 
