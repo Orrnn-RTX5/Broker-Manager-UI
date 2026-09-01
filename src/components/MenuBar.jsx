@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Wifi, WifiOff, Activity } from 'lucide-react';
 import FileMenu from './menus/FileMenu';
 import EditMenu from './menus/EditMenu';
@@ -10,13 +11,16 @@ import NewAccountModal from './Popups/NewAccountModal';
 import LoginModal from './Popups/LoginModal';
 import DesktopAppDownloadButton from './DesktopAppDownloadButton';
 import DesktopUpdateButton from './DesktopUpdateButton';
+import ExportCurrentViewDialog from './ExportCurrentViewDialog';
 import apiClient from '../services/apiClient';
 import { isDesktopBackendTarget } from '../config/backendTarget.js';
 
 const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
+  const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [connectionData, setConnectionData] = useState(null);
   const [pingMs, setPingMs] = useState(null);
   const [trafficKb, setTrafficKb] = useState(13.0); // start with a small base to look realistic
@@ -25,6 +29,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
 
   useEffect(() => {
     let intervalId;
+    let initialCheckTimer;
     const checkConnection = async () => {
       if (!isAuthenticated) {
         setConnectionData(null);
@@ -50,12 +55,17 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
     };
 
     if (isAuthenticated) {
-        checkConnection();
-        intervalId = setInterval(checkConnection, 10000); // Poll every 10s
+        // Connection telemetry is useful, but it is not dashboard-critical.
+        // Let the visible data requests start first on a hard refresh.
+        initialCheckTimer = window.setTimeout(() => {
+          checkConnection();
+          intervalId = window.setInterval(checkConnection, 10000); // Poll every 10s
+        }, 1_000);
     }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
+      if (initialCheckTimer) window.clearTimeout(initialCheckTimer);
     };
   }, [isAuthenticated]);
 
@@ -89,6 +99,11 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
       setIsNewAccountOpen(true);
     };
 
+    const handleExportClick = () => {
+      setActiveMenu(null);
+      setIsExportOpen(true);
+    };
+
     const handleDisconnectClick = () => {
       setActiveMenu(null);
       if (onLogout) onLogout();
@@ -105,6 +120,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
         onConnectClick={handleConnectClick} 
         onDisconnectClick={handleDisconnectClick}
         onNewAccountClick={handleNewAccountClick} 
+        onExportClick={handleExportClick}
         onExitClick={handleExitClick}
         onPrintClick={() => {
           setActiveMenu(null);
@@ -134,7 +150,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
 
   return (
     <div
-      className="app-menu-bar h-9 flex items-center justify-between px-2 text-[13px] select-none relative z-50"
+      className="app-menu-bar manager-menu-bar flex items-center justify-between text-[13px] select-none relative"
       style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
@@ -143,20 +159,31 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
     >
       <div className="flex items-center h-full" ref={menuRef}>
         {/* Logo */}
-        <div
-          className="px-2.5 flex items-center h-full cursor-pointer"
+        <button
+          type="button"
+          className="manager-menu-brand px-2 flex items-center h-full cursor-pointer border-0 bg-transparent text-left"
           style={{ color: 'var(--text)' }}
+          onClick={() => {
+            setActiveMenu(null);
+            navigate('/');
+          }}
+          title="Go to dashboard"
+          aria-label="Go to dashboard"
         >
           <div
-            className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
+            className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold"
             style={{ background: 'var(--accent)', color: '#fff', letterSpacing: '-0.02em' }}
           >
             R5
           </div>
-        </div>
+          <div className="ml-2 leading-tight">
+            <div className="text-[12px] font-bold" style={{ color: 'var(--text)' }}>RTX5</div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>Manager</div>
+          </div>
+        </button>
 
         {/* Menu Items */}
-        <div className="flex items-center h-full ml-1 gap-0.5">
+        <div className="manager-menu-items flex items-center h-full ml-1 gap-0.5">
           {menuItems.map((item) => {
             const active = activeMenu === item;
             return (
@@ -164,7 +191,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
                 <div
                   onClick={() => setActiveMenu(active ? null : item)}
                   onMouseEnter={() => activeMenu && setActiveMenu(item)}
-                  className="px-2.5 h-[26px] flex items-center cursor-pointer rounded-md transition-colors"
+                  className="manager-menu-item px-2.5 h-[26px] flex items-center cursor-pointer rounded-md transition-colors"
                   style={{
                     background: active ? 'var(--surface-3)' : 'transparent',
                     color: active ? 'var(--text)' : 'var(--text-2)',
@@ -183,7 +210,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
       </div>
 
       {/* Right side status */}
-      <div className="flex items-center h-full gap-2 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
+      <div className="manager-menu-status flex items-center h-full gap-2 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>
         <select
           className="border-none focus:outline-none rounded-md px-2 py-1 cursor-pointer appearance-none text-[11px]"
           style={{ background: 'transparent', color: 'var(--text-2)' }}
@@ -256,6 +283,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction }) => {
       </div>
       {/* Modals */}
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
+      <ExportCurrentViewDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={handleLoginSuccess} />
     </div>
   );

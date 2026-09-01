@@ -7,6 +7,7 @@ import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction';
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 const RESPONSE_TOO_LARGE_MESSAGE =
   'Response is too large for a paged grid request. Backend must honor limit/offset/search before the UI can load it safely.';
+const API_DEBUG_ENABLED = import.meta.env?.VITE_DEBUG_API === 'true';
 
 const expireAndThrow = (reason) => {
   authService.expireSession(reason);
@@ -105,11 +106,13 @@ const apiClient = {
 
     const { finalUrl, headers } = prepareRequest();
 
-    console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
-      headers: redactHeaders(headers),
-      body: redactSensitive(safeRequestBody(requestOptions.body)),
-      responseType: 'raw',
-    });
+    if (API_DEBUG_ENABLED) {
+      console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
+        headers: redactHeaders(headers),
+        body: redactSensitive(safeRequestBody(requestOptions.body)),
+        responseType: 'raw',
+      });
+    }
 
     const response = await desktopFetch(finalUrl, { ...requestOptions, headers });
 
@@ -160,10 +163,12 @@ const apiClient = {
 
     const { finalUrl, headers } = prepareRequest();
 
-    console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
-      headers: redactHeaders(headers),
-      body: redactSensitive(safeRequestBody(requestOptions.body)),
-    });
+    if (API_DEBUG_ENABLED) {
+      console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
+        headers: redactHeaders(headers),
+        body: redactSensitive(safeRequestBody(requestOptions.body)),
+      });
+    }
 
     try {
       const response = await desktopFetch(finalUrl, { ...requestOptions, headers });
@@ -206,10 +211,12 @@ const apiClient = {
         throw new Error(errMsg);
       }
 
-      console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {
-        responseType: 'text',
-        bytes: text.length,
-      });
+      if (API_DEBUG_ENABLED) {
+        console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {
+          responseType: 'text',
+          bytes: text.length,
+        });
+      }
       return text;
     }
 
@@ -225,7 +232,12 @@ const apiClient = {
         console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
         throw new Error(errMsg);
       }
-      console.debug(`[API RESPONSE SUCCESS] ${response.status}`, redactSensitive(text));
+      if (API_DEBUG_ENABLED) {
+        console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {
+          responseType: 'text',
+          bytes: text.length,
+        });
+      }
       return text;
     }
 
@@ -238,7 +250,12 @@ const apiClient = {
       throw new Error(errorMsg);
     }
 
-    console.debug(`[API RESPONSE SUCCESS] ${response.status}`, redactSensitive(data));
+    if (API_DEBUG_ENABLED) {
+      console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {
+        responseType: 'json',
+        bytes: text.length,
+      });
+    }
     return data;
   },
 

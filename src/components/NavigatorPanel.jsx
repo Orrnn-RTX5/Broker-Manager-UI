@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGroupList } from '../hooks/useGroupList';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
@@ -11,12 +11,16 @@ import {
 } from 'lucide-react';
 
 // Reusable Tree Node Component
-const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode }) => {
+const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode, onExpandedChange }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const hasChildren = React.Children.count(children) > 0;
 
   const handleClick = (event) => {
-    if (hasChildren) setIsExpanded(!isExpanded);
+    if (hasChildren) {
+      const nextExpanded = !isExpanded;
+      setIsExpanded(nextExpanded);
+      onExpandedChange?.(nextExpanded);
+    }
     if (onClickNode) onClickNode(event);
   };
 
@@ -62,17 +66,33 @@ const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = fa
 
 const NavigatorPanel = () => {
   const navigate = useWorkspaceNavigation();
+  const [shouldLoadGroups, setShouldLoadGroups] = useState(false);
   const { groups, total: groupsTotal, hasMore: groupsHasMore, loading: groupsLoading } = useGroupList({
     limit: 100,
     offset: 0,
     sort_by: 'name',
     sort_dir: 'asc',
+    enabled: shouldLoadGroups,
   });
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [brokerInfo] = useState(() => getBrokerInfo());
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
+
+  // The dashboard needs its metrics before an optional tree list. Load groups
+  // as soon as the browser becomes idle, or immediately when the user expands
+  // the Groups branch.
+  useEffect(() => {
+    const startLoading = () => setShouldLoadGroups(true);
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(startLoading, { timeout: 2_000 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timerId = window.setTimeout(startLoading, 1_000);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const navigateTo = (path) => navigate(path);
 
@@ -129,10 +149,13 @@ const NavigatorPanel = () => {
 
               <TreeNode
                 label="Groups"
-                count={groupsLoading ? '...' : (groupsTotal ?? groups?.length ?? 0).toString()}
+                count={shouldLoadGroups ? (groupsLoading ? '...' : (groupsTotal ?? groups?.length ?? 0).toString()) : null}
                 icon={Users2}
                 iconColor="text-blue-500"
                 onClickNode={() => navigateTo('/groups')}
+                onExpandedChange={(expanded) => {
+                  if (expanded) setShouldLoadGroups(true);
+                }}
               >
                 {groups?.map(g => (
                   <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigateTo(getGroupDetailsPath(g.name))} />

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useRef, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
@@ -10,31 +10,45 @@ import authService from './services/authService';
 import { clearBrokerInfo } from './services/brokerAuth';
 
 import Dashboard from './features/dashboard/Dashboard';
-import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
-import OnlineUsersDashboard from './features/analytics/OnlineUsersDashboard';
-import OpenPositionsDashboard from './features/analytics/OpenPositionsDashboard';
-import AdvertisingCampaignsDashboard from './features/analytics/AdvertisingCampaignsDashboard';
-import ByCountryDashboard from './features/analytics/ByCountryDashboard';
-import OpenOrdersDashboard from './features/analytics/OpenOrdersDashboard';
-import ClientsDashboard from './features/clients/ClientsDashboard';
-import OnlineUsersPage from './features/clients/OnlineUsersPage';
-import TradingAccountsPage from './features/clients/TradingAccountsPage';
-import PositionsPage from './features/clients/PositionsPage';
-import OpenPositionsPage from './features/clients/OpenPositionsPage';
-import OrdersPage from './features/clients/OrdersPage';
-import DealsPage from './features/clients/DealsPage';
-import GroupsPage from './features/groups/GroupsPage';
-import GroupDetailsPage from './features/groups/GroupDetailsPage';
-import DealerQueuePage from './features/dealer/DealerQueuePage';
-import RestrictedAccountsPage from './features/dealer/RestrictedAccountsPage';
-import IBListPage from './features/ib/IBListPage';
-import IBTreePage from './features/ib/IBTreePage';
-import SymbolsOverviewPage from './features/symbols/SymbolsOverviewPage';
-import SymbolListPage from './features/symbols/SymbolListPage';
-import SymbolManagementPage from './features/symbols/SymbolManagementPage';
+
+// Keep the dashboard and workspace shell in the initial bundle. Every other
+// workspace view is loaded only when it is opened, so its data/UI code cannot
+// delay the first dashboard render.
+const TradingAccountsDashboard = lazy(() => import('./features/analytics/TradingAccountsDashboard'));
+const OnlineUsersDashboard = lazy(() => import('./features/analytics/OnlineUsersDashboard'));
+const AdvertisingCampaignsDashboard = lazy(() => import('./features/analytics/AdvertisingCampaignsDashboard'));
+const ByCountryDashboard = lazy(() => import('./features/analytics/ByCountryDashboard'));
+const OpenOrdersDashboard = lazy(() => import('./features/analytics/OpenOrdersDashboard'));
+const ClientsDashboard = lazy(() => import('./features/clients/ClientsDashboard'));
+const OnlineUsersPage = lazy(() => import('./features/clients/OnlineUsersPage'));
+const TradingAccountsPage = lazy(() => import('./features/clients/TradingAccountsPage'));
+const PositionsPage = lazy(() => import('./features/clients/PositionsPage'));
+const OpenPositionsPage = lazy(() => import('./features/clients/OpenPositionsPage'));
+const OrdersPage = lazy(() => import('./features/clients/OrdersPage'));
+const DealsPage = lazy(() => import('./features/clients/DealsPage'));
+const GroupsPage = lazy(() => import('./features/groups/GroupsPage'));
+const GroupDetailsPage = lazy(() => import('./features/groups/GroupDetailsPage'));
+const DealerQueuePage = lazy(() => import('./features/dealer/DealerQueuePage'));
+const RestrictedAccountsPage = lazy(() => import('./features/dealer/RestrictedAccountsPage'));
+const IBListPage = lazy(() => import('./features/ib/IBListPage'));
+const IBTreePage = lazy(() => import('./features/ib/IBTreePage'));
+const SymbolsOverviewPage = lazy(() => import('./features/symbols/SymbolsOverviewPage'));
+const SymbolListPage = lazy(() => import('./features/symbols/SymbolListPage'));
+const SymbolManagementPage = lazy(() => import('./features/symbols/SymbolManagementPage'));
 
 const AUTH_STORAGE_POLL_MS = 2000;
 const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
+
+const WorkspaceRouteFallback = () => (
+  <div
+    role="status"
+    aria-live="polite"
+    className="flex min-h-full items-center justify-center p-6 text-sm"
+    style={{ color: 'var(--muted)' }}
+  >
+    Loading workspace…
+  </div>
+);
 
 const SessionExpiryRedirect = ({ isAuthenticated }) => {
   const location = useLocation();
@@ -190,34 +204,36 @@ function App() {
           </Routes>
         ) : (
           <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/admin-dashboard" element={<Dashboard />} />
-              <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
-              <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />
-              <Route path="/analytics/open-positions" element={<OpenPositionsPage />} />
-              <Route path="/analytics/advertising-campaigns" element={<AdvertisingCampaignsDashboard />} />
-              <Route path="/analytics/open-orders" element={<OpenOrdersDashboard />} />
-              <Route path="/analytics/by-country" element={<ByCountryDashboard />} />
-              <Route path="/clients" element={<ClientsDashboard />} />
-              <Route path="/clients/online-users" element={<OnlineUsersPage />} />
-              <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
-              <Route path="/clients/positions" element={<PositionsPage />} />
-              <Route path="/clients/orders" element={<OrdersPage />} />
-              <Route path="/dealing" element={<DealsPage />} />
-              <Route path="/dealer/queue" element={<RequirePermission permission="dealer_queue"><DealerQueuePage /></RequirePermission>} />
-              <Route path="/dealer/restrictions" element={<RequirePermission permission="view_accounts"><RestrictedAccountsPage /></RequirePermission>} />
-              <Route path="/ib" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
-              <Route path="/ib/tree" element={<RequirePermission permission="manage_ib"><IBTreePage /></RequirePermission>} />
-              <Route path="/ib/:login/:tab?" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
-              <Route path="/groups" element={<RequirePermission permission="manage_groups"><GroupsPage /></RequirePermission>} />
-              <Route path="/groups/:groupName" element={<RequirePermission permission="manage_groups"><GroupDetailsPage /></RequirePermission>} />
-              <Route path="/symbols" element={<RequirePermission permission="manage_groups"><SymbolsOverviewPage /></RequirePermission>} />
-              <Route path="/symbols/:group" element={<RequirePermission permission="manage_groups"><SymbolListPage /></RequirePermission>} />
-              <Route path="/symbol-management" element={<RequirePermission permission="manage_groups"><SymbolManagementPage /></RequirePermission>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<WorkspaceRouteFallback />}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/admin-dashboard" element={<Dashboard />} />
+                <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
+                <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />
+                <Route path="/analytics/open-positions" element={<OpenPositionsPage />} />
+                <Route path="/analytics/advertising-campaigns" element={<AdvertisingCampaignsDashboard />} />
+                <Route path="/analytics/open-orders" element={<OpenOrdersDashboard />} />
+                <Route path="/analytics/by-country" element={<ByCountryDashboard />} />
+                <Route path="/clients" element={<ClientsDashboard />} />
+                <Route path="/clients/online-users" element={<OnlineUsersPage />} />
+                <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
+                <Route path="/clients/positions" element={<PositionsPage />} />
+                <Route path="/clients/orders" element={<OrdersPage />} />
+                <Route path="/dealing" element={<DealsPage />} />
+                <Route path="/dealer/queue" element={<RequirePermission permission="dealer_queue"><DealerQueuePage /></RequirePermission>} />
+                <Route path="/dealer/restrictions" element={<RequirePermission permission="view_accounts"><RestrictedAccountsPage /></RequirePermission>} />
+                <Route path="/ib" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
+                <Route path="/ib/tree" element={<RequirePermission permission="manage_ib"><IBTreePage /></RequirePermission>} />
+                <Route path="/ib/:login/:tab?" element={<RequirePermission permission="manage_ib"><IBListPage /></RequirePermission>} />
+                <Route path="/groups" element={<RequirePermission permission="manage_groups"><GroupsPage /></RequirePermission>} />
+                <Route path="/groups/:groupName" element={<RequirePermission permission="manage_groups"><GroupDetailsPage /></RequirePermission>} />
+                <Route path="/symbols" element={<RequirePermission permission="manage_groups"><SymbolsOverviewPage /></RequirePermission>} />
+                <Route path="/symbols/:group" element={<RequirePermission permission="manage_groups"><SymbolListPage /></RequirePermission>} />
+                <Route path="/symbol-management" element={<RequirePermission permission="manage_groups"><SymbolManagementPage /></RequirePermission>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </AdminLayout>
         )}
       </GlobalErrorBoundary>

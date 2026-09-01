@@ -5,9 +5,17 @@ import {
   getPositionsPage,
   getTradingAccountsPage,
 } from '../../services/api';
-import { buildDashboardFallbackMetrics, normalizeDashboardSummary } from './dashboardMetrics';
+import {
+  buildDashboardFallbackMetrics,
+  normalizeAccountLimitStatus,
+  normalizeDashboardSummary,
+} from './dashboardMetrics';
 
-const DASHBOARD_SNAPSHOT_LIMIT = 100_000;
+// The dashboard must never download an entire account/position history just to
+// calculate a card. If an endpoint provides a total, one row is enough to read
+// it; otherwise the KPI stays unavailable until a dedicated aggregate exists.
+const DASHBOARD_FALLBACK_PAGE_LIMIT = 1;
+const DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY = ['dashboard', 'metrics', 'account-limits'];
 
 const getErrorMessage = (error) => (
   error instanceof Error ? error.message : String(error || 'Request failed')
@@ -32,13 +40,13 @@ const loadPagedFallbackMetrics = async (summaryError, signal) => {
   const [accountLimit, accounts, positions] = await Promise.all([
     settleDashboardPage('accountLimit', () => getAccountLimitStatus({ signal })),
     settleDashboardPage('accounts', () => getTradingAccountsPage({
-      limit: DASHBOARD_SNAPSHOT_LIMIT,
+      limit: DASHBOARD_FALLBACK_PAGE_LIMIT,
       offset: 0,
     }, { signal })),
     settleDashboardPage('positions', () => getPositionsPage({
-      limit: DASHBOARD_SNAPSHOT_LIMIT,
+      limit: DASHBOARD_FALLBACK_PAGE_LIMIT,
       offset: 0,
-    }, { signal })),
+    }, { signal, stream: true })),
   ]);
 
   const metrics = buildDashboardFallbackMetrics({
@@ -82,6 +90,28 @@ const loadDashboardMetrics = async ({ signal } = {}) => {
     return loadPagedFallbackMetrics(error, signal);
   }
 };
+
+const loadDashboardAccountLimits = async ({ signal } = {}) => {
+  const status = await getAccountLimitStatus({ signal });
+  const metrics = normalizeAccountLimitStatus(status);
+
+  if (!metrics) {
+    throw new Error('AccountLimitStatus response did not include account totals');
+  }
+
+  return {
+    metrics,
+    asOf: Date.now(),
+  };
+};
+
+export const useDashboardAccountLimits = () => useQuery({
+  queryKey: DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY,
+  queryFn: loadDashboardAccountLimits,
+  staleTime: 15_000,
+  refetchInterval: 30_000,
+  refetchIntervalInBackground: false,
+});
 
 export const useDashboardMetrics = () => useQuery({
   queryKey: ['dashboard', 'metrics', 'summary'],

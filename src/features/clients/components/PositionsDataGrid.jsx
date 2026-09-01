@@ -55,7 +55,6 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     params,
     pageSize,
     enabled: hasRequestedData,
-    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {
@@ -80,8 +79,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     refetch();
   };
 
-  const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
+  const renderHeader = (col, label) => (
+    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }}>
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
@@ -95,7 +94,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col w-full overflow-hidden">
+    <div className="ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -104,9 +103,9 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           <strong>API Error.</strong> {error?.message || 'Failed to load positions.'}
         </div>
       )}
-      <div className="w-full overflow-x-auto">
+      <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
         <table className="ui-grid min-w-max">
-          <thead>
+          <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {renderHeader('position', 'Ticket')}
               {renderHeader('login', 'Login')}
@@ -114,13 +113,13 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
               {renderHeader('email', 'Email')}
               {renderHeader('symbol', 'Symbol')}
               {renderHeader('type', 'Action')}
-              {renderHeader('volume', 'Lots', 'right')}
-              {renderHeader('priceOpen', 'Open', 'right')}
-              {renderHeader('priceCurrent', 'Current', 'right')}
-              {renderHeader('priceSl', 'S/L', 'right')}
-              {renderHeader('priceTp', 'T/P', 'right')}
-              {renderHeader('swap', 'Storage', 'right')}
-              {renderHeader('profit', 'Profit', 'right')}
+              {renderHeader('volume', 'Lots')}
+              {renderHeader('priceOpen', 'Open')}
+              {renderHeader('priceCurrent', 'Current')}
+              {renderHeader('priceSl', 'S/L')}
+              {renderHeader('priceTp', 'T/P')}
+              {renderHeader('swap', 'Storage')}
+              {renderHeader('profit', 'Profit')}
               {renderHeader('comment', 'Comment')}
             </tr>
           </thead>
@@ -156,24 +155,24 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="tabular">{row.position}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
-                  <td style={{ fontWeight: 500 }}>{row.name}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.email}</td>
-                  <td style={{ fontWeight: 500 }}>{row.symbol}</td>
-                  <td>
+                  <td className="tabular" style={{ textAlign: 'center' }}>{row.position}</td>
+                  <td className="tabular" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.login}</td>
+                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.email}</td>
+                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.symbol}</td>
+                  <td style={{ textAlign: 'center' }}>
                     <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
                       {row.type.toUpperCase()}
                     </span>
                   </td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceOpen)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceCurrent, 1)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceSl)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.priceTp)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right', color: swapTone }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right', color: profitTone, fontWeight: 600 }}>{fmt(row.profit)}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.comment}</td>
+                  <td className="tabular" style={{ textAlign: 'center' }}>{row.volume}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceOpen)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceCurrent, 1)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center', color: swapTone }}>{fmt(row.swap)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone, fontWeight: 600 }}>{fmt(row.profit)}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.comment}</td>
                 </tr>
               );
             })}

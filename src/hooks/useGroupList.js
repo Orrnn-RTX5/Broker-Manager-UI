@@ -4,18 +4,20 @@ import { getGroupsPage } from '../services/api';
 
 export const useGroupList = (params = {}) => {
   const addNotification = useNotificationStore((state) => state.addNotification);
+  const { enabled = true, ...groupParams } = params;
 
   const queryParams = {
     limit: 100,
     offset: 0,
     sort_by: 'name',
     sort_dir: 'asc',
-    ...params,
+    ...groupParams,
   };
 
   const { data, isLoading: loading, error, isError } = useQuery({
     queryKey: ['groups', queryParams],
     queryFn: ({ signal }) => getGroupsPage(queryParams, { signal }),
+    enabled,
     placeholderData: (previousData) => previousData,
     // Show notification on error
     meta: {

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ChevronDown, Search, User } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, User } from 'lucide-react';
+import FilterDropdown from '../../components/FilterDropdown';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
@@ -23,20 +24,6 @@ const ACCOUNT_COLUMNS = [
   { key: 'currency', label: 'Currency' },
 ];
 
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
-
 const TradingAccountsPage = () => {
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('All Groups');
@@ -45,10 +32,14 @@ const TradingAccountsPage = () => {
   const [restrictLogin, setRestrictLogin] = useState(null);
   const [editAccount, setEditAccount] = useState(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const { groups } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
+  const { groups, loading: groupsLoading } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
   const { canAct } = usePermissions();
   const canEditAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
-  const groupOptions = groups.map((group) => group.name).filter(Boolean);
+  const groupOptions = useMemo(
+    () => ['All Groups', ...groups.map((group) => group.name).filter(Boolean)],
+    [groups]
+  );
+  const countryOptions = useMemo(() => ['All Countries', ...ALL_COUNTRIES], []);
 
   const ctl = useGridPageController({
     columns: ACCOUNT_COLUMNS,
@@ -71,8 +62,20 @@ const TradingAccountsPage = () => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Groups"    width="w-[160px]" options={groupOptions}  onChange={(e) => setGroupFilter(e.target.value)} />
-          <Dropdown value="All Countries" width="w-[140px]" options={ALL_COUNTRIES} onChange={(e) => setCountryFilter(e.target.value)} />
+          <FilterDropdown
+            value={groupFilter}
+            className="w-[160px]"
+            options={groupOptions}
+            loading={groupsLoading}
+            loadingLabel="Loading groups…"
+            onChange={setGroupFilter}
+          />
+          <FilterDropdown
+            value={countryFilter}
+            className="w-[160px]"
+            options={countryOptions}
+            onChange={setCountryFilter}
+          />
         </div>
       </div>
 

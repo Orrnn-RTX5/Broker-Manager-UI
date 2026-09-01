@@ -6,6 +6,7 @@
   overflow: hidden;
   background: transparent;
   position: relative;
+  isolation: isolate;
 }
 
 .middle {
@@ -30,4 +31,51 @@
   flex-direction: column;
   height: 100%;
   flex-shrink: 0;
+}
+
+/* Trading-terminal workspace: quotes stay in a slim rail at the far left,
+   while navigation remains available next to it at full working height. */
+.leftSideRow {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.paneResizer {
+  width: 8px;
+  flex: 0 0 8px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: var(--border);
+  border-inline: 1px solid var(--bg);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.paneResizer:hover,
+.paneResizer:focus-visible {
+  color: var(--accent-text);
+  background: var(--accent);
+  outline: none;
+}
+
+.paneResizer svg {
+  pointer-events: none;
+}
+
+.maximizedPanelOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
 }

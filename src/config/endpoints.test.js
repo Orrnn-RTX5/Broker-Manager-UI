@@ -46,10 +46,14 @@ test('manager API path keeps proxy prefix for web/public backend mode', () => {
   assert.equal(buildManagerApiPath('/api/manager/IBUpdate', true), '/manager/IBUpdate');
 });
 
-test('native auth API paths never receive the manager proxy prefix', () => {
+test('native versioned API paths never receive the manager proxy prefix', () => {
   assert.equal(buildManagerApiPath('/api/v2/auth/login', true), '/api/v2/auth/login');
   assert.equal(buildManagerApiPath('/api/v2/admin/login', true), '/api/v2/admin/login');
   assert.equal(buildManagerApiPath('/api/v1/auth/refresh', true), '/api/v1/auth/refresh');
+  assert.equal(
+    buildManagerApiPath('/api/v1/manager/transactions/deposit', true),
+    '/api/v1/manager/transactions/deposit'
+  );
 });
 
 test('manager API path removes proxy prefix for direct backend mode', () => {
@@ -109,6 +113,18 @@ test('broker v2 API paths never receive the legacy /manager prefix', () => {
   assert.equal(
     buildBrokerApiUrl('/api/v2/positions/history'),
     'https://fxtrustbrokerbackend.orrnn.com/api/v2/positions/history'
+  );
+});
+
+test('manager client keeps versioned transaction routes at the broker root', () => {
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'test',
+    backend_url: 'https://fxtrustbrokerbackend.orrnn.com',
+  }));
+
+  assert.equal(
+    buildManagerApiUrl('/api/v1/manager/transactions/deposit'),
+    'https://fxtrustbrokerbackend.orrnn.com/api/v1/manager/transactions/deposit'
   );
 });
 

@@ -112,6 +112,22 @@ test('paged normalizer processes only the supplied page rows, not a synthetic fu
   assert.equal(normalizedCount, 100);
 });
 
+test('paged normalizer clamps an oversized backend response before normalizing it', () => {
+  const fullDataset = Array.from({ length: 40_000 }, (_, index) => ({ id: index + 1 }));
+  let normalizedCount = 0;
+
+  const page = normalizePagedResult(fullDataset, { limit: 30, offset: 60 }, (row) => {
+    normalizedCount += 1;
+    return row;
+  });
+
+  assert.equal(page.rows.length, 30);
+  assert.equal(page.rows[0].id, 61);
+  assert.equal(page.rows.at(-1).id, 90);
+  assert.equal(page.hasMore, true);
+  assert.equal(normalizedCount, 30);
+});
+
 test('paged text fallback extracts only the requested page from a full backend payload', async () => {
   const fullDataset = Array.from({ length: 40_000 }, (_, index) => ({ login: index + 1, name: `Account ${index + 1}` }));
   const payloadText = JSON.stringify({ answer: fullDataset, total: fullDataset.length });

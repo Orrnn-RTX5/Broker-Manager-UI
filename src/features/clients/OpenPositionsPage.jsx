@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { ChevronDown, Search, BarChart3 } from 'lucide-react';
+import { Search, BarChart3 } from 'lucide-react';
+import FilterDropdown from '../../components/FilterDropdown';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
@@ -23,20 +24,6 @@ const POSITION_COLUMNS = [
   { key: 'profit',       label: 'Profit' },
   { key: 'comment',      label: 'Comment' },
 ];
-
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
 
 const OpenPositionsPage = () => {
   const [search, setSearch] = useState('');
@@ -67,8 +54,8 @@ const OpenPositionsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getPositionActions]);
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
+    <div className="p-6 w-full h-full flex flex-col gap-5 overflow-y-auto" {...ctl.pageProps}>
+      <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
           <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
           <div>
@@ -76,15 +63,10 @@ const OpenPositionsPage = () => {
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Types"   width="w-[100px]" options={['Buy', 'Sell']}                onChange={(e) => setTypeFilter(e.target.value)} />
-          <Dropdown value="All Symbols" width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
-          <Dropdown value="All Reasons" width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
-        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-xs w-full">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
@@ -96,18 +78,9 @@ const OpenPositionsPage = () => {
             style={{ paddingLeft: 32 }}
           />
         </div>
-        {['All Types', 'Buy', 'Sell'].map(opt => (
-          <button
-            key={opt}
-            onClick={() => setTypeFilter(opt)}
-            className={`ui-btn ui-btn-sm ${typeFilter === opt ? 'ui-btn-primary' : 'ui-btn-secondary'}`}
-          >
-            {opt}
-          </button>
-        ))}
-        <div className="h-6 w-px mx-1" style={{ background: 'var(--border)' }} />
-        <Dropdown value={symbolFilter} width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
-        <Dropdown value={reasonFilter} width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
+        <FilterDropdown value={typeFilter} className="w-[100px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
+        <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
+        <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
       </div>
 
       <PositionsDataGrid

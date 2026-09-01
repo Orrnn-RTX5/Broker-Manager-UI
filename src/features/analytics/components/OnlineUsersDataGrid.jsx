@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getOnlineUsersPage } from '../../../services/api';
@@ -47,7 +47,6 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: 5_000,
-    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {
@@ -72,8 +71,8 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     refetch();
   };
 
-  const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }} className="cursor-pointer">
+  const renderHeader = (col, label) => (
+    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }} className="cursor-pointer">
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
@@ -123,7 +122,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
               {renderHeader('client', 'Client')}
               {renderHeader('version', 'Build')}
               {renderHeader('ip', 'IP Address')}
-              {renderHeader('equity', 'Equity', 'right')}
+              {renderHeader('equity', 'Equity')}
               {renderHeader('currency', 'Cu.')}
             </tr>
           </thead>
@@ -152,19 +151,16 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td style={{ color: 'var(--text-3)' }}>
-                    <span className="inline-flex items-center gap-2">
-                      <User size={13} style={{ color: 'var(--accent)' }} />
-                      <span className="tabular">{row.login}</span>
-                    </span>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>
+                    <span className="tabular">{row.login}</span>
                   </td>
-                  <td style={{ fontWeight: 500 }}>{row.name}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.group}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.client}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.version}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)' }}>{row.ip}</td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.equity)}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.currency}</td>
+                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.group}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.client}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.version}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.ip}</td>
+                  <td className="tabular" style={{ textAlign: 'center' }}>{fmt(row.equity)}</td>
+                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.currency}</td>
                 </tr>
               );
             })}

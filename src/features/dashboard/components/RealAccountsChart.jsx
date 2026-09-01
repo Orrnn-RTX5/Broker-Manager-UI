@@ -38,8 +38,8 @@ const RealAccountsChart = () => {
               }}
               labelStyle={{ display: 'none' }}
             />
-            <Line type="linear" dataKey="value" stroke="#7f56d9" strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Brush dataKey="time" height={15} stroke="#7f56d9" fill="var(--surface-2)" tickFormatter={() => ''} />
+            <Line type="linear" dataKey="value" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Brush dataKey="time" height={15} stroke="var(--accent)" fill="var(--surface-2)" tickFormatter={() => ''} />
           </LineChart>
         </ResponsiveContainer>
       </div>

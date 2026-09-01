@@ -428,14 +428,50 @@ export const normalizePagedResult = (payload, query = {}, normalizeRow = (row) =
   const limit = normalizeLimit(query.limit);
   const offset = normalizeOffset(query.offset);
   const sourceRows = extractRows(payload, preferredKeys);
-  const rows = sourceRows.reduce((acc, rawRow) => {
-    const normalizedRow = normalizeRow(rawRow);
-    if (matchesPagedQuery(rawRow, normalizedRow, query)) acc.push(normalizedRow);
-    return acc;
-  }, []);
   const total = extractTotal(payload);
   const hasKnownTotal = total !== null;
-  const hasMore = hasKnownTotal ? offset + rows.length < total : rows.length === limit;
+  // A few manager endpoints can ignore limit/offset and send every row. Treat
+  // an oversized response as a local page so one grid cannot normalize and
+  // render thousands of records before its first paint. A normal server page
+  // (at most `limit` rows) retains its existing offset semantics.
+  const needsLocalPagination = sourceRows.length > limit;
+  const rowOffset = needsLocalPagination ? offset : 0;
+  const filters = query.filters && typeof query.filters === 'object' ? query.filters : {};
+  const rows = [];
+  let matched = 0;
+  let hasAdditionalRows = false;
+
+  for (const rawRow of sourceRows) {
+    const rawMatches = rowContainsSearch(rawRow, query.search) && rowMatchesFilters(rawRow, filters);
+    let normalizedRow = null;
+
+    // Most backend rows already contain searchable/filterable fields. Only
+    // normalize non-matching rows when the query could match a derived field.
+    if (!rawMatches) {
+      normalizedRow = normalizeRow(rawRow);
+      if (!matchesPagedQuery(rawRow, normalizedRow, query)) continue;
+    }
+
+    if (matched < rowOffset) {
+      matched += 1;
+      continue;
+    }
+
+    if (rows.length < limit) {
+      rows.push(normalizedRow || normalizeRow(rawRow));
+      matched += 1;
+      continue;
+    }
+
+    hasAdditionalRows = true;
+    break;
+  }
+
+  const hasMore = hasKnownTotal
+    ? offset + rows.length < total
+    : needsLocalPagination
+      ? hasAdditionalRows
+      : rows.length === limit;
 
   return {
     rows,

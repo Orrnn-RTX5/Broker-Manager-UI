@@ -98,6 +98,11 @@
   cursor: grabbing;
 }
 
+.titleBarStatic,
+.titleBarStatic:active {
+  cursor: default;
+}
+
 .panelIcon {
   font-size: 14px;
   color: var(--dock-icon-color, #7f56d9);

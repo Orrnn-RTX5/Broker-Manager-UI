@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
@@ -9,14 +9,14 @@ import {
 
 const MAX_TICKS = 1000;
 
-const toDisplayPrice = (value, fallback = '0.00000') => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number.toFixed(5) : fallback;
-};
-
 const toNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+};
+
+const formatSpread = (bid, ask) => {
+  const difference = Math.abs(toNumber(ask) - toNumber(bid));
+  return Number.isFinite(difference) ? difference.toFixed(5) : '-';
 };
 
 const formatDetailValue = (value) => {
@@ -26,16 +26,55 @@ const formatDetailValue = (value) => {
     : '-';
 };
 
-const normalizeQuote = (entry = {}) => ({
-  ...entry,
-  symbol: String(entry.symbol || '').trim(),
-  bid: toDisplayPrice(entry.bid),
-  ask: toDisplayPrice(entry.ask),
-  dir: entry.dir === 'down' ? 'down' : 'up',
-  session: entry.session || {},
+const MarketQuoteRow = memo(function MarketQuoteRow({
+  compact,
+  isConnected,
+  onOpenTicks,
+  onSelect,
+  quote,
+  selected,
+}) {
+  const isUp = quote.dir === 'up';
+
+  return (
+    <tr
+      onClick={() => onSelect(quote)}
+      onDoubleClick={() => onOpenTicks(quote)}
+      className={`market-row cursor-pointer ${selected ? 'is-selected' : ''}`}
+    >
+      <td className={compact ? 'px-2 py-1.5 text-center font-medium' : 'px-3 py-2 font-medium'} style={{ borderRight: '1px solid var(--border)' }}>
+        <div className={compact ? 'flex items-center justify-center gap-1 whitespace-nowrap' : 'flex items-center gap-1.5'}>
+          {isUp
+            ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
+            : <ArrowDownRight size={compact ? 11 : 14} style={{ color: 'var(--danger-text)' }} strokeWidth={2.5} />}
+          <span>{quote.symbol}</span>
+          {!compact && quote.isStale && (
+            <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>
+              {isConnected ? 'No fresh tick' : 'Cached'}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className={compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+        <span key={`${quote.symbol}-bid-${quote.bid}`} className={isUp ? 'flash-up' : 'flash-down'}>
+          {quote.bid}
+        </span>
+      </td>
+      <td className={compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+        <span key={`${quote.symbol}-ask-${quote.ask}`} className={isUp ? 'flash-up' : 'flash-down'}>
+          {quote.ask}
+        </span>
+      </td>
+      {compact && (
+        <td className="px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
+          {formatSpread(quote.bid, quote.ask)}
+        </td>
+      )}
+    </tr>
+  );
 });
 
-const MarketData = () => {
+const MarketData = ({ compact = false }) => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [tickHistory, setTickHistory] = useState([]);
@@ -59,31 +98,30 @@ const MarketData = () => {
     initWebSocket();
   }, [initWebSocket]);
 
-  const liveQuotes = useMemo(() => {
-    let searchRegex = null;
-    if (searchQuery.trim()) {
+  const searchRegex = useMemo(() => {
+    const query = searchQuery.trim();
+    if (query) {
       try {
-        searchRegex = new RegExp(searchQuery.trim(), 'i');
+        return new RegExp(query, 'i');
       } catch {
-        searchRegex = new RegExp(searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       }
     }
+    return null;
+  }, [searchQuery]);
 
-    return sortMarketWatchQuotes(Object.values(symbols || {})
-      .map(normalizeQuote)
-      .filter((quote) => {
-        if (!quote.symbol) return false;
-        if (searchRegex) {
-          return searchRegex.test(quote.symbol);
-        }
-        return true;
-      }));
-  }, [symbols, searchQuery]);
+  const liveQuotes = useMemo(() => {
+    return sortMarketWatchQuotes(Object.values(symbols || {}).filter((quote) => {
+      if (!quote?.symbol) return false;
+      return !searchRegex || searchRegex.test(quote.symbol);
+    }));
+  }, [symbols, searchRegex]);
 
   const quoteSummary = useMemo(
     () => summarizeMarketWatchQuotes(liveQuotes),
     [liveQuotes]
   );
+  const columnCount = compact ? 4 : 3;
 
   const selectedQuote = useMemo(
     () => liveQuotes.find((quote) => quote.symbol === selectedSymbol) || null,
@@ -117,7 +155,7 @@ const MarketData = () => {
     });
   }), []);
 
-  const selectQuote = (quote, nextTab = activeTab) => {
+  const selectQuote = useCallback((quote, nextTab) => {
     setSelectedSymbol(quote.symbol);
     setTickHistory([{
       bid: toNumber(quote.bid),
@@ -125,33 +163,68 @@ const MarketData = () => {
       time: quote.lastUpdate || 0,
     }]);
     setActiveTab(nextTab);
-  };
+  }, []);
 
-  const handleSearchSymbol = () => {
+  const handleSelectQuote = useCallback(
+    (quote) => selectQuote(quote, activeTab),
+    [activeTab, selectQuote]
+  );
+
+  const handleOpenTicks = useCallback(
+    (quote) => selectQuote(quote, 'Ticks'),
+    [selectQuote]
+  );
+
+  const handleSearchSymbol = useCallback(() => {
     if (liveQuotes && liveQuotes.length > 0) {
       selectQuote(liveQuotes[0], activeTab);
     }
-  };
+  }, [activeTab, liveQuotes, selectQuote]);
 
-  const renderDirectionIcon = (quote, size = 14) => (
-    quote.dir === 'up'
-      ? <ArrowUpRight size={size} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
-      : <ArrowDownRight size={size} style={{ color: 'var(--danger-text)' }} strokeWidth={2.5} />
+  const renderCompactSearch = () => (
+    <div
+      className="shrink-0 px-2 py-1.5"
+      style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+    >
+      <div className="relative">
+        <Search
+          size={13}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: 'var(--muted)' }}
+          aria-hidden="true"
+        />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') handleSearchSymbol();
+          }}
+          placeholder="Search symbols…"
+          aria-label="Search market symbols"
+          className="ui-input ui-input-sm h-7 w-full text-[11px]"
+          style={{ paddingLeft: 29 }}
+        />
+      </div>
+    </div>
   );
 
   const renderSymbols = () => (
-    <div className="flex-1 overflow-auto">
-      <table className="w-full text-left border-collapse table-fixed">
+    <div className="flex-1 min-h-0 flex flex-col">
+      {compact && renderCompactSearch()}
+      <div className="flex-1 min-h-0 overflow-auto">
+      <table className={`w-full text-left border-collapse table-fixed ${compact ? 'min-w-[320px]' : ''}`}>
         <thead>
           <tr
             className="select-none sticky top-0 z-10 text-xs"
             style={{ background: 'var(--surface-2)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}
           >
-            <th className="px-3 py-2 font-medium w-1/3" style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
-            <th className="px-3 py-2 font-medium w-1/3 text-right" style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
-            <th className="px-3 py-2 font-medium w-1/3 text-right">Ask</th>
+            <th className={compact ? 'px-2 py-1.5 font-medium w-[38%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3'} style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
+            <th className={compact ? 'px-1.5 py-1.5 font-medium w-[22%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
+            <th className={compact ? 'px-1.5 py-1.5 font-medium w-[22%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Ask</th>
+            {compact && <th className="px-1.5 py-1.5 font-medium w-[18%] text-center whitespace-nowrap">Spread</th>}
           </tr>
-          <tr>
+          {!compact && <tr>
             <th colSpan={3} className="px-3 py-2">
               <div
                 className="flex items-center h-7 w-full rounded-md transition-colors"
@@ -186,11 +259,11 @@ const MarketData = () => {
                 </button>
               </div>
             </th>
-          </tr>
+          </tr>}
         </thead>
-        <tbody className="text-sm">
+        <tbody className={compact ? 'text-[11px]' : 'text-sm'}>
           <tr>
-            <td colSpan={3} className="px-3 py-2 text-[11px]" style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+            <td colSpan={columnCount} className={compact ? 'px-2 py-1.5 text-[10px]' : 'px-3 py-2 text-[11px]'} style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
               <span className="inline-flex items-center gap-1.5">
                 <span
                   className="inline-block h-1.5 w-1.5 rounded-full"
@@ -198,57 +271,44 @@ const MarketData = () => {
                   aria-hidden="true"
                 />
                 {isConnected
-                  ? `Live feed connected · ${quoteSummary.live} updating · ${quoteSummary.cached} without a fresh tick`
+                  ? (compact ? `Live · ${quoteSummary.live} updating` : `Live feed connected · ${quoteSummary.live} updating · ${quoteSummary.cached} without a fresh tick`)
                   : 'Connecting to live feed…'}
               </span>
             </td>
           </tr>
           {feedError && liveQuotes.length > 0 && (
             <tr>
-              <td colSpan={3} className="px-3 py-2 text-[11px]" style={{ color: 'var(--warning, var(--muted))', borderBottom: '1px solid var(--border)' }}>
+              <td colSpan={columnCount} className="px-3 py-2 text-[11px]" style={{ color: 'var(--warning, var(--muted))', borderBottom: '1px solid var(--border)' }}>
                 {feedError}
               </td>
             </tr>
           )}
           {feedError && liveQuotes.length === 0 ? (
             <tr>
-              <td colSpan={3} className="px-3 py-6 text-center text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
+              <td colSpan={columnCount} className="px-3 py-6 text-center text-xs" style={{ color: 'var(--warning, var(--muted))' }}>
                 {feedError}
               </td>
             </tr>
-          ) : liveQuotes.map((quote) => (
-            <tr
-              key={quote.symbol}
-              onClick={() => selectQuote(quote, activeTab)}
-              onDoubleClick={() => selectQuote(quote, 'Ticks')}
-              className={`market-row cursor-pointer ${selectedSymbol === quote.symbol ? 'is-selected' : ''}`}
-              title={quote.isStale
-                ? (isConnected ? 'Feed connected; this symbol has no fresh tick.' : 'Cached symbol data; live feed is not connected.')
-                : 'Live market feed'}
-            >
-              <td className="px-3 py-2 flex items-center gap-1.5 font-medium" style={{ borderRight: '1px solid var(--border)' }}>
-                {renderDirectionIcon(quote)}
-                <span>{quote.symbol}</span>
-                {quote.isStale && (
-                  <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>
-                    {isConnected ? 'No fresh tick' : 'Cached'}
-                  </span>
-                )}
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums" style={{ borderRight: '1px solid var(--border)', color: quote.dir === 'up' ? 'var(--ok-text)' : 'var(--danger-text)' }}>
-                <span key={`${quote.symbol}-bid-${quote.bid}`} className={quote.dir === 'up' ? 'flash-up' : 'flash-down'}>
-                  {quote.bid}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums" style={{ color: quote.dir === 'up' ? 'var(--ok-text)' : 'var(--danger-text)' }}>
-                <span key={`${quote.symbol}-ask-${quote.ask}`} className={quote.dir === 'up' ? 'flash-up' : 'flash-down'}>
-                  {quote.ask}
-                </span>
+          ) : liveQuotes.length === 0 ? (
+            <tr>
+              <td colSpan={columnCount} className="px-3 py-6 text-center text-xs" style={{ color: 'var(--muted)' }}>
+                {searchQuery.trim() ? 'No market symbols match your search.' : 'Waiting for market prices…'}
               </td>
             </tr>
+          ) : liveQuotes.map((quote) => (
+            <MarketQuoteRow
+              key={quote.symbol}
+              compact={compact}
+              isConnected={isConnected}
+              onOpenTicks={handleOpenTicks}
+              onSelect={handleSelectQuote}
+              quote={quote}
+              selected={selectedSymbol === quote.symbol}
+            />
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 
@@ -370,7 +430,7 @@ const MarketData = () => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden text-sm" style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+    <div className={`market-data flex flex-col h-full w-full overflow-hidden text-sm ${compact ? 'market-data-compact' : ''}`} style={{ background: 'var(--surface)', color: 'var(--text)' }}>
       <style>{`
         @keyframes flashTextUp {
           0% { color: var(--ok-text); text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
@@ -397,14 +457,14 @@ const MarketData = () => {
         {activeTab === 'Ticks' && renderTicks()}
       </div>
 
-      <div className="flex items-end px-3 pt-3" style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
+      <div className={compact ? 'flex items-end px-2 pt-1.5' : 'flex items-end px-3 pt-3'} style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
         <div className="flex gap-1 w-full border-b" style={{ borderColor: 'var(--border)' }}>
           {['Symbols', 'Details', 'Ticks'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`
-                px-4 py-2 font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
+                ${compact ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
                 ${activeTab === tab
                   ? 'bg-[var(--surface)] text-[var(--accent)] z-10'
                   : 'bg-transparent text-[var(--text-3)] border-transparent hover:text-[var(--text-2)] hover:bg-[var(--surface-hover)]'}

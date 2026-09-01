@@ -4,7 +4,7 @@ const data = [
   { name: 'None', value: 100 }
 ];
 
-const COLORS = ['#7f56d9'];
+const COLORS = ['var(--accent)'];
 
 const AccountsBySourceChart = ({ onClick }) => {
   return (
@@ -42,7 +42,7 @@ const AccountsBySourceChart = ({ onClick }) => {
         </div>
         <div className="w-1/2 flex items-center justify-start pl-4">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ background: '#7f56d9' }} />
+            <div className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
             <span className="text-xs" style={{ color: 'var(--text-2)' }}>None</span>
           </div>
         </div>

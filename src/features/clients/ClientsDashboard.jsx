@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { ChevronDown, Search, Users2 } from 'lucide-react';
+import { Search, Users2 } from 'lucide-react';
+import FilterDropdown from '../../components/FilterDropdown';
 import ClientsDataGrid from './components/ClientsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import ClientDetailsModal from '../../components/Popups/ClientDetailsModal';
@@ -19,25 +20,6 @@ const CLIENT_COLUMNS = [
   { key: 'phone',   label: 'Phone' },
   { key: 'country', label: 'Country' },
 ];
-
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border-3)',
-        color: 'var(--text-2)',
-        boxShadow: 'var(--shadow-xs)',
-      }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
 
 const ClientsDashboard = () => {
   const [search, setSearch] = useState('');
@@ -122,9 +104,9 @@ const ClientsDashboard = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Types"     width="w-[130px]" options={['Individual', 'Corporate', 'IB']} onChange={(e) => setTypeFilter(e.target.value)} />
-          <Dropdown value="All Statuses"  width="w-[130px]" options={['Active', 'Inactive', 'Unregistered', 'Pending']} onChange={(e) => setStatusFilter(e.target.value)} />
-          <Dropdown value="All Countries" width="w-[140px]" options={ALL_COUNTRIES} onChange={(e) => setCountryFilter(e.target.value)} />
+          <FilterDropdown value={typeFilter} className="w-[130px]" options={['All Types', 'Individual', 'Corporate', 'IB']} onChange={setTypeFilter} />
+          <FilterDropdown value={statusFilter} className="w-[130px]" options={['All Statuses', 'Active', 'Inactive', 'Unregistered', 'Pending']} onChange={setStatusFilter} />
+          <FilterDropdown value={countryFilter} className="w-[140px]" options={['All Countries', ...ALL_COUNTRIES]} onChange={setCountryFilter} />
         </div>
       </div>
 

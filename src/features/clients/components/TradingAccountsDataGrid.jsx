@@ -62,7 +62,6 @@ const TradingAccountsDataGrid = ({
     params,
     pageSize,
     enabled: hasRequestedData,
-    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {
@@ -132,7 +131,7 @@ const TradingAccountsDataGrid = ({
   };
 
   return (
-    <div className="ui-card flex flex-col w-full overflow-hidden">
+    <div className="ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -141,9 +140,9 @@ const TradingAccountsDataGrid = ({
           <strong>API Error.</strong> {error?.message || 'Failed to load accounts.'}
         </div>
       )}
-      <div className="w-full overflow-x-auto">
+      <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
         <table className="ui-grid min-w-max">
-          <thead>
+          <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {renderHeader('login', 'Login')}
               {renderHeader('status', 'Status')}

@@ -247,11 +247,16 @@ export const normalizeGroupRow = (item = {}) => (
 );
 
 const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options = {}) => {
+  const { stream = false, ...requestOptions } = options;
   const pagedEndpoint = buildPagedEndpoint(endpoint, params);
-  if (endpoint === '/AccountDetailsMany') {
-    const response = await apiClient.getRaw(pagedEndpoint, options);
+
+  // AccountDetailsMany and explicit lightweight callers use the streamed
+  // parser. It can stop after the requested page instead of JSON-parsing a
+  // large response that a manager endpoint may have returned in full.
+  if (endpoint === '/AccountDetailsMany' || stream) {
+    const response = await apiClient.getRaw(pagedEndpoint, requestOptions);
     return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, {
-      ...options,
+      ...requestOptions,
       serverPaged: true,
     });
   }
@@ -259,15 +264,15 @@ const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options =
   try {
     const data = await apiClient.get(pagedEndpoint, {
       maxResponseBytes: PAGED_RESPONSE_MAX_BYTES,
-      ...options,
+      ...requestOptions,
     });
     return normalizePagedResult(data, params, normalizeRow, preferredKeys);
   } catch (error) {
     if (!String(error?.message || '').includes(PAGED_RESPONSE_TOO_LARGE)) throw error;
   }
 
-  const text = await apiClient.getText(pagedEndpoint, options);
-  return normalizePagedTextResult(text, params, normalizeRow, preferredKeys, options);
+  const text = await apiClient.getText(pagedEndpoint, requestOptions);
+  return normalizePagedTextResult(text, params, normalizeRow, preferredKeys, requestOptions);
 };
 
 const isExactLoginSearch = (value) => /^\d+$/.test(String(value || '').trim());

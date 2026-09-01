@@ -1,4 +1,4 @@
-import { Link2, Unplug, Play, Square, Plus, LogOut, FolderOpen, Printer, Search, Settings as SettingsIcon } from 'lucide-react';
+import { Link2, Unplug, Play, Square, Plus, LogOut, FolderOpen, Printer, Download } from 'lucide-react';
 import { MenuItem, MenuDivider } from './MenuItem';
 
 const FileMenu = ({
@@ -6,6 +6,7 @@ const FileMenu = ({
   onConnectClick,
   onDisconnectClick,
   onNewAccountClick,
+  onExportClick,
   onPrintClick,
   onExitClick,
 }) => {
@@ -36,13 +37,11 @@ const FileMenu = ({
         onClick={onNewAccountClick}
         disabled={!isAuthenticated}
       />
-      <MenuItem icon={LogOut} text="Export" iconColor="text-gray-400" disabled />
+      <MenuItem icon={Download} text="Export" iconColor="text-sky-500" onClick={onExportClick} disabled={!isAuthenticated} />
       <MenuDivider />
       <MenuItem icon={FolderOpen} text="Open Data Folder" shortcut="Ctrl+Shift+D" iconColor="text-yellow-500" />
       <MenuDivider />
       <MenuItem icon={Printer} text="Print" shortcut="Ctrl+P" iconColor="text-blue-600" onClick={onPrintClick} />
-      <MenuItem icon={Search} text="Print Preview" iconColor="text-blue-600" />
-      <MenuItem icon={SettingsIcon} text="Print Setup" iconColor="text-blue-600" />
       <MenuDivider />
       <MenuItem icon={LogOut} text="Exit" iconColor="text-red-500" onClick={onExitClick} />
     </div>

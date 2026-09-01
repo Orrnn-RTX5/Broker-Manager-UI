@@ -7,6 +7,7 @@ import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
+import apiClient from '../../services/apiClient';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
@@ -18,6 +19,42 @@ const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAda
 const TABS = [
   'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
 ];
+
+const createIdempotencyKey = () => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  // All supported browsers and Electron builds provide randomUUID. Keep a
+  // UUID-shaped fallback for older clients because the backend validates this
+  // idempotency value as a UUID.
+  const bytes = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+const loadAccountDetails = async (loginId) => {
+  const params = new URLSearchParams({ login: String(loginId) });
+  const response = await fetchManagerApi(`/AccountDetails?${params.toString()}`, {
+    headers: { accept: 'application/json' },
+  });
+  const text = await response.text();
+  let payload;
+
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error(response.ok ? 'Invalid account details response' : text || 'Failed to refresh account balance');
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || 'Failed to refresh account balance');
+  }
+
+  return payload;
+};
 
 const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHeader, disabled = false }) => (
   <div
@@ -68,6 +105,21 @@ const pickAllowedFields = (source, allowed) =>
 
 const hasDisplayValue = (value) =>
   value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
+
+// Account windows are draggable. Keep their title bar and tabs reachable even
+// after a drag or a browser resize, otherwise the top controls can disappear
+// above the viewport while the lower form remains visible.
+const clampPopupPosition = (position = {}, size = {}) => {
+  const width = Math.max(0, Number(size.width) || 0);
+  const height = Math.max(0, Number(size.height) || 0);
+  const maxX = Math.max(0, window.innerWidth - width);
+  const maxY = Math.max(0, window.innerHeight - height);
+
+  return {
+    x: Math.min(maxX, Math.max(0, Number(position.x) || 0)),
+    y: Math.min(maxY, Math.max(0, Number(position.y) || 0)),
+  };
+};
 
 const normalizeLanguageOption = (value) => {
   if (!hasDisplayValue(value)) return LANGUAGE_OPTIONS[0];
@@ -210,7 +262,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [depositAmount, setDepositAmount] = useState('');
   const [depositComment, setDepositComment] = useState('');
-  const [depositCredit, setDepositCredit] = useState('');
+  const [isCreditDeposit, setIsCreditDeposit] = useState(false);
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositSuccess, setDepositSuccess] = useState(null);
@@ -267,10 +319,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let startPosY = position.y;
 
     const handleMouseMove = (moveEvent) => {
-      setPosition({
+      setPosition(clampPopupPosition({
         x: startPosX + (moveEvent.clientX - startX),
         y: startPosY + (moveEvent.clientY - startY),
-      });
+      }, size));
     };
 
     const handleMouseUp = () => {
@@ -309,9 +361,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         });
       } else if (edge === 'left') {
         let newWidth = Math.max(500, startWidth - dx);
-        let actualDx = startWidth - newWidth;
+        let actualDx = newWidth - startWidth;
         setSize(prev => ({ ...prev, width: newWidth }));
-        setPosition(prev => ({ ...prev, x: startPosX - actualDx }));
+        setPosition(prev => ({
+          ...prev,
+          x: clampPopupPosition({ x: startPosX - actualDx, y: prev.y }, { width: newWidth, height: startHeight }).x,
+        }));
       }
     };
 
@@ -338,10 +393,28 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       setIsMaximized(true);
     } else {
       setIsMaximized(false);
-      setPosition({ x: preMaxState.x, y: preMaxState.y });
+      setPosition(clampPopupPosition({ x: preMaxState.x, y: preMaxState.y }, {
+        width: preMaxState.w,
+        height: preMaxState.h,
+      }));
       setSize({ width: preMaxState.w, height: preMaxState.h });
     }
   };
+
+  useEffect(() => {
+    const keepPopupVisible = () => {
+      setPosition((currentPosition) => {
+        const clampedPosition = clampPopupPosition(currentPosition, size);
+        return clampedPosition.x === currentPosition.x && clampedPosition.y === currentPosition.y
+          ? currentPosition
+          : clampedPosition;
+      });
+    };
+
+    keepPopupVisible();
+    window.addEventListener('resize', keepPopupVisible);
+    return () => window.removeEventListener('resize', keepPopupVisible);
+  }, [size]);
 
   const toggleMinimize = () => {
     if (isMaximized) setIsMaximized(false);
@@ -662,19 +735,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       setError(null);
 
       try {
-        const params = new URLSearchParams({ login: String(loginId) });
-        const res = await fetchManagerApi(`/AccountDetails?${params.toString()}`, {
-          headers: { 'accept': 'application/json' }
-        });
-        const text = await res.text();
-        let payload;
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          throw new Error('Invalid JSON response');
-        }
-        if (!res.ok) throw new Error(payload.error || 'Server error');
-        setAccountData(payload);
+        setAccountData(await loadAccountDetails(loginId));
       } catch (err) {
         setError(err.message);
       } finally {
@@ -855,7 +916,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
     // Client-side validation is defence-in-depth only — the backend remains the
     // authority — but it must still reject malformed/blank/over-precision input
-    // and validate the optional `credit` field, which previously went through raw.
+    // before a financial request reaches the backend.
     const validateMoney = (raw, { allowNegative = false } = {}) => {
       const str = String(raw).trim();
       // up to 2 decimal places, optional leading minus
@@ -873,15 +934,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       return;
     }
 
-    // credit is optional; when supplied it may be negative (credit removal) but
-    // must still be a well-formed number within the same magnitude cap.
-    let creditVal = null;
-    if (depositCredit !== '' && depositCredit !== null && depositCredit !== undefined) {
-      creditVal = validateMoney(depositCredit, { allowNegative: true });
-      if (creditVal === null) {
-        setDepositError("Credit must be a number with up to 2 decimals and cannot exceed ±1,000,000.");
-        return;
-      }
+    const parsedLogin = Number(loginId);
+    if (!Number.isSafeInteger(parsedLogin) || parsedLogin <= 0) {
+      setDepositError('This account has an invalid login ID. Please reopen the account and try again.');
+      return;
     }
 
     setIsDepositing(true);
@@ -889,30 +945,35 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setDepositSuccess(null);
 
     try {
-      const params = new URLSearchParams({
-        login: loginId,
-        amount: amountVal
-      });
-      if (depositComment) params.append('comment', depositComment);
-      if (creditVal !== null) params.append('credit', String(creditVal));
-
-      const res = await fetchManagerApi(`/Deposit?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
+      const result = await apiClient.post('/api/v1/manager/transactions/deposit', {
+        login: parsedLogin,
+        amount: amountVal,
+        comment: depositComment.trim(),
+        idempotency_key: createIdempotencyKey(),
+        is_credit: isCreditDeposit,
       });
 
-      const responseText = await res.text();
-      // attempt to parse if JSON
-      let data;
-      try { data = JSON.parse(responseText); } catch { data = responseText; }
-
-      if (!res.ok) {
-        throw new Error(typeof data === 'object' ? (data.error || data.message || 'Deposit failed') : data);
+      if (result && typeof result === 'object' && (result.success === false || result.ok === false)) {
+        throw new Error(result.error || result.message || 'Deposit failed');
       }
-      setDepositSuccess(`Successfully deposited ${amountVal}!`);
+
+      const responseMessage = result && typeof result === 'object'
+        ? (result.message || result.detail || result.status_message)
+        : '';
+      setDepositSuccess(responseMessage || `Successfully ${isCreditDeposit ? 'added credit of' : 'deposited'} ${amountVal}!`);
       setDepositAmount('');
       setDepositComment('');
-      setDepositCredit('');
+      setIsCreditDeposit(false);
+      onAccountUpdated?.(loginId);
+
+      // Do not wait for the next grid/websocket interval after the backend has
+      // accepted the transaction: refresh the displayed balance immediately.
+      void loadAccountDetails(loginId)
+        .then((payload) => setAccountData(payload))
+        .catch(() => {
+          // The transaction already succeeded. The live metrics stream will
+          // reconcile if an account-details refresh is temporarily unavailable.
+        });
     } catch (err) {
       setDepositError(err.message);
     } finally {
@@ -1863,6 +1924,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
 
                   <div className="p-5 flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-purple-100/50 dark:border-purple-500/20 bg-white/30 dark:bg-purple-950/20 px-3 py-2 text-[12px]">
+                      <span className="text-purple-900/70 dark:text-purple-200/70">Current balance</span>
+                      <span className="font-semibold tabular text-purple-900 dark:text-white">{balanceVal}</span>
+                    </div>
                     {depositError && (
                       <div className="p-3 bg-red-100/50 dark:bg-red-900/30 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl text-[12px]">
                         {depositError}
@@ -1879,8 +1944,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <input
                         type="number"
                         value={depositAmount}
-                        onChange={(e) => setDepositAmount(e.target.value)}
+                        onChange={(e) => {
+                          setDepositAmount(e.target.value);
+                          setDepositError(null);
+                          setDepositSuccess(null);
+                        }}
                         placeholder="Max 1,000,000"
+                        min="0.01"
+                        step="0.01"
                         className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all placeholder-purple-400/60"
                       />
                     </div>
@@ -1890,20 +1961,32 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <input
                         type="text"
                         value={depositComment}
-                        onChange={(e) => setDepositComment(e.target.value)}
+                        onChange={(e) => {
+                          setDepositComment(e.target.value);
+                          setDepositError(null);
+                          setDepositSuccess(null);
+                        }}
                         className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all"
                       />
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Credit</label>
+                    <label className="flex items-start gap-2.5 rounded-xl border border-purple-100/50 dark:border-purple-500/20 bg-white/20 dark:bg-purple-950/20 px-3 py-2.5 cursor-pointer">
                       <input
-                        type="text"
-                        value={depositCredit}
-                        onChange={(e) => setDepositCredit(e.target.value)}
-                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all"
+                        type="checkbox"
+                        checked={isCreditDeposit}
+                        onChange={(e) => {
+                          setIsCreditDeposit(e.target.checked);
+                          setDepositError(null);
+                          setDepositSuccess(null);
+                        }}
+                        disabled={isDepositing}
+                        className="mt-0.5 h-3.5 w-3.5 accent-purple-600"
                       />
-                    </div>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Post as credit</span>
+                        <span className="text-[11px] text-purple-900/55 dark:text-purple-200/55">Use only when this transaction should be recorded as account credit.</span>
+                      </span>
+                    </label>
 
                     <button
                       onClick={handleDeposit}
@@ -1911,7 +1994,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       title={!canDeposit ? 'You do not have permission to deposit funds' : undefined}
                       className="mt-4 px-6 h-9 self-end bg-purple-600/80 hover:bg-purple-600 dark:bg-purple-500/80 dark:hover:bg-purple-500 backdrop-blur-md border border-purple-400/50 text-white text-[12px] font-medium rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center"
                     >
-                      {isDepositing ? 'Working...' : 'Deposit'}
+                      {isDepositing ? 'Working...' : isCreditDeposit ? 'Add credit' : 'Deposit'}
                     </button>
                   </div>
                 </div>

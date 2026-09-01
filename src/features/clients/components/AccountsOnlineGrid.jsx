@@ -66,7 +66,6 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: 5_000,
-    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {
@@ -91,8 +90,8 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
     refetch();
   };
 
-  const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }} className="cursor-pointer">
+  const renderHeader = (col, label) => (
+    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }} className="cursor-pointer">
       {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
     </th>
   );
@@ -181,20 +180,20 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="tabular">
-                    <div className="flex items-center gap-2">
+                  <td className="tabular" style={{ textAlign: 'center' }}>
+                    <div className="flex items-center justify-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                       <span className="font-bold" style={{ color: 'var(--text)' }}>{row.login}</span>
                     </div>
                   </td>
-                  <td className="tabular" style={{ color: 'var(--text-2)' }}>{formatDateTime(row.connectedAt)}</td>
-                  <td className="tabular">
-                    <div className="flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                  <td className="tabular" style={{ color: 'var(--text-2)', textAlign: 'center' }}>{formatDateTime(row.connectedAt)}</td>
+                  <td className="tabular" style={{ textAlign: 'center' }}>
+                    <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--text-3)' }}>
                       <Clock size={12} />
                       <span>{formatAge(row.sessionAge)}</span>
                     </div>
                   </td>
-                  <td>
+                  <td style={{ textAlign: 'center' }}>
                     {row.isAdmin ? (
                       <span className="ui-badge ui-badge-accent font-bold">
                         <Shield size={10} className="mr-1" />
@@ -204,8 +203,8 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                       <span className="ui-badge ui-badge-soft">USER</span>
                     )}
                   </td>
-                  <td>
-                    <div className="flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
+                  <td style={{ textAlign: 'center' }}>
+                    <div className="flex items-center justify-center gap-2" style={{ color: 'var(--text-3)' }}>
                       <DeviceIcon size={14} style={{ color: 'var(--accent)' }} />
                       <span className="capitalize">{row.deviceType || 'Unknown'}</span>
                     </div>

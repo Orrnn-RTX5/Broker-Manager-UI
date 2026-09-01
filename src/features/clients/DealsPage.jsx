@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { ChevronDown, Search, Activity } from 'lucide-react';
+import { Search, Activity } from 'lucide-react';
+import FilterDropdown from '../../components/FilterDropdown';
 import DealsDataGrid from './components/DealsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
@@ -25,20 +26,6 @@ const DEAL_COLUMNS = [
   { key: 'time',         label: 'Time' },
   { key: 'comment',      label: 'Comment' },
 ];
-
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
 
 const DealsPage = () => {
   const [search, setSearch] = useState('');
@@ -78,9 +65,9 @@ const DealsPage = () => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Actions" width="w-[110px]" options={['deal_buy', 'deal_sell']}  onChange={(e) => setActionFilter(e.target.value)} />
-          <Dropdown value="All Symbols" width="w-[120px]" options={['GBPUSD', 'xauusd']}       onChange={(e) => setSymbolFilter(e.target.value)} />
-          <Dropdown value="All Entries" width="w-[120px]" options={['entry_in', 'entry_out']}  onChange={(e) => setEntryFilter(e.target.value)} />
+          <FilterDropdown value={actionFilter} className="w-[110px]" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'GBPUSD', 'xauusd']} onChange={setSymbolFilter} />
+          <FilterDropdown value={entryFilter} className="w-[120px]" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />
         </div>
       </div>
 

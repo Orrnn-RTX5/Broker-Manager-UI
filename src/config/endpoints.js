@@ -151,8 +151,9 @@ export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) =>
   return !stripManagerPrefix && !isDirectBrokerBackendUrl(backendUrl, brokerInfo);
 };
 
-const isNativeAuthApiPath = (path = '') =>
-  /^\/api\/v\d+\/(?:auth|admin)(?:\/|\?|$)/i.test(path);
+// Versioned API routes are owned by the broker backend itself. They must not
+// receive the legacy `/manager` prefix used by the older Manager endpoints.
+const isNativeApiPath = (path = '') => /^\/api\/v\d+(?:\/|\?|$)/i.test(path);
 
 export const buildManagerApiPath = (endpoint = '', useProxyPrefix = true) => {
   const raw = String(endpoint || '');
@@ -160,7 +161,7 @@ export const buildManagerApiPath = (endpoint = '', useProxyPrefix = true) => {
     .replace(/^\/api\/manager(?=\/|\?|$)/, '')
     .replace(/^\/manager(?=\/|\?|$)/, '');
 
-  if (isNativeAuthApiPath(path)) return path;
+  if (isNativeApiPath(path)) return path;
 
   if (useProxyPrefix) {
     return path
@@ -184,7 +185,7 @@ export const buildManagerApiUrl = (endpoint = '') => {
   const managerPath = buildManagerApiPath(raw, useProxyPrefix);
 
   if (shouldUseManagerDevProxy()) {
-    if (isNativeAuthApiPath(managerPath)) return managerPath;
+    if (isNativeApiPath(managerPath)) return managerPath;
     const rootPath = buildManagerApiPath(raw, false);
     return `/api/manager${rootPath}`;
   }

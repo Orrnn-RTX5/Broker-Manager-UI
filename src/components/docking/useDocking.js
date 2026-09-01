@@ -21,7 +21,31 @@ const DEFAULT_SIZES = {
 let idCounter = 0;
 
 export function useDocking(initialPanels = {}) {
-  const [panels, setPanels] = useState({});
+  const [panels, setPanels] = useState(() => {
+    const initialLayout = {};
+    let panelIndex = 0;
+
+    Object.entries(initialPanels).forEach(([id, config]) => {
+      initialLayout[id] = {
+        id,
+        title: config.title || id,
+        position: config.defaultPosition || DOCK_POSITIONS.FLOAT,
+        floatPos: config.floatPos || { x: 100 + panelIndex * 30, y: 100 + panelIndex * 30 },
+        size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
+        visible: config.visible !== false,
+        minimized: false,
+        maximized: false,
+        zIndex: 100 + panelIndex,
+        order: config.order !== undefined ? config.order : panelIndex,
+        icon: config.icon || '\u25a3',
+        ...config,
+      };
+      panelIndex++;
+    });
+
+    idCounter = panelIndex;
+    return initialLayout;
+  });
   const [draggingId, setDraggingId] = useState(null);
 
   const resetLayout = useCallback(() => {
@@ -36,6 +60,7 @@ export function useDocking(initialPanels = {}) {
         size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
         visible: config.visible !== false,
         minimized: false,
+        maximized: false,
         zIndex: 100 + tempCounter,
         order: config.order !== undefined ? config.order : tempCounter,
         icon: config.icon || '▣',
@@ -58,6 +83,7 @@ export function useDocking(initialPanels = {}) {
         size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
         visible: config.visible !== false,
         minimized: false,
+        maximized: false,
         zIndex: 100 + idCounter,
         order: config.order !== undefined ? config.order : idCounter,
         icon: config.icon || '▣',
@@ -85,6 +111,7 @@ export function useDocking(initialPanels = {}) {
           position,
           size: DEFAULT_SIZES[position],
           minimized: false,
+          maximized: false,
           order: maxOrder + 1,
         },
       };
@@ -102,14 +129,22 @@ export function useDocking(initialPanels = {}) {
   const togglePanel = useCallback((id) => {
     setPanels(prev => {
       if (!prev[id]) return prev;
-      return { ...prev, [id]: { ...prev[id], visible: !prev[id].visible } };
+      const visible = !prev[id].visible;
+      return {
+        ...prev,
+        [id]: {
+          ...prev[id],
+          visible,
+          maximized: visible ? prev[id].maximized : false,
+        },
+      };
     });
   }, []);
 
   const closePanel = useCallback((id) => {
     setPanels(prev => {
       if (!prev[id]) return prev;
-      return { ...prev, [id]: { ...prev[id], visible: false } };
+      return { ...prev, [id]: { ...prev[id], visible: false, maximized: false } };
     });
   }, []);
 
@@ -123,8 +158,30 @@ export function useDocking(initialPanels = {}) {
           position: DOCK_POSITIONS.FLOAT,
           floatPos: pos || prev[id].floatPos,
           size: prev[id].floatSize || DEFAULT_SIZES.float,
+          maximized: false,
         },
       };
+    });
+  }, []);
+
+  const togglePanelMaximized = useCallback((id) => {
+    setPanels(prev => {
+      const panel = prev[id];
+      if (!panel || !panel.canMaximize || panel.position === DOCK_POSITIONS.FLOAT) return prev;
+
+      const maximize = !panel.maximized;
+      const nextPanels = { ...prev };
+
+      // Only one panel can fill the workspace. The original dock position and
+      // divider size remain untouched, so Restore returns to the same layout.
+      Object.values(prev).forEach(currentPanel => {
+        if (currentPanel.maximized) {
+          nextPanels[currentPanel.id] = { ...currentPanel, maximized: false };
+        }
+      });
+
+      nextPanels[id] = { ...panel, visible: true, maximized: maximize };
+      return nextPanels;
     });
   }, []);
 
@@ -166,6 +223,7 @@ export function useDocking(initialPanels = {}) {
     togglePanel,
     closePanel,
     floatPanel,
+    togglePanelMaximized,
     resetLayout,
     movePanelInZone,
   };

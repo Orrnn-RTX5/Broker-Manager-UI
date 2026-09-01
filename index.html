@@ -11,6 +11,16 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Apply the saved manager theme before CSS/React paint to prevent a
+      // light-mode flash when a user refreshes while using dark mode.
+      try {
+        const savedTheme = JSON.parse(localStorage.getItem('theme-storage'));
+        if (savedTheme?.state?.isDarkMode === true) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (_) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

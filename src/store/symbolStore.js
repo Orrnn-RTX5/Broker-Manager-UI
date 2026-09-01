@@ -12,7 +12,6 @@ import {
 import { FEED_DATA_STATE } from '../utils/feedStatus';
 import { extractFeedTicks } from '../utils/feedMessages';
 import {
-  createSocketBeforeBackgroundLoad,
   hasCurrentSessionLiveTick,
   isActiveFeedSocket,
   markSymbolMapCached,
@@ -21,6 +20,9 @@ import {
 
 const WS_CONNECT_TIMEOUT_MS = 10_000;
 const WS_RECONNECT_DELAY_MS = 5_000;
+const WS_METADATA_FALLBACK_DELAY_MS = 3_000;
+const MARKET_TICK_BATCH_MS = 100;
+const SYMBOL_CACHE_WRITE_DELAY_MS = 2_000;
 const REHYDRATED_SYMBOL_REASON = 'Cached quote awaiting a tick from the current feed connection.';
 
 const CATEGORIES = {
@@ -136,6 +138,94 @@ const buildFallbackSymbols = (rows = [], staleReason = '', currentSymbols = {}) 
 
 let symbolFallbackPromise = null;
 let reconnectTimer = null;
+let pendingFeedTicks = new Map();
+let pendingFeedSocket = null;
+let tickBatchTimer = null;
+let pendingSymbolCacheWrite = null;
+let symbolCacheWriteTimer = null;
+
+const getSymbolCacheStorage = () => {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+};
+
+const flushSymbolCache = () => {
+  if (symbolCacheWriteTimer) {
+    clearTimeout(symbolCacheWriteTimer);
+    symbolCacheWriteTimer = null;
+  }
+
+  const pendingWrite = pendingSymbolCacheWrite;
+  pendingSymbolCacheWrite = null;
+  if (!pendingWrite) return;
+
+  try {
+    getSymbolCacheStorage()?.setItem(pendingWrite.name, JSON.stringify(pendingWrite.value));
+  } catch {
+    // A full or unavailable browser cache must not interrupt live market data.
+  }
+};
+
+// Persisting a complete quote map on every tick blocks the main thread. Keep
+// the same offline cache, but write only the latest snapshot every two seconds.
+const throttledSymbolStorage = {
+  getItem: (name) => {
+    try {
+      const value = getSymbolCacheStorage()?.getItem(name);
+      return value ? JSON.parse(value) : null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    pendingSymbolCacheWrite = { name, value };
+    if (symbolCacheWriteTimer) return;
+    symbolCacheWriteTimer = setTimeout(flushSymbolCache, SYMBOL_CACHE_WRITE_DELAY_MS);
+  },
+  removeItem: (name) => {
+    if (pendingSymbolCacheWrite?.name === name) pendingSymbolCacheWrite = null;
+    try {
+      getSymbolCacheStorage()?.removeItem(name);
+    } catch {
+      // Storage cleanup is best-effort.
+    }
+  },
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushSymbolCache);
+}
+
+// Feeds can deliver many messages in the same frame. Coalesce them by symbol
+// so React renders the latest price at a controlled cadence instead of once per
+// WebSocket message.
+const queueFeedTicks = (updates, socket) => {
+  if (pendingFeedSocket && pendingFeedSocket !== socket) {
+    pendingFeedTicks = new Map();
+  }
+  pendingFeedSocket = socket;
+
+  updates.forEach((entry) => {
+    const symbol = getSymbolName(entry);
+    if (symbol) pendingFeedTicks.set(symbol, entry);
+  });
+
+  if (tickBatchTimer) return;
+  tickBatchTimer = setTimeout(() => {
+    tickBatchTimer = null;
+    const sourceSocket = pendingFeedSocket;
+    const batch = [...pendingFeedTicks.values()];
+    pendingFeedTicks = new Map();
+    pendingFeedSocket = null;
+
+    if (batch.length > 0 && useSymbolStore.getState().ws === sourceSocket) {
+      useSymbolStore.getState().upsertSymbols(batch);
+    }
+  }, MARKET_TICK_BATCH_MS);
+};
 
 const useSymbolStore = create(
   persist(
@@ -149,31 +239,46 @@ const useSymbolStore = create(
 
       upsertSymbols: (dataArray) => {
         set((state) => {
-          const nextSymbols = { ...state.symbols };
+          let nextSymbols = state.symbols;
           const now = Date.now();
-          let metadataUpdated = false;
-
+          let newSymbolAdded = false;
+          let metadataNeedsRefresh = false;
           const updatedSymbols = new Set();
 
           dataArray.forEach(data => {
             const symbol = getSymbolName(data);
             if (!symbol) return;
             const { bid, ask } = data;
-            if (!nextSymbols[symbol]) metadataUpdated = true;
+            const current = nextSymbols[symbol];
+            const nextBid = bid !== undefined && bid !== null
+              ? formatPrice(bid, current?.bid || '0.00000')
+              : (current?.bid || '0.00000');
+            const nextAsk = ask !== undefined && ask !== null
+              ? formatPrice(ask, current?.ask || '0.00000')
+              : (current?.ask || '0.00000');
+            const hasFreshLiveTick = current?.feedState === FEED_DATA_STATE.LIVE && !current?.isStale;
+
+            // Identical live ticks do not affect anything the user can see, so
+            // avoid cloning the entire map and triggering a React update.
+            if (current && current.bid === nextBid && current.ask === nextAsk && hasFreshLiveTick) return;
+
+            if (nextSymbols === state.symbols) nextSymbols = { ...state.symbols };
+            if (!current) newSymbolAdded = true;
+            if (!hasFreshLiveTick) metadataNeedsRefresh = true;
             updatedSymbols.add(symbol);
 
-            const previousBid = Number(nextSymbols[symbol]?.bid);
-            const nextBid = Number(bid);
-            const dir = Number.isFinite(previousBid) && Number.isFinite(nextBid)
-              ? (nextBid >= previousBid ? 'up' : 'down')
-              : (nextSymbols[symbol]?.dir || 'up');
+            const previousBid = Number(current?.bid);
+            const nextBidNumber = Number(nextBid);
+            const dir = Number.isFinite(previousBid) && Number.isFinite(nextBidNumber)
+              ? (nextBidNumber >= previousBid ? 'up' : 'down')
+              : (current?.dir || 'up');
             
             const category = getCategory(symbol);
             nextSymbols[symbol] = {
-              ...(nextSymbols[symbol] || {}),
+              ...(current || {}),
               symbol,
-              bid: bid !== undefined && bid !== null ? Number(bid).toFixed(5) : (nextSymbols[symbol]?.bid || '0.00000'),
-              ask: ask !== undefined && ask !== null ? Number(ask).toFixed(5) : (nextSymbols[symbol]?.ask || '0.00000'),
+              bid: nextBid,
+              ask: nextAsk,
               lastUpdate: now,
               category,
               dir,
@@ -183,12 +288,15 @@ const useSymbolStore = create(
             };
           });
 
+          if (nextSymbols === state.symbols) return state;
+
           const nextState = { symbols: nextSymbols };
           
-          // Recompute metadata if it's empty or a new symbol was added
-          if (metadataUpdated || (state.symbolMetadata && state.symbolMetadata.length === 0 && Object.keys(nextSymbols).length > 0)) {
+          // Metadata contains feed-state only, not prices. Refresh it only for
+          // a new symbol or the first fresh tick after cached data is restored.
+          if (newSymbolAdded || (state.symbolMetadata && state.symbolMetadata.length === 0 && Object.keys(nextSymbols).length > 0)) {
             nextState.symbolMetadata = buildSymbolMetadata(nextSymbols);
-          } else if (updatedSymbols.size > 0 && state.symbolMetadata?.length > 0) {
+          } else if (metadataNeedsRefresh && updatedSymbols.size > 0 && state.symbolMetadata?.length > 0) {
             nextState.symbolMetadata = state.symbolMetadata.map((entry) => (
               updatedSymbols.has(entry.symbol) && nextSymbols[entry.symbol]
                 ? buildMetadataEntry(nextSymbols[entry.symbol])
@@ -269,11 +377,26 @@ const useSymbolStore = create(
 
           console.debug('[SymbolStore] Connecting to feed WebSocket');
           let ws;
+          let metadataFallbackTimer = null;
+
+          const clearMetadataFallback = () => {
+            if (!metadataFallbackTimer) return;
+            clearTimeout(metadataFallbackTimer);
+            metadataFallbackTimer = null;
+          };
+
+          const scheduleMetadataFallback = () => {
+            if (Object.keys(get().symbols).length > 0) return;
+            metadataFallbackTimer = setTimeout(() => {
+              metadataFallbackTimer = null;
+              if (get().ws === ws && Object.keys(get().symbols).length === 0) {
+                get().loadSymbolFallback(SYMBOL_METADATA_FALLBACK_REASON);
+              }
+            }, WS_METADATA_FALLBACK_DELAY_MS);
+          };
+
           try {
-            ws = createSocketBeforeBackgroundLoad(
-              () => new WebSocket(wsUrl),
-              () => get().loadSymbolFallback(SYMBOL_METADATA_FALLBACK_REASON)
-            );
+            ws = new WebSocket(wsUrl);
           } catch {
             const message = 'Market feed unavailable: websocket connection could not be started.';
             set((state) => ({
@@ -296,6 +419,7 @@ const useSymbolStore = create(
             if (get().ws !== ws || ws.readyState !== 0) return;
 
             const message = 'Market feed unavailable: websocket connection timed out.';
+            clearMetadataFallback();
             set((state) => ({
               ...markCachedSymbolData(state, message),
               isConnected: false,
@@ -303,6 +427,7 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
+            get().loadSymbolFallback(message, { setFeedError: true });
 
             try {
               ws.close();
@@ -328,6 +453,7 @@ const useSymbolStore = create(
             console.debug('[SymbolStore] Connected to feed WebSocket');
             set({ isConnected: true, isConnecting: false, feedError: '' });
             ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
+            scheduleMetadataFallback();
           };
 
           ws.onmessage = (e) => {
@@ -335,7 +461,8 @@ const useSymbolStore = create(
             try {
               const updates = extractFeedTicks(e.data);
               if (updates.length > 0) {
-                get().upsertSymbols(updates);
+                clearMetadataFallback();
+                queueFeedTicks(updates, ws);
               }
             } catch (err) {
               console.error('[SymbolStore] WS parse error:', err);
@@ -345,6 +472,7 @@ const useSymbolStore = create(
           ws.onclose = () => {
             clearTimeout(connectWatchdog);
             connectWatchdog = null;
+            clearMetadataFallback();
             if (get().ws !== ws) return;
             console.log('[SymbolStore] Disconnected. Reconnecting...');
             set({ isConnected: false, isConnecting: false, ws: null });
@@ -358,6 +486,7 @@ const useSymbolStore = create(
 
           ws.onerror = () => {
             const message = 'Market feed unavailable: websocket connection failed.';
+            clearMetadataFallback();
             set((state) => ({
               ...markCachedSymbolData(state, message),
               isConnected: false,
@@ -425,6 +554,7 @@ const useSymbolStore = create(
     }),
     {
       name: 'rtx-symbols-storage',
+      storage: throttledSymbolStorage,
       partialize: (state) => ({ 
         symbols: state.symbols,
         symbolMetadata: state.symbolMetadata 

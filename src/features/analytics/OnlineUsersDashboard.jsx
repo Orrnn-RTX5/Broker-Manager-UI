@@ -13,21 +13,21 @@ const formatMoney = (value) => new Intl.NumberFormat('en-US', {
 }).format(value);
 
 const MetricCard = ({ icon, label, value, hint }) => (
-  <div className="ui-card ui-card-hover p-4 flex items-start gap-3">
+  <div className="ui-card ui-card-hover min-h-[122px] h-full p-4 flex items-start gap-3">
     <div
       className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
       style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
     >
       {icon}
     </div>
-    <div className="min-w-0">
-      <div className="text-xs uppercase tracking-wider font-medium" style={{ color: 'var(--text-3)' }}>
+    <div className="min-w-0 flex-1 flex flex-col self-stretch">
+      <div className="min-h-8 text-xs leading-4 uppercase tracking-wider font-medium" style={{ color: 'var(--text-3)' }}>
         {label}
       </div>
-      <div className="text-2xl font-semibold tabular mt-1" style={{ color: 'var(--text)' }}>
+      <div className="text-2xl leading-7 font-semibold tabular mt-1" style={{ color: 'var(--text)' }}>
         {value}
       </div>
-      <div className="text-[11px] mt-1 truncate" style={{ color: 'var(--muted)' }}>
+      <div className="min-h-4 text-[11px] leading-4 mt-auto truncate" style={{ color: 'var(--muted)' }}>
         {hint}
       </div>
     </div>

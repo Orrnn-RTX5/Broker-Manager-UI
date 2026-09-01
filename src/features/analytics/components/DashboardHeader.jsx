@@ -1,23 +1,21 @@
-import { Settings, Power, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+import { Settings, Power } from 'lucide-react';
 import DateRangePicker from '../../../components/Popups/DateRangePicker';
+import FilterDropdown from '../../../components/FilterDropdown';
 
-export const FilterSelect = ({ value, width = 140, options = [] }) => (
-  <div className="relative" style={{ width }}>
-    <select
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border-3)',
-        color: 'var(--text-2)',
-        boxShadow: 'var(--shadow-xs)',
-      }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
+export const FilterSelect = ({ value, width = 140, options = [] }) => {
+  const [selectedValue, setSelectedValue] = useState(value);
+
+  return (
+    <FilterDropdown
+      value={selectedValue}
+      options={[value, ...options]}
+      style={{ width }}
+      disabled={options.length === 0}
+      onChange={setSelectedValue}
+    />
+  );
+};
 
 export default function DashboardHeader({ title, subtitle, filters = null }) {
   return (

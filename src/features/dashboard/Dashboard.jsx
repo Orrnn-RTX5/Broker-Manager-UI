@@ -1,7 +1,7 @@
 import { AlertTriangle, BarChart3, DollarSign, RefreshCw, Users, Wallet } from 'lucide-react';
 import ComingSoon from '../../components/ComingSoon';
 import { DASHBOARD_PLACEHOLDER_MODE } from './dashboardState';
-import useDashboardMetrics from './useDashboardMetrics';
+import useDashboardMetrics, { useDashboardAccountLimits } from './useDashboardMetrics';
 
 const formatInteger = (value) => new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
@@ -28,32 +28,20 @@ const Kpi = ({ icon, label, value, hint, loading, unavailable, tone = 'default' 
       ? 'var(--danger-text)'
       : 'var(--text)';
 
+  const displayedValue = loading ? '—' : value ?? '—';
+  const helperText = loading ? 'Loading live metrics…' : hint || 'Metric unavailable';
+
   return (
-    <div className="ui-card ui-card-hover p-5 flex flex-col gap-3">
-      <div
-        className="w-10 h-10 rounded-lg flex items-center justify-center"
-        style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
-      >
+    <article className="dashboard-kpi ui-card ui-card-hover">
+      <div className="dashboard-kpi-icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}>
         {icon}
       </div>
-      <div>
-        <div className="text-xs uppercase tracking-wider font-medium mb-1" style={{ color: 'var(--text-3)' }}>
-          {label}
-        </div>
-        <div className="text-2xl font-semibold tabular" style={{ color: valueColor }}>
-          {loading ? (
-            <span style={{ color: 'var(--muted)', fontWeight: 400 }}>Loading...</span>
-          ) : value ?? (
-            <span style={{ color: 'var(--muted)', fontWeight: 400 }}>Unavailable</span>
-          )}
-        </div>
-        {hint && (
-          <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-            {hint}
-          </div>
-        )}
+      <div className="dashboard-kpi-content">
+        <div className="dashboard-kpi-label" style={{ color: 'var(--text-3)' }}>{label}</div>
+        <div className="dashboard-kpi-value tabular" style={{ color: valueColor }}>{displayedValue}</div>
+        <div className="dashboard-kpi-hint" style={{ color: 'var(--muted)' }}>{helperText}</div>
       </div>
-    </div>
+    </article>
   );
 };
 
@@ -92,17 +80,29 @@ const Dashboard = () => {
     isFetching,
     refetch,
   } = useDashboardMetrics();
+  const {
+    data: accountLimitData,
+    isLoading: isAccountLimitLoading,
+    isFetching: isAccountLimitFetching,
+    refetch: refetchAccountLimits,
+  } = useDashboardAccountLimits();
 
   const metrics = data?.metrics;
+  const accountLimitMetrics = accountLimitData?.metrics;
+  const realAccounts = accountLimitMetrics?.realAccounts ?? metrics?.realAccounts;
+  const demoAccounts = accountLimitMetrics?.demoAccounts ?? metrics?.demoAccounts;
   const sourceMode = data?.sourceMode || 'summary';
   const isSummarySource = sourceMode === 'summary';
   const sources = data?.sources || {};
   const errors = data?.errors || [];
   const asOf = formatTime(data?.asOf);
+  const accountAsOf = formatTime(accountLimitData?.asOf ?? data?.asOf);
   const summaryHint = isSummarySource
     ? `From DashboardSummary${asOf ? ` at ${asOf}` : ''}`
     : '';
-  const accountHint = isSummarySource
+  const accountHint = accountLimitMetrics
+    ? `From AccountLimitStatus${accountAsOf ? ` at ${accountAsOf}` : ''}`
+    : isSummarySource
     ? summaryHint
     : `${sources.accountLimit?.ok ? 'From AccountLimitStatus' : 'From AccountDetailsMany'}${asOf ? ` at ${asOf}` : ''}`;
   const positionHint = isSummarySource
@@ -111,10 +111,15 @@ const Dashboard = () => {
   const equityHint = isSummarySource
     ? summaryHint
     : `Computed from AccountDetailsMany${asOf ? ` at ${asOf}` : ''}`;
+  const isRefreshing = isFetching || isAccountLimitFetching;
+  const refreshDashboard = () => {
+    refetchAccountLimits();
+    refetch();
+  };
 
   return (
     <div
-      className="p-6 w-full h-full flex flex-col gap-6"
+      className="dashboard-page p-6 pb-4 w-full min-h-full flex flex-col gap-4"
       data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}
     >
       <div className="flex items-end justify-between">
@@ -128,33 +133,33 @@ const Dashboard = () => {
         </div>
         <button
           type="button"
-          onClick={() => refetch()}
-          disabled={isFetching}
+          onClick={refreshDashboard}
+          disabled={isRefreshing}
           className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5"
         >
-          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
 
       <DashboardNotice errors={errors} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="dashboard-kpi-grid">
         <Kpi
           icon={<Users size={18} />}
           label="Real Accounts"
-          value={metrics?.realAccounts != null ? formatInteger(metrics.realAccounts) : null}
-          loading={isLoading}
-          unavailable={!isLoading && metrics?.realAccounts == null}
-          hint={metrics?.realAccounts != null ? accountHint : 'Account total unavailable'}
+          value={realAccounts != null ? formatInteger(realAccounts) : null}
+          loading={realAccounts == null && (isAccountLimitLoading || isLoading)}
+          unavailable={realAccounts == null && !isAccountLimitLoading && !isLoading}
+          hint={realAccounts != null ? accountHint : 'Account total unavailable'}
         />
         <Kpi
           icon={<Users size={18} />}
           label="Demo Accounts"
-          value={metrics?.demoAccounts != null ? formatInteger(metrics.demoAccounts) : null}
-          loading={isLoading}
-          unavailable={!isLoading && metrics?.demoAccounts == null}
-          hint={metrics?.demoAccounts != null ? accountHint : 'Demo account total unavailable'}
+          value={demoAccounts != null ? formatInteger(demoAccounts) : null}
+          loading={demoAccounts == null && (isAccountLimitLoading || isLoading)}
+          unavailable={demoAccounts == null && !isAccountLimitLoading && !isLoading}
+          hint={demoAccounts != null ? accountHint : 'Demo account total unavailable'}
         />
         <Kpi
           icon={<DollarSign size={18} />}
@@ -182,13 +187,18 @@ const Dashboard = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ComingSoon title="Real Accounts" description="Backend aggregation required for account registration series." />
-        <ComingSoon title="Deposits & Withdrawals" description="Backend aggregation required for 24h cashflow series." />
-        <ComingSoon title="Accounts by Source" description="Backend aggregation required for source breakdown." />
+      <div className="dashboard-insights-grid">
+        <ComingSoon title="Real Accounts" description="Account-registration trends need the aggregation endpoint." />
+        <ComingSoon title="Deposits & Withdrawals" description="Cashflow trends need the 24-hour aggregation endpoint." />
+        <ComingSoon title="Accounts by Source" description="Source allocation needs its dedicated manager endpoint." />
       </div>
 
-      <ComingSoon title="Liquidity Providers" description="Backend aggregation required for LP routing health." height={140} />
+      <ComingSoon
+        title="Liquidity Providers"
+        description="Routing health will be shown when the liquidity aggregation endpoint is connected."
+        height={112}
+        compact
+      />
     </div>
   );
 };

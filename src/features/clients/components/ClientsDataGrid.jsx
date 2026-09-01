@@ -66,7 +66,6 @@ const ClientsDataGrid = ({
     params,
     pageSize,
     enabled: hasRequestedData,
-    keepRunningOnUnmount: true,
   });
 
   useEffect(() => {
@@ -111,7 +110,7 @@ const ClientsDataGrid = ({
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+    <div className="ui-card flex flex-col min-h-0 w-full flex-1 overflow-hidden">
       {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -120,9 +119,9 @@ const ClientsDataGrid = ({
           <strong>API Error.</strong> {error?.message || 'Failed to load clients.'}
         </div>
       )}
-      <div className="w-full overflow-x-auto flex-1">
+      <div className="grid-scroll-area w-full min-h-0 overflow-auto flex-1">
         <table className={`ui-grid min-w-max ${grid?.showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
-          <thead>
+          <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {grid && <th style={{ width: 32 }} />}
               {isVisible('id') && renderHeader('id', 'ID')}

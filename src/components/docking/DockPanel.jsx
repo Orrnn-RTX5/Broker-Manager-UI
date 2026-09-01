@@ -1,5 +1,5 @@
-import { useRef, useCallback, useState } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { useRef, useCallback } from 'react';
+import { ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
 import styles from './DockPanel.module.css';
@@ -9,10 +9,10 @@ const RESIZE_HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 // Minimum drag distance (px) before a drag is considered intentional
 const DRAG_THRESHOLD = 8;
 
-export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
+export default function DockPanel({ id, children, canMoveUp, canMoveDown, layoutStyle }) {
   const {
-    panels, updatePanel, dockPanel, bringToFront,
-    closePanel, floatPanel, draggingId, setDraggingId,
+    panels, updatePanel, bringToFront,
+    closePanel, floatPanel, togglePanelMaximized, draggingId, setDraggingId,
     movePanelInZone,
   } = useDockingContext();
   const panel = panels[id];
@@ -23,10 +23,12 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
 
   const pos     = panel?.position;
   const isFloat = pos === DOCK_POSITIONS.FLOAT;
+  const isMaximized = Boolean(panel?.maximized);
 
   // ─── Drag to float ──────────────────────────────────────────────────────────
   const onTitleMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
+    if (isMaximized) return;
     e.preventDefault();
     bringToFront(id);
 
@@ -94,7 +96,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [id, pos, isFloat, bringToFront, floatPanel, updatePanel, setDraggingId]);
+  }, [id, pos, isFloat, isMaximized, bringToFront, floatPanel, updatePanel, setDraggingId]);
 
   // ─── Resize ─────────────────────────────────────────────────────────────────
   const onResizeMouseDown = useCallback((e, handle) => {
@@ -157,7 +159,13 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
       zIndex: panel.zIndex ?? 100,
     };
     containerClass += ' ' + styles.panelFloat;
-  } else if (pos === DOCK_POSITIONS.LEFT)   { containerClass += ' ' + styles.panelLeft; }
+  } else if (pos === DOCK_POSITIONS.LEFT) {
+    containerClass += ' ' + styles.panelLeft;
+    const width = Number(panel.size?.width);
+    if (Number.isFinite(width) && width > 0) {
+      containerStyle = { width: `${Math.round(width)}px` };
+    }
+  }
   else if (pos === DOCK_POSITIONS.RIGHT)  { containerClass += ' ' + styles.panelRight; }
   else if (pos === DOCK_POSITIONS.TOP)    { containerClass += ' ' + styles.panelTop; }
   else if (pos === DOCK_POSITIONS.BOTTOM) { containerClass += ' ' + styles.panelBottom; }
@@ -169,11 +177,14 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
     <div
       ref={panelRef}
       className={containerClass}
-      style={containerStyle}
+      style={{ ...containerStyle, ...layoutStyle }}
       onMouseDown={() => isFloat && bringToFront(id)}
     >
       {/* Title Bar */}
-      <div className={styles.titleBar} onMouseDown={onTitleMouseDown}>
+      <div
+        className={`${styles.titleBar}${isMaximized ? ` ${styles.titleBarStatic}` : ''}`}
+        onMouseDown={onTitleMouseDown}
+      >
         <span className={styles.panelIcon}>{panel.icon}</span>
         <span className={styles.titleText}>{panel.title}</span>
         <div className={styles.titleActions}>
@@ -195,7 +206,20 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown }) {
               <ChevronDown size={14} />
             </button>
           )}
-          {!isFloat && (
+          {panel.canMaximize && !isFloat && (
+            <button
+              type="button"
+              className={styles.titleBtn}
+              title={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
+              aria-label={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
+              aria-pressed={isMaximized}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => togglePanelMaximized(id)}
+            >
+              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          )}
+          {!isFloat && !isMaximized && (
             <button
               className={styles.titleBtn}
               title="Pop out to floating window"

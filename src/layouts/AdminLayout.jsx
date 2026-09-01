@@ -25,8 +25,9 @@ const INITIAL_PANELS = {
     title: 'Navigator',
     icon: '📂',
     defaultPosition: 'left',
-    visible: true,         // changed from false to true to be visible by default
-    size: { width: 280, height: '100%' },
+    visible: true,
+    order: 1,
+    size: { width: 270, height: '100%' },
   },
   [PANEL_ACCOUNTS]: {
     title: 'Accounts',
@@ -38,9 +39,11 @@ const INITIAL_PANELS = {
   [PANEL_MARKET_DATA]: {
     title: 'Market Watch',
     icon: '📈',
-    defaultPosition: 'float',
-    visible: false,
-    size: { width: 600, height: 500 },
+    defaultPosition: 'left',
+    visible: true,
+    canMaximize: true,
+    order: 0,
+    size: { width: 336, height: '100%' },
   },
 };
 
@@ -53,6 +56,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
+  const isMarketDataOpen = panels[PANEL_MARKET_DATA]?.visible ?? false;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -71,10 +75,14 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     document.exitFullscreen?.().catch?.(console.error);
   }, []);
 
+  const toggleMarketWatch = useCallback(() => {
+    togglePanel(PANEL_MARKET_DATA);
+  }, [togglePanel]);
+
   const handleViewAction = useCallback((action) => {
     switch (action) {
       case 'market-watch':
-        togglePanel(PANEL_MARKET_DATA);
+        toggleMarketWatch();
         break;
       case 'navigator':
         togglePanel(PANEL_NAVIGATOR);
@@ -95,7 +103,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       default:
         break;
     }
-  }, [navigate, toggleFullscreen, togglePanel]);
+  }, [navigate, toggleMarketWatch, toggleFullscreen, togglePanel]);
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -168,7 +176,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const panelContents = {
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
     [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
-    [PANEL_MARKET_DATA]: <MarketData />,
+    [PANEL_MARKET_DATA]: <MarketData compact />,
   };
 
   return (
@@ -191,7 +199,8 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
           isSidebarOpen={isNavigatorOpen}
           toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
           isRightSidebarOpen={isAccountsOpen}
-          toggleMarketData={() => togglePanel(PANEL_MARKET_DATA)}
+          toggleMarketData={toggleMarketWatch}
+          isMarketDataOpen={isMarketDataOpen}
           resetLayout={resetLayout}
           onLogout={onLogout}
         />
@@ -200,7 +209,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       {/* ── Main dockable workspace ── */}
       <div className="flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout panelContents={panelContents}>
-          <div className="flex-1 min-h-0 w-full overflow-auto relative" style={{ background: 'var(--bg)' }}>
+          <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
             {children}
           </div>
         </DockLayout>

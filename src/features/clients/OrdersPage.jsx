@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { ChevronDown, Search, ClipboardList } from 'lucide-react';
+import { Search, ClipboardList } from 'lucide-react';
+import FilterDropdown from '../../components/FilterDropdown';
 import OrdersDataGrid from './components/OrdersDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
@@ -23,20 +24,6 @@ const ORDER_COLUMNS = [
   { key: 'timeDone',  label: 'Done Time' },
   { key: 'comment',   label: 'Comment' },
 ];
-
-const Dropdown = ({ value, width = 'w-32', options = [], onChange }) => (
-  <div className={`relative ${width}`}>
-    <select
-      onChange={onChange}
-      className="appearance-none w-full h-7 pl-2.5 pr-7 text-xs rounded-md transition-colors focus:outline-none"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', color: 'var(--text-2)', boxShadow: 'var(--shadow-xs)' }}
-    >
-      <option>{value}</option>
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-    <ChevronDown size={11} className="absolute right-2 top-2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-  </div>
-);
 
 const OrdersPage = () => {
   const [search, setSearch] = useState('');
@@ -76,9 +63,9 @@ const OrdersPage = () => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <Dropdown value="All Types"   width="w-[100px]" options={['Buy', 'Sell']}                onChange={(e) => setTypeFilter(e.target.value)} />
-          <Dropdown value="All Symbols" width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
-          <Dropdown value="All Reasons" width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
+          <FilterDropdown value={typeFilter} className="w-[100px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
+          <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
         </div>
       </div>
 
@@ -105,8 +92,8 @@ const OrdersPage = () => {
           </button>
         ))}
         <div className="h-6 w-px mx-1" style={{ background: 'var(--border)' }} />
-        <Dropdown value={symbolFilter} width="w-[120px]" options={['xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={(e) => setSymbolFilter(e.target.value)} />
-        <Dropdown value={reasonFilter} width="w-[120px]" options={['Mobile', 'Client', 'Expert']} onChange={(e) => setReasonFilter(e.target.value)} />
+        <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
+        <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
       </div>
 
       <OrdersDataGrid

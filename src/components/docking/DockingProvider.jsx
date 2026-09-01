@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { DockingContext } from './DockingContext';
 import { useDocking } from './useDocking';
 
@@ -19,11 +18,6 @@ import { useDocking } from './useDocking';
  */
 export default function DockingProvider({ children, initialPanels = {} }) {
   const docking = useDocking(initialPanels);
-
-  useEffect(() => {
-    docking.resetLayout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <DockingContext.Provider value={docking}>
