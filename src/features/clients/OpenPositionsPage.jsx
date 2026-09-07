@@ -9,6 +9,7 @@ import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
 import { useAnalyticsRouteTiming } from '../../hooks/useAnalyticsTiming.js';
 import { ANALYTICS_VIEWS } from '../../utils/analyticsQueryOptions.js';
+import useSymbolStore from '../../store/symbolStore';
 
 const POSITION_COLUMNS = [
   { key: 'position',     label: 'Ticket' },
@@ -27,14 +28,37 @@ const POSITION_COLUMNS = [
   { key: 'comment',      label: 'Comment' },
 ];
 
+const POPULAR_SYMBOLS = [
+  'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD',
+  'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY',
+  'XAUUSD', 'XAGUSD', 'BTCUSD', 'ETHUSD', 'SOLUSD',
+  'US30', 'NAS100', 'SPX500', 'GER30', 'UK100',
+];
+const DEFAULT_REASONS = ['Client', 'Mobile', 'Expert', 'Dealer', 'Web', 'Auto', 'Signal'];
+
 const OpenPositionsPage = () => {
   useAnalyticsRouteTiming(ANALYTICS_VIEWS.openPositions);
+  const symbolsMap = useSymbolStore((state) => state.symbols);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [restrictLogin, setRestrictLogin] = useState(null);
+
+  const symbolOptions = useMemo(() => {
+    const fromStore = Object.keys(symbolsMap || {});
+    return Array.from(new Set([
+      'All Symbols',
+      ...fromStore,
+      ...POPULAR_SYMBOLS,
+    ])).filter(Boolean);
+  }, [symbolsMap]);
+
+  const reasonOptions = useMemo(() => [
+    'All Reasons',
+    ...DEFAULT_REASONS,
+  ], []);
 
   const ctl = useGridPageController({
     columns: POSITION_COLUMNS,
@@ -57,33 +81,49 @@ const OpenPositionsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getPositionActions]);
 
   return (
-    <div className="open-positions-page p-6 w-full h-full flex flex-col gap-5 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2">
-          <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
+    <div className="open-positions-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+      {/* Header with Title and Dropdown Filters */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          <BarChart3 size={16} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="open-positions-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Open Positions</h1>
-            <p className="open-positions-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
+            <h1 className="open-positions-title" style={{ color: 'var(--text)' }}>Open Positions</h1>
+            <p className="open-positions-subtitle" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
           </div>
+        </div>
+        <div className="open-positions-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <FilterDropdown
+            value={typeFilter}
+            className="w-[105px]"
+            options={['All Types', 'Buy', 'Sell']}
+            onChange={setTypeFilter}
+          />
+          <FilterDropdown
+            value={symbolFilter}
+            className="w-[130px]"
+            options={symbolOptions}
+            onChange={setSymbolFilter}
+          />
+          <FilterDropdown
+            value={reasonFilter}
+            className="w-[120px]"
+            options={reasonOptions}
+            onChange={setReasonFilter}
+          />
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="open-positions-filters flex flex-wrap items-center gap-3">
-        <div className="open-positions-search relative max-w-xs w-full">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-          <input
-            type="text"
-            placeholder="Search login, position, symbol…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="ui-input ui-input-sm"
-            style={{ paddingLeft: 32 }}
-          />
-        </div>
-        <FilterDropdown value={typeFilter} className="w-[100px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
-        <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
-        <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
+      {/* Search Bar */}
+      <div className="open-positions-search relative w-full max-w-xs">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+        <input
+          type="text"
+          placeholder="Search login, position, symbol…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="ui-input ui-input-sm"
+          style={{ paddingLeft: 32 }}
+        />
       </div>
 
       <PositionsDataGrid

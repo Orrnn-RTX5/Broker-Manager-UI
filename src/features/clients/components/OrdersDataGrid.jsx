@@ -207,7 +207,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
       )}
 
       <div
-        className="orders-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="orders-grid-footer flex items-center justify-between px-3 py-0 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-3">
@@ -232,13 +232,13 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>
             <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
             {isIdle ? 'Load' : 'Refresh'}
           </button>
-          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>Prev</button>
           <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs">Next</button>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ paddingBlock: 2 }}>Next</button>
         </div>
       </div>
 

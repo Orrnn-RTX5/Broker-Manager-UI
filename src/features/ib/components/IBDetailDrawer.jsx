@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
-  DollarSign,
   Download,
   GitBranch,
   Link,
@@ -20,13 +19,10 @@ import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import IBClientLinker from './IBClientLinker';
 import IBCreateModal from './IBCreateModal';
-import IBPayoutModal from './IBPayoutModal';
 import {
   IB_COMMISSION_TYPES,
-  MUTABLE_COMMISSION_STATUSES,
   buildCommissionPlanPayload,
   canRemoveIB,
-  canSetCommissionStatus,
   emptyToNull,
   getIBStatusActions,
   isEligibleIBParent,
@@ -45,7 +41,6 @@ const TABS = [
   { id: 'clients', label: 'Clients' },
   { id: 'plans', label: 'Plans' },
   { id: 'ledger', label: 'Ledger' },
-  { id: 'payout', label: 'Payout' },
   { id: 'stats', label: 'Stats' },
 ];
 
@@ -113,7 +108,6 @@ const EmptyState = ({ children }) => (
 
 const normalizeStats = (response) => normalizeObject(response, ['stats']) || {};
 const defaultLedgerFilters = () => ({ from: monthStart(), to: today(), paid: '', status: '', client_login: '', symbol: '' });
-const defaultStatsFilters = () => ({ from: monthStart(), to: today() });
 
 const ProfileTab = ({ ib, actionBusy, canManageIB, onStatusAction, onRemove, onSaveNotes }) => {
   const [notes, setNotes] = useState(ib?.notes || '');
@@ -227,6 +221,16 @@ const TreeNode = ({ node, onCreateChild }) => {
   );
 };
 
+const findTreeNode = (node, login) => {
+  if (!node) return null;
+  if (String(node.login) === String(login)) return node;
+  for (const child of node.children || []) {
+    const match = findTreeNode(child, login);
+    if (match) return match;
+  }
+  return null;
+};
+
 const TreeTab = ({ login, onCreateChild }) => {
   const [tree, setTree] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -237,7 +241,8 @@ const TreeTab = ({ login, onCreateChild }) => {
     setError('');
     try {
       const response = await ibApi.tree(login);
-      setTree(normalizeIBTreeNode(normalizeObject(response, ['tree']) || response));
+      const fullTree = normalizeIBTreeNode(normalizeObject(response, ['tree']) || response);
+      setTree(findTreeNode(fullTree, login) || fullTree);
     } catch (err) {
       setTree(null);
       setError(err.message || 'Failed to load IB tree.');
@@ -333,18 +338,17 @@ const ClientsTab = ({ login, onOpenLinker }) => {
   );
 };
 
-const planFormDefaults = (login, plan = null) => ({
-  id: plan?.id || '',
+const planFormDefaults = (login) => ({
   ib_login: login,
-  plan_name: plan?.plan_name || '',
-  commission_type: plan?.commission_type || 'per_lot',
-  rate: plan?.rate ?? '',
-  override_rate: plan?.override_rate ?? 0,
-  symbol_filter: plan?.symbol_filter || '',
-  group_filter: plan?.group_filter || '',
-  min_lots: plan?.min_lots ?? 0,
-  max_lots: plan?.max_lots ?? 0,
-  enabled: plan?.enabled !== false,
+  plan_name: '',
+  commission_type: 'per_lot',
+  rate: '',
+  override_rate: 0,
+  symbol_filter: '',
+  group_filter: '',
+  min_lots: 0,
+  max_lots: 0,
+  enabled: true,
 });
 
 const PlansTab = ({ login }) => {
@@ -360,7 +364,9 @@ const PlansTab = ({ login }) => {
     setError('');
     try {
       const response = await ibApi.listPlans(login);
-      setPlans(normalizeRecords(response, ['plans']).map(normalizeIBPlan));
+      setPlans(normalizeRecords(response, ['plans'])
+        .map(normalizeIBPlan)
+        .filter((plan) => !plan.ib_login || String(plan.ib_login) === String(login)));
     } catch (err) {
       setPlans([]);
       setError(err.message || 'Failed to load commission plans.');
@@ -386,31 +392,12 @@ const PlansTab = ({ login }) => {
     setNotice('');
     try {
       const payload = buildCommissionPlanPayload(form, login);
-      if (payload.id) await ibApi.updatePlan(payload);
-      else await ibApi.createPlan(payload);
+      await ibApi.createPlan(payload);
       setForm(null);
       setNotice('Commission plan saved.');
       load();
     } catch (err) {
       setError(err.message || 'Failed to save commission plan.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const planAction = async (plan, action) => {
-    if (action === 'delete' && !window.confirm(`Archive plan "${plan.plan_name}"? Historical references are preserved.`)) return;
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      if (action === 'enable') await ibApi.enablePlan(plan.id);
-      if (action === 'disable') await ibApi.disablePlan(plan.id);
-      if (action === 'delete') await ibApi.deletePlan(plan.id);
-      setNotice('Plan updated.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to update plan.');
     } finally {
       setSaving(false);
     }
@@ -426,7 +413,7 @@ const PlansTab = ({ login }) => {
 
       {form && (
         <div className="ui-card p-3 flex flex-col gap-3">
-          <SectionTitle>{form.id ? 'Edit plan' : 'Create plan'}</SectionTitle>
+          <SectionTitle>Create plan</SectionTitle>
           <div className="grid grid-cols-2 gap-2">
             <input className="ui-input ui-input-sm" placeholder="Plan name" value={form.plan_name} onChange={(event) => setField('plan_name', event.target.value)} />
             <select className="ui-input ui-input-sm" value={form.commission_type} onChange={(event) => setField('commission_type', event.target.value)}>
@@ -453,13 +440,13 @@ const PlansTab = ({ login }) => {
       <div className="overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
-            <tr><th>Plan</th><th>Type</th><th>Rate</th><th>Override</th><th>Symbols</th><th>Groups</th><th>Lots</th><th>Status</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
+            <tr><th>Plan</th><th>Type</th><th>Rate</th><th>Override</th><th>Symbols</th><th>Groups</th><th>Lots</th><th>Status</th></tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9}><EmptyState>Loading plans...</EmptyState></td></tr>
+              <tr><td colSpan={8}><EmptyState>Loading plans...</EmptyState></td></tr>
             ) : plans.length === 0 ? (
-              <tr><td colSpan={9}><EmptyState>No commission plans configured.</EmptyState></td></tr>
+              <tr><td colSpan={8}><EmptyState>No commission plans configured.</EmptyState></td></tr>
             ) : plans.map((plan) => (
               <tr key={plan.id}>
                 <td style={{ fontWeight: 500 }}>{plan.plan_name}</td>
@@ -470,17 +457,6 @@ const PlansTab = ({ login }) => {
                 <td>{plan.group_filter || 'All'}</td>
                 <td className="tabular">{fmt(plan.min_lots)} - {plan.max_lots > 0 ? fmt(plan.max_lots) : 'unlimited'}</td>
                 <td><span className={`ui-badge text-[9px] ${plan.enabled ? 'ui-badge-success' : 'ui-badge-neutral'}`}>{plan.enabled ? 'ENABLED' : 'DISABLED'}</span></td>
-                <td style={{ textAlign: 'right' }}>
-                  <div className="inline-flex gap-1">
-                    <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => setForm(planFormDefaults(login, plan))}>Edit</button>
-                    <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => planAction(plan, plan.enabled ? 'disable' : 'enable')} disabled={saving}>
-                      {plan.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                    <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={() => planAction(plan, 'delete')} disabled={saving} title="Archive">
-                      <Trash2 size={13} style={{ color: 'var(--danger-text)' }} />
-                    </button>
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -490,11 +466,11 @@ const PlansTab = ({ login }) => {
   );
 };
 
-const LedgerTab = ({ login, onRefreshRelated }) => {
+const LedgerTab = ({ login, canManageIB, onRefreshRelated }) => {
   const [filters, setFilters] = useState(defaultLedgerFilters);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [mutatingId, setMutatingId] = useState(null);
+  const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -507,13 +483,7 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
     ...(emptyToNull(filters.symbol) ? [`Symbol: ${String(filters.symbol).trim()}`] : []),
   ].join(' | ');
 
-  const query = useMemo(() => ({
-    login,
-    ...(filters.from ? { from: filters.from } : {}),
-    ...(filters.to ? { to: filters.to } : {}),
-    ...(filters.paid ? { paid: filters.paid } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
-  }), [filters.from, filters.paid, filters.status, filters.to, login]);
+  const query = useMemo(() => ({ ib_login: login }), [login]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -521,6 +491,22 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
     try {
       const response = await ibApi.commissions(query);
       let nextRows = normalizeRecords(response, ['commissions']).map(normalizeIBCommission);
+      if (filters.from) nextRows = nextRows.filter((row) => {
+        const value = Number(row.calculated_at);
+        const date = Number.isFinite(value) && value > 0
+          ? new Date(value > 1_000_000_000_000 ? value : value * 1000).toISOString().slice(0, 10)
+          : '';
+        return !date || date >= filters.from;
+      });
+      if (filters.to) nextRows = nextRows.filter((row) => {
+        const value = Number(row.calculated_at);
+        const date = Number.isFinite(value) && value > 0
+          ? new Date(value > 1_000_000_000_000 ? value : value * 1000).toISOString().slice(0, 10)
+          : '';
+        return !date || date <= filters.to;
+      });
+      if (filters.paid) nextRows = nextRows.filter((row) => row.paid === (filters.paid === 'true'));
+      if (filters.status) nextRows = nextRows.filter((row) => row.status === filters.status);
       if (emptyToNull(filters.client_login)) nextRows = nextRows.filter((row) => String(row.client_login).includes(String(filters.client_login).trim()));
       if (emptyToNull(filters.symbol)) nextRows = nextRows.filter((row) => row.symbol.toLowerCase().includes(String(filters.symbol).trim().toLowerCase()));
       setRows(nextRows);
@@ -530,7 +516,7 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
     } finally {
       setLoading(false);
     }
-  }, [filters.client_login, filters.symbol, query]);
+  }, [filters, query]);
 
   useEffect(() => {
     load();
@@ -539,22 +525,30 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
   const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const clearFilters = () => setFilters(defaultLedgerFilters());
 
-  const setStatus = async (commission, status) => {
-    if (!canSetCommissionStatus(commission, status)) return;
-    if ((status === 'approved' || status === 'rejected') && !window.confirm(`${status} commission #${commission.id}?`)) return;
+  const payCommissions = async () => {
+    if (!canManageIB) {
+      setError('Your role does not have permission to manage IB commissions.');
+      return;
+    }
+    if (!window.confirm(`Pay eligible commissions for IB ${login} from ${filters.from || 'the beginning'} through ${filters.to || 'today'}?`)) return;
 
-    setMutatingId(commission.id);
+    setPaying(true);
     setError('');
     setNotice('');
     try {
-      await ibApi.setCommissionStatus(commission.id, status);
-      setNotice(`Commission #${commission.id} set to ${status}.`);
+      await ibApi.payCommissions({
+        login: Number(login),
+        ...(filters.from ? { from: filters.from } : {}),
+        ...(filters.to ? { to: filters.to } : {}),
+        execute: true,
+      });
+      setNotice(`Eligible commissions for IB ${login} were submitted for payment.`);
       await load();
       onRefreshRelated?.();
     } catch (err) {
-      setError(err.message || 'Failed to update commission status.');
+      setError(err.message || 'Failed to pay IB commissions.');
     } finally {
-      setMutatingId(null);
+      setPaying(false);
     }
   };
 
@@ -583,7 +577,7 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
         </select>
         <select value={filters.status} onChange={(event) => setFilter('status', event.target.value)} className="ui-input ui-input-sm">
           <option value="">All statuses</option>
-          {MUTABLE_COMMISSION_STATUSES.concat('paid').map((status) => <option key={status} value={status}>{status}</option>)}
+          {['accrued', 'pending_review', 'approved', 'rejected', 'paid'].map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
         <input placeholder="Client login" value={filters.client_login} onChange={(event) => setFilter('client_login', event.target.value)} className="ui-input ui-input-sm" />
         <input placeholder="Symbol" value={filters.symbol} onChange={(event) => setFilter('symbol', event.target.value)} className="ui-input ui-input-sm" />
@@ -594,20 +588,21 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
           <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={clearFilters} disabled={loading}>Clear filters</button>
           <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Load</button>
           <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={13} /> CSV</button>
+          <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={payCommissions} disabled={paying || !canManageIB}>{paying ? <Loader size={13} className="animate-spin" /> : null} Pay commissions</button>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
-              <th>ID</th><th>Client</th><th>Deal</th><th>Symbol</th><th>Lots</th><th>Type</th><th>Commission</th><th>Override</th><th>Total</th><th>Status</th><th>Paid</th><th>Calculated</th><th style={{ textAlign: 'right' }}>Actions</th>
+              <th>ID</th><th>Client</th><th>Deal</th><th>Symbol</th><th>Lots</th><th>Type</th><th>Commission</th><th>Override</th><th>Total</th><th>Status</th><th>Paid</th><th>Calculated</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={13}><EmptyState>Loading commissions...</EmptyState></td></tr>
+              <tr><td colSpan={12}><EmptyState>Loading commissions...</EmptyState></td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={13}><EmptyState>No commissions match the active filters. Check the date range or clear optional filters.</EmptyState></td></tr>
+              <tr><td colSpan={12}><EmptyState>No commissions match the active filters. Check the date range or clear optional filters.</EmptyState></td></tr>
             ) : rows.map((row) => (
               <tr key={row.id}>
                 <td className="tabular">{row.id}</td>
@@ -622,15 +617,6 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
                 <td><StatusBadge status={row.status} /></td>
                 <td><span className={`ui-badge text-[9px] ${row.paid ? 'ui-badge-success' : 'ui-badge-warn'}`}>{row.paid ? 'PAID' : 'UNPAID'}</span></td>
                 <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(row.calculated_at)}</td>
-                <td style={{ textAlign: 'right' }}>
-                  <div className="inline-flex gap-1">
-                    {MUTABLE_COMMISSION_STATUSES.map((status) => (
-                      <button key={status} className="ui-btn ui-btn-secondary ui-btn-xs" disabled={!canSetCommissionStatus(row, status) || mutatingId === row.id} onClick={() => setStatus(row, status)}>
-                        {status}
-                      </button>
-                    ))}
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -641,7 +627,6 @@ const LedgerTab = ({ login, onRefreshRelated }) => {
 };
 
 const StatsTab = ({ login }) => {
-  const [filters, setFilters] = useState(defaultStatsFilters);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -650,11 +635,7 @@ const StatsTab = ({ login }) => {
     setLoading(true);
     setError('');
     try {
-      const response = await ibApi.stats({
-        login,
-        ...(filters.from ? { from: filters.from } : {}),
-        ...(filters.to ? { to: filters.to } : {}),
-      });
+      const response = await ibApi.stats({ ib_login: login });
       setStats(normalizeStats(response));
     } catch (err) {
       setStats(null);
@@ -662,14 +643,11 @@ const StatsTab = ({ login }) => {
     } finally {
       setLoading(false);
     }
-  }, [filters, login]);
+  }, [login]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  const activeFilterText = `Date: ${filters.from || 'any'} to ${filters.to || 'any'}`;
-  const clearFilters = () => setFilters(defaultStatsFilters());
 
   const cards = [
     ['Client Count', stats?.client_count],
@@ -681,13 +659,9 @@ const StatsTab = ({ login }) => {
   return (
     <div className="flex flex-col gap-3">
       {error && <AlertBox>{error}</AlertBox>}
-      <div className="flex flex-wrap gap-2">
-        <input type="date" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} className="ui-input ui-input-sm" />
-        <input type="date" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} className="ui-input ui-input-sm" />
-        <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={clearFilters} disabled={loading}>Clear filters</button>
+      <div className="flex justify-end">
         <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={load} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</button>
       </div>
-      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Active filters: {activeFilterText}</span>
       {loading ? <EmptyState>Loading stats...</EmptyState> : (
         <div className="grid grid-cols-2 gap-3">
           {cards.map(([label, value]) => (
@@ -842,10 +816,7 @@ const IBDetailDrawer = ({ login, initialTab = 'profile', onClose, onNavigateTab,
       return <PlansTab login={login} />;
     }
     if (activeTab === 'ledger') {
-      return <LedgerTab login={login} onRefreshRelated={refreshAll} />;
-    }
-    if (activeTab === 'payout') {
-      return <IBPayoutModal login={login} embedded onSuccess={refreshAll} />;
+      return <LedgerTab login={login} canManageIB={canManageIB} onRefreshRelated={refreshAll} />;
     }
     if (activeTab === 'stats') {
       return <StatsTab login={login} />;
@@ -897,7 +868,6 @@ const IBDetailDrawer = ({ login, initialTab = 'profile', onClose, onNavigateTab,
               }}
             >
               {tab.id === 'stats' && <BarChart3 size={12} className="inline mr-1" />}
-              {tab.id === 'payout' && <DollarSign size={12} className="inline mr-1" />}
               {tab.label}
             </button>
           ))}

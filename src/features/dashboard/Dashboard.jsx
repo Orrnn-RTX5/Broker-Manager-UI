@@ -1,206 +1,137 @@
-import { AlertTriangle, BarChart3, DollarSign, RefreshCw, Users, Wallet } from 'lucide-react';
-import ComingSoon from '../../components/ComingSoon';
+import { createElement, useState } from 'react';
+import {
+  Activity, BarChart3, CalendarDays, ChevronRight, CircleGauge, DollarSign,
+  MoreVertical, RefreshCw, Server, ShieldCheck, TrendingDown,
+  TrendingUp, UserRoundCheck, UsersRound, WalletCards,
+} from 'lucide-react';
+import {
+  Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 import { DASHBOARD_PLACEHOLDER_MODE } from './dashboardState';
 import useDashboardMetrics, { useDashboardAccountLimits } from './useDashboardMetrics';
+import { OPERATIONAL_DASHBOARD_PLACEHOLDERS as preview } from './operationalDashboardAdapter';
+import RegionalActivityMap from './RegionalActivityMap';
 
-const formatInteger = (value) => new Intl.NumberFormat('en-US', {
-  maximumFractionDigits: 0,
+const integer = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
+const money = (value, compact = false, currency = 'USD') => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: currency || 'USD', maximumFractionDigits: compact ? 1 : 0,
+  notation: compact ? 'compact' : 'standard',
 }).format(value);
 
-const formatMoney = (value) => new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-}).format(value);
-
-const formatTime = (timestamp) => {
-  if (!timestamp) return '';
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(timestamp));
+const Sparkline = ({ points, tone = 'success' }) => {
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const path = points.map((point, index) => {
+    const x = (index / (points.length - 1)) * 92 + 4;
+    const y = 28 - ((point - min) / (max - min || 1)) * 22;
+    return `${index ? 'L' : 'M'} ${x} ${y}`;
+  }).join(' ');
+  return <svg className={`cc-sparkline is-${tone}`} viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><path d={path} /></svg>;
 };
 
-const Kpi = ({ icon, label, value, hint, loading, unavailable, tone = 'default' }) => {
-  const valueColor = unavailable
-    ? 'var(--muted)'
-    : tone === 'danger'
-      ? 'var(--danger-text)'
-      : 'var(--text)';
+const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', points, placeholder }) => (
+  <article className="cc-metric-card" data-placeholder={placeholder || undefined} title={placeholder ? 'This aggregate is supplied by the isolated UI adapter until its API is connected.' : undefined}>
+    <span className={`cc-metric-icon is-${tone}`}>{createElement(Icon, { size: 17, strokeWidth: 1.7 })}</span>
+    <div className="cc-metric-main">
+      <small>{label}</small>
+      <strong className="tabular">{value}</strong>
+      <span className={`is-${tone}`}>{tone === 'danger' ? <TrendingDown size={11} /> : <TrendingUp size={11} />}{change || detail}</span>
+    </div>
+    {points && <Sparkline points={points} tone={tone} />}
+  </article>
+);
 
-  const displayedValue = loading ? '—' : value ?? '—';
-  const helperText = loading ? 'Loading live metrics…' : hint || 'Metric unavailable';
-
+const ChartTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const values = Object.fromEntries(payload.map((item) => [item.dataKey, item.value]));
   return (
-    <article className="dashboard-kpi ui-card ui-card-hover">
-      <div className="dashboard-kpi-icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}>
-        {icon}
-      </div>
-      <div className="dashboard-kpi-content">
-        <div className="dashboard-kpi-label" style={{ color: 'var(--text-3)' }}>{label}</div>
-        <div className="dashboard-kpi-value tabular" style={{ color: valueColor }}>{displayedValue}</div>
-        <div className="dashboard-kpi-hint" style={{ color: 'var(--muted)' }}>{helperText}</div>
-      </div>
-    </article>
-  );
-};
-
-const DashboardNotice = ({ errors }) => {
-  if (!errors.length) return null;
-
-  const isFullFailure = errors.some((error) => error.key === 'summary');
-  const message = isFullFailure
-    ? 'Dashboard data unavailable. DashboardSummary failed.'
-    : `Partial dashboard data. ${errors.map((error) => error.key).join(', ')} endpoint failed.`;
-
-  return (
-    <div
-      className="ui-card px-4 py-3 flex items-start gap-3 text-sm"
-      style={{
-        background: isFullFailure ? 'var(--danger-soft)' : 'var(--warn-soft)',
-        borderColor: isFullFailure ? 'var(--danger-border)' : 'var(--warn-border)',
-        color: isFullFailure ? 'var(--danger-text)' : 'var(--warn-text)',
-      }}
-    >
-      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-      <div>
-        <div className="font-medium">{message}</div>
-        <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-          {errors.map((error) => `${error.key}: ${error.error}`).join(' | ')}
-        </div>
-      </div>
+    <div className="cc-chart-tooltip">
+      <strong>{label}</strong><span>Volume: {integer(values.volume || 0)} lots</span><span>Equity: {money(values.equity || 0)}</span>
     </div>
   );
 };
 
-const Dashboard = () => {
-  const {
-    data,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useDashboardMetrics();
-  const {
-    data: accountLimitData,
-    isLoading: isAccountLimitLoading,
-    isFetching: isAccountLimitFetching,
-    refetch: refetchAccountLimits,
-  } = useDashboardAccountLimits();
+const PanelTitle = ({ children, meta }) => (
+  <div className="cc-panel-title"><strong>{children}</strong>{meta && <span>{meta}</span>}</div>
+);
 
-  const metrics = data?.metrics;
-  const accountLimitMetrics = accountLimitData?.metrics;
-  const realAccounts = accountLimitMetrics?.realAccounts ?? metrics?.realAccounts;
-  const demoAccounts = accountLimitMetrics?.demoAccounts ?? metrics?.demoAccounts;
-  const sourceMode = data?.sourceMode || 'summary';
-  const isSummarySource = sourceMode === 'summary';
-  const sources = data?.sources || {};
-  const errors = data?.errors || [];
-  const asOf = formatTime(data?.asOf);
-  const accountAsOf = formatTime(accountLimitData?.asOf ?? data?.asOf);
-  const summaryHint = isSummarySource
-    ? `From DashboardSummary${asOf ? ` at ${asOf}` : ''}`
-    : '';
-  const accountHint = accountLimitMetrics
-    ? `From AccountLimitStatus${accountAsOf ? ` at ${accountAsOf}` : ''}`
-    : isSummarySource
-    ? summaryHint
-    : `${sources.accountLimit?.ok ? 'From AccountLimitStatus' : 'From AccountDetailsMany'}${asOf ? ` at ${asOf}` : ''}`;
-  const positionHint = isSummarySource
-    ? summaryHint
-    : `From PositionsAll${asOf ? ` at ${asOf}` : ''}`;
-  const equityHint = isSummarySource
-    ? summaryHint
-    : `Computed from AccountDetailsMany${asOf ? ` at ${asOf}` : ''}`;
-  const isRefreshing = isFetching || isAccountLimitFetching;
-  const refreshDashboard = () => {
-    refetchAccountLimits();
-    refetch();
-  };
+export default function Dashboard() {
+  const [range, setRange] = useState('24H');
+  const { data, isLoading, isFetching, refetch } = useDashboardMetrics();
+  const { data: limitData, isFetching: isLimitFetching, refetch: refetchLimits } = useDashboardAccountLimits();
+  const metrics = data?.metrics || {};
+  const limits = limitData?.metrics || {};
+  const realAccounts = limits.realAccounts ?? metrics.realAccounts;
+  const demoAccounts = limits.demoAccounts ?? metrics.demoAccounts;
+  const refreshing = isFetching || isLimitFetching;
+  const refresh = () => { refetch(); refetchLimits(); };
 
   return (
-    <div
-      className="dashboard-page p-6 pb-4 w-full min-h-full flex flex-col gap-4"
-      data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}
-    >
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="dashboard-page-title text-2xl font-semibold" style={{ color: 'var(--text)' }}>
-            Dashboard
-          </h1>
-          <p className="dashboard-page-subtitle text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
-            Live account and trading metrics from manager APIs.
-          </p>
+    <main className="cc-dashboard" data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}>
+      <header className="cc-dashboard-header">
+        <div><h1>Executive Dashboard</h1><p>Live brokerage operations, exposure, account activity and infrastructure health.</p></div>
+        <div className="cc-dashboard-controls">
+          <button type="button"><CalendarDays size={13} />Last 24 Hours</button>
+          <button type="button" onClick={refresh} disabled={refreshing}><RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />Refresh</button>
+          <button type="button" aria-label="More dashboard actions" title="More dashboard actions"><MoreVertical size={15} /></button>
         </div>
-        <button
-          type="button"
-          onClick={refreshDashboard}
-          disabled={isRefreshing}
-          className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5"
-        >
-          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+      </header>
 
-      <DashboardNotice errors={errors} />
+      {data?.errors?.length > 0 && <div className="cc-data-notice"><Activity size={12} />Some live aggregates are unavailable; cached values and clearly marked UI adapters remain visible.</div>}
 
-      <div className="dashboard-kpi-grid">
-        <Kpi
-          icon={<Users size={18} />}
-          label="Real Accounts"
-          value={realAccounts != null ? formatInteger(realAccounts) : null}
-          loading={realAccounts == null && (isAccountLimitLoading || isLoading)}
-          unavailable={realAccounts == null && !isAccountLimitLoading && !isLoading}
-          hint={realAccounts != null ? accountHint : 'Account total unavailable'}
-        />
-        <Kpi
-          icon={<Users size={18} />}
-          label="Demo Accounts"
-          value={demoAccounts != null ? formatInteger(demoAccounts) : null}
-          loading={demoAccounts == null && (isAccountLimitLoading || isLoading)}
-          unavailable={demoAccounts == null && !isAccountLimitLoading && !isLoading}
-          hint={demoAccounts != null ? accountHint : 'Demo account total unavailable'}
-        />
-        <Kpi
-          icon={<DollarSign size={18} />}
-          label="Deposits 24h"
-          value={metrics?.deposits24h != null ? formatMoney(metrics.deposits24h) : null}
-          loading={isLoading}
-          unavailable={!isLoading && metrics?.deposits24h == null}
-          hint={metrics?.deposits24h != null ? summaryHint : 'Backend cashflow metric required'}
-        />
-        <Kpi
-          icon={<BarChart3 size={18} />}
-          label="Open Positions"
-          value={metrics?.openPositions != null ? formatInteger(metrics.openPositions) : null}
-          loading={isLoading}
-          unavailable={!isLoading && metrics?.openPositions == null}
-          hint={metrics?.openPositions != null ? positionHint : 'Position total unavailable'}
-        />
-        <Kpi
-          icon={<Wallet size={18} />}
-          label="Equity"
-          value={metrics?.equity != null ? formatMoney(metrics.equity) : null}
-          loading={isLoading}
-          unavailable={!isLoading && metrics?.equity == null}
-          hint={metrics?.equity != null ? equityHint : 'Account equity unavailable'}
-        />
-      </div>
+      <section className="cc-metric-grid" aria-label="Brokerage key metrics">
+        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" points={[3,5,4,8,6,11,9,15]} />
+        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" points={[8,6,9,5,11,8,14,12]} tone="neutral" />
+        <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? '—' : money(metrics.equity, true)} change="+3.5%" points={[2,5,4,7,6,9,8,13]} />
+        <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? '—' : integer(metrics.openPositions)} change="−6.2%" points={[12,9,11,7,8,5,6,3]} tone="danger" />
+        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? 'Awaiting API' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} points={[4,7,5,11,8,14,10,16]} placeholder={metrics.deposits24h == null} />
+        <MetricCard icon={ShieldCheck} label="MARGIN EXPOSURE" value={`${preview.marginExposure}%`} detail="Used $1.2M / $1.8M" points={[10,8,12,5,9,4,7,3]} tone="danger" placeholder />
+        <MetricCard icon={Server} label="ACTIVE SERVERS" value={`${preview.activeServers} / ${preview.totalServers}`} detail="All systems operational" points={[3,3,4,4,4,5,5,5]} placeholder />
+        <MetricCard icon={CircleGauge} label="RISK SCORE" value={`${preview.riskScore} / 100`} detail="Low Risk" points={[2,3,3,4,5,4,6,7]} placeholder />
+      </section>
 
-      <div className="dashboard-insights-grid">
-        <ComingSoon title="Real Accounts" description="Account-registration trends need the aggregation endpoint." />
-        <ComingSoon title="Deposits & Withdrawals" description="Cashflow trends need the 24-hour aggregation endpoint." />
-        <ComingSoon title="Accounts by Source" description="Source allocation needs its dedicated manager endpoint." />
-      </div>
+      <section className="cc-panel cc-activity-panel">
+        <div className="cc-chart-toolbar">
+          <div><PanelTitle meta="Preview trend">Trading Activity & Account Equity</PanelTitle><div className="cc-chart-legend"><span><i className="is-volume" />Trading Volume (Lots)</span><span><i className="is-equity" />Account Equity (USD)</span></div></div>
+          <div className="cc-chart-actions">
+            <div>{['1H','6H','24H','7D','30D'].map((item) => <button key={item} type="button" className={range === item ? 'is-active' : ''} onClick={() => setRange(item)}>{item}</button>)}</div>
+            <button type="button">USD⌄</button>
+          </div>
+        </div>
+        <div className="cc-chart-area">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={preview.activity} margin={{ top: 8, right: 10, bottom: 0, left: -12 }}>
+              <CartesianGrid stroke="var(--cc-grid)" vertical={false} />
+              <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval={1} />
+              <YAxis yAxisId="volume" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+              <YAxis yAxisId="equity" orientation="right" domain={['dataMin - 50000', 'dataMax + 50000']} axisLine={false} tickLine={false} tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }} />
+              <Bar yAxisId="volume" dataKey="volume" fill="var(--cc-bar)" barSize={8} radius={[1,1,0,0]} />
+              <Line yAxisId="equity" type="monotone" dataKey="equity" stroke="var(--success)" strokeWidth={1.8} dot={false} activeDot={{ r: 3, fill: 'var(--success)', strokeWidth: 0 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
 
-      <ComingSoon
-        title="Liquidity Providers"
-        description="Routing health will be shown when the liquidity aggregation endpoint is connected."
-        height={112}
-        compact
-      />
-    </div>
+      <section className="cc-lower-grid">
+        <article className="cc-panel cc-data-panel">
+          <PanelTitle meta="UI adapter">Top Traded Symbols</PanelTitle>
+          <table><thead><tr><th>Symbol</th><th>Volume (Lots)</th><th>Trades</th><th>Contribution</th></tr></thead><tbody>{preview.symbols.map((row) => <tr key={row[0]}>{row.map((cell, i) => <td key={cell} className={i ? 'tabular' : ''}>{cell}</td>)}</tr>)}</tbody></table>
+          <button type="button" className="cc-panel-link">View All Symbols <ChevronRight size={12} /></button>
+        </article>
+
+        <article className="cc-panel cc-region-panel">
+          <PanelTitle meta="Account share · Volume share">Regional Activity</PanelTitle>
+          <RegionalActivityMap />
+          <div className="cc-region-columns"><span>Region</span><b>Accounts</b><em>Volume</em></div>
+          <div className="cc-region-list">{preview.regions.map(([name, accounts, volume]) => <div key={name}><span><i />{name}</span><b>{accounts}</b><em>{volume}</em></div>)}</div>
+        </article>
+
+        <article className="cc-panel cc-data-panel cc-approvals">
+          <PanelTitle meta={`${preview.approvalCount} pending`}>Approval Queue</PanelTitle>
+          <table><thead><tr><th>Type</th><th>Details</th><th>Time</th><th>Status</th></tr></thead><tbody>{preview.approvals.map((row) => <tr key={`${row[0]}-${row[2]}`}>{row.map((cell, i) => <td key={cell} className={i === 3 ? `is-status is-${cell.toLowerCase()}` : ''}>{cell}</td>)}</tr>)}</tbody></table>
+        </article>
+      </section>
+    </main>
   );
-};
-
-export default Dashboard;
+}

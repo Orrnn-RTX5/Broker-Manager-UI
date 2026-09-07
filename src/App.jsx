@@ -8,7 +8,8 @@ import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
 import { clearBrokerInfo } from './services/brokerAuth';
-import { preloadFrequentWorkspaceRoutes, workspaceRouteLoaders } from './utils/workspaceRouteModules';
+import { invalidatePositionsCache, invalidateSymbolManagementData, preloadSymbolManagementData } from './services/api';
+import { preloadAllWorkspaceRoutes, preloadFrequentWorkspaceRoutes, preloadWorkspaceRoute, workspaceRouteLoaders } from './utils/workspaceRouteModules';
 import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQueries.js';
 import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
 
@@ -19,17 +20,21 @@ import OpenPositionsPage from './features/clients/OpenPositionsPage';
 import ClientsDashboard from './features/clients/ClientsDashboard';
 import OrdersPage from './features/clients/OrdersPage';
 import GroupsPage from './features/groups/GroupsPage';
+import TradingAccountsPage from './features/clients/TradingAccountsPage';
+import PositionsPage from './features/clients/PositionsPage';
+import DealsPage from './features/clients/DealsPage';
+import OnlineUsersPage from './features/clients/OnlineUsersPage';
 
-// Keep the dashboard and workspace shell in the initial bundle. Every other
-// workspace view is loaded only when it is opened, so its data/UI code cannot
-// delay the first dashboard render.
+// Pre-warm the active route module immediately on hard refresh before render
+if (typeof window !== 'undefined' && window.location?.pathname) {
+  preloadWorkspaceRoute(window.location.pathname);
+}
+
+// Keep primary navigation pages in the bundle for instant (<1s) zero-delay renders.
+// Auxiliary or deep views are loaded on-demand.
 const TradingAccountsDashboard = lazy(workspaceRouteLoaders.tradingAccountsDashboard);
 const AdvertisingCampaignsDashboard = lazy(workspaceRouteLoaders.advertisingCampaignsDashboard);
 const ByCountryDashboard = lazy(workspaceRouteLoaders.byCountryDashboard);
-const OnlineUsersPage = lazy(workspaceRouteLoaders.onlineUsersPage);
-const TradingAccountsPage = lazy(workspaceRouteLoaders.tradingAccountsPage);
-const PositionsPage = lazy(workspaceRouteLoaders.positionsPage);
-const DealsPage = lazy(workspaceRouteLoaders.dealsPage);
 const GroupDetailsPage = lazy(workspaceRouteLoaders.groupDetailsPage);
 const DealerQueuePage = lazy(workspaceRouteLoaders.dealerQueuePage);
 const RestrictedAccountsPage = lazy(workspaceRouteLoaders.restrictedAccountsPage);
@@ -43,31 +48,104 @@ const AUTH_STORAGE_POLL_MS = 2000;
 const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
 
 const ROUTE_LOADING_LABELS = Object.freeze({
+  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
+  '/admin-dashboard': 'Dashboard',
+  '/analytics/trading-accounts': 'Trading Accounts Analytics',
   '/analytics/online-users': 'Online Users',
   '/analytics/open-positions': 'Open Positions',
+  '/analytics/advertising-campaigns': 'Advertising Campaigns',
   '/analytics/open-orders': 'Open Orders',
+  '/analytics/by-country': 'By Country Analytics',
+  '/clients': 'Clients Overview',
+  '/clients/online-users': 'Active Sessions',
+  '/clients/trading-accounts': 'Trading Accounts',
+  '/clients/positions': 'Open Positions',
+  '/clients/orders': 'Orders',
+  '/dealing': 'Dealing & Executions',
+  '/dealer/queue': 'Dealer Queue',
+  '/dealer/restrictions': 'Restricted Accounts',
+  '/ib': 'IB Accounts',
+  '/ib/tree': 'IB Tree',
+  '/groups': 'Account Groups',
+  '/symbols': 'Symbols Browser',
+  '/symbol-management': 'Symbol Management',
 });
+
+const getRouteLabel = (pathname) => {
+  if (ROUTE_LOADING_LABELS[pathname]) return ROUTE_LOADING_LABELS[pathname];
+  if (pathname.startsWith('/groups/')) return 'Group Details';
+  if (pathname.startsWith('/ib/')) return 'IB Account Details';
+  if (pathname.startsWith('/symbols/')) return 'Symbol Details';
+  const segment = pathname.split('/').filter(Boolean).pop();
+  return segment ? segment.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Workspace';
+};
 
 const WorkspaceRouteFallback = () => {
   const location = useLocation();
-  const label = ROUTE_LOADING_LABELS[location.pathname] || 'Workspace';
+  const label = getRouteLabel(location.pathname);
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex min-h-full w-full flex-col gap-4 p-6"
-      style={{ color: 'var(--muted)' }}
+      className="workspace-soft-landing flex min-h-full w-full flex-col gap-4 p-6 animate-fade-in"
     >
-      <div>
-        <div className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{label}</div>
-        <div className="mt-1 text-[10px]">Opening view…</div>
+      {/* Header bar placeholder matching page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 h-5 rounded-md bg-[var(--surface-3)] animate-pulse" />
+          <div>
+            <h1 className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{label}</h1>
+            <div className="flex items-center gap-1.5 mt-0.5 text-[10px]" style={{ color: 'var(--muted)' }}>
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-ping" />
+              <span>Connecting live data…</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Action / search bar skeleton */}
+        <div className="flex items-center gap-2">
+          <div className="h-7 w-40 rounded-md bg-[var(--surface-2)] border border-[var(--border)] animate-pulse" />
+          <div className="h-7 w-24 rounded-md bg-[var(--surface-2)] border border-[var(--border)] animate-pulse" />
+        </div>
       </div>
-      <div className="ui-card min-h-48 animate-pulse p-4">
-        <div className="h-3 w-40 rounded" style={{ background: 'var(--surface-3)' }} />
-        <div className="mt-4 h-8 w-full rounded" style={{ background: 'var(--surface-2)' }} />
-        <div className="mt-3 h-8 w-full rounded" style={{ background: 'var(--surface-2)' }} />
-        <div className="mt-3 h-8 w-4/5 rounded" style={{ background: 'var(--surface-2)' }} />
+
+      {/* Structured data table skeleton */}
+      <div className="ui-card flex-1 min-h-[360px] flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)]">
+        {/* Table header skeleton */}
+        <div
+          className="flex items-center h-8 px-4 gap-4 border-b border-[var(--border)]"
+          style={{ background: 'var(--surface-2)' }}
+        >
+          <div className="h-2.5 w-16 rounded bg-[var(--surface-3)] animate-pulse" />
+          <div className="h-2.5 w-24 rounded bg-[var(--surface-3)] animate-pulse" />
+          <div className="h-2.5 w-20 rounded bg-[var(--surface-3)] animate-pulse" />
+          <div className="h-2.5 w-16 rounded bg-[var(--surface-3)] animate-pulse" />
+          <div className="h-2.5 w-20 rounded bg-[var(--surface-3)] animate-pulse ml-auto" />
+          <div className="h-2.5 w-20 rounded bg-[var(--surface-3)] animate-pulse" />
+        </div>
+
+        {/* Table row skeleton lines */}
+        <div className="p-3 flex flex-col gap-2.5 flex-1">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center h-7 px-2 gap-4 rounded"
+              style={{
+                background: i % 2 === 0 ? 'var(--surface-2)' : 'transparent',
+                opacity: 1 - i * 0.08,
+              }}
+            >
+              <div className="h-2 w-14 rounded bg-[var(--surface-3)] animate-pulse" />
+              <div className="h-2 w-28 rounded bg-[var(--surface-3)] animate-pulse" />
+              <div className="h-2 w-20 rounded bg-[var(--surface-3)] animate-pulse" />
+              <div className="h-2 w-16 rounded bg-[var(--surface-3)] animate-pulse" />
+              <div className="h-2 w-20 rounded bg-[var(--surface-3)] animate-pulse ml-auto" />
+              <div className="h-2 w-16 rounded bg-[var(--surface-3)] animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -122,6 +200,7 @@ function App() {
 
   useEffect(() => {
     const handleSessionExpired = () => {
+      invalidatePositionsCache();
       authService.clearSession();
       queryClient.clear();
       sessionSnapshotRef.current = null;
@@ -182,13 +261,26 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
-    // Start warming as soon as the authenticated shell commits. A live market
-    // feed means the main thread may never become truly idle, which used to
-    // postpone requestIdleCallback until after the user had already clicked.
-    preloadFrequentWorkspaceRoutes();
-    prefetchInitialAnalyticsData(queryClient);
-    prefetchInitialWorkspaceData(queryClient);
-    return undefined;
+    // Prioritize the active route's data query first. Defer background route warming
+    // and auxiliary prefetches so they never compete for network connections or CPU
+    // during the critical initial page load and render.
+    const warmTimeoutId = setTimeout(() => {
+      const runWarming = () => {
+        preloadSymbolManagementData();
+        preloadFrequentWorkspaceRoutes();
+        preloadAllWorkspaceRoutes();
+        prefetchInitialAnalyticsData(queryClient);
+        prefetchInitialWorkspaceData(queryClient);
+      };
+
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(runWarming, { timeout: 2000 });
+      } else {
+        runWarming();
+      }
+    }, 800);
+
+    return () => clearTimeout(warmTimeoutId);
   }, [isAuthenticated, queryClient]);
 
   useEffect(() => {
@@ -218,6 +310,10 @@ function App() {
       authService.expireSession(status.reason || 'session_invalid');
       return;
     }
+    // Module-level request caches outlive route trees. Reset them at every
+    // authenticated boundary so another manager or broker never inherits rows
+    // (or an in-flight response) from the previous session.
+    invalidatePositionsCache();
     rememberValidSession(status);
     // Start authenticated data warming before the dashboard transition. React
     // Query deduplicates this with the authenticated effect below.
@@ -228,6 +324,8 @@ function App() {
   };
 
   const handleLogout = () => {
+    invalidatePositionsCache();
+    invalidateSymbolManagementData();
     authService.clearSession();
     queryClient.clear();
     clearBrokerInfo();

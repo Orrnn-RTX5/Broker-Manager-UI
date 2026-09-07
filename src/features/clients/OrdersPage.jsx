@@ -54,24 +54,24 @@ const OrdersPage = () => {
 
   return (
     <div className="orders-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pb-2">
+        <div className="flex min-w-0 items-center gap-2">
           <ClipboardList size={18} style={{ color: 'var(--accent)' }} />
-          <div>
+          <div className="min-w-0">
             <h1 className="orders-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Orders</h1>
             <p className="orders-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to modify</p>
           </div>
         </div>
-        <div className="orders-filters flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <FilterDropdown value={typeFilter} className="w-[100px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
-          <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
-          <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
+        <div className="orders-filters flex flex-nowrap items-center justify-end gap-2">
+          <FilterDropdown value={typeFilter} className="w-[96px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[112px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
+          <FilterDropdown value={reasonFilter} className="w-[112px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="orders-filters flex flex-wrap items-center gap-2">
-        <div className="orders-search relative max-w-xs w-full">
+      {/* Search */}
+      <div className="orders-search-row relative -top-1 flex items-center justify-start">
+        <div className="orders-search relative w-full max-w-[420px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"
@@ -82,18 +82,6 @@ const OrdersPage = () => {
             style={{ paddingLeft: 32 }}
           />
         </div>
-        {['All Types', 'Buy', 'Sell'].map(opt => (
-          <button
-            key={opt}
-            onClick={() => setTypeFilter(opt)}
-            className={`ui-btn ui-btn-sm ${typeFilter === opt ? 'ui-btn-primary' : 'ui-btn-secondary'}`}
-          >
-            {opt}
-          </button>
-        ))}
-        <div className="h-6 w-px mx-1" style={{ background: 'var(--border)' }} />
-        <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
-        <FilterDropdown value={reasonFilter} className="w-[120px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
       </div>
 
       <OrdersDataGrid

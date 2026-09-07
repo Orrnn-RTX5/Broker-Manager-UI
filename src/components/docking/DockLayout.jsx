@@ -7,9 +7,11 @@ import GlobalDockOverlay from './GlobalDockOverlay';
 import styles from './DockLayout.module.css';
 
 const MIN_LEFT_PANEL_WIDTH = 180;
-const MIN_NAVIGATOR_WIDTH = 220;
-const MIN_MARKET_WATCH_WIDTH = 336;
+const MIN_NAVIGATOR_WIDTH = 200;
+const MIN_MARKET_WATCH_WIDTH = 230;
 const MIN_CENTER_WIDTH = 360;
+const MIN_BOTTOM_PANEL_HEIGHT = 96;
+const MIN_MIDDLE_AREA_HEIGHT = 260;
 
 const getMinimumPanelWidth = (panel) => {
   if (panel?.id === 'market_data') return MIN_MARKET_WATCH_WIDTH;
@@ -20,8 +22,8 @@ const getMinimumPanelWidth = (panel) => {
 const getLeftPanelWidth = (panel) => {
   const width = Number(panel?.size?.width);
   const fallback = panel?.id === 'market_data'
-    ? MIN_MARKET_WATCH_WIDTH
-    : panel?.id === 'navigator' ? 270 : 280;
+    ? 280
+    : panel?.id === 'navigator' ? 260 : 280;
   const preferredWidth = Number.isFinite(width) && width > 0 ? width : fallback;
   return Math.max(getMinimumPanelWidth(panel), preferredWidth);
 };
@@ -117,6 +119,92 @@ const DockedPaneResizer = ({ panel, centerAreaRef, onResize }) => {
   );
 };
 
+const DockedBottomResizer = ({ panel, middleAreaRef, onResize }) => {
+  const getCurrentHeight = (panelElement) => {
+    const renderedHeight = panelElement?.getBoundingClientRect().height;
+    if (Number.isFinite(renderedHeight) && renderedHeight > 0) return renderedHeight;
+
+    const configuredHeight = Number(panel?.size?.height);
+    return Number.isFinite(configuredHeight) && configuredHeight > 0 ? configuredHeight : 132;
+  };
+
+  const getMaximumHeight = (currentHeight) => {
+    const middleHeight = middleAreaRef.current?.getBoundingClientRect().height;
+    const availableMiddleHeight = Number.isFinite(middleHeight) ? middleHeight : MIN_MIDDLE_AREA_HEIGHT;
+    return currentHeight + Math.max(0, availableMiddleHeight - MIN_MIDDLE_AREA_HEIGHT);
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.button !== 0 && event.pointerType !== 'touch') return;
+
+    event.preventDefault();
+    const resizer = event.currentTarget;
+    const panelElement = resizer.nextElementSibling;
+    const startHeight = getCurrentHeight(panelElement);
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+    const maximumHeight = getMaximumHeight(startHeight);
+    let isResizing = true;
+
+    const handlePointerMove = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const nextHeight = Math.min(
+        maximumHeight,
+        Math.max(MIN_BOTTOM_PANEL_HEIGHT, startHeight - (moveEvent.clientY - startY))
+      );
+      onResize(panel.id, Math.round(nextHeight));
+    };
+
+    const cleanup = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      resizer.removeEventListener('pointermove', handlePointerMove);
+      resizer.removeEventListener('pointerup', handlePointerEnd);
+      resizer.removeEventListener('pointercancel', handlePointerEnd);
+      resizer.removeEventListener('lostpointercapture', cleanup);
+      if (resizer.hasPointerCapture?.(pointerId)) resizer.releasePointerCapture(pointerId);
+    };
+
+    const handlePointerEnd = (endEvent) => {
+      if (endEvent.pointerId === pointerId) cleanup();
+    };
+
+    resizer.addEventListener('pointermove', handlePointerMove);
+    resizer.addEventListener('pointerup', handlePointerEnd);
+    resizer.addEventListener('pointercancel', handlePointerEnd);
+    resizer.addEventListener('lostpointercapture', cleanup);
+    resizer.setPointerCapture?.(pointerId);
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+
+    event.preventDefault();
+    const currentHeight = getCurrentHeight(event.currentTarget.nextElementSibling);
+    const delta = event.key === 'ArrowUp' ? 16 : -16;
+    const nextHeight = Math.min(
+      getMaximumHeight(currentHeight),
+      Math.max(MIN_BOTTOM_PANEL_HEIGHT, currentHeight + delta)
+    );
+    onResize(panel.id, Math.round(nextHeight));
+  };
+
+  return (
+    <div
+      className={styles.bottomResizer}
+      role="separator"
+      aria-label={`Resize ${panel.title} panel`}
+      aria-orientation="horizontal"
+      aria-valuemin={MIN_BOTTOM_PANEL_HEIGHT}
+      aria-valuenow={Math.round(getCurrentHeight())}
+      tabIndex={0}
+      title="Drag to resize terminal"
+      onPointerDown={handlePointerDown}
+      onKeyDown={handleKeyDown}
+    ><span aria-hidden="true" /></div>
+  );
+};
+
 /**
  * DockLayout renders:
  *   top-bar  ← panels docked to top
@@ -135,6 +223,7 @@ const DockedPaneResizer = ({ panel, centerAreaRef, onResize }) => {
 export default function DockLayout({ panelContents = {}, children }) {
   const { panels, draggingId, dockPanel, updatePanel } = useDockingContext();
   const centerAreaRef = useRef(null);
+  const middleAreaRef = useRef(null);
 
   const visiblePanels = Object.values(panels).filter(p => p.visible);
   const maximizedPanel = visiblePanels.find(panel => panel.maximized);
@@ -168,6 +257,16 @@ export default function DockLayout({ panelContents = {}, children }) {
       },
     });
   }, [panels, updatePanel]);
+  const resizeBottomPanel = useCallback((id, height) => {
+    const panel = panels[id];
+    if (!panel) return;
+    updatePanel(id, {
+      size: {
+        ...panel.size,
+        height: Math.max(MIN_BOTTOM_PANEL_HEIGHT, height),
+      },
+    });
+  }, [panels, updatePanel]);
 
   const getLeftPanelLayoutStyle = (panel) => {
     const width = getLeftPanelWidth(panel);
@@ -198,7 +297,7 @@ export default function DockLayout({ panelContents = {}, children }) {
       ))}
 
       {/* Middle row */}
-      <div className={styles.middle}>
+      <div ref={middleAreaRef} className={styles.middle}>
         {leftPanels.length > 1 && (
           <div className={styles.leftSideRow}>
             {leftPanels.map((p, index) => (
@@ -263,9 +362,12 @@ export default function DockLayout({ panelContents = {}, children }) {
 
       {/* Bottom strip */}
       {bottomPanels.map(p => (
-        <DockPanel key={p.id} id={p.id}>
-          {panelContents[p.id]}
-        </DockPanel>
+        <Fragment key={p.id}>
+          <DockedBottomResizer panel={p} middleAreaRef={middleAreaRef} onResize={resizeBottomPanel} />
+          <DockPanel id={p.id}>
+            {panelContents[p.id]}
+          </DockPanel>
+        </Fragment>
       ))}
 
       {/* Floating panels (fixed position, handled by DockPanel) */}

@@ -2,16 +2,18 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import {
-  Activity, ArrowUpDown, BarChart2, ChevronDown, ClipboardList, Command, Copy,
+  Activity, ArrowUpDown, BarChart2, ChevronDown, ClipboardList, Copy,
   Expand, Folder, FolderOpen, Gavel, Handshake, History, Info, LayoutGrid,
-  LogOut, MoreHorizontal, Plus, Printer, RefreshCw, Search, Settings2,
-  Shield, TrendingUp, User, Users, X,
+  Keyboard, MoreHorizontal, Plus, Printer, RefreshCw, RotateCcw, Search, Settings2,
+  PanelRightOpen, Shield, TrendingUp, User, Users, X,
 } from 'lucide-react';
 
 import NewAccountModal from './Popups/NewAccountModal';
 import AccountLimitModal from './Popups/AccountLimitModal';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
+import KeyboardShortcutsModal from './Popups/KeyboardShortcutsModal';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
+import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 
 const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
@@ -39,29 +41,48 @@ const copyText = async (value) => {
   document.body.removeChild(textarea);
 };
 
-function ActionMenu({ label, icon: TriggerIcon = MoreHorizontal, actions, pathname }) {
-  const [isOpen, setIsOpen] = useState(false);
+function ActionMenu({
+  id,
+  label,
+  title,
+  icon: TriggerIcon = MoreHorizontal,
+  actions,
+  pathname,
+  onPrefetch,
+  openId,
+  onOpenChange,
+  showLabel = true,
+}) {
+  const isOpen = openId === id;
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    const close = (event) => {
-      if (!menuRef.current?.contains(event.target)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, []);
+  const prefetchActions = () => {
+    actions.forEach((action) => {
+      if (action.path) onPrefetch?.(action.path);
+    });
+  };
+
+  const hasLabel = Boolean(showLabel && label);
+  const resolvedTitle = title || label;
 
   return (
-    <div className="manager-action-menu" ref={menuRef}>
+    <div className="manager-action-menu" data-menu={id} ref={menuRef}>
       <button
         type="button"
-        className={`manager-toolbar-trigger ${actions.some((action) => matchesRoute(pathname, action)) ? 'is-active' : ''}`}
-        onClick={() => setIsOpen((open) => !open)}
+        className={`manager-toolbar-trigger ${!hasLabel ? 'is-icon-dropdown' : ''} ${isOpen ? 'is-open' : ''} ${actions.some((action) => matchesRoute(pathname, action)) ? 'is-active' : ''}`}
+        title={resolvedTitle}
+        aria-label={label}
+        aria-haspopup="menu"
         aria-expanded={isOpen}
+        onClick={(event) => {
+          event.stopPropagation();
+          prefetchActions();
+          onOpenChange(isOpen ? null : id);
+        }}
       >
         {createElement(TriggerIcon, { size: 16, strokeWidth: 1.9 })}
-        <span>{label}</span>
-        <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
+        {hasLabel && <span>{label}</span>}
+        <ChevronDown size={14} className={`manager-toolbar-chevron ${isOpen ? 'is-open' : ''}`} />
       </button>
       {isOpen && (
         <div className="manager-action-popover" role="menu">
@@ -74,7 +95,13 @@ function ActionMenu({ label, icon: TriggerIcon = MoreHorizontal, actions, pathna
                 type="button"
                 role="menuitem"
                 className={`manager-action-popover-item ${active ? 'is-active' : ''}`}
-                onClick={() => { setIsOpen(false); action.onClick(); }}
+                onPointerDown={() => {
+                  if (action.path) onPrefetch?.(action.path);
+                }}
+                onClick={() => {
+                  onOpenChange(null);
+                  action.onClick();
+                }}
               >
                 <Icon size={16} style={{ color: toneColor[action.tone] || toneColor.default }} strokeWidth={1.8} />
                 <span>{action.label}</span>
@@ -88,16 +115,26 @@ function ActionMenu({ label, icon: TriggerIcon = MoreHorizontal, actions, pathna
   );
 }
 
-const PrimaryLink = ({ action, pathname }) => {
+const PrimaryLink = ({ action, pathname, onPrefetch }) => {
   const Icon = action.icon;
   const active = typeof action.active === 'boolean'
     ? action.active
     : matchesRoute(pathname, action);
+  const handleIntent = () => {
+    action.onPrefetch?.();
+    if (action.path) onPrefetch?.(action.path);
+    else if (action.id === 'dashboard') onPrefetch?.('/dashboard');
+  };
   return (
     <button
       type="button"
       onClick={action.onClick}
+      onPointerEnter={handleIntent}
+      onPointerDown={handleIntent}
+      onFocus={handleIntent}
       className={`manager-primary-link ${active ? 'is-active' : ''}`}
+      title={action.label}
+      aria-label={action.label}
       aria-pressed={typeof action.active === 'boolean' ? active : undefined}
     >
       <Icon size={16} strokeWidth={1.8} />
@@ -105,6 +142,7 @@ const PrimaryLink = ({ action, pathname }) => {
     </button>
   );
 };
+
 
 function CommandPalette({ onClose, actions }) {
   const [query, setQuery] = useState('');
@@ -160,14 +198,6 @@ function CommandPalette({ onClose, actions }) {
 function AccountLookup({ value, onChange, onOpen, isOpen, onOpenChange }) {
   const lookupRef = useRef(null);
 
-  useEffect(() => {
-    const close = (event) => {
-      if (!lookupRef.current?.contains(event.target)) onOpenChange(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [onOpenChange]);
-
   const submit = (event) => {
     event?.preventDefault();
     if (!value.trim()) return;
@@ -177,7 +207,16 @@ function AccountLookup({ value, onChange, onOpen, isOpen, onOpenChange }) {
 
   return (
     <div className="manager-account-lookup" ref={lookupRef}>
-      <button type="button" className="manager-account-lookup-trigger" onClick={() => onOpenChange(!isOpen)} aria-expanded={isOpen}>
+      <button
+        type="button"
+        className={`manager-account-lookup-trigger ${isOpen ? 'is-open' : ''}`}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenChange(!isOpen);
+        }}
+      >
         <Search size={16} /> <span>Find account</span>
       </button>
       {isOpen && (
@@ -193,13 +232,24 @@ function AccountLookup({ value, onChange, onOpen, isOpen, onOpenChange }) {
   );
 }
 
-const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSidebarOpen, toggleMarketData, isMarketDataOpen, resetLayout, onLogout }) => {
+const ToolBar = ({
+  toggleSidebar,
+  isSidebarOpen,
+  toggleRightSidebar,
+  isRightSidebarOpen,
+  toggleMarketData,
+  isMarketDataOpen,
+  toggleOwnerConsole,
+  isOwnerConsoleOpen,
+  resetLayout,
+}) => {
   const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
   const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
   const [searchLoginId, setSearchLoginId] = useState('');
   const [activeSearchedAccount, setActiveSearchedAccount] = useState(null);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
-  const [isAccountLookupOpen, setIsAccountLookupOpen] = useState(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
+  const [openToolbarMenu, setOpenToolbarMenu] = useState(null);
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
@@ -220,6 +270,13 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
     setSearchLoginId('');
   };
 
+  const handleResetWorkspace = useCallback(() => {
+    resetLayout?.();
+    if (location.pathname !== '/dashboard' && location.pathname !== '/') {
+      navigate('/dashboard');
+    }
+  }, [resetLayout, navigate, location.pathname]);
+
   const accountPanelAction = {
     id: 'accounts-panel',
     label: `${isRightSidebarOpen ? 'Hide' : 'Show'} account panel`,
@@ -228,9 +285,12 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
     shortcut: 'Ctrl L',
     active: Boolean(isRightSidebarOpen),
     onClick: toggleRightSidebar,
+    onPrefetch: () => {
+      queryClient.prefetchQuery(getSidebarAccountsQueryOptions('')).catch(() => undefined);
+    },
   };
   const primaryActions = [
-    { id: 'dashboard', label: 'Overview', icon: BarChart2, category: 'Navigation', match: (path) => path === '/' || path === '/dashboard' || path === '/admin-dashboard', onClick: go('/dashboard') },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart2, category: 'Navigation', match: (path) => path === '/' || path === '/dashboard' || path === '/admin-dashboard', onClick: go('/dashboard') },
     // The account panel replaces the top-level Clients link. Opening it mounts
     // the panel and triggers its account-data request.
     { ...accountPanelAction, id: 'accounts-panel-primary' },
@@ -247,7 +307,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
   ];
   const workspaceActions = [
     { id: 'navigator', label: `${isSidebarOpen ? 'Hide' : 'Show'} navigator`, icon: FolderOpen, tone: 'accent', shortcut: 'Alt N', onClick: toggleSidebar },
-    { id: 'reset-layout', label: 'Reset workspace layout', icon: LayoutGrid, tone: 'default', onClick: resetLayout },
+    { id: 'reset-layout', label: 'Reset workspace layout', icon: LayoutGrid, tone: 'default', shortcut: 'Alt T', onClick: handleResetWorkspace },
   ];
   const operations = [
     { id: 'dealing', label: 'Dealing', icon: Activity, tone: 'danger', path: '/dealing', onClick: go('/dealing') },
@@ -270,10 +330,11 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
     { id: 'fullscreen', label: 'Fullscreen', icon: Expand, shortcut: 'Alt R / F11', onClick: fullscreen },
     { id: 'print', label: 'Print current view', icon: Printer, onClick: () => window.print() },
     { id: 'copy-url', label: 'Copy current link', icon: Copy, tone: 'accent', onClick: () => copyText(window.location.href).catch(console.error) },
+    { id: 'shortcut-toolbox', label: 'Toolbox', icon: Keyboard, tone: 'info', shortcut: 'Ctrl /', onClick: () => setIsKeyboardShortcutsOpen(true) },
   ];
   const commandActions = [
     { id: 'new-account-command', label: 'Create new account', icon: Plus, tone: 'accent', category: 'Quick action', shortcut: 'Ctrl Shift N', onClick: () => setIsNewAccountModalOpen(true) },
-    { id: 'find-account-command', label: 'Find account by login', icon: Search, tone: 'info', category: 'Quick action', onClick: () => setIsAccountLookupOpen(true) },
+    { id: 'find-account-command', label: 'Find account by login', icon: Search, tone: 'info', category: 'Quick action', onClick: () => setOpenToolbarMenu('find-account') },
     ...primaryActions.map((action) => ({ ...action, category: 'Navigation' })),
     ...workspaceActions.map((action) => ({ ...action, category: 'Workspace' })),
     ...operations.map((action) => ({ ...action, category: 'Operations' })),
@@ -285,6 +346,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
     const onKeyDown = (event) => {
       const commandKey = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
+      if (event.key === 'Escape') setOpenToolbarMenu(null);
       if (event.altKey && !commandKey && key === 'r') {
         event.preventDefault();
         fullscreen();
@@ -293,36 +355,66 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
       if (!commandKey) return;
       if (key === 'k') { event.preventDefault(); setIsCommandOpen((open) => !open); }
       if (key === 'r') { event.preventDefault(); refreshData(); }
+      if (key === '/') { event.preventDefault(); setIsKeyboardShortcutsOpen(true); }
       if (event.shiftKey && key === 'n') { event.preventDefault(); setIsNewAccountModalOpen(true); }
     };
+    const onPointerDown = (event) => {
+      if (!event.target.closest?.('.manager-toolbar')) setOpenToolbarMenu(null);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
   }, [fullscreen, refreshData]);
 
   return (
     <>
       <nav className="manager-toolbar workspace-ui" aria-label="Primary workspace navigation">
         <div className="manager-toolbar-left">
-          <ActionMenu label="Workspace" icon={LayoutGrid} actions={workspaceActions} pathname={location.pathname} />
+          <ActionMenu id="workspace" label="Workspace" icon={LayoutGrid} actions={workspaceActions} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
           <span className="manager-toolbar-divider" />
           <div className="manager-primary-navigation">
-            {primaryActions.map((action) => <PrimaryLink key={action.id} action={action} pathname={location.pathname} />)}
+            {primaryActions.map((action) => (
+              <PrimaryLink key={action.id} action={action} pathname={location.pathname} onPrefetch={navigate.preload} />
+            ))}
           </div>
-          <ActionMenu label="Operations" icon={Gavel} actions={operations} pathname={location.pathname} />
-          <ActionMenu label="Management" icon={Settings2} actions={management} pathname={location.pathname} />
+          <ActionMenu id="operations" label="Operations" icon={Gavel} actions={operations} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="management" label="Management" title="Management" icon={Settings2} actions={management} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} showLabel={false} />
         </div>
 
         <div className="manager-toolbar-right">
-          <AccountLookup value={searchLoginId} onChange={(event) => setSearchLoginId(event.target.value)} onOpen={searchAccount} isOpen={isAccountLookupOpen} onOpenChange={setIsAccountLookupOpen} />
+          <AccountLookup
+            value={searchLoginId}
+            onChange={(event) => setSearchLoginId(event.target.value)}
+            onOpen={searchAccount}
+            isOpen={openToolbarMenu === 'find-account'}
+            onOpenChange={(open) => setOpenToolbarMenu(open ? 'find-account' : null)}
+          />
+          {!isOwnerConsoleOpen && (
+            <button
+              type="button"
+              className="manager-primary-link manager-owner-console-toggle"
+              onClick={toggleOwnerConsole}
+              title="Open Owner Console"
+              aria-label="Open Owner Console"
+            >
+              <PanelRightOpen size={17} strokeWidth={1.9} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="manager-primary-link manager-reset-layout"
+            onClick={handleResetWorkspace}
+            title="Reset workspace layout"
+            aria-label="Reset workspace layout"
+          >
+            <RotateCcw size={15} strokeWidth={1.9} />
+            <span>Reset</span>
+          </button>
           <button type="button" className="manager-new-account" onClick={() => setIsNewAccountModalOpen(true)}>
             <Plus size={16} strokeWidth={2.2} /> <span>New account</span>
-          </button>
-          <button type="button" className="manager-command-trigger" onClick={() => setIsCommandOpen(true)} title="Quick commands (Ctrl K)">
-            <Command size={16} /> <span>Quick search</span><kbd>Ctrl K</kbd>
-          </button>
-          <ActionMenu label="More" actions={utilities} pathname={location.pathname} />
-          <button type="button" className="manager-logout" onClick={() => onLogout?.()} title="Logout" aria-label="Logout">
-            <LogOut size={17} />
           </button>
         </div>
       </nav>
@@ -331,6 +423,7 @@ const ToolBar = ({ toggleSidebar, isSidebarOpen, toggleRightSidebar, isRightSide
       <AccountLimitModal isOpen={isAccountLimitModalOpen} onClose={() => setIsAccountLimitModalOpen(false)} />
       {activeSearchedAccount && <AccountDetailsModal account={activeSearchedAccount} onClose={() => setActiveSearchedAccount(null)} initialTab="Overview" />}
       {isCommandOpen && <CommandPalette onClose={() => setIsCommandOpen(false)} actions={commandActions} />}
+      {isKeyboardShortcutsOpen && <KeyboardShortcutsModal onClose={() => setIsKeyboardShortcutsOpen(false)} />}
     </>
   );
 };

@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getBrokerDealsPage } from '../../../services/api';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GridLoadingState from '../../../components/GridLoadingState';
+import {
+  DEALS_INITIAL_PARAMS,
+  WORKSPACE_DATA_STALE_MS,
+  WORKSPACE_QUERY_META,
+} from '../../../utils/workspaceQueryOptions.js';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtDate = (ts) => {
@@ -17,6 +23,37 @@ const fmtDate = (ts) => {
   });
 };
 
+const DEALS_SNAPSHOT_KEY = 'rtx5_deals_snapshot_v1';
+
+const getInitialDealsSnapshot = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(DEALS_SNAPSHOT_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return undefined;
+};
+
+const saveDealsSnapshot = (data) => {
+  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(DEALS_SNAPSHOT_KEY, JSON.stringify({
+        rows: data.rows.slice(0, 30),
+        total: data.total ?? data.rows.length,
+        hasMore: Boolean(data.hasMore),
+      }));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
+
 const SortIcon = ({ col, sortCol, sortDir }) => {
   if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
   return sortDir === 'asc'
@@ -25,13 +62,14 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter = 'All Symbols', entryFilter = 'All Entries', onRowsChange, onRowContext }) => {
-  const [sortCol, setSortCol] = useState('ticket');
-  const [sortDir, setSortDir] = useState('desc');
+  const queryClient = useQueryClient();
+  const [sortCol, setSortCol] = useState(DEALS_INITIAL_PARAMS.sort_by);
+  const [sortDir, setSortDir] = useState(DEALS_INITIAL_PARAMS.sort_dir);
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
   const [activeAccountTicket, setActiveAccountTicket] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('deals');
-  const pageSize = 30;
+  const pageSize = DEALS_INITIAL_PARAMS.limit;
 
   const filters = useMemo(() => ({
     ...(actionFilter !== 'All Actions' ? { action: actionFilter } : {}),
@@ -45,6 +83,20 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
     sort_dir: sortDir,
     filters,
   }), [search, sortCol, sortDir, filters]);
+
+  const isDefaultParams = !search
+    && actionFilter === 'All Actions'
+    && symbolFilter === 'All Symbols'
+    && entryFilter === 'All Entries'
+    && sortCol === DEALS_INITIAL_PARAMS.sort_by
+    && sortDir === DEALS_INITIAL_PARAMS.sort_dir;
+
+  const initialData = useMemo(() => {
+    if (!isDefaultParams) return undefined;
+    const cached = queryClient.getQueryData(['deals', 'page', DEALS_INITIAL_PARAMS]);
+    if (cached?.rows?.length > 0) return cached;
+    return getInitialDealsSnapshot();
+  }, [isDefaultParams, queryClient]);
 
   const {
     rows,
@@ -65,7 +117,57 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
     params,
     pageSize,
     enabled: hasRequestedData,
+    staleTime: WORKSPACE_DATA_STALE_MS,
+    meta: WORKSPACE_QUERY_META,
+    initialData,
+    placeholderData: (previousData) => {
+      const base = previousData || initialData || getInitialDealsSnapshot();
+      if (!base?.rows?.length) return undefined;
+      const s = String(search || '').trim().toLowerCase();
+      if (!s && (!filters || Object.keys(filters).length === 0)) {
+        return base;
+      }
+      let matchedRows = base.rows;
+      if (s) {
+        matchedRows = matchedRows.filter((r) =>
+          String(r.login || '').toLowerCase().includes(s) ||
+          String(r.ticket || '').toLowerCase().includes(s) ||
+          String(r.symbol || '').toLowerCase().includes(s) ||
+          String(r.accountName || '').toLowerCase().includes(s)
+        );
+      }
+      if (filters?.action && filters.action !== 'all actions') {
+        matchedRows = matchedRows.filter((r) => String(r.action || '').toLowerCase() === filters.action.toLowerCase());
+      }
+      if (filters?.symbol && filters.symbol !== 'All Symbols') {
+        matchedRows = matchedRows.filter((r) => String(r.symbol || '').toLowerCase() === filters.symbol.toLowerCase());
+      }
+      if (filters?.entry && filters.entry !== 'All Entries') {
+        matchedRows = matchedRows.filter((r) => String(r.entry || '').toLowerCase() === filters.entry.toLowerCase());
+      }
+      return {
+        rows: matchedRows,
+        total: matchedRows.length,
+        hasMore: false,
+      };
+    },
   });
+
+  useEffect(() => {
+    if (rows && rows.length > 0 && isDefaultParams && offset === 0) {
+      saveDealsSnapshot({ rows, total, hasMore });
+    }
+  }, [rows, total, hasMore, isDefaultParams, offset]);
+
+  // Prevent brief flash of loading skeleton on sub-120ms network fetches
+  const [showLoadingState, setShowLoadingState] = useState(false);
+  useEffect(() => {
+    if (isLoading && rows.length === 0) {
+      const timer = setTimeout(() => setShowLoadingState(true), 120);
+      return () => clearTimeout(timer);
+    }
+    setShowLoadingState(false);
+  }, [isLoading, rows.length]);
 
   useEffect(() => {
     if (onRowsChange) onRowsChange(rows);
@@ -102,7 +204,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col w-full overflow-hidden">
+    <div className="deals-grid ui-card flex flex-col w-full overflow-hidden">
       {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -111,7 +213,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           <strong>API Error.</strong> {error?.message || 'Failed to load deals.'}
         </div>
       )}
-      {isLoading && rows.length === 0 ? (
+      {isLoading && rows.length === 0 && showLoadingState ? (
         <GridLoadingState label="Loading deals…" />
       ) : (
       <div className="w-full overflow-x-auto">
@@ -132,6 +234,17 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
               {renderHeader('profit', 'Profit', 'right')}
               {renderHeader('commission', 'Commission', 'right')}
               {renderHeader('swap', 'Swap', 'right')}
+              {renderHeader('username', 'Username')}
+              {renderHeader('accountName', 'Account')}
+              {renderHeader('accountGroup', 'Group')}
+              {renderHeader('symbol', 'Symbol')}
+              {renderHeader('action', 'Action')}
+              {renderHeader('entry', 'Entry')}
+              {renderHeader('volume', 'Volume', 'right')}
+              {renderHeader('price', 'Price', 'right')}
+              {renderHeader('profit', 'Profit', 'right')}
+              {renderHeader('commission', 'Commission', 'right')}
+              {renderHeader('swap', 'Swap', 'right')}
               {renderHeader('fee', 'Fee', 'right')}
               {renderHeader('time', 'Time')}
               {renderHeader('comment', 'Comment')}
@@ -139,11 +252,11 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={17} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+              <tr><td colSpan={17} className="text-center py-16" style={{ color: 'var(--muted)', fontSize: '12px' }}>
                 {isIdle ? (
                   <div className="flex flex-col items-center gap-3">
-                    <span>Deals are not loaded.</span>
-                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
+                    <span style={{ fontSize: '12px' }}>Deals are not loaded.</span>
+                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm" style={{ fontSize: '12px' }}>
                       <RefreshCw size={13} />
                       {loadLabel}
                     </button>
@@ -174,7 +287,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   <td style={{ color: 'var(--text-3)' }}>{row.accountGroup}</td>
                   <td style={{ fontWeight: 500 }}>{row.symbol}</td>
                   <td className="capitalize">
-                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`} style={{ fontSize: '10px' }}>
                       {row.action}
                     </span>
                   </td>
@@ -185,7 +298,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.commission)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.swap)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.fee)}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{fmtDate(row.time)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: '12px' }}>{fmtDate(row.time)}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.comment}</td>
                 </tr>
               );
@@ -196,36 +309,36 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
       )}
 
       <div
-        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+        className="deals-grid-footer flex items-center justify-between px-4 py-2.5 shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: '10px' }}
       >
-        <span className="flex items-center gap-2">
-          <span>
+        <span className="flex items-center gap-2" style={{ fontSize: '10px' }}>
+          <span style={{ fontSize: '10px' }}>
             {isIdle ? (
               'Deals not loaded'
             ) : (
               <>
-                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{rangeStart}-{rangeEnd}</span>
                 {' '}of{' '}
-                <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span> deals
+                <span className="tabular font-medium" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{total ?? 'many'}</span> deals
               </>
             )}
           </span>
           {isFetching && !isLoading && (
-            <span className="ui-badge ui-badge-danger">
+            <span className="ui-badge ui-badge-danger" style={{ fontSize: '10px' }}>
               <AlertTriangle size={10} />
               Updating
             </span>
           )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>
             <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
             {isIdle ? 'Load' : 'Refresh'}
           </button>
-          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs">Next</button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
+          <span className="tabular px-1 pagination-page" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>
         </div>
       </div>
 

@@ -77,10 +77,10 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
               <Loader size={20} className="animate-spin" />
             </div>
             <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              <div className="position-history-heading font-semibold" style={{ color: 'var(--text)' }}>
                 Loading position history
               </div>
-              <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+              <div className="position-history-copy mt-1" style={{ color: 'var(--text-3)' }}>
                 Fetching closed trade records for this account.
               </div>
             </div>
@@ -100,10 +100,10 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
               <History size={20} strokeWidth={1.8} />
             </div>
             <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              <div className="position-history-heading font-semibold" style={{ color: 'var(--text)' }}>
                 No closed positions
               </div>
-              <div className="text-xs mt-1 leading-5" style={{ color: 'var(--text-3)' }}>
+              <div className="position-history-copy mt-1" style={{ color: 'var(--text-3)' }}>
                 Account <span className="tabular" style={{ color: 'var(--text-2)' }}>{login}</span> has no closed trade history.
               </div>
             </div>

@@ -22,17 +22,17 @@ const PositionHistoryEmptyState = ({ onSelectAccount }) => (
         <Search size={26} strokeWidth={1.8} />
       </div>
       <div className="mt-4">
-        <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
+        <h2 className="position-history-heading font-semibold" style={{ color: 'var(--text)' }}>
           Choose an account to get started
         </h2>
-        <p className="mt-1.5 text-sm leading-6" style={{ color: 'var(--text-3)' }}>
+        <p className="position-history-copy mt-1.5" style={{ color: 'var(--text-3)' }}>
           Enter the account login ID above to view its position history.
         </p>
       </div>
       <button type="button" onClick={onSelectAccount} className="ui-btn ui-btn-primary ui-btn-sm mt-5 inline-flex items-center gap-1.5">
-        <Search size={13} /> Enter login ID
+        <Search size={12} /> Enter login ID
       </button>
-      <div className="mt-6 pt-4 text-xs" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-3)' }}>
+      <div className="position-history-copy mt-6 pt-4" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-3)' }}>
         <span className="font-medium" style={{ color: 'var(--text-2)' }}>You’ll see:</span>
         <div className="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-1">
           <span>Closed trades</span>
@@ -84,22 +84,22 @@ const PositionsPage = () => {
   };
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+    <div className="position-history-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-center gap-2">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center border"
+            className="w-8 h-8 rounded-lg flex items-center justify-center border"
             style={{
               background: 'var(--accent-soft)',
               borderColor: 'var(--accent-border)',
               color: 'var(--accent-text)',
             }}
           >
-            <History size={20} />
+            <History size={16} />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Position History</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Search historical records by account login ID</p>
+            <h1 className="position-history-title" style={{ color: 'var(--text)' }}>Position History</h1>
+            <p className="position-history-subtitle" style={{ color: 'var(--text-3)' }}>Search historical records by account login ID</p>
           </div>
         </div>
       </div>
@@ -150,7 +150,7 @@ const PositionsPage = () => {
         <div className="flex items-center justify-between gap-2 lg:justify-end">
           {currentLogin ? (
             <div
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5"
               style={{
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',
@@ -162,7 +162,7 @@ const PositionsPage = () => {
               <span className="tabular" style={{ color: 'var(--text)' }}>{currentLogin}</span>
             </div>
           ) : (
-            <span className="text-xs" style={{ color: 'var(--muted)' }}>Select an account</span>
+            <span className="position-history-copy" style={{ color: 'var(--muted)' }}>Select an account</span>
           )}
           <div className="flex items-center gap-1.5">
             {currentLogin && (

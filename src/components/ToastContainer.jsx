@@ -9,14 +9,14 @@ const Toast = ({ notification }) => {
   const remove = useNotificationStore((state) => state.removeNotification);
 
   const icons = {
-    success: <CheckCircle className="w-5 h-5 text-emerald-400" />,
+    success: <CheckCircle className="w-5 h-5 text-blue-400" />,
     error: <AlertCircle className="w-5 h-5 text-red-400" />,
     info: <Info className="w-5 h-5 text-blue-400" />,
     warning: <AlertTriangle className="w-5 h-5 text-amber-400" />,
   };
 
   const bgColors = {
-    success: 'bg-emerald-500/10 border-emerald-500/20',
+    success: 'bg-blue-500/10 border-blue-500/20',
     error: 'bg-red-500/10 border-red-500/20',
     info: 'bg-blue-500/10 border-blue-500/20',
     warning: 'bg-amber-500/10 border-amber-500/20',

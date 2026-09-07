@@ -20,7 +20,7 @@ const SymbolManagementPage = () => {
   const [activeTab, setActiveTab] = useState('symbols');
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div className="symbol-management-page p-6 w-full h-full flex flex-col gap-4 overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="flex items-end justify-between shrink-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -39,7 +39,7 @@ const SymbolManagementPage = () => {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-t transition-colors"
+            className="symbol-management-tab flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium rounded-t transition-colors"
             style={{
               color: activeTab === id ? 'var(--accent-text)' : 'var(--text-3)',
               borderBottom: activeTab === id ? '2px solid var(--accent)' : '2px solid transparent',

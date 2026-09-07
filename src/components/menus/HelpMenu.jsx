@@ -11,11 +11,11 @@ import { MenuItem, MenuDivider } from './MenuItem';
 
 const HelpMenu = () => {
   return (
-    <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[240px] z-[60] transition-colors">
+    <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[240px] z-[60] transition-colors">
       <MenuItem icon={HelpCircle} text="Help Topics" shortcut="F1" iconColor="text-blue-500" />
-      <MenuItem icon={Lightbulb} text="What's New" iconColor="text-green-500" />
+      <MenuItem icon={Lightbulb} text="What's New" iconColor="text-blue-500" />
       <MenuDivider />
-      <MenuItem icon={Globe} text="RTX5 Platform" iconColor="text-green-600" />
+      <MenuItem icon={Globe} text="RTX5 Platform" iconColor="text-blue-600" />
       <MenuItem icon={Send} text="Official News Channel" iconColor="text-blue-400" />
       <MenuDivider />
       {/* Mocking the Mac/Linux icons with Lucide equivalents */}

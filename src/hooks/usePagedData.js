@@ -29,6 +29,8 @@ export default function usePagedData({
   refetchOnWindowFocus = false,
   refetchOnReconnect = false,
   keepRunningOnUnmount = false,
+  initialData,
+  placeholderData,
   meta,
 }) {
   const [pageState, setPageState] = useState(() => ({ page: 0, key: stableParamsKey(params) }));
@@ -54,7 +56,8 @@ export default function usePagedData({
     refetchOnMount,
     refetchOnWindowFocus,
     refetchOnReconnect,
-    placeholderData: (previousData) => previousData,
+    initialData,
+    placeholderData: placeholderData || ((previousData) => previousData || initialData),
     meta,
   });
 

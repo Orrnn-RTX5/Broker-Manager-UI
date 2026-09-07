@@ -23,10 +23,10 @@ const MetricCard = ({ icon, label, value, hint }) => (
       {icon}
     </div>
     <div className="online-users-metric-content min-w-0 flex-1 flex flex-col self-stretch">
-      <div className="online-users-metric-label min-h-8 text-xs leading-4 uppercase tracking-wider font-medium" style={{ color: 'var(--text-3)' }}>
+      <div className="online-users-metric-label min-h-8 text-xs leading-4 uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
         {label}
       </div>
-      <div className="online-users-metric-value text-2xl leading-7 font-semibold tabular mt-1" style={{ color: 'var(--text)' }}>
+      <div className="online-users-metric-value tabular mt-1" style={{ color: 'var(--text)' }}>
         {value}
       </div>
       <div className="online-users-metric-hint min-h-4 text-[11px] leading-4 mt-auto truncate" style={{ color: 'var(--muted)' }}>
@@ -51,7 +51,7 @@ const OnlineUsersDashboard = () => {
     <div className="online-users-page p-6 w-full h-full flex flex-col gap-5 overflow-y-auto">
       <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
         <div>
-          <h1 className="online-users-title text-2xl font-semibold" style={{ color: 'var(--text)' }}>
+          <h1 className="online-users-title" style={{ color: 'var(--text)' }}>
             Online Users
           </h1>
           <p className="online-users-subtitle text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>

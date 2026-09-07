@@ -3,25 +3,27 @@ import { fetchManagerApi } from '../services/managerFetch';
 import authService from '../services/authService';
 import { decidePermission, isPermissionResolved } from '../utils/permissions';
 import { getPermissionSessionQueryKey } from '../utils/sessionFingerprint';
+import { MANAGER_API } from '../config/managerApiContract.js';
+import { normalizeManagerSession } from '../utils/managerSession.js';
 
 // Client-side RBAC. This is a UX / defence-in-depth layer only — every dangerous
 // route and action is also gated server-side by RequirePermission middleware —
 // but it stops non-privileged managers from reaching dangerous views and
 // money/state buttons.
 //
-// Source of truth: the backend /SessionInfo endpoint returns
+// Source of truth: the documented manager auth/me endpoint returns
 //   { is_admin: bool, role: string, permissions: string[] }
-// where admins receive ["*"]. We additionally read is_admin synchronously from
-// the login session blob so admins are never blocked while /SessionInfo loads.
+// (directly or in a data/session envelope). We additionally read is_admin
+// synchronously from the login session blob so admins are never blocked while it loads.
 //
 // IMPORTANT (NEW-02 fix): for a NON-admin we are fail-CLOSED once the permission
-// set has resolved (loaded OR errored). A /SessionInfo error therefore DENIES;
+// set has resolved (loaded OR errored). A session-info error therefore DENIES;
 // it no longer grants every gate. `is_admin` from the login blob is treated as a
 // UX convenience for admins only — it can never turn a denial into a grant for a
 // gated permission because the backend remains the authority.
 
 const fetchSessionInfo = async () => {
-  const res = await fetchManagerApi('/SessionInfo', {
+  const res = await fetchManagerApi(MANAGER_API.session, {
     headers: { accept: 'application/json' },
   });
   const text = await res.text();
@@ -29,10 +31,10 @@ const fetchSessionInfo = async () => {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('Invalid SessionInfo response');
+    throw new Error('Invalid manager session response');
   }
   if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to load session info');
-  return data;
+  return data?.data || data?.session || data;
 };
 
 export const usePermissions = () => {
@@ -52,8 +54,9 @@ export const usePermissions = () => {
     retry: 1,
   });
 
-  const isAdmin = claims.isAdmin || data?.is_admin === true;
-  const permissions = Array.isArray(data?.permissions) ? data.permissions : [];
+  const manager = normalizeManagerSession(data, claims);
+  const isAdmin = manager.isAdmin;
+  const permissions = manager.permissions;
 
   const state = { isAdmin, permissions, isLoading, isError };
   const resolved = isPermissionResolved(state);
@@ -73,7 +76,8 @@ export const usePermissions = () => {
 
   return {
     isAdmin,
-    role: data?.role || (claims.isAdmin ? 'admin' : ''),
+    role: manager.role,
+    manager,
     permissions,
     loading: isLoading && !isAdmin,
     resolved,

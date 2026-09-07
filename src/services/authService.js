@@ -4,6 +4,7 @@
  */
 
 import { buildManagerApiUrl } from '../config/endpoints.js';
+import { MANAGER_API } from '../config/managerApiContract.js';
 import { desktopFetch } from './desktopHttp.js';
 
 const TOKENS = {
@@ -85,9 +86,9 @@ const getSessionToken = () => {
 const getLocalAuthToken = () => getStorageItem('localStorage', TOKENS.AUTH);
 
 // Synchronous read of the role claims the login endpoint embedded in the
-// session blob (the /api/v2/*/login response is spread into `auth`). Used by the
+// session blob (the login response is spread into `auth`). Used by the
 // client RBAC layer for an immediate admin/manager decision before the richer
-// /SessionInfo permission set has loaded. The backend remains the authority.
+// manager session permission set has loaded. The backend remains the authority.
 export const getSessionClaims = () => {
   const session = getSessionAuth() || {};
   return {
@@ -235,7 +236,7 @@ export const refreshSession = async () => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      const response = await desktopFetch(buildManagerApiUrl('/api/v1/auth/refresh'), {
+      const response = await desktopFetch(buildManagerApiUrl(MANAGER_API.refresh), {
         method: 'POST',
         headers: {
           'accept': 'application/json',

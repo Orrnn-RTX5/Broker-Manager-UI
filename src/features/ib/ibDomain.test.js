@@ -15,8 +15,6 @@ import {
   validateClientLinkInput,
   validateCommissionPlanInput,
   validateIBCreateInput,
-  validatePayoutDecisionInput,
-  validatePayoutRequestInput,
 } from './ibDomain.js';
 
 test('normalizeRecords accepts backend list wrappers', () => {
@@ -185,9 +183,3 @@ test('commission plan validation enforces supported types and numeric bounds', (
   );
 });
 
-test('payout validation requires ids and rejection reason', () => {
-  assert.deepEqual(validatePayoutRequestInput({ login: 2001, amount: '10' }), []);
-  assert.deepEqual(validatePayoutRequestInput({ login: 2001, amount: '-1' }), ['Amount must be greater than zero when provided.']);
-  assert.deepEqual(validatePayoutDecisionInput({ payout_id: '', action: 'approve' }), ['Payout ID must be a positive integer.']);
-  assert.deepEqual(validatePayoutDecisionInput({ payout_id: 9, action: 'reject', reason: '' }), ['Rejection reason is required.']);
-});

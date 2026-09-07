@@ -110,13 +110,13 @@ const DealerQueuePage = () => {
   };
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+    <div className="dealer-queue-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
         <div className="flex items-center gap-2">
           <Gavel size={18} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
+            <h1 className="dealer-queue-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
+            <p className="dealer-queue-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
           </div>
         </div>
         <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5 mt-2 md:mt-0" onClick={refetch} disabled={isLoading}>
@@ -124,23 +124,24 @@ const DealerQueuePage = () => {
         </button>
       </div>
 
-      <div className="relative w-full max-w-xs">
+      <div className="dealer-queue-search relative w-full max-w-xs">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input type="text" placeholder="Search ticket, login, symbol…" value={search}
           onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" style={{ paddingLeft: 32 }} />
       </div>
 
-      <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+      <div className="dealer-queue-grid ui-card flex flex-col w-full flex-1 overflow-hidden">
         {error && (
-          <div className="px-4 py-2 text-xs" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
+          <div className="dealer-queue-error px-4 py-2 text-[10px]" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
             <AlertTriangle size={12} className="inline mr-1" /> {error}
           </div>
         )}
         {isLoading && filtered.length === 0 ? (
           <GridLoadingState label="Loading dealer queue…" />
         ) : (
-        <div className="w-full overflow-x-auto flex-1">
-          <table className="ui-grid min-w-max">
+        <div className="dealer-queue-table-shell relative w-full flex-1 min-h-0">
+          <div className="dealer-queue-scroll w-full h-full overflow-x-auto">
+            <table className="ui-grid min-w-max">
             <thead>
               <tr>
                 <th>ID</th>
@@ -157,22 +158,7 @@ const DealerQueuePage = () => {
               </tr>
             </thead>
             <tbody>
-              {isLoading && filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading queue…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                    {rawData.length === 0 ? (
-                      'Queue is empty'
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        No queued orders match “{search}”.
-                        <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => setSearch('')}>Clear search</button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ) : (
+              {filtered.length > 0 && (
                 filtered.map((row, idx) => {
                   const isBuy = (row.side || '').toLowerCase() === 'buy';
                   return (
@@ -192,7 +178,7 @@ const DealerQueuePage = () => {
                       </td>
                       <td style={{ fontWeight: 500 }}>{row.symbol}</td>
                       <td>
-                        <span className={`ui-badge text-[9px] px-1 py-0 ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                        <span className={`ui-badge text-[10px] px-1 py-0 ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
                           {(row.side || '').toUpperCase()}
                         </span>
                       </td>
@@ -228,11 +214,24 @@ const DealerQueuePage = () => {
                 })
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
+          {filtered.length === 0 && (
+            <div className="dealer-queue-empty-state" style={{ color: 'var(--muted)' }}>
+              {rawData.length === 0 ? (
+                'Queue is empty'
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  No queued orders match “{search}”.
+                  <button className="ui-btn ui-btn-secondary ui-btn-xs" onClick={() => setSearch('')}>Clear search</button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         )}
 
-        <div className="flex items-center px-4 py-2.5 text-xs shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
+        <div className="dealer-queue-footer flex items-center px-4 py-2.5 text-[10px] shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           {filtered.length} item{filtered.length !== 1 ? 's' : ''} in queue
         </div>
       </div>

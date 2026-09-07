@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle2, AlertCircle, Loader2, UserPlus, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
-import { fetchManagerApi } from '../../services/managerFetch';
+import { createManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
@@ -209,10 +209,8 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     setLoading(true);
     setResult(null);
 
-    // POST the payload as a JSON body so the cleartext master/investor passwords
-    // (and all other fields) stay out of the request URL, server access logs, and
-    // browser history (fe-manager-ui-03 / fe-manager-ui-08). The backend exposes
-    // /AccountCreate over POST JSON, mirroring /UserPasswordChange.
+    // POST the payload as JSON to the versioned account writer so passwords and
+    // account fields never appear in request URLs or browser history.
     const payload = {
       master_pass: form.master_pass,
       investor_pass: form.investor_pass,
@@ -227,22 +225,8 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     };
 
     try {
-      const response = await fetchManagerApi('/AccountCreate', {
-        method: 'POST',
-        headers: { accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        data = null;
-      }
-
-      if (!response.ok || !Number.isFinite(Number(data?.login))) {
-        throw new Error(data?.error || data?.message || responseText || 'Account creation failed.');
-      }
+      const data = await createManagerAccount(payload);
+      if (!Number.isFinite(Number(data?.login))) throw new Error(data?.message || 'Account creation failed.');
       setResult({ success: true, data });
       onSuccess?.(data);
     } catch (err) {

@@ -1,0 +1,200 @@
+MANAGER API -> FRONTEND INTEGRATION STATUS
+Audit date: 2026-09-07 (Asia/Calcutta)
+Frontend checked: http://localhost:5173
+Broker/session checked: TEST, Manager 9000
+Source contract: pasted manager endpoint catalog (347 method entries, 268 unique path templates)
+
+SECURITY NOTE
+The supplied password, access token, and refresh token are intentionally not stored in this file or in application source.
+
+STATUS SUMMARY
+- 87 documented path templates now have a frontend client reference or a dynamic route builder.
+- This number is not a completion percentage. The backend catalog contains many aliases, deprecated GET writers, format variants, public health routes, and optional product modules.
+- All 19 active manager pages were opened in a real browser session and rendered without JavaScript page errors. A separate focused check found the report-summary 404 documented under BACKEND BLOCKERS.
+- No real account, order, balance, group, IB, or symbol mutation was executed during verification. Write contracts were checked using automated tests and non-mutating/invalid validation probes only.
+
+COMPLETED / INTEGRATED
+
+1. Authentication and session
+- POST /api/v1/manager/auth/login (frontend moved from the old v2 login route)
+- GET /api/v1/manager/auth/me
+- POST /api/v1/manager/auth/refresh
+- POST /api/v1/manager/ws-ticket
+
+2. Accounts
+- Account list, online accounts, summaries, full details, batch details, limits, positions, and history are connected.
+- POST /api/v1/manager/accounts is used for account creation.
+- PATCH /api/v1/manager/accounts/{login} is used for editable account fields.
+- DELETE /api/v1/manager/accounts/{login} is used for account deletion.
+- POST /UserArchive and POST /UserRestore replaced their mutating GET calls.
+- POST /UserPasswordCheck and POST /UserPasswordChange keep passwords out of URLs.
+
+3. Account finance
+The Account Details -> Balance tab now provides all four canonical actions, with permission checks, amount validation, confirmation, and UUID idempotency keys:
+- POST /api/v1/manager/transactions/deposit
+- POST /api/v1/manager/transactions/withdraw
+- POST /api/v1/manager/transactions/credit
+- POST /api/v1/manager/transactions/transfer
+
+4. Trading and dealer operations
+- POST /api/v1/manager/orders places BUY/SELL manager market orders from Account Details -> Trade.
+- GET /api/v1/manager/accounts/{login}/orders/by-client-id/{client_order_id} has a client method for durable status lookup.
+- POST /api/v1/manager/orders/{ticket}/close closes a selected position/order.
+- Dealer queue, restrictions, order/deal/position views, position history, and open positions are connected.
+- Documented safe POST successors are now used for OrderModify, OrderDelete, OrderApprove, OrderReject, OrderPriceChange, DealRollback, PositionCommentChange, PositionFlip, PositionForceCloseAll, PositionPriceChange, PositionVolumeChange, AccountRestrictSet, AccountRestrictClear, AccountSpreadSet, AccountExecutionSet, and AccountBookSet.
+- Legacy GET /PositionForceClose remains only because the catalog has no safe POST successor and the canonical force-close endpoint is retired on the live broker (see BACKEND BLOCKERS).
+
+5. IB management
+- IB list, detail, create, status update, remove, tree, client link/unlink, commission plans, commission ledger/pay, and stats are connected to the documented endpoints.
+- The dead IB payout modal and its unused validators were removed. Its three assumed endpoints are absent from the supplied catalog and return 404 on the live broker.
+
+6. Symbols, groups, dashboard, and navigation
+- Documented symbol lists/parameters, categories, mappings, category-safe POST delete, and symbol cloning are connected.
+- Group list/detail/edit screens and the available extended symbol configuration screens remain connected (contract omissions are listed below).
+- Dashboard and operational grids use real manager data; no fake KPI fallback was added.
+- Broken Window menu links (/orders and /settings) were removed/fixed. The menu now shows only real frontend destinations for clients, accounts, positions, orders, deals, dealer queue, restrictions, groups, IB, and symbol management.
+
+LIVE VERIFICATION RESULTS
+- Login: POST /api/v1/manager/auth/login -> 200.
+- Session: GET /api/v1/manager/auth/me -> 200.
+- WebSocket tickets: POST /api/v1/manager/ws-ticket -> 200.
+- Main reads returned 200: AccountsOnline, AccountDetailsMany, AccountLimitStatus, GroupList, SymbolCategoryList, SymbolsList, SymbolsParams, ConnectionStatus, BrokerOrders, BrokerDeals, DealerQueueList, AccountRestrictList, PositionsAll, and IBList.
+- Extra symbol tabs opened without failed responses. SymbolMappingList, SwapFreeGroupList, and SymbolVisibilityList returned 200.
+- Account Details displayed Deposit, Withdraw, Credit, Transfer, destination-account input, and BUY/SELL order actions.
+- Automated tests: 205/205 after adding account, transaction, and order contract coverage and removing obsolete payout tests.
+- Production web build: successful.
+- Targeted lint for every API-integration file: successful.
+- Repository-wide lint: still fails on 33 older errors outside this API integration (mostly unused variables and React effect rules in analytics/data-grid utility files).
+
+BACKEND BLOCKERS / CONTRACT MISMATCHES
+
+1. GET /reports/v1/summary is integrated, but the live TEST broker returned HTTP 404 during focused browser verification. The dashboard falls back to other live account metrics, but the report-summary KPI source cannot work until the backend route is deployed/fixed.
+
+2. POST /api/v1/manager/positions/{ticket}/force-close returned HTTP 409 with code GO_EXECUTION_RETIRED on the live broker. The response says to use a supported Rust command. The frontend therefore uses POST /api/v1/manager/orders/{ticket}/close for normal selected-position close actions.
+
+3. /IBPayoutRequest, /IBPayoutApprove, and /IBPayoutReject are not in the supplied manager catalog and returned 404. The inactive frontend code that assumed these routes was removed. Add a documented payout API before rebuilding this UI.
+
+4. The supplied catalog contains endpoint names and descriptions but no request/response schemas. New high-risk write screens should not be guessed from names alone. Publish OpenAPI request bodies, enums, error models, and idempotency behavior before adding the remaining finance/payment/product mutations.
+
+5. Existing UI routes missing from the supplied catalog:
+- Groups: /GroupList (live read returned 200), /GroupCreate, /GroupUpdate, /GroupDelete, /GroupStats, /GroupMoveAccounts.
+- Extended symbols: /SymbolAdd, /SymbolUpdate, /SymbolEnable, /SymbolDisable, /SessionOverrideList, /SessionOverrideSet, /SessionOverrideDelete, /SymbolSessionGet, /SymbolSessionSet, /DynamicLeverageList, /DynamicLeverageCreate, /DynamicLeverageDelete, /CommissionScheduleList, /CommissionScheduleCreate, /CommissionScheduleDelete, /SwapFreeGroupList, /SwapFreeGroupSet, /SwapFreeGroupDelete, /MarketDepthConfigGet, /MarketDepthConfigSet, /SymbolVisibilityList, /SymbolVisibilityGet, /SymbolVisibilitySet.
+- Several of those extended read endpoints returned 200 in the UI, so they were not removed. The backend catalog should be updated. GroupDelete, GroupMoveAccounts, SymbolAdd/Update/Enable/Disable, and some delete endpoints are currently undocumented GET mutations; the backend should provide documented POST/PATCH/DELETE successors.
+
+REMAINING FRONTEND BUSINESS MODULES
+These are real documented capabilities that have no complete manager screen/action yet. Build only the modules the product actually needs.
+
+Payments (high priority if managers process deposits/withdrawals)
+- POST /api/v1/manager/payment-requests/deposits/{id}/approve
+- POST /api/v1/manager/payment-requests/deposits/{id}/reject
+- POST /api/v1/manager/payment-requests/withdrawals/{id}/approve
+- POST /api/v1/manager/payment-requests/withdrawals/{id}/reject
+- POST /api/v1/manager/payment-requests/transactions/{id}/refund
+- The catalog does not include list/detail endpoints for payment requests, so a queue screen cannot be completed from this catalog alone.
+
+Reports and statements
+- GET /reports/v1/accounts/{login}/daily
+- GET /reports/v1/accounts/{login}/equity
+- GET /reports/v1/accounts/{login}/export
+- GET /reports/v1/accounts/{login}/statement
+- GET /reports/v1/daily
+- GET /DailyRequest, /DailyRequestEx, /DailyRequestLight, /DailyRequestLightEx
+- GET /DailyRequestByGroup, /DailyRequestByGroupEx, /DailyRequestLightByGroup, /DailyRequestLightByGroupEx
+- GET /DailyRequestByLogins, /DailyRequestByLoginsEx, /DailyRequestLightByLogins, /DailyRequestLightByLoginsEx
+- GET /Segregated
+- POST /api/v1/manager/grok/chat
+
+Bulk finance and accounting operations
+- /BulkCredit, /BulkDeposit, /BulkWithdraw, /BulkOperationStatus
+- /CommissionCharge, /CorrectionApply, /DividendPay, /TaxWithhold
+- /TransferFunds is a legacy alternative; canonical account-to-account transfer is already integrated.
+
+Communications and maintenance
+- /AnnouncementCreate, /AnnouncementDelete, /AnnouncementGet, /AnnouncementList
+- /EmailTemplateCreate, /EmailTemplateList, /EmailTemplateTest, /EmailTemplateUpdate
+- /MailList, /MailSend, /MailSendBulk
+- /MaintenanceGet, /MaintenanceSet
+- /EmailSend, /MessengerSend, /NotificationSend
+
+Bonus system
+- /BonusAward, /BonusBulkAward, /BonusCancel, /BonusExpiredProcess
+- /BonusList, /BonusListAll, /BonusProgress
+- /BonusPlanCreate, /BonusPlanDelete, /BonusPlanList, /BonusPlanUpdate
+
+Copy trading
+- /CopyFollowerAdd, /CopyFollowerList, /CopyFollowerPause, /CopyFollowerResume, /CopyFollowerStop, /CopyFollowerUpdate
+- /CopyMasterCreate, /CopyMasterDelete, /CopyMasterGet, /CopyMasterList, /CopyMasterUpdate
+- /CopyLeaderboard, /CopyStats, /CopyTradeLog
+
+Prop-firm management
+- /PropAccountEnroll, /PropAccountFail, /PropAccountGet, /PropAccountGetByLogin, /PropAccountList, /PropAccountReset, /PropAccountStats
+- /PropChallengeCreate, /PropChallengeDelete, /PropChallengeGet, /PropChallengeList, /PropChallengeUpdate
+- /PropPayoutApprove, /PropPayoutList, /PropPayoutReject, /PropPayoutRequest
+- /PropStats
+
+Workspace/templates
+- /ChartDrawingDelete, /ChartDrawingDeleteAll, /ChartDrawingList, /ChartDrawingSave
+- /IndicatorTemplateDelete, /IndicatorTemplateList, /IndicatorTemplateSave
+- /TradeTemplateDelete, /TradeTemplateList, /TradeTemplateSave
+- /WorkspaceDelete, /WorkspaceDuplicate, /WorkspaceGet, /WorkspaceList, /WorkspaceSave
+
+Market-data tools not used by the current manager UI
+- /ChartRequest, /IsQuoteSession, /IsTradeSession
+- /Subscribe, /SubscribeMany, /Unsubscribe, /UnsubscribeMany
+- /SummaryGet, /SummaryGetAll
+- /SymbolGroupExecutionSet, /SymbolGroups, /SymbolGroupsForUserGroup, /SymbolSessions
+- /TickHistory, /TickHistoryByTime, /TickLast, /TickStat
+- The current UI uses its configured WebSocket feed for live prices. GET/POST /TickAdd is explicitly retired and should not be integrated.
+
+Trading/deal batch and specialist actions
+- /OrderActivate and /OrderCloseAll
+- /DealDeleteBatch, /DealHistory, /DealPerformBatch, /DealRequestByLogins
+- /PendingOrderHistory and /PositionsMT4Format
+- /DealModify, /ModifyDeal, and /ModifyOrder are aliases of already integrated behavior and do not need separate UI.
+- /OrderSend is superseded by POST /api/v1/manager/orders and does not need separate UI.
+
+Subscriptions
+- /SubscribeOrderProfit, /SubscribeOrderProfitInterval, /SubscribeOrderProfitIntervalPost
+- /UnsubscribeOrderProfit, /UnsubscribeOrderProfitInterval, /UnsubscribeOrderProfitIntervalPost
+
+Server information, journal, and news
+- /Holidays, /News, /ServerTimezone
+- /TradeJournal
+- /api/v1/calendar/today
+- /news/v1/articles, /news/v1/breaking, /news/v1/calendar, /news/v1/calendar/week
+
+Gateway / liquidity-provider administration
+- GET/POST /api/v1/gateway/lp/central/config
+- POST /api/v1/gateway/lp/central/connect
+- POST /api/v1/gateway/lp/connect
+- POST /api/v1/gateway/lp/disconnect
+- GET /api/v1/gateway/lp/required-fields
+- GET /api/v1/gateway/lp/routing-options
+- GET /api/v1/gateway/lp/status
+
+Historical data service (catalog says port 8098)
+- /history/candles/{symbol}
+- /history/candles/{symbol}/latest
+- /history/ticks/{symbol}
+
+Account/connection conveniences that are not required by the current UI
+- /AccountCreateAndDeposit: optional convenience; canonical create plus canonical deposit is already available.
+- /UserDetails and /UserDetailsMany: current UI uses AccountDetails/AccountDetailsMany.
+- /Disconnect: local logout works; use this only if the backend requires explicit token invalidation.
+- /IsConnected and /SessionInfo: current UI uses auth/me and ConnectionStatus.
+- /SymbolBaseList: no base-symbol picker is implemented.
+- /CommissionScheduleList_filtered is marked by the catalog itself as replaced by /CommissionScheduleList.
+
+INTENTIONALLY NOT FRONTEND FEATURES
+- /livez, /readyz, /Ping, /ReadMe are infrastructure health/documentation routes.
+- /MemoryUsage and /StartTimeUtc are service diagnostics unless an operations screen is requested.
+- Legacy /AccountCreate, /AccountDelete, /UserUpdate, /BalanceAdjustment, and /Deposit are not needed because canonical versioned writers are integrated.
+- Deprecated cleartext-URL GET variants for password operations are intentionally not used.
+- Where the catalog offers both a mutating GET and a safe POST successor, the frontend should use only the POST successor.
+
+RECOMMENDED NEXT ORDER
+1. Backend fixes/deploys reports/v1/summary and publishes schemas.
+2. Backend supplies payment-request list/detail APIs; then build Payments Processing.
+3. Build account statements/equity/report exports.
+4. Choose which optional product modules are actually sold/enabled: Bonus, Copy Trading, Prop Firm, Communications, Gateway, Workspace.
+5. Add backend-safe successors for undocumented group/symbol GET mutations before further frontend work.

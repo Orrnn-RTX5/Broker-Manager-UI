@@ -9,18 +9,18 @@ import {
 test('dashboard declares the existing backend endpoints used for live KPI values', () => {
   assert.equal(DASHBOARD_PLACEHOLDER_MODE, false);
   assert.deepEqual([...DASHBOARD_BACKEND_ENDPOINTS], [
-    '/DashboardSummary',
+    '/reports/v1/summary',
     '/AccountLimitStatus',
     '/AccountDetailsMany',
     '/PositionsAll',
   ]);
 });
 
-test('dashboard tracks aggregation endpoints still required for chart and cashflow metrics', () => {
+test('dashboard tracks capabilities still absent from the manager contract', () => {
   assert.deepEqual([...DASHBOARD_REQUIRED_AGGREGATION_ENDPOINTS], [
-    '/Dashboard/AccountsSeries',
-    '/Dashboard/CashflowSeries',
-    '/Dashboard/AccountsBySource',
-    '/Dashboard/LiquidityProviders',
+    'intraday account/equity series',
+    'account source breakdown',
+    'liquidity provider aggregate',
+    'approval queue aggregate',
   ]);
 });

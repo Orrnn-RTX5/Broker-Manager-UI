@@ -4,6 +4,10 @@ import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
 import MarginCallsSidebar from '../components/MarginCallsSidebar';
 import MarketData from '../components/Popups/MarketData';
+import WorkspaceTabs from '../components/shell/WorkspaceTabs';
+import StatusBar from '../components/shell/StatusBar';
+import OwnerConsole from '../features/owner/OwnerConsole';
+import TerminalDock from '../features/terminal/TerminalDock';
 import useThemeStore from '../store/themeStore';
 import useSymbolStore from '../store/symbolStore';
 
@@ -14,11 +18,15 @@ import GlobalLoader from '../components/GlobalLoader';
 import ToastContainer from '../components/ToastContainer';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { startPositionSync, stopPositionSync } from '../services/positionSync';
+import { resetWorkspaceLayout, toggleDocumentFullscreen } from '../utils/quickSettingsActions.js';
+import '../styles/command-center.css';
 
 // ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
 const PANEL_ACCOUNTS   = 'accounts';
 const PANEL_MARKET_DATA= 'market_data';
+const PANEL_OWNER      = 'owner_console';
+const PANEL_TERMINAL   = 'terminal';
 
 // ─── Initial panel configuration ─────────────────────────────────────────────
 const INITIAL_PANELS = {
@@ -28,7 +36,7 @@ const INITIAL_PANELS = {
     defaultPosition: 'left',
     visible: true,
     order: 1,
-    size: { width: 270, height: '100%' },
+    size: { width: 216, height: '100%' },
   },
   [PANEL_ACCOUNTS]: {
     title: 'Accounts',
@@ -44,20 +52,41 @@ const INITIAL_PANELS = {
     visible: true,
     canMaximize: true,
     order: 0,
-    size: { width: 336, height: '100%' },
+    size: { width: 244, height: '100%' },
+  },
+  [PANEL_OWNER]: {
+    title: 'Owner Console',
+    icon: 'owner',
+    defaultPosition: 'right',
+    visible: true,
+    size: { width: 310, height: '100%' },
+  },
+  [PANEL_TERMINAL]: {
+    title: 'Operations Terminal',
+    icon: 'terminal',
+    defaultPosition: 'bottom',
+    visible: true,
+    canMaximize: true,
+    size: { width: '100%', height: 'clamp(118px, 15vh, 148px)' },
   },
 };
 
 // ─── Inner layout (needs docking context) ────────────────────────────────────
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
-  const { togglePanel, panels, resetLayout } = useDockingContext();
+  const { togglePanel, updatePanel, panels, resetLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
+  const [connectionTelemetry, setConnectionTelemetry] = useState({
+    connectionData: null,
+    pingMs: null,
+    trafficKb: 13.0,
+  });
 
   const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
   const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
   const isMarketDataOpen = panels[PANEL_MARKET_DATA]?.visible ?? false;
+  const isOwnerConsoleOpen = panels[PANEL_OWNER]?.visible ?? true;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -78,17 +107,21 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     return () => stopPositionSync();
   }, [isAuthenticated]);
 
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.error);
-      return;
-    }
-    document.exitFullscreen?.().catch?.(console.error);
-  }, []);
+  const toggleFullscreen = useCallback(() => toggleDocumentFullscreen(document), []);
 
   const toggleMarketWatch = useCallback(() => {
     togglePanel(PANEL_MARKET_DATA);
   }, [togglePanel]);
+
+  const toggleAccountsPanel = useCallback(() => {
+    const isOpeningAccounts = !panels[PANEL_ACCOUNTS]?.visible;
+
+    if (isOpeningAccounts && panels[PANEL_OWNER]?.visible) {
+      updatePanel(PANEL_OWNER, { visible: false, maximized: false });
+    }
+
+    togglePanel(PANEL_ACCOUNTS);
+  }, [panels, togglePanel, updatePanel]);
 
   const handleViewAction = useCallback((action) => {
     switch (action) {
@@ -99,8 +132,11 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         togglePanel(PANEL_NAVIGATOR);
         break;
       case 'margin-calls':
-        togglePanel(PANEL_ACCOUNTS);
+        toggleAccountsPanel();
         break;
+      case 'reset-layout':
+        resetWorkspaceLayout(resetLayout, navigate);
+        return true;
       case 'queue':
         navigate('/dealer/queue');
         break;
@@ -109,12 +145,11 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         setIsToolBarVisible((visible) => !visible);
         break;
       case 'fullscreen':
-        toggleFullscreen();
-        break;
+        return toggleFullscreen();
       default:
         break;
     }
-  }, [navigate, toggleMarketWatch, toggleFullscreen, togglePanel]);
+  }, [navigate, toggleAccountsPanel, toggleMarketWatch, toggleFullscreen, togglePanel, resetLayout]);
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -138,6 +173,12 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         return;
       }
 
+      if (e.altKey && !ctrlKey && !e.shiftKey && key === 't') {
+        e.preventDefault();
+        handleViewAction('reset-layout');
+        return;
+      }
+
       if (ctrlKey) {
         const viewShortcutActions = {
           m: 'market-watch',
@@ -155,7 +196,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
       if (key === 'F11'.toLowerCase() && !ctrlKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
-        handleViewAction('fullscreen');
+        handleViewAction('fullscreen')?.catch?.(console.error);
         return;
       }
 
@@ -188,11 +229,13 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
     [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
     [PANEL_MARKET_DATA]: <MarketData compact />,
+    [PANEL_OWNER]: <OwnerConsole />,
+    [PANEL_TERMINAL]: <TerminalDock />,
   };
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="rtx5-command-shell flex flex-col h-screen overflow-hidden"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
       <GlobalLoader />
@@ -203,28 +246,40 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         onLogin={onLogin}
         onLogout={onLogout}
         onViewAction={handleViewAction}
+        onStatusChange={setConnectionTelemetry}
       />
       {isToolBarVisible && (
         <ToolBar
           toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
           isSidebarOpen={isNavigatorOpen}
-          toggleRightSidebar={() => togglePanel(PANEL_ACCOUNTS)}
+          toggleRightSidebar={toggleAccountsPanel}
           isRightSidebarOpen={isAccountsOpen}
           toggleMarketData={toggleMarketWatch}
           isMarketDataOpen={isMarketDataOpen}
+          toggleOwnerConsole={() => togglePanel(PANEL_OWNER)}
+          isOwnerConsoleOpen={isOwnerConsoleOpen}
           resetLayout={resetLayout}
           onLogout={onLogout}
         />
       )}
 
       {/* ── Main dockable workspace ── */}
-      <div className="flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="cc-shell-workspace flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout panelContents={panelContents}>
-          <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
-            {children}
+          <div className="cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
+            <WorkspaceTabs />
+            <div className="cc-route-viewport">
+              {children}
+            </div>
           </div>
         </DockLayout>
       </div>
+      <StatusBar
+        isAuthenticated={isAuthenticated}
+        connectionData={connectionTelemetry.connectionData}
+        pingMs={connectionTelemetry.pingMs}
+        trafficKb={connectionTelemetry.trafficKb}
+      />
     </div>
   );
 }

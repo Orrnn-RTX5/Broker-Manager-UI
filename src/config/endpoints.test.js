@@ -49,7 +49,8 @@ test('manager API path keeps proxy prefix for web/public backend mode', () => {
 test('native versioned API paths never receive the manager proxy prefix', () => {
   assert.equal(buildManagerApiPath('/api/v2/auth/login', true), '/api/v2/auth/login');
   assert.equal(buildManagerApiPath('/api/v2/admin/login', true), '/api/v2/admin/login');
-  assert.equal(buildManagerApiPath('/api/v1/auth/refresh', true), '/api/v1/auth/refresh');
+  assert.equal(buildManagerApiPath('/api/v1/manager/auth/refresh', true), '/api/v1/manager/auth/refresh');
+  assert.equal(buildManagerApiPath('/reports/v1/summary', true), '/reports/v1/summary');
   assert.equal(
     buildManagerApiPath('/api/v1/manager/transactions/deposit', true),
     '/api/v1/manager/transactions/deposit'
@@ -60,7 +61,8 @@ test('manager API path removes proxy prefix for direct backend mode', () => {
   assert.equal(buildManagerApiPath('/AccountCreate', false), '/AccountCreate');
   assert.equal(buildManagerApiPath('/manager/UserPasswordCheck', false), '/UserPasswordCheck');
   assert.equal(buildManagerApiPath('/api/manager/IBUpdate', false), '/IBUpdate');
-  assert.equal(buildManagerApiPath('/api/v1/auth/refresh', false), '/api/v1/auth/refresh');
+  assert.equal(buildManagerApiPath('/api/v1/manager/auth/refresh', false), '/api/v1/manager/auth/refresh');
+  assert.equal(buildManagerApiPath('/reports/v1/summary', false), '/reports/v1/summary');
 });
 
 test('direct broker backend URLs bypass the /manager proxy prefix', () => {

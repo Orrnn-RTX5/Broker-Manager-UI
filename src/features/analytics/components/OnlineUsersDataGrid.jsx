@@ -1,11 +1,43 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import GridLoadingState from '../../../components/GridLoadingState';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOnlineUsersAnalyticsPage } from '../analyticsQueries.js';
-import { ANALYTICS_VIEWS, ONLINE_USERS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
+import { ANALYTICS_VIEWS, ONLINE_USERS_STALE_MS, ONLINE_USERS_INITIAL_PARAMS } from '../../../utils/analyticsQueryOptions.js';
+
+const ONLINE_USERS_SNAPSHOT_KEY = 'rtx5_online_users_snapshot_v1';
+
+const getInitialOnlineUsersSnapshot = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(ONLINE_USERS_SNAPSHOT_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return undefined;
+};
+
+const saveOnlineUsersSnapshot = (data) => {
+  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(ONLINE_USERS_SNAPSHOT_KEY, JSON.stringify({
+        rows: data.rows.slice(0, 30),
+        total: data.total ?? data.rows.length,
+        hasMore: Boolean(data.hasMore),
+      }));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -17,11 +49,21 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
+  const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('analytics-online-users');
   const pageSize = 30;
+
+  const isDefaultParams = !search && sortCol === 'login' && sortDir === 'asc';
+
+  const initialData = useMemo(() => {
+    if (!isDefaultParams) return undefined;
+    const cached = queryClient.getQueryData(['online-users', 'page', ONLINE_USERS_INITIAL_PARAMS]);
+    if (cached?.rows?.length > 0) return cached;
+    return getInitialOnlineUsersSnapshot();
+  }, [isDefaultParams, queryClient]);
 
   const params = useMemo(() => ({
     search,
@@ -51,8 +93,25 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: ONLINE_USERS_STALE_MS,
-    refetchOnMount: true,
+    initialData,
+    placeholderData: (previousData) => previousData || initialData || getInitialOnlineUsersSnapshot(),
   });
+
+  useEffect(() => {
+    if (rows && rows.length > 0 && isDefaultParams && offset === 0) {
+      saveOnlineUsersSnapshot({ rows, total, hasMore });
+    }
+  }, [rows, total, hasMore, isDefaultParams, offset]);
+
+  // Prevent brief flash of loading skeleton on sub-120ms network fetches
+  const [showLoadingState, setShowLoadingState] = useState(false);
+  useEffect(() => {
+    if (isLoading && rows.length === 0) {
+      const timer = setTimeout(() => setShowLoadingState(true), 120);
+      return () => clearTimeout(timer);
+    }
+    setShowLoadingState(false);
+  }, [isLoading, rows.length]);
 
   const timingMetadata = useMemo(() => ({
     rowCount: rows.length,
@@ -106,7 +165,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
         style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}
       >
         <div>
-          <div className="online-users-grid-title text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+          <div className="online-users-grid-title text-xs uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
             {isIdle ? 'Online users not loaded' : `${total ?? rows.length} online users`}
           </div>
         </div>
@@ -128,7 +187,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
           <strong>API Error.</strong> {error?.message || 'Failed to load online users.'}
         </div>
       )}
-      {isLoading && rows.length === 0 ? (
+      {isLoading && rows.length === 0 && showLoadingState ? (
         <GridLoadingState label="Loading online users…" />
       ) : (
       <div className="w-full overflow-x-auto">
@@ -173,7 +232,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>
                     <span className="tabular">{row.login}</span>
                   </td>
-                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
+                  <td style={{ textAlign: 'center' }}>{row.name}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.group}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.client}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.version}</td>

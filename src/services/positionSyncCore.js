@@ -7,6 +7,34 @@ export const getWsTicket = (payload) => {
   return String(source?.ticket || source?.ws_ticket || source?.wsTicket || '').trim();
 };
 
+export const getPositionUpdateLogin = (payload) => {
+  const queue = [payload];
+  const visited = new Set();
+  const containerKeys = ['data', 'position', 'update', 'payload', 'answer', 'record', 'account'];
+
+  while (queue.length > 0 && visited.size < 24) {
+    const source = queue.shift();
+    if (!source || typeof source !== 'object' || visited.has(source)) continue;
+    visited.add(source);
+
+    const login = source.login
+      ?? source.Login
+      ?? source.account_login
+      ?? source.accountLogin
+      ?? source.user_login
+      ?? source.userLogin;
+    if (login !== undefined && login !== null && String(login).trim()) return login;
+
+    if (Array.isArray(source)) {
+      source.forEach((item) => queue.push(item));
+      continue;
+    }
+    containerKeys.forEach((key) => queue.push(source[key]));
+  }
+
+  return undefined;
+};
+
 export const isPositionMutation = (payload) => {
   if (!payload || typeof payload !== 'object') return false;
   const source = payload.data || payload.position || payload.update || payload;

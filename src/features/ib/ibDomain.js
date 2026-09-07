@@ -219,21 +219,3 @@ export const buildCommissionPlanPayload = (form = {}, ibLogin) => ({
   enabled: form.enabled !== false,
 });
 
-export const validatePayoutRequestInput = ({ login, amount } = {}) => {
-  const errors = [];
-  const loginError = requirePositiveInteger(login, 'IB login');
-  if (loginError) errors.push(loginError);
-  if (emptyToNull(amount)) {
-    const parsed = Number(amount);
-    if (!Number.isFinite(parsed) || parsed <= 0) errors.push('Amount must be greater than zero when provided.');
-  }
-  return errors;
-};
-
-export const validatePayoutDecisionInput = ({ payout_id, action, reason } = {}) => {
-  const errors = [];
-  const idError = requirePositiveInteger(payout_id, 'Payout ID');
-  if (idError) errors.push(idError);
-  if (action === 'reject' && !emptyToNull(reason)) errors.push('Rejection reason is required.');
-  return errors;
-};

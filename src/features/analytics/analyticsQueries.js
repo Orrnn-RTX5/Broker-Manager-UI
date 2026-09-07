@@ -102,5 +102,7 @@ export const preloadAnalyticsDestination = (queryClient, path) => Promise.all([
 
 export const prefetchInitialAnalyticsData = (queryClient) => Promise.allSettled([
   prefetchAnalyticsData(queryClient, ANALYTICS_PATHS.onlineUsers),
-  prefetchAnalyticsData(queryClient, ANALYTICS_PATHS.openPositions),
+  // Do not pull the global PositionsAll dataset during login. The account
+  // details flow uses a much smaller account-scoped request, while the open
+  // positions destination still prefetches on navigation intent.
 ]);

@@ -89,28 +89,28 @@ const ClientsDashboard = () => {
 
   return (
     <div
-      className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto"
+      className="clients-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto"
       onContextMenu={handleContextMenu}
     >
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <Users2 size={18} style={{ color: 'var(--accent)' }} />
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          <Users2 size={16} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Clients</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '18px' }}>Clients</h1>
+            <p className="clients-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '14px' }}>
               Right-click for actions · Double-click a row for details
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <FilterDropdown value={typeFilter} className="w-[130px]" options={['All Types', 'Individual', 'Corporate', 'IB']} onChange={setTypeFilter} />
-          <FilterDropdown value={statusFilter} className="w-[130px]" options={['All Statuses', 'Active', 'Inactive', 'Unregistered', 'Pending']} onChange={setStatusFilter} />
-          <FilterDropdown value={countryFilter} className="w-[140px]" options={['All Countries', ...ALL_COUNTRIES]} onChange={setCountryFilter} />
+        <div className="clients-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <FilterDropdown value={typeFilter} fontSize="10px" className="w-[110px]" options={['All Types', 'Individual', 'Corporate', 'IB']} onChange={setTypeFilter} />
+          <FilterDropdown value={statusFilter} fontSize="10px" className="w-[125px]" options={['All Statuses', 'Active', 'Inactive', 'Unregistered', 'Pending']} onChange={setStatusFilter} />
+          <FilterDropdown value={countryFilter} fontSize="10px" className="w-[135px]" options={['All Countries', ...ALL_COUNTRIES]} onChange={setCountryFilter} />
         </div>
       </div>
 
-      <div className="relative w-full max-w-xs">
+      <div className="clients-search relative w-full max-w-xs">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"
@@ -118,7 +118,7 @@ const ClientsDashboard = () => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
+          style={{ paddingLeft: 32, fontSize: '10px' }}
         />
       </div>
 

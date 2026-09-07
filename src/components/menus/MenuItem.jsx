@@ -14,7 +14,7 @@ export const MenuItem = ({
     <div
       onClick={disabled ? undefined : onClick}
       className={`
-      flex items-center justify-between px-6 py-1.5 cursor-pointer select-none text-[13px] transition-colors
+      manager-menu-dropdown-item flex items-center justify-between px-6 py-1.5 cursor-pointer select-none transition-colors
       ${disabled ? 'text-gray-400 dark:text-[var(--muted)] cursor-default' : 'text-[#1a1a1a] dark:text-[var(--text)] hover:bg-[#e6f0fa] dark:hover:bg-[var(--surface-hover,var(--surface-3))]'}
     `}>
       <div className="flex items-center gap-3">

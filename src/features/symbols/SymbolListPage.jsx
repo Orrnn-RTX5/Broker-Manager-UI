@@ -7,7 +7,7 @@ import useSymbolStore from '../../store/symbolStore';
 import { getSymbolFeedStatus } from '../../utils/feedStatus';
 
 const getStatusDotClass = (status) => {
-  if (status.isLive) return 'bg-green-500 animate-pulse';
+  if (status.isLive) return 'bg-blue-500 animate-pulse';
   if (status.tone === 'warning') return 'bg-amber-500';
   return 'bg-gray-400';
 };
@@ -82,10 +82,10 @@ const SymbolListPage = () => {
                   return (
                     <tr key={item.symbol} className="hover:bg-[var(--surface-hover)] transition-colors">
                       <td className="px-4 py-3 font-bold" style={{ color: 'var(--text)' }}>{item.symbol}</td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm" style={{ color: item.dir === 'down' ? 'var(--market-value-down)' : 'var(--market-value-up)' }}>
                          {item.bid}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm">
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-sm" style={{ color: item.dir === 'down' ? 'var(--market-value-down)' : 'var(--market-value-up)' }}>
                          {item.ask}
                       </td>
                       <td className="px-4 py-3">

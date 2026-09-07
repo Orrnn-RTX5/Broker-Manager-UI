@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
 import {
-  symbolList, symbolAdd, symbolUpdate, symbolEnable, symbolDisable,
-  symbolClone, symbolCategoryList,
+  symbolManagementList, peekSymbolManagementData,
+  symbolAdd, symbolUpdate, symbolEnable, symbolDisable, symbolClone,
 } from '../../../services/api';
 import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
 
@@ -259,9 +259,10 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
 
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
 const SymbolsTab = () => {
-  const [symbols, setSymbols] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialData = useMemo(() => peekSymbolManagementData(), []);
+  const [symbols, setSymbols] = useState(() => initialData?.symbols || []);
+  const [categories, setCategories] = useState(() => initialData?.categories || []);
+  const [loading, setLoading] = useState(() => !initialData?.symbols?.length);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -269,23 +270,47 @@ const SymbolsTab = () => {
   const [modal, setModal] = useState(null); // null | 'add' | 'edit' | 'clone'
   const [editTarget, setEditTarget] = useState(null);
   const [togglingSymbol, setTogglingSymbol] = useState(null);
+  const hasSymbolsRef = useRef(Boolean(initialData?.symbols?.length));
+  const mountedRef = useRef(true);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ force = false, blocking = !hasSymbolsRef.current } = {}) => {
+    if (blocking) setLoading(true);
     try {
-      const [symsResult, catsResult] = await Promise.allSettled([symbolList(), symbolCategoryList()]);
-      if (symsResult.status === 'fulfilled') {
-        setSymbols(Array.isArray(symsResult.value) ? symsResult.value : []);
-      }
-      if (catsResult.status === 'fulfilled') {
-        setCategories(Array.isArray(catsResult.value) ? catsResult.value : []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+      const data = await symbolManagementList({
+        force,
+        onProgress: (progress) => {
+          if (!mountedRef.current) return;
+          if (Array.isArray(progress?.symbols) && progress.symbols.length > 0) {
+            hasSymbolsRef.current = true;
+            setSymbols(progress.symbols);
+            setLoading(false);
+          }
+          if (Array.isArray(progress?.categories) && progress.categories.length > 0) {
+            setCategories(progress.categories);
+          }
+        },
+      });
 
-  useEffect(() => { load(); }, []);
+      if (!mountedRef.current) return;
+      if (Array.isArray(data?.symbols) && (data.symbols.length > 0 || !hasSymbolsRef.current)) {
+        hasSymbolsRef.current = data.symbols.length > 0;
+        setSymbols(data.symbols);
+      }
+      if (Array.isArray(data?.categories)) {
+        setCategories(data.categories);
+      }
+    } catch {
+      // Keep any cached or progressive rows visible when a background refresh fails.
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, [load]);
 
   const handleToggle = async (sym) => {
     setTogglingSymbol(sym.symbol);
@@ -309,6 +334,7 @@ const SymbolsTab = () => {
       if (filterCategory && s.category !== filterCategory) return false;
       if (filterType === 'base' && s.symbolType !== 'base') return false;
       if (filterType === 'derived' && s.symbolType !== 'derived') return false;
+      if (s.__managementPartial && filterEnabled) return false;
       if (filterEnabled === 'enabled' && !s.enabled) return false;
       if (filterEnabled === 'disabled' && s.enabled) return false;
       return true;
@@ -379,8 +405,8 @@ const SymbolsTab = () => {
                     )}
                   </td>
                   <td>
-                    <span className={`ui-badge text-[10px] ${s.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
-                      {s.symbolType || 'base'}
+                    <span className={`ui-badge text-[10px] ${s.__managementPartial && !s.symbolType ? '' : s.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
+                      {s.__managementPartial && !s.symbolType ? 'Loading…' : s.symbolType || 'base'}
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.category || '—'}</td>
@@ -392,15 +418,15 @@ const SymbolsTab = () => {
                   </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.calcMode || '—'}</td>
                   <td>
-                    <span className={`ui-badge text-[10px] ${s.enabled ? 'ui-badge-success' : 'ui-badge-danger'}`}>
-                      {s.enabled ? 'Enabled' : 'Disabled'}
+                    <span className={`ui-badge text-[10px] ${typeof s.enabled !== 'boolean' ? '' : s.enabled ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                      {typeof s.enabled !== 'boolean' ? 'Loading…' : s.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleToggle(s)}
-                        disabled={togglingSymbol === s.symbol}
+                        disabled={s.__managementPartial || togglingSymbol === s.symbol}
                         className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
                         title={s.enabled ? 'Disable' : 'Enable'}
                       >
@@ -411,6 +437,7 @@ const SymbolsTab = () => {
                       </button>
                       <button
                         onClick={() => { setEditTarget(s); setModal('edit'); }}
+                        disabled={s.__managementPartial}
                         className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
                         title="Edit"
                       >
@@ -431,14 +458,14 @@ const SymbolsTab = () => {
           symbol={editTarget}
           categories={categories}
           onClose={() => { setModal(null); setEditTarget(null); }}
-          onSuccess={() => { setModal(null); setEditTarget(null); load(); }}
+          onSuccess={() => { setModal(null); setEditTarget(null); load({ force: true, blocking: false }); }}
         />
       )}
       {modal === 'clone' && (
         <CloneModal
           categories={categories}
           onClose={() => setModal(null)}
-          onSuccess={() => { setModal(null); load(); }}
+          onSuccess={() => { setModal(null); load({ force: true, blocking: false }); }}
         />
       )}
     </div>

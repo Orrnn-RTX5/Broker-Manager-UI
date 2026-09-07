@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Users, Search } from 'lucide-react';
+import { Users, Search } from 'lucide-react';
 import AccountsOnlineGrid from './components/AccountsOnlineGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
@@ -25,15 +25,15 @@ const OnlineUsersPage = () => {
   });
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+    <div className="active-sessions-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center border border-indigo-500/20 shadow-sm">
-            <Users size={20} className="text-indigo-600" />
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-border)', color: 'var(--accent-text)' }}>
+            <Users size={16} />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>Active Sessions</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently connected accounts</p>
+            <h1 className="active-sessions-title" style={{ color: 'var(--text)' }}>Active Sessions</h1>
+            <p className="active-sessions-subtitle" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently connected accounts</p>
           </div>
         </div>
       </div>

@@ -1,22 +1,46 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GridLoadingState from '../../../components/GridLoadingState';
-import { subscribeToPositionSync } from '../../../services/positionSync';
+import { getPositionUpdateLogin, subscribeToPositionSync } from '../../../services/positionSync';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQueries.js';
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
+import { invalidateGlobalPositionsCache, invalidatePositionsCache } from '../../../services/api.js';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
+const POSITIONS_SNAPSHOT_KEY = 'rtx5_open_positions_snapshot_v1';
+
+const getInitialPositionsSnapshot = () => {
+  try {
+    const raw = sessionStorage.getItem(POSITIONS_SNAPSHOT_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.rows) && parsed.rows.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+};
+
+const savePositionsSnapshot = (pageData) => {
+  if (Array.isArray(pageData?.rows) && pageData.rows.length > 0) {
+    try {
+      sessionStorage.setItem(POSITIONS_SNAPSHOT_KEY, JSON.stringify({
+        rows: pageData.rows.slice(0, 30),
+        total: pageData.total || pageData.rows.length,
+        hasMore: Boolean(pageData.hasMore),
+      }));
+    } catch {
+      // ignore
+    }
+  }
 };
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
@@ -42,6 +66,27 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     filters,
   }), [search, sortCol, sortDir, filters]);
 
+  const isDefaultParams = !search
+    && typeFilter === 'All Types'
+    && symbolFilter === 'All Symbols'
+    && reasonFilter === 'All Reasons'
+    && sortCol === 'position'
+    && sortDir === 'asc';
+
+  const initialData = useMemo(() => {
+    if (!isDefaultParams) return undefined;
+    const cached = queryClient.getQueryData(['positions', 'page', {
+      search: '',
+      sort_by: 'position',
+      sort_dir: 'asc',
+      filters: {},
+      limit: 30,
+      offset: 0,
+    }]);
+    if (cached?.rows?.length > 0) return cached;
+    return getInitialPositionsSnapshot();
+  }, [isDefaultParams, queryClient]);
+
   const {
     rows,
     total,
@@ -61,10 +106,55 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     queryFn: fetchOpenPositionsAnalyticsPage,
     params,
     pageSize,
+    debounceMs: 150,
     enabled: hasRequestedData,
     staleTime: OPEN_POSITIONS_STALE_MS,
-    refetchOnMount: true,
+    initialData,
+    placeholderData: (previousData) => {
+      const base = previousData || initialData || getInitialPositionsSnapshot();
+      if (!base?.rows?.length) return undefined;
+      const s = String(search || '').trim().toLowerCase();
+      if (!s && (!filters || Object.keys(filters).length === 0)) {
+        return base;
+      }
+      let matchedRows = base.rows;
+      if (s) {
+        matchedRows = matchedRows.filter((r) =>
+          String(r.login || '').toLowerCase().includes(s) ||
+          String(r.ticket || r.position || '').toLowerCase().includes(s) ||
+          String(r.symbol || '').toLowerCase().includes(s)
+        );
+      }
+      if (filters?.type && filters.type !== 'all types') {
+        matchedRows = matchedRows.filter((r) => String(r.type || '').toLowerCase() === filters.type.toLowerCase());
+      }
+      if (filters?.symbol && filters.symbol !== 'All Symbols') {
+        matchedRows = matchedRows.filter((r) => String(r.symbol || '').toLowerCase() === filters.symbol.toLowerCase());
+      }
+      if (filters?.reason && filters.reason !== 'All Reasons') {
+        matchedRows = matchedRows.filter((r) => String(r.reason || '').toLowerCase() === filters.reason.toLowerCase());
+      }
+      return {
+        rows: matchedRows,
+        total: matchedRows.length,
+        hasMore: false,
+      };
+    },
   });
+
+  // Prevent brief flash of loading skeleton on sub-120ms network fetches
+  const [showLoadingState, setShowLoadingState] = useState(false);
+  useEffect(() => {
+    const shouldShow = isLoading && rows.length === 0;
+    const timer = setTimeout(() => setShowLoadingState(shouldShow), shouldShow ? 120 : 0);
+    return () => clearTimeout(timer);
+  }, [isLoading, rows.length]);
+
+  useEffect(() => {
+    if (rows && rows.length > 0 && !search && (!filters || Object.keys(filters).length === 0)) {
+      savePositionsSnapshot({ rows, total, hasMore });
+    }
+  }, [rows, total, hasMore, search, filters]);
 
   const timingMetadata = useMemo(() => ({
     rowCount: rows.length,
@@ -77,16 +167,31 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     metadata: timingMetadata,
   });
 
+  const onRowsChangeRef = useRef(onRowsChange);
   useEffect(() => {
-    if (onRowsChange) onRowsChange(rows);
-  }, [rows, onRowsChange]);
+    onRowsChangeRef.current = onRowsChange;
+  });
 
-  useEffect(() => subscribeToPositionSync(() => {
-    // An HTTP snapshot is deliberately used after every lifecycle event. It
-    // handles opens, partial closes and reversals without trying to infer the
-    // complete row shape from a websocket frame.
+  useEffect(() => {
+    onRowsChangeRef.current?.(rows);
+  }, [rows]);
+
+  useEffect(() => subscribeToPositionSync((event) => {
+    // Reconnect notifications carry no position change. Refetching on every
+    // unstable websocket reconnect can stampede the slow PositionsAll route.
+    if (event?.type === 'snapshot' && event?.reason === 'connected') return;
+
+    // Every frame invalidates the global grid snapshot. Account-scoped frames
+    // invalidate only their own modal cache; symbol-only P/L frames must not
+    // cancel an unrelated account's first-page/continuation request.
+    if (event?.type === 'position') {
+      const updateLogin = getPositionUpdateLogin(event.payload);
+      if (updateLogin === undefined) invalidateGlobalPositionsCache();
+      else invalidatePositionsCache(updateLogin);
+    } else {
+      invalidatePositionsCache();
+    }
     if (hasRequestedData) queryClient.invalidateQueries({ queryKey: ['positions'] });
-    else markDataRequested();
   }), [hasRequestedData, markDataRequested, queryClient]);
 
   const handleSort = (col) => {
@@ -100,6 +205,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   const handleLoadData = () => markDataRequested();
 
   const handleRefresh = () => {
+    invalidatePositionsCache();
     if (!hasRequestedData) {
       markDataRequested();
       return;
@@ -108,8 +214,12 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   };
 
   const renderHeader = (col, label) => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }}>
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th
+      onClick={() => handleSort(col)}
+      aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      style={{ textAlign: 'center' }}
+    >
+      {label}
     </th>
   );
 
@@ -131,7 +241,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           <strong>API Error.</strong> {error?.message || 'Failed to load positions.'}
         </div>
       )}
-      {isLoading && rows.length === 0 ? (
+      {isLoading && rows.length === 0 && showLoadingState ? (
         <GridLoadingState label="Loading open positions…" />
       ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
@@ -188,9 +298,9 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                 >
                   <td className="tabular" style={{ textAlign: 'center' }}>{row.position}</td>
                   <td className="tabular" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.login}</td>
-                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
+                  <td style={{ textAlign: 'center' }}>{row.name}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.email}</td>
-                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.symbol}</td>
+                  <td style={{ textAlign: 'center' }}>{row.symbol}</td>
                   <td style={{ textAlign: 'center' }}>
                     <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
                       {row.type.toUpperCase()}
@@ -202,7 +312,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                   <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'center', color: swapTone }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone, fontWeight: 600 }}>{fmt(row.profit)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone }}>{fmt(row.profit)}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.comment}</td>
                 </tr>
               );
@@ -213,8 +323,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
       )}
 
       <div
-        className="open-positions-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+        className="open-positions-grid-footer flex items-center justify-between px-4 py-2 text-[10px] shrink-0"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: '10px' }}
       >
         <span className="flex items-center gap-3">
           <span>
@@ -230,21 +340,15 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           </span>
           {!isIdle && <span style={{ color: 'var(--muted)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{pageBuys}</span></span>}
           {!isIdle && <span style={{ color: 'var(--muted)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{pageSells}</span></span>}
-          {isFetching && !isLoading && (
-            <span className="ui-badge ui-badge-danger">
-              <AlertTriangle size={10} />
-              Updating
-            </span>
-          )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>
             <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
             {isIdle ? 'Load' : 'Refresh'}
           </button>
-          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs">Next</button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>
         </div>
       </div>
 

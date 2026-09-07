@@ -72,7 +72,49 @@ test('dashboard summary normalizer accepts aggregate KPI fields', () => {
     openPositions: 125,
     equity: 1250500.25,
     deposits24h: 10000,
+    withdrawals24h: null,
+    netFlow24h: null,
   });
+});
+
+test('dashboard summary normalizer maps the documented USD reports envelope without mixing currencies', () => {
+  assert.deepEqual(normalizeDashboardSummary({
+    data: [
+      { currency: 'EUR', total_deposits: '999999', total_withdrawals: '-888888' },
+      {
+        currency: 'USD', date: '2026-09-05', finalized: true,
+        active_accounts: 1248, total_accounts: 5600, total_deals: 426,
+        total_deposits: '186420.25', total_withdrawals: '-142300.10',
+        total_volume: '1284.5', total_profit: '44120.15',
+      },
+    ],
+    meta: { currency: 'USD', finalized: true },
+  }), {
+    realAccounts: null,
+    demoAccounts: null,
+    openPositions: null,
+    equity: null,
+    deposits24h: 186420.25,
+    withdrawals24h: 142300.1,
+    netFlow24h: 44120.15,
+    activeAccounts: 1248,
+    totalAccounts: 5600,
+    totalDeals: 426,
+    totalVolume: 1284.5,
+    totalProfit: 44120.15,
+    reportCurrency: 'USD',
+    reportDate: '2026-09-05',
+    reportFinalized: true,
+  });
+});
+
+test('dashboard summary normalizer refuses an ambiguous multi-currency report without USD', () => {
+  assert.equal(normalizeDashboardSummary({
+    data: [
+      { currency: 'EUR', total_deposits: '100' },
+      { currency: 'GBP', total_deposits: '200' },
+    ],
+  }), null);
 });
 
 test('dashboard summary normalizer rejects unsupported payloads', () => {
@@ -102,6 +144,8 @@ test('dashboard fallback metrics prefer explicit totals and account limit counts
     openPositions: 125,
     equity: null,
     deposits24h: null,
+    withdrawals24h: null,
+    netFlow24h: null,
   });
 });
 
@@ -127,6 +171,8 @@ test('dashboard fallback metrics compute from complete endpoint rows when totals
     openPositions: 2,
     equity: 1250,
     deposits24h: null,
+    withdrawals24h: null,
+    netFlow24h: null,
   });
 });
 

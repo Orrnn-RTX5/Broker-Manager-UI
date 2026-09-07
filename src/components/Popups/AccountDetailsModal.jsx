@@ -1,19 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings } from 'lucide-react';
-import { getPositionsPage } from '../../services/api';
-import { subscribeToPositionSync } from '../../services/positionSync';
-import { buildFeedWsUrl, buildMetricsWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
+import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, SlidersHorizontal, WalletCards } from 'lucide-react';
+import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
+import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
+import { getPositionUpdateLogin, subscribeToPositionSync } from '../../services/positionSync';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
+import AccountTradeTab from './AccountTradeTab';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
 import { closeManagerPosition } from '../../services/managerTradeApi';
-import apiClient from '../../services/apiClient';
+import { submitManagerTransaction } from '../../services/managerFinanceApi';
+import { updateManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
-import { extractFeedTicks } from '../../utils/feedMessages';
 import {
   canCloseAccountTrades,
   canMutateAccountTrades,
@@ -27,22 +28,22 @@ const TABS = [
   'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
 ];
 
-const createIdempotencyKey = () => {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
+const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 5_000;
 
-  // All supported browsers and Electron builds provide randomUUID. Keep a
-  // UUID-shaped fallback for older clients because the backend validates this
-  // idempotency value as a UUID.
-  const bytes = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-};
+const TRANSACTION_LABELS = Object.freeze({
+  deposit: 'Deposit',
+  withdraw: 'Withdraw',
+  credit: 'Credit',
+  transfer: 'Transfer',
+});
 
-const loadAccountDetails = async (loginId) => {
+const pendingAccountDetailsRequests = new Map();
+
+const requestAccountDetails = async (loginId) => {
   const params = new URLSearchParams({ login: String(loginId) });
   const response = await fetchManagerApi(`/AccountDetails?${params.toString()}`, {
     headers: { accept: 'application/json' },
@@ -61,6 +62,17 @@ const loadAccountDetails = async (loginId) => {
   }
 
   return payload;
+};
+
+const loadAccountDetails = (loginId) => {
+  const key = String(loginId);
+  if (pendingAccountDetailsRequests.has(key)) return pendingAccountDetailsRequests.get(key);
+
+  const request = requestAccountDetails(loginId).finally(() => {
+    if (pendingAccountDetailsRequests.get(key) === request) pendingAccountDetailsRequests.delete(key);
+  });
+  pendingAccountDetailsRequests.set(key, request);
+  return request;
 };
 
 const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHeader, disabled = false }) => (
@@ -93,7 +105,15 @@ const LANGUAGE_OPTIONS = [
   'Turkish (tr)',
 ];
 
-// Whitelist of fields the UserUpdate form is allowed to submit. Anything not in
+const createGeneratedPassword = () => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  const random = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+  return `A9!${random}`;
+};
+
+// Whitelist of fields the account update form is allowed to submit. Anything not in
 // this set (e.g. balance, equity, password_hash, broker_id, is_admin injected
 // via dev-tools into formData) is stripped before the request is built so the
 // client cannot be coaxed into pushing arbitrary columns to the backend.
@@ -250,16 +270,18 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
 
 const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position', onAccountUpdated }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
+  const loginId = account && typeof account === 'object' ? account.login : account;
+  const initialPositions = peekAccountPositions(loginId);
   const { canAct } = usePermissions();
   const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
-  const canDeposit = canAct(PERMISSIONS.MANAGE_FINANCES);
+  const canManageFinances = canAct(PERMISSIONS.MANAGE_FINANCES);
   const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
   const canManipulateTrades = canMutateAccountTrades(canAct);
   const canCloseTrades = canCloseAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accountData, setAccountData] = useState(null);
-  const [, setLoading] = useState(false);
-  const [, setError] = useState(null);
+  const [detailsLoading, setLoading] = useState(false);
+  const [detailsError, setError] = useState(null);
   const [formData, setFormData] = useState({});
   const [updateLoading, setUpdateLoading] = useState(false);
   const [passwords, setPasswords] = useState({ master: '', investor: '', api: '', phone: '', otp: '' });
@@ -270,35 +292,25 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [depositAmount, setDepositAmount] = useState('');
   const [depositComment, setDepositComment] = useState('');
-  const [isCreditDeposit, setIsCreditDeposit] = useState(false);
+  const [transactionType, setTransactionType] = useState('deposit');
+  const [transferLogin, setTransferLogin] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositSuccess, setDepositSuccess] = useState(null);
 
-  const [positions, setPositions] = useState([]);
+  const [positions, setPositions] = useState(() => initialPositions || []);
+  const [positionsLoading, setPositionsLoading] = useState(() => initialPositions === undefined);
+  const [positionsError, setPositionsError] = useState('');
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyRefreshRevision, setHistoryRefreshRevision] = useState(0);
   const [positionSyncRevision, setPositionSyncRevision] = useState(0);
+  const lastPositionsRequestAtRef = useRef(0);
+  const pendingPositionsRefreshTimerRef = useRef(null);
   const [selectedTicketRow, setSelectedTicketRow] = useState(null);
-  const [modalTradeSymbol, setModalTradeSymbol] = useState('EURUSD');
-  const [tradeSL, setTradeSL] = useState('0.00000');
-  const [tradeTP, setTradeTP] = useState('0.00000');
-  const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
-  const [tradeTickHistory, setTradeTickHistory] = useState([]);
-  const [tradeFeedError, setTradeFeedError] = useState('');
-  const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
-  const tradeSymbolRef = useRef(modalTradeSymbol);
-
-  const selectedTicketRowRef = useRef(selectedTicketRow);
-  useEffect(() => { selectedTicketRowRef.current = selectedTicketRow; }, [selectedTicketRow]);
-
-  const isAutoPipTrackRef = useRef(isAutoPipTrack);
-  useEffect(() => { isAutoPipTrackRef.current = isAutoPipTrack; }, [isAutoPipTrack]);
-
-  const adjustValue = (setter, amount) => {
-    setIsAutoPipTrack(false);
-    setter(prev => (parseFloat(prev) + amount).toFixed(5));
-  };
 
   const [ctxMenu, setCtxMenu] = useState({ x: 0, y: 0, isOpen: false, data: null });
 
@@ -308,8 +320,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return () => window.removeEventListener('click', closeMenu);
   }, []);
 
-  const initialWidth = Math.min(850, window.innerWidth - 40);
-  const initialHeight = Math.min(600, window.innerHeight - 40);
+  const initialWidth = Math.min(880, window.innerWidth - 40);
+  const initialHeight = Math.min(630, window.innerHeight - 40);
 
   const [position, setPosition] = useState({
     x: Math.max(0, (window.innerWidth - initialWidth) / 2),
@@ -469,6 +481,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const status = result?.retcode || result?.status || 'OK';
       const message = result?.message || JSON.stringify(result);
       alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
+      invalidatePositionsCache(loginId);
       setPositions(prev => prev.filter(p => p.position !== ticket));
     } catch (err) {
       console.error(`[${label}] error:`, err);
@@ -480,179 +493,56 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
   };
 
-  const [liveMetrics, setLiveMetrics] = useState(null);
-
-  // Since the user is passing either an Account Object or just an integer Login ID, we handle both.
-  // Null-safe: `typeof null === 'object'`, so guard against a falsy `account`
-  // (the modal may now run its hooks before the `if (!account)` early return).
-  const loginId = account && typeof account === 'object' ? account.login : account;
-
-  useEffect(() => subscribeToPositionSync((event) => {
-    const update = event?.payload?.data || event?.payload?.position || event?.payload || {};
-    const updateLogin = update.login ?? update.Login ?? update.account_login ?? update.accountLogin;
-    if (updateLogin === undefined || String(updateLogin) === String(loginId)) {
-      setPositionSyncRevision((revision) => revision + 1);
-    }
-  }), [loginId]);
-
   useEffect(() => {
-    if (!loginId) return;
-
-    let ws;
-    let reconnectTimeout;
-
-    const connectMetricsWs = () => {
-      const token = localStorage.getItem('authToken');
-      if (!token) return;
-
-      const metricsUrl = buildMetricsWsUrl(token, loginId);
-      console.debug(`[Metrics WS] Connecting for account ${loginId}`);
-      ws = new WebSocket(metricsUrl);
-
-      ws.onopen = () => {
-        console.debug(`[Metrics WS] Connected successfully for account ${loginId}`);
+    const refreshPositions = () => {
+      const runRefresh = () => {
+        pendingPositionsRefreshTimerRef.current = null;
+        lastPositionsRequestAtRef.current = Date.now();
+        invalidatePositionsCache(loginId);
+        setPositionSyncRevision((revision) => revision + 1);
       };
 
-      ws.onerror = (e) => {
-        // Do not log the raw event; devtools can expose WebSocket.url, including
-        // the legacy id query token used by this browser-only metrics endpoint.
-        console.error(`[Metrics WS] Error payload:`, {
-          type: e?.type,
-          readyState: ws?.readyState,
-        });
-      };
-
-      ws.onmessage = (e) => {
-        try {
-          const parsed = JSON.parse(e.data);
-          let updateObj = null;
-
-          // Unwrap nested envelope: { channel: "...", data: { data: { login: 200074... } } }
-          let payload = parsed;
-          if (parsed && parsed.data && parsed.data.data) {
-            payload = parsed.data.data;
-          }
-
-          if (Array.isArray(payload)) {
-            updateObj = payload.find(m => m.login == loginId || m.login === undefined);
-          } else {
-            updateObj = payload;
-          }
-
-          if (updateObj && (updateObj.login == loginId || updateObj.login === undefined)) {
-            if (updateObj.balance !== undefined || updateObj.equity !== undefined || updateObj.floating_pnl !== undefined || updateObj.total_swap !== undefined) {
-              setLiveMetrics(prev => prev ? { ...prev, ...updateObj } : updateObj);
-            }
-          }
-        } catch (err) {
-          console.error(`[Metrics WS] Error parsing message:`, err);
-        }
-      };
-
-      ws.onclose = (e) => {
-        console.debug(`[Metrics WS] Connection closed cleanly=${e.wasClean} code=${e.code} reason=${redactSensitive(e.reason)}. Reconnecting in 3s...`);
-        reconnectTimeout = setTimeout(connectMetricsWs, 3000);
-      };
+      const elapsed = Date.now() - lastPositionsRequestAtRef.current;
+      const remaining = ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS - elapsed;
+      if (remaining <= 0) {
+        runRefresh();
+        return;
+      }
+      if (pendingPositionsRefreshTimerRef.current !== null) return;
+      // Coalesce a burst into one trailing refresh instead of dropping the last
+      // update and leaving the modal stale until the 30-second safety poll.
+      pendingPositionsRefreshTimerRef.current = window.setTimeout(runRefresh, remaining);
     };
 
-    connectMetricsWs();
+    const unsubscribe = subscribeToPositionSync((event) => {
+      // The modal already performs its initial account-scoped fetch. A websocket
+      // reconnect can happen repeatedly on an unavailable feed, so treating every
+      // `connected` snapshot as data invalidation creates a request loop.
+      if (event?.type === 'snapshot' && event?.reason === 'connected') return;
+
+      if (event?.type === 'position') {
+        const updateLogin = getPositionUpdateLogin(event.payload);
+        // Untargeted frames must not make every open account refetch. The
+        // periodic snapshot below reconciles any malformed server envelope.
+        if (updateLogin === undefined || String(updateLogin) !== String(loginId)) return;
+      } else if (event?.type !== 'snapshot' || event?.reason !== 'poll') {
+        return;
+      }
+
+      refreshPositions();
+    });
 
     return () => {
-      clearTimeout(reconnectTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        } else if (ws.readyState === WebSocket.CONNECTING) {
-          ws.onopen = () => ws.close();
-        }
+      unsubscribe();
+      if (pendingPositionsRefreshTimerRef.current !== null) {
+        window.clearTimeout(pendingPositionsRefreshTimerRef.current);
+        pendingPositionsRefreshTimerRef.current = null;
       }
     };
   }, [loginId]);
 
-  useEffect(() => {
-    tradeSymbolRef.current = modalTradeSymbol;
-  }, [modalTradeSymbol]);
-
-  useEffect(() => {
-    if (activeTab !== 'Trade') return;
-
-    let ws;
-    let reconnectTimeout;
-
-    const connectWebSocket = () => {
-      let wsUrl;
-      try {
-        wsUrl = buildFeedWsUrl();
-      } catch (err) {
-        setTradeFeedError(getFeedWsDisabledMessage(err));
-        return;
-      }
-
-      ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        setTradeFeedError('');
-        ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
-      };
-      ws.onmessage = (e) => {
-        try {
-          let newTick = null;
-          extractFeedTicks(e.data).forEach((msg) => {
-            if (msg.symbol === tradeSymbolRef.current && msg.bid != null && msg.ask != null) {
-              newTick = { bid: parseFloat(msg.bid), ask: parseFloat(msg.ask), time: Date.now() };
-            }
-          });
-          if (newTick) {
-            setTradeTickHistory(prev => {
-              const updated = [...prev, newTick];
-              if (updated.length > 500) return updated.slice(-500);
-              return updated;
-            });
-            // Auto Update SL/TP if enabled
-            if (isAutoPipTrackRef.current && selectedTicketRowRef.current) {
-              const type = selectedTicketRowRef.current.type;
-              const pipSpacing = 0.00050; // 5 pips
-              if (type === 'buy') {
-                setTradeTP((parseFloat(newTick.ask) + pipSpacing).toFixed(5));
-                setTradeSL((parseFloat(newTick.bid) - pipSpacing).toFixed(5));
-              } else if (type === 'sell') {
-                setTradeTP((parseFloat(newTick.bid) - pipSpacing).toFixed(5));
-                setTradeSL((parseFloat(newTick.ask) + pipSpacing).toFixed(5));
-              }
-            }
-          }
-        } catch {
-          // Ignore malformed feed ticks; the next websocket message can still update the chart.
-        }
-      };
-      ws.onerror = () => {
-        setTradeFeedError('Market feed unavailable: websocket connection failed.');
-      };
-      ws.onclose = () => { reconnectTimeout = setTimeout(connectWebSocket, 3000); };
-    };
-
-    connectWebSocket();
-    return () => {
-      clearTimeout(reconnectTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        } else if (ws.readyState === WebSocket.CONNECTING) {
-          ws.onopen = () => ws.close();
-        }
-      }
-    };
-  }, [activeTab]);
-
   const handleModifySLTP = (pos) => {
     setSelectedTicketRow(pos);
-    setModalTradeSymbol(pos.symbol || 'EURUSD');
-    setTradeSL(pos.priceSl ? Number(pos.priceSl).toFixed(5) : '0.00000');
-    setTradeTP(pos.priceTp ? Number(pos.priceTp).toFixed(5) : '0.00000');
-    setTradeTickHistory([]);
     setActiveTab('Trade');
   };
 
@@ -674,63 +564,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     alert(`${label} failed\n\nstatus: ${status}\nmessage: ${message}`);
   };
 
-  // Commits S/L + T/P (and, for deals, any adapter-editable field)
-  // through the entity-aware adapter.
-  const handleUpdateTrade = async () => {
-    if (!requireTradeMutationPermission()) return;
-    if (!selectedTicketRow) return;
-    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
-    if (!ticket) { alert('No ticket selected.'); return; }
-
-    setIsUpdatingTrade(true);
-    try {
-      const sl = parseFloat(tradeSL);
-      const tp = parseFloat(tradeTP);
-      const results = [];
-      if (adapter.editableFields.stoploss && !Number.isNaN(sl)) {
-        results.push(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
-      }
-      if (adapter.editableFields.takeprofit && !Number.isNaN(tp)) {
-        results.push(await adapter.modifyField({ ticket, field: 'takeprofit', value: tp }));
-      }
-      showResult(`Modify ${adapter.label} #${ticket}`, results[results.length - 1] || { message: 'no changes' });
-    } catch (err) {
-      showError(`Modify ${adapter.label}`, err);
-    } finally {
-      setIsUpdatingTrade(false);
-    }
-  };
-
-  // Runs a named adapter action (Flip, ForceClose, Cancel, etc.)
-  const runAdapterAction = async (action) => {
-    if (!requireTradeMutationPermission()) return;
-    if (!selectedTicketRow) { alert('Select a row first.'); return; }
-    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
-    const login = loginId;
-    const ctx = { ticket, login };
-
-    if (action.confirm && !window.confirm(action.confirm)) return;
-
-    let formData = {};
-    if (action.prompt) {
-      for (const field of action.prompt) {
-        const raw = window.prompt(`${field.label}${field.required ? ' (required)' : ''}:`);
-        if (raw === null) return;
-        if (field.required && !raw.trim()) { alert(`${field.label} is required.`); return; }
-        formData[field.key] = field.type === 'number' ? parseFloat(raw) : raw;
-      }
-    }
-
-    try {
-      const result = await action.run(ctx, formData);
-      showResult(action.label, result);
-    } catch (err) {
-      showError(action.label, err);
-    }
-  };
-
   const togglePassword = (field) => {
     setShowPasswords(prev => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const generatePassword = (field) => {
+    setPasswords((current) => ({ ...current, [field]: createGeneratedPassword() }));
+    setShowPasswords((current) => ({ ...current, [field]: true }));
   };
 
   const handleCopy = async (field, value) => {
@@ -751,30 +591,60 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   useEffect(() => {
     if (!loginId) return;
 
-    const fetchDetails = async () => {
-      setLoading(true);
-      setError(null);
+    let active = true;
+
+    const fetchDetails = async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
 
       try {
-        setAccountData(await loadAccountDetails(loginId));
+        const details = await loadAccountDetails(loginId);
+        if (active) {
+          setAccountData(details);
+          setError(null);
+        }
       } catch (err) {
-        setError(err.message);
+        if (active && !silent) setError(err.message);
       } finally {
-        setLoading(false);
+        if (active && !silent) setLoading(false);
       }
     };
 
+    fetchDetails();
+
+    // The broker currently rejects account-metrics websocket ticket scopes.
+    // Refresh quietly instead of retrying the retired legacy websocket URL.
+    const detailsRefresh = setInterval(() => fetchDetails({ silent: true }), 15_000);
+
+    return () => {
+      active = false;
+      clearInterval(detailsRefresh);
+    };
+  }, [loginId]);
+
+  useEffect(() => {
+    if (!loginId) return;
+
+    let active = true;
+
     const fetchPositions = async () => {
+      lastPositionsRequestAtRef.current = Date.now();
+      setPositionsLoading(true);
+      setPositionsError('');
       try {
-        const data = await getPositionsPage({
-          limit: 500,
-          offset: 0,
-          filters: { login: String(loginId) },
-          sort_by: 'position',
-          sort_dir: 'desc',
-        });
-        const mine = data.rows;
+        let mine = await getAccountPositions(loginId);
+        if (!active) return;
         setPositions(mine);
+
+        if (hasAccountPositionsContinuation(loginId)) {
+          mine = await completeAccountPositions(loginId, mine, {
+            onPage: (rows) => {
+              if (active) setPositions(rows);
+            },
+          });
+          if (!active) return;
+          setPositions(mine);
+        }
 
         // When the popup was opened via double-click on a row, `targetTicket`
         // holds that row's ticket. Auto-select it so the Trade tab is pre-wired
@@ -787,10 +657,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           );
           if (hit) {
             setSelectedTicketRow(hit);
-            setModalTradeSymbol(hit.symbol || 'EURUSD');
-            setTradeSL(hit.priceSl ? Number(hit.priceSl).toFixed(5) : '0.00000');
-            setTradeTP(hit.priceTp ? Number(hit.priceTp).toFixed(5) : '0.00000');
-            setTradeTickHistory([]);
           } else {
             // Fallback: synthesize a minimal row so buttons still work for
             // Orders / Deals where the popup doesn't fetch its own list.
@@ -805,7 +671,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           }
         }
       } catch (err) {
+        if (!active) return;
         console.error("Failed to fetch positions", err);
+        setPositionsError(err?.message || 'Unable to load open positions.');
         if (targetTicket) {
           setSelectedTicketRow({
             position: targetTicket,
@@ -816,12 +684,39 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             priceTp: 0,
           });
         }
+      } finally {
+        if (active) setPositionsLoading(false);
       }
     };
 
-    fetchDetails();
     fetchPositions();
+
+    return () => {
+      active = false;
+    };
   }, [loginId, targetTicket, positionSyncRevision]);
+
+  useEffect(() => {
+    if (activeTab !== 'History' || !loginId) return;
+
+    let active = true;
+    setHistoryLoading(true);
+    setHistoryError('');
+    getPositionHistory(loginId)
+      .then((rows) => {
+        if (active) setHistoryRows(Array.isArray(rows) ? rows : []);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setHistoryRows([]);
+        setHistoryError(err?.message || 'Failed to load position history.');
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [activeTab, loginId, historyRefreshRevision]);
 
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
@@ -850,17 +745,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     try {
       setUpdateLoading(true);
 
-      const params = new URLSearchParams({
-        login: loginId,
-        ...allowedUpdates
-      });
-
-      const res = await fetchManagerApi(`/UserUpdate?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' }
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update');
+      await updateManagerAccount(loginId, allowedUpdates);
 
       setAccountData(prev => ({ ...prev, ...allowedUpdates }));
       setFormData({});
@@ -930,9 +815,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
   };
 
-  const handleDeposit = async () => {
-    if (!canDeposit) {
-      setDepositError('Your role does not have permission to deposit funds.');
+  const handleTransaction = async () => {
+    if (!canManageFinances) {
+      setDepositError('Your role does not have permission to manage account funds.');
       return;
     }
     // Client-side validation is defence-in-depth only — the backend remains the
@@ -961,30 +846,48 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       return;
     }
 
+    const parsedTransferLogin = Number(transferLogin);
+    if (transactionType === 'transfer' &&
+        (!Number.isSafeInteger(parsedTransferLogin) || parsedTransferLogin <= 0)) {
+      setDepositError('Enter a valid destination account login.');
+      return;
+    }
+    if (transactionType === 'transfer' && parsedTransferLogin === parsedLogin) {
+      setDepositError('The destination account must be different from the source account.');
+      return;
+    }
+
+    const transactionLabel = TRANSACTION_LABELS[transactionType];
+    const targetDescription = transactionType === 'transfer'
+      ? ` from ${parsedLogin} to ${parsedTransferLogin}`
+      : ` for account ${parsedLogin}`;
+    if (!window.confirm(`${transactionLabel} ${amountVal}${targetDescription}?`)) return;
+
     setIsDepositing(true);
     setDepositError(null);
     setDepositSuccess(null);
 
     try {
-      const result = await apiClient.post('/api/v1/manager/transactions/deposit', {
-        login: parsedLogin,
+      const accountFields = transactionType === 'transfer'
+        ? { from_login: parsedLogin, to_login: parsedTransferLogin }
+        : { login: parsedLogin };
+      const result = await submitManagerTransaction(transactionType, {
+        ...accountFields,
         amount: amountVal,
         comment: depositComment.trim(),
-        idempotency_key: createIdempotencyKey(),
-        is_credit: isCreditDeposit,
       });
 
       if (result && typeof result === 'object' && (result.success === false || result.ok === false)) {
-        throw new Error(result.error || result.message || 'Deposit failed');
+        throw new Error(result.error || result.message || `${transactionLabel} failed`);
       }
 
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      setDepositSuccess(responseMessage || `Successfully ${isCreditDeposit ? 'added credit of' : 'deposited'} ${amountVal}!`);
+      setDepositSuccess(responseMessage || `${transactionLabel} transaction submitted successfully.`);
       setDepositAmount('');
       setDepositComment('');
-      setIsCreditDeposit(false);
+      if (transactionType === 'transfer') setTransferLogin('');
       onAccountUpdated?.(loginId);
 
       // Do not wait for the next grid/websocket interval after the backend has
@@ -1025,16 +928,39 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const formatNumber = (val) => {
     if (val === null || val === undefined || isNaN(Number(val))) return '0.00';
-    return Number(val).toFixed(2);
+    return ACCOUNT_NUMBER_FORMATTER.format(Number(val));
   };
 
-  const balanceVal = liveMetrics?.balance !== undefined ? formatNumber(liveMetrics.balance) : formatNumber(getFieldValue('Balance'));
-  const equityVal = liveMetrics?.equity !== undefined ? formatNumber(liveMetrics.equity) : formatNumber(getFieldValue('Equity'));
-  const marginVal = liveMetrics?.used_margin !== undefined ? formatNumber(liveMetrics.used_margin) : formatNumber(getFieldValue('Margin'));
-  const freeMarginVal = liveMetrics?.free_margin !== undefined ? formatNumber(liveMetrics.free_margin) : formatNumber(getFieldValue('MarginFree'));
-  const marginLevelVal = liveMetrics?.margin_level !== undefined ? formatNumber(liveMetrics.margin_level) : formatNumber(getFieldValue('MarginLevel'));
+  const balanceVal = formatNumber(getFieldValue('Balance'));
+  const equityVal = formatNumber(getFieldValue('Equity'));
+  const marginVal = formatNumber(getFieldValue('Margin'));
+  const freeMarginVal = formatNumber(getFieldValue('MarginFree'));
+  const rawMarginLevel = getFieldValue('MarginLevel', null);
+  const hasMarginLevel = rawMarginLevel !== null && rawMarginLevel !== undefined && rawMarginLevel !== '' && Number.isFinite(Number(rawMarginLevel));
+  const marginLevelVal = hasMarginLevel ? formatNumber(rawMarginLevel) : '—';
   const creditVal = formatNumber(getFieldValue('Credit', 0));
   const profitVal = getFieldValue('Profit', 0);
+  const swapVal = formatNumber(getFieldValue('Swap', 0));
+  const profitNumber = Number(profitVal || 0);
+  const marginLevelNumber = Number(rawMarginLevel);
+  const financialSnapshot = [
+    { label: 'Balance', value: balanceVal, tone: 'primary' },
+    { label: 'Equity', value: equityVal, tone: 'primary' },
+    { label: 'Used margin', value: marginVal },
+    { label: 'Free margin', value: freeMarginVal },
+    { label: 'Credit', value: creditVal },
+    {
+      label: 'Margin level',
+      value: `${marginLevelVal}${hasMarginLevel ? '%' : ''}`,
+      tone: hasMarginLevel ? (marginLevelNumber < 100 ? 'negative' : 'positive') : '',
+    },
+    { label: 'Swap', value: swapVal },
+    {
+      label: 'Floating P/L',
+      value: formatNumber(profitVal),
+      tone: profitNumber > 0 ? 'positive' : profitNumber < 0 ? 'negative' : '',
+    },
+  ];
 
   const formatDate = (value) => {
     if (!hasDisplayValue(value)) return '';
@@ -1093,20 +1019,36 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       {!isMinimized && (
         <>
           {/* Tab Bar */}
-          <div className="account-details-tabs flex items-center flex-shrink-0">
+          <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections">
             {TABS.map(tab => (
-              <div
+              <button
+                type="button"
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`account-details-tab ${activeTab === tab ? 'is-active' : ''}`}
+                role="tab"
+                id={`account-tab-${tab.toLowerCase()}`}
+                aria-selected={activeTab === tab}
+                aria-controls="account-details-tabpanel"
               >
                 {tab}
-              </div>
+              </button>
             ))}
           </div>
 
           {/* Content Area */}
-          <div className="account-details-content flex-1 overflow-auto flex flex-col">
+          <div
+            id="account-details-tabpanel"
+            role="tabpanel"
+            aria-labelledby={`account-tab-${activeTab.toLowerCase()}`}
+            className={`account-details-content flex-1 overflow-auto flex flex-col ${activeTab === 'Overview' ? 'is-overview' : ''} ${activeTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
+          >
+            {activeTab !== 'Trade' && (detailsLoading || detailsError) && (
+              <div className={`account-details-status ${detailsError ? 'is-error' : 'is-loading'}`} role={detailsError ? 'alert' : 'status'}>
+                {detailsLoading && <Loader size={12} className="animate-spin" />}
+                <span>{detailsError ? `Live account details unavailable: ${detailsError}` : 'Refreshing account details…'}</span>
+              </div>
+            )}
 
             {activeTab === 'Overview' ? (
               <>
@@ -1124,7 +1066,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <a href="#" className="account-overview-group">{groupValue}</a>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
                       statusValue === 'active' 
-                      ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
+                      ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' 
                       : 'bg-red-500/20 text-red-500 border border-red-500/30'
                     }`}>
                       {statusLabel}
@@ -1151,25 +1093,68 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                 {/* Data Grid Section Modernized */}
                 <div className="account-positions-card flex-1 flex flex-col overflow-hidden">
-                  {/* Header */}
-                  <div className="account-positions-grid account-positions-header">
-                    <div className="p-3 border-r border-[var(--border)]">Symbol</div>
-                    <div className="p-3 border-r border-[var(--border)]">Type</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">Volume</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">Open</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">S / L</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">T / P</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">Current</div>
-                    <div className="p-3 border-r border-[var(--border)] text-right">Swap</div>
-                    <div className="p-3 text-right border-r border-[var(--border)]">Profit</div>
-                    <div className="p-3 text-center">Action</div>
-                  </div>
+                  <div className="account-positions-table-shell custom-scrollbar">
+                    {/* Header */}
+                    <div className="account-positions-grid account-positions-header">
+                      <div className="p-3 border-r border-[var(--border)]">Symbol</div>
+                      <div className="p-3 border-r border-[var(--border)]">Type</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">Volume</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">Open</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">S / L</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">T / P</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">Current</div>
+                      <div className="p-3 border-r border-[var(--border)] text-right">Swap</div>
+                      <div className="p-3 text-right border-r border-[var(--border)]">Profit</div>
+                      <div className="p-3 text-center">Action</div>
+                    </div>
 
-                  {/* Rows */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {/* Only this body scrolls when the account has many positions. */}
+                    <div className="account-positions-body custom-scrollbar">
                     {(() => {
                       const displayPositions = targetTicket ? positions.filter(p => p.position === targetTicket) : positions;
-                      return displayPositions.length > 0 ? displayPositions.map((pos) => {
+                      if (positionsLoading && displayPositions.length === 0) {
+                        return (
+                          <div className="account-positions-state is-loading" role="status" aria-live="polite">
+                            <span className="account-positions-state-content">
+                              <Loader size={14} className="animate-spin" aria-hidden="true" />
+                              <span>Loading open positions...</span>
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (positionsError && displayPositions.length === 0) {
+                        return (
+                          <div className="account-positions-state is-error" role="alert">
+                            <span>Open positions could not be loaded.</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                invalidatePositionsCache(loginId);
+                                setPositionSyncRevision((revision) => revision + 1);
+                              }}
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        );
+                      }
+                      return displayPositions.length > 0 ? (
+                        <>
+                          {positionsError && (
+                            <div className="account-positions-partial-error" role="alert">
+                              <span>Some open positions could not be loaded.</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  invalidatePositionsCache(loginId);
+                                  setPositionSyncRevision((revision) => revision + 1);
+                                }}
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          )}
+                          {displayPositions.map((pos) => {
                         const isPos = pos.profit > 0;
                         const isNeg = pos.profit < 0;
                         return (
@@ -1203,7 +1188,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             {/* T/P */}
                             <div
                               onDoubleClick={() => handleModifySLTP(pos)}
-                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-green-500/80 cursor-pointer hover:bg-green-500/10 transition-colors"
+                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-blue-500/80 cursor-pointer hover:bg-blue-500/10 transition-colors"
                               title="Double-click to modify T/P"
                             >
                               {Number(pos.priceTp || 0).toFixed(5)}
@@ -1226,32 +1211,38 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             </div>
                           </div>
                         );
-                      }) : (
+                          })}
+                        </>
+                      ) : (
                         <div className="account-positions-empty">No open positions matching this account.</div>
                       );
                     })()}
+                    </div>
                   </div>
 
-                  {/* Summary Footer Modernized */}
-                  <div className="account-balance-summary mt-auto">
-                    <div className="flex border-b border-[var(--border)] text-[12px] font-bold">
-                      <div className="flex-1 p-3 px-4 flex items-center gap-3 text-[var(--text-2)] overflow-x-auto custom-scrollbar no-scrollbar">
-                        <PlusSquare size={14} className="text-blue-500" />
-                        <span className="opacity-60 font-normal">Balance:</span> <span className="text-[var(--text)]">{balanceVal}</span>
-                        <span className="opacity-60 font-normal ml-3">Credit:</span> <span className="text-amber-500">{creditVal}</span>
-                        <span className="opacity-60 font-normal ml-3">Equity:</span> <span className="text-[var(--text)] font-black">{equityVal}</span>
-                        <span className="opacity-60 font-normal ml-3">Margin:</span> <span className="text-[var(--text)]">{marginVal}</span>
-                        <span className="opacity-60 font-normal ml-3 text-green-500">Free:</span> <span className="text-green-500">{freeMarginVal}</span>
-                        <span className="opacity-60 font-normal ml-3 text-gray-500">Level:</span> <span className="text-gray-300">{marginLevelVal}%</span>
+                  {/* Account financial snapshot */}
+                  <div className="account-balance-summary mt-auto" role="group" aria-label="Account financial snapshot">
+                    <div className="account-balance-summary-header">
+                      <div className="account-balance-summary-title">
+                        <span className="account-balance-summary-icon" aria-hidden="true">
+                          <WalletCards size={13} />
+                        </span>
+                        <span>Financial snapshot</span>
                       </div>
-                      <div className="w-[100px] p-3 text-right text-[var(--text-3)] font-mono">
-                        {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
-                      </div>
-                      <div className={`w-[120px] p-3 px-4 text-right font-black font-mono text-sm ${Number(liveMetrics?.floating_pnl ?? profitVal ?? 0) >= 0 ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
-                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : formatNumber(profitVal)}
-                      </div>
+                      <span className="account-balance-summary-status">
+                        <RefreshCw size={11} aria-hidden="true" />
+                        Refreshes every 15s
+                      </span>
                     </div>
-                    {Number(marginLevelVal) < 100 && (
+                    <dl className="account-balance-metrics">
+                      {financialSnapshot.map(({ label, value, tone }) => (
+                        <div className={`account-balance-stat${tone ? ` is-${tone}` : ''}`} key={label}>
+                          <dt>{label}</dt>
+                          <dd className="tabular" title={`${label}: ${value}`}>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {hasMarginLevel && Number(rawMarginLevel) > 0 && Number(rawMarginLevel) < 100 && (
                       <div className="p-1 px-4 text-[10px] font-bold bg-red-500/10 text-red-500 border-b border-red-500/20 animate-pulse text-center uppercase tracking-widest">
                         MARGIN CALL WARNING
                       </div>
@@ -1309,10 +1300,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                         Balance: {balanceVal} {currencyValue} <span className="font-normal opacity-80 mx-1">Equity:</span> {equityVal} <span className="font-normal opacity-80 mx-1">Margin:</span> {marginVal} <span className="font-normal opacity-80 mx-1">Free Margin:</span> {freeMarginVal}
                       </div>
                       <div className="w-[80px] p-1 px-2 text-right">
-                        {liveMetrics?.total_swap !== undefined ? formatNumber(liveMetrics.total_swap) : '0.00'}
+                        {swapVal}
                       </div>
-                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(liveMetrics?.floating_pnl ?? profitVal ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {liveMetrics?.floating_pnl !== undefined ? formatNumber(liveMetrics.floating_pnl) : formatNumber(profitVal)}
+                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(profitVal ?? 0) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                        {formatNumber(profitVal)}
                       </div>
                     </div>
                     <div className="p-1 px-6 text-[12px] font-bold font-sans text-gray-900 dark:text-white">
@@ -1429,517 +1420,204 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
               </div>
             ) : activeTab === 'Account' ? (
-              <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar text-[13px] font-sans">
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-3 mb-3">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Group:</span>
-                  <select value={getValue('Group', groupValue)} onChange={(e) => handleInputChange('Group', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-[#3794ff] rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
-                    <option value={getValue('Group', groupValue)}>{getValue('Group', groupValue)}</option>
-                    <option value="demo\forex-hedge-usd-01">demo\forex-hedge-usd-01</option>
-                    <option value="std_ecn">std_ecn</option>
-                    <option value="demo_standard">demo_standard</option>
-                  </select>
+              <div className="account-settings-tab">
+                <div className="account-section-heading">
+                  <div className="account-section-heading-icon"><WalletCards size={16} /></div>
+                  <div>
+                    <h2>Trading configuration</h2>
+                    <p>Review the account profile and update supported trading settings.</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-[110px_130px_100px_130px] items-center gap-x-2 gap-y-3 mb-3">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Color:</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-[80px] h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm flex items-center justify-between px-1">
-                      <div className="w-3 h-3 bg-transparent"></div>
-                      <span className="opacity-0">v</span>
-                    </div>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 dark:text-gray-300">
-                      <input type="checkbox" className="accent-blue-500 rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3 w-3" /> None
+                <section className="account-settings-card">
+                  <div className="account-settings-card-title">
+                    <h3>Account assignment</h3>
+                    <span className={`ui-badge ${statusValue === 'active' ? 'ui-badge-success' : 'ui-badge-danger'}`}>{statusLabel}</span>
+                  </div>
+                  <div className="account-settings-grid">
+                    <label className="account-settings-field account-settings-span-full">
+                      <span>Group</span>
+                      <input
+                        type="text"
+                        value={getValue('Group', groupValue) || ''}
+                        onChange={(event) => handleInputChange('Group', event.target.value)}
+                        autoComplete="off"
+                      />
+                      <small>Enter the exact server group path.</small>
                     </label>
-                  </div>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Leverage:</span>
-                  <select value={getValue('Leverage', String(leverageValue).replace('1:', ''))} onChange={(e) => handleInputChange('Leverage', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
-                    <option value={getValue('Leverage', String(leverageValue).replace('1:', ''))}>1:{getValue('Leverage', String(leverageValue).replace('1:', ''))}</option>
-                    <option value="10">1:10</option>
-                    <option value="50">1:50</option>
-                    <option value="100">1:100</option>
-                    <option value="500">1:500</option>
-                    <option value="1000">1:1000</option>
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-[110px_200px_110px_200px] items-center gap-x-2 gap-y-3 mb-4">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Bank account:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Agent account:</span>
-                  <input type="text" className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
-                </div>
-
-                <div className="ml-[118px] space-y-2.5 mb-6">
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                    <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable this account
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                    <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable password change
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                    <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable one-time password
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                    <input type="checkbox" className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Change password at next login
-                  </label>
-                </div>
-
-                <div className="flex flex-1 gap-2">
-                  <div className="w-[110px] flex flex-col gap-2 shrink-0 pt-0 text-gray-700 dark:text-gray-300 text-right">
-                    <span>Trade accounts:</span>
-                    <div className="mt-8 flex flex-col gap-2">
-                      <button className="h-6 bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-sm w-[70px] ml-auto">Add</button>
-                      <button className="h-6 bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-sm w-[70px] ml-auto">Edit</button>
-                      <button className="h-6 bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-sm w-[70px] ml-auto">Delete</button>
+                    <label className="account-settings-field">
+                      <span>Leverage</span>
+                      <select value={String(getValue('Leverage', rawLeverageValue || '100')).replace(/^1:/, '')} onChange={(event) => handleInputChange('Leverage', event.target.value)}>
+                        {[10, 25, 50, 100, 200, 500, 1000].map((value) => <option key={value} value={value}>1:{value}</option>)}
+                      </select>
+                    </label>
+                    <div className="account-settings-field is-readonly">
+                      <span>Currency</span>
+                      <strong>{currencyValue || '—'}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Accounting mode</span>
+                      <strong>{modeVal || '—'}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Login</span>
+                      <strong className="tabular">{loginId}</strong>
                     </div>
                   </div>
-                  <div className="flex-1 border border-gray-300 dark:border-gray-600 bg-[#1e1e1e] flex flex-col">
-                    <div className="grid grid-cols-2 bg-[#252526] h-[22px] border-b border-gray-300 dark:border-gray-600 px-1 items-center">
-                      <div className="border-r border-gray-300 dark:border-gray-600 px-1">Gateway ID</div>
-                      <div className="px-2">Account</div>
-                    </div>
-                  </div>
-                </div>
+                </section>
 
+                <div className="account-settings-note">
+                  <ShieldCheck size={15} />
+                  <span>Changes are validated by the manager server. Account access and password controls are available in the Security tab.</span>
+                </div>
               </div>
             ) : activeTab === 'Limits' ? (
-              <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar text-[13px] font-sans">
-
-                <div className="flex gap-8 mb-4">
-                  <div className="flex-1 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Show to regular managers
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Include in server reports
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable daily reports
-                    </label>
-
-                    <div className="h-2"></div>
-
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable API connections
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable sponsored VPS hosting
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Allow access to subscription data via data feeds
-                    </label>
-                  </div>
-
-                  <div className="flex-1 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable trading
-                    </label>
-                    <div className="h-6"></div>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable algo trading by Expert Advisors
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
-                      <input type="checkbox" defaultChecked className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Enable trailing stops
-                    </label>
+              <div className="account-settings-tab">
+                <div className="account-section-heading">
+                  <div className="account-section-heading-icon"><SlidersHorizontal size={16} /></div>
+                  <div>
+                    <h2>Risk thresholds</h2>
+                    <p>Configure the server-enforced margin protection levels for this account.</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[180px_1fr] items-center gap-x-2 gap-y-3 mt-4 w-[420px] mx-auto ml-8">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Margin call level:</span>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={getValue('MarginCallLevel', '100')} onChange={(e) => handleInputChange('MarginCallLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
-                    <span className="text-gray-700 dark:text-gray-300">%</span>
+                <section className="account-settings-card account-risk-card">
+                  <div className="account-risk-grid">
+                    <label className="account-settings-field">
+                      <span>Margin call level</span>
+                      <div className="account-percent-field">
+                        <input type="number" min="0" max="10000" step="0.01" value={getValue('MarginCallLevel', '100') ?? ''} onChange={(event) => handleInputChange('MarginCallLevel', event.target.value)} />
+                        <span>%</span>
+                      </div>
+                      <small>Warning threshold shown to managers.</small>
+                    </label>
+                    <label className="account-settings-field">
+                      <span>Stop out level</span>
+                      <div className="account-percent-field">
+                        <input type="number" min="0" max="10000" step="0.01" value={getValue('StopOutLevel', '50') ?? ''} onChange={(event) => handleInputChange('StopOutLevel', event.target.value)} />
+                        <span>%</span>
+                      </div>
+                      <small>Liquidation threshold enforced by the server.</small>
+                    </label>
                   </div>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Stop out level:</span>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={getValue('StopOutLevel', '50')} onChange={(e) => handleInputChange('StopOutLevel', e.target.value)} className="h-[22px] w-[80px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
-                    <span className="text-gray-700 dark:text-gray-300">%</span>
+                  <div className="account-risk-preview">
+                    <span>Current policy</span>
+                    <strong>{getValue('MarginCallLevel', '100')}% margin call</strong>
+                    <small>{getValue('StopOutLevel', '50')}% stop out</small>
                   </div>
+                </section>
 
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Limit total value of positions:</span>
-                  <div className="flex items-center gap-2">
-                    <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium text-center">
-                      <option>Default</option>
-                    </select>
-                    <span className="text-gray-700 dark:text-gray-300">USD</span>
-                  </div>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Limit number of active orders:</span>
-                  <select className="h-[22px] w-[100px] bg-[#1a1b1f] border border-[#3794ff] text-[#3794ff] rounded-sm px-1 focus:outline-none appearance-none font-medium text-center">
-                    <option>Default</option>
-                  </select>
+                <div className="account-settings-note">
+                  <ShieldCheck size={15} />
+                  <span>Trading permissions, reporting, API access, and order caps are inherited from the assigned group. This panel only shows controls supported by the account update API.</span>
                 </div>
-
               </div>
             ) : activeTab === 'Trade' ? (
-              <div className="flex-1 flex gap-2 overflow-hidden bg-[#1a1a1c] p-1 pr-2">
-                {/* Left Graph Area */}
-                <div className="w-[380px] border border-[#333] bg-[#0a0a0a] flex flex-col relative shrink-0"
-                  style={{
-                    backgroundImage: `radial-gradient(circle, #2d2d30 1px, transparent 1px)`,
-                    backgroundSize: '15px 15px'
-                  }}>
-                  <div className="absolute top-1 left-2 bg-[#2d2d30] px-1 text-gray-300 text-[11px] border border-[#404040] shadow-sm font-sans z-10">{modalTradeSymbol}</div>
-
-                  {/* Real-time SVG Chart */}
-                  <div className="flex-1 relative overflow-hidden flex items-end">
-                    {(() => {
-                      if (tradeFeedError) {
-                        return <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-500 text-[11px]">{tradeFeedError}</div>;
-                      }
-                      if (tradeTickHistory.length < 2) {
-                        return <div className="absolute inset-0 flex items-center justify-center text-gray-600 text-[11px]">Waiting for ticks on {modalTradeSymbol}...</div>;
-                      }
-
-                      const recentHistory = tradeTickHistory.slice(-80);
-                      const asks = recentHistory.map(t => t.ask);
-                      const bids = recentHistory.map(t => t.bid);
-                      const minVal = Math.min(...bids);
-                      const maxVal = Math.max(...asks);
-
-                      const range = maxVal - minVal || 0.0001;
-                      const padding = range * 0.20;
-                      const minP = minVal - padding;
-                      const maxP = maxVal + padding;
-                      const finalRange = maxP - minP;
-
-                      const width = 100;
-
-                      const getPoints = (isAsk) => {
-                        return recentHistory.map((t, i) => {
-                          const x = (i / Math.max(recentHistory.length - 1, 1)) * width;
-                          const val = isAsk ? t.ask : t.bid;
-                          const rawY = 100 - (((val - minP) / finalRange) * 100);
-                          const y = isAsk ? rawY - 2.5 : rawY + 2.5; // Artificial spread expansion
-                          return `${x},${y}`;
-                        }).join(' ');
-                      };
-
-                      const currentAsk = recentHistory[recentHistory.length - 1].ask;
-                      const currentBid = recentHistory[recentHistory.length - 1].bid;
-
-                      let askY = 100 - (((currentAsk - minP) / finalRange) * 100) - 2.5;
-                      let bidY = 100 - (((currentBid - minP) / finalRange) * 100) + 2.5;
-
-                      askY = Math.max(0, Math.min(100, askY));
-                      bidY = Math.max(0, Math.min(100, bidY));
-
-                      const yAxisLabels = [0, 0.25, 0.5, 0.75, 1].map(percent => {
-                        const y = 100 - (percent * 100);
-                        const val = minP + (finalRange * percent);
-                        return (
-                          <div key={percent} className="absolute right-0 w-[45px] text-[#777] text-[9px] text-right font-mono select-none pr-1" style={{ top: `${y}%`, transform: 'translateY(-50%)' }}>
-                            {val.toFixed(5)}
-                          </div>
-                        );
-                      });
-
-                      return (
-                        <>
-                          {yAxisLabels}
-
-                          <svg className="w-full h-full absolute inset-0 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" style={{ paddingRight: '45px', boxSizing: 'border-box' }}>
-                            <polyline fill="none" stroke="#ef4444" strokeWidth="0.5" points={getPoints(true)} />
-                            <polyline fill="none" stroke="#3b82f6" strokeWidth="0.5" points={getPoints(false)} />
-                          </svg>
-
-                          {/* Tail Lines */}
-                          <div className="absolute right-[45px] left-0 pointer-events-none border-t border-dashed border-[#ef4444]" style={{ top: `${askY}%` }} />
-                          <div className="absolute right-[45px] left-0 pointer-events-none border-t border-dashed border-[#3b82f6]" style={{ top: `${bidY}%` }} />
-
-                          {/* Tail Price Labels */}
-                          <div className="absolute right-0 w-[45px] bg-[#ef4444] text-[10px] text-white font-mono text-center px-0.5 z-20" style={{ top: `${askY}%`, transform: 'translateY(-50%)' }}>
-                            {currentAsk.toFixed(5)}
-                          </div>
-                          <div className="absolute right-0 w-[45px] bg-[#3b82f6] text-[10px] text-white font-mono text-center px-0.5 z-20" style={{ top: `${bidY}%`, transform: 'translateY(-50%)' }}>
-                            {currentBid.toFixed(5)}
-                          </div>
-                        </>
-                      );
-                    })()}
+              <AccountTradeTab
+                loginId={loginId}
+                account={account}
+                positions={positions}
+                selectedTicketRow={selectedTicketRow}
+                setSelectedTicketRow={setSelectedTicketRow}
+                adapter={adapter}
+                canManipulateTrades={canManipulateTrades}
+                canCloseTrades={canCloseTrades}
+                handleModifySLTP={handleModifySLTP}
+                requestTradeClose={requestTradeClose}
+                showResult={showResult}
+                showError={showError}
+                requireTradeMutationPermission={requireTradeMutationPermission}
+                onTradePlaced={() => {
+                  invalidatePositionsCache(loginId);
+                  setPositionSyncRevision((revision) => revision + 1);
+                }}
+              />
+            ) : activeTab === 'History' ? (
+              <div className="account-history-tab">
+                <div className="account-section-heading">
+                  <div className="account-section-heading-icon"><FileText size={16} /></div>
+                  <div>
+                    <h2>Position history</h2>
+                    <p>Closed trades and realized account activity for login {loginId}.</p>
                   </div>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm account-history-refresh"
+                    onClick={() => setHistoryRefreshRevision((revision) => revision + 1)}
+                    disabled={historyLoading}
+                  >
+                    <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} />
+                    Refresh
+                  </button>
                 </div>
-
-                {/* Right Trade Form Area */}
-                <div className="flex-1 flex flex-col pl-4 text-[13px] font-sans pb-4 overflow-y-auto custom-scrollbar overflow-x-hidden">
-
-                  {selectedTicketRow ? (
-                    <div className="grid grid-cols-[80px_1fr] items-center gap-2 mb-3 mt-1">
-                      <span className="text-blue-400 text-right font-bold">Ticket:</span>
-                      <input type="text" readOnly value={selectedTicketRow.position} className="h-[22px] bg-[#1a1b1f] border border-blue-500/50 rounded-sm px-2 text-blue-400 focus:outline-none w-full appearance-none font-mono font-bold" />
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-[80px_1fr] items-center gap-2 mb-3 mt-1">
-                      <span className="text-gray-500 text-right">New Trade</span>
-                      <div className="h-[22px]" />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-[80px_1fr] items-center gap-2 mb-2 mt-1">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Symbol:</span>
-                    <select
-                      value={modalTradeSymbol}
-                      onChange={(e) => {
-                        setModalTradeSymbol(e.target.value);
-                        setTradeTickHistory([]);
-                      }}
-                      className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none font-bold"
-                    >
-                      <option value={modalTradeSymbol}>{modalTradeSymbol}</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-[80px_1fr] items-center gap-2 mb-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Type:</span>
-                    <input type="text" readOnly value={selectedTicketRow ? (selectedTicketRow.type === 'buy' ? 'Buy Order' : 'Sell Order') : 'Market Order'} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none font-medium" />
-                  </div>
-
-                  <div className="grid grid-cols-[80px_170px_1fr] items-center gap-2 mb-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Volume:</span>
-                    <div className="flex">
-                      <input type="text" defaultValue="0.01" className="h-[22px] w-[120px] bg-[#1a1b1f] border border-[#3794ff] rounded-sm px-2 text-[#3794ff] focus:outline-none font-medium text-right shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                      <div className="flex flex-col ml-1 justify-between h-[22px]">
-                        <button className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mb-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▲</span></button>
-                        <button className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mt-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▼</span></button>
-                      </div>
-                    </div>
-                    <span className="text-gray-700 dark:text-gray-300">1 000 EUR</span>
-                  </div>
-
-                  <div className="grid grid-cols-[80px_170px] items-center gap-2 mb-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Fill Policy:</span>
-                    <select className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none flex-1 appearance-none">
-                      <option>Fill or Kill</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-[80px_170px_1fr] items-center gap-2 mb-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">At Price:</span>
-                    <div className="flex">
-                      <input type="text" defaultValue="1.14620" className="h-[22px] w-[120px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none text-right shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                      <div className="flex flex-col ml-1 justify-between h-[22px]">
-                        <button className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mb-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▲</span></button>
-                        <button className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mt-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▼</span></button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 ml-2">
-                      <button className="px-5 py-[1px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-[12px] h-[22px]">Update</button>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 dark:text-gray-200">
-                        <input type="checkbox" checked={isAutoPipTrack} onChange={(e) => setIsAutoPipTrack(e.target.checked)} className="accent-[#3794ff] rounded-sm bg-[#1a1b1f] border-gray-300 dark:border-gray-600 h-3.5 w-3.5" /> Auto
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-[70px_1fr_75px_1fr] items-center gap-x-1.5 gap-y-3 mb-2 mt-4 w-full pr-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Stop Loss:</span>
-                    <div className="flex w-full">
-                      <input type="text" value={tradeSL} onChange={(e) => { setTradeSL(e.target.value); setIsAutoPipTrack(false); }} className="h-[22px] w-full bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none text-right shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                      <div className="flex flex-col ml-1 justify-between h-[22px] shrink-0">
-                        <button onClick={() => adjustValue(setTradeSL, 0.00001)} className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mb-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▲</span></button>
-                        <button onClick={() => adjustValue(setTradeSL, -0.00001)} className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mt-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▼</span></button>
-                      </div>
-                    </div>
-
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Take Profit:</span>
-                    <div className="flex w-full">
-                      <input type="text" value={tradeTP} onChange={(e) => { setTradeTP(e.target.value); setIsAutoPipTrack(false); }} className="h-[22px] w-full bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none text-right shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                      <div className="flex flex-col ml-1 justify-between h-[22px] shrink-0">
-                        <button onClick={() => adjustValue(setTradeTP, 0.00001)} className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mb-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▲</span></button>
-                        <button onClick={() => adjustValue(setTradeTP, -0.00001)} className="h-[10px] w-4 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-[1px] flex items-center justify-center hover:bg-[#3e3e42]"><span className="text-[8px] leading-none mt-0.5" style={{ fontFamily: 'system-ui', transform: 'scaleX(1.5)' }}>▼</span></button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-[80px_1fr] items-center gap-2 mb-2">
-                    <span className="text-gray-700 dark:text-gray-300 text-right">Comment:</span>
-                    <select className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none"></select>
-                  </div>
-
-                  <div className="flex justify-center items-center gap-3 py-4 text-[26px] font-sans tracking-tight">
-                    <span className="text-[#ef5350]">
-                      {tradeTickHistory.length > 0 ? tradeTickHistory[tradeTickHistory.length - 1].ask.toFixed(5) : '0.000'}
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300 text-2xl font-light">/</span>
-                    <span className="text-[#64b5f6]">
-                      {tradeTickHistory.length > 0 ? tradeTickHistory[tradeTickHistory.length - 1].bid.toFixed(5) : '0.000'}
-                    </span>
-                  </div>
-
-                  {selectedTicketRow ? (
-                    <div className="px-3 mb-2 flex flex-col gap-2">
-                      <button
-                        onClick={handleUpdateTrade}
-                        disabled={isUpdatingTrade || !canManipulateTrades}
-                        title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
-                        className="ui-btn ui-btn-primary"
-                        style={{ height: 34, fontWeight: 600 }}
-                      >
-                        {isUpdatingTrade ? 'Modifying…' : `Modify ${adapter.label} S/L · T/P`}
-                      </button>
-
-                      {adapter.actions.length > 0 && (
-                        <div className="flex flex-wrap gap-2 justify-center">
-                          {adapter.actions.map(act => (
-                            <button
-                              key={act.key}
-                              onClick={() => runAdapterAction(act)}
-                              title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : act.title}
-                              disabled={!canManipulateTrades}
-                              className={
-                                act.tone === 'danger' ? 'ui-btn ui-btn-danger ui-btn-sm' :
-                                  act.tone === 'danger-outline' ? 'ui-btn ui-btn-secondary ui-btn-sm' :
-                                    'ui-btn ui-btn-secondary ui-btn-sm'
-                              }
-                              style={act.tone === 'danger-outline' ? { color: 'var(--danger-text)', borderColor: 'var(--danger-border)' } : undefined}
-                            >
-                              {act.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="px-3 mb-2">
-                      <div
-                        className="text-center text-xs py-4 rounded-lg"
-                        style={{
-                          background: 'var(--surface-2)',
-                          border: '1px dashed var(--border)',
-                          color: 'var(--text-3)',
-                        }}
-                      >
-                        Select a {adapter.label.toLowerCase()} row to enable modifications.
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="px-3 mt-1 relative">
-                    <div className="h-6 bg-[#252526] border border-[#333] shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)]"></div>
-                  </div>
-
-                </div>
+                <PositionHistoryGrid
+                  data={historyRows}
+                  isLoading={historyLoading}
+                  error={historyError}
+                  login={loginId}
+                />
               </div>
             ) : activeTab === 'Security' ? (
-              <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar text-[13px] font-sans px-2">
-
-                <div className="mb-6 space-y-1">
-                  <p className="text-gray-800 dark:text-gray-200 mb-1">Master password is used for full access to the trading account</p>
-                  <div className="flex gap-4 items-start">
-                    <div>
-                      <div className="relative">
-                        <input type={showPasswords.master ? "text" : "password"} value={passwords.master} onChange={(e) => setPasswords(p => ({ ...p, master: e.target.value }))} placeholder="|" className="w-[180px] h-[22px] bg-[#1a1b1f] border border-[#3794ff] rounded-sm pl-2 pr-12 text-gray-800 dark:text-gray-200 focus:outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <button onClick={() => togglePassword('master')} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {showPasswords.master ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                          <button onClick={() => handleCopy('master', passwords.master)} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {copiedField === 'master' ? <CheckIcon size={12} className="text-green-500" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-[#dbab44] mt-1 tracking-wide">minimum 8 characters</p>
-                    </div>
-                    <button onClick={() => handlePasswordCheck('USER_PASS_MAIN', passwords.master)} disabled={checkingPassword === 'USER_PASS_MAIN' || !canManagePasswords} title={!canManagePasswords ? 'No permission to verify passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_MAIN' ? '...' : 'Check'}</button>
-                    <button onClick={() => handlePasswordChange('USER_PASS_MAIN', passwords.master)} disabled={changingPassword === 'USER_PASS_MAIN' || !canManagePasswords} title={!canManagePasswords ? 'No permission to change passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'USER_PASS_MAIN' ? 'Wait...' : 'Change'}</button>
-                    <button className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200">Generate</button>
+              <div className="account-security-tab">
+                <div className="account-section-heading">
+                  <div className="account-section-heading-icon"><ShieldCheck size={16} /></div>
+                  <div>
+                    <h2>Password management</h2>
+                    <p>Verify or rotate account credentials without exposing them in request URLs.</p>
                   </div>
                 </div>
 
-                <div className="mb-6 space-y-1">
-                  <p className="text-gray-800 dark:text-gray-200 mb-1">Investor password is used for limited access to the trading account in read-only mode</p>
-                  <div className="flex gap-4 items-start">
-                    <div>
-                      <div className="relative">
-                        <input type={showPasswords.investor ? "text" : "password"} value={passwords.investor} onChange={(e) => setPasswords(p => ({ ...p, investor: e.target.value }))} placeholder="" className="w-[180px] h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm pl-2 pr-12 text-gray-800 dark:text-gray-200 focus:outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <button onClick={() => togglePassword('investor')} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {showPasswords.investor ? <EyeOff size={13} /> : <Eye size={13} />}
+                <div className="account-security-list">
+                  {[
+                    { field: 'master', type: 'USER_PASS_MAIN', title: 'Master password', description: 'Full trading access for the account owner.' },
+                    { field: 'investor', type: 'USER_PASS_INVESTOR', title: 'Investor password', description: 'Read-only access to account activity.' },
+                    { field: 'api', type: 'USER_PASS_API', title: 'API password', description: 'Access through approved Web API integrations.' },
+                  ].map(({ field, type, title, description }) => (
+                    <section className="account-security-card" key={field}>
+                      <div className="account-security-copy">
+                        <h3>{title}</h3>
+                        <p>{description}</p>
+                      </div>
+                      <div className="account-security-controls">
+                        <div className="account-password-input">
+                          <input
+                            aria-label={`${title} value`}
+                            type={showPasswords[field] ? 'text' : 'password'}
+                            value={passwords[field]}
+                            onChange={(event) => setPasswords((current) => ({ ...current, [field]: event.target.value }))}
+                            placeholder="Minimum 8 characters"
+                            autoComplete="new-password"
+                          />
+                          <button type="button" onClick={() => togglePassword(field)} aria-label={`${showPasswords[field] ? 'Hide' : 'Show'} ${title.toLowerCase()}`}>
+                            {showPasswords[field] ? <EyeOff size={14} /> : <Eye size={14} />}
                           </button>
-                          <button onClick={() => handleCopy('investor', passwords.investor)} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {copiedField === 'investor' ? <CheckIcon size={12} className="text-green-500" /> : <Copy size={12} />}
+                          <button type="button" onClick={() => handleCopy(field, passwords[field])} disabled={!passwords[field]} aria-label={`Copy ${title.toLowerCase()}`}>
+                            {copiedField === field ? <CheckIcon size={13} /> : <Copy size={13} />}
                           </button>
                         </div>
+                        <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => generatePassword(field)}>Generate</button>
+                        <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => handlePasswordCheck(type, passwords[field])} disabled={!passwords[field] || checkingPassword === type || !canManagePasswords}>
+                          {checkingPassword === type ? 'Checking…' : 'Verify'}
+                        </button>
+                        <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" onClick={() => handlePasswordChange(type, passwords[field])} disabled={passwords[field].length < 8 || changingPassword === type || !canManagePasswords}>
+                          {changingPassword === type ? 'Updating…' : 'Change'}
+                        </button>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-1 tracking-wide">minimum 8 characters</p>
-                    </div>
-                    <button onClick={() => handlePasswordCheck('USER_PASS_INVESTOR', passwords.investor)} disabled={checkingPassword === 'USER_PASS_INVESTOR' || !canManagePasswords} title={!canManagePasswords ? 'No permission to verify passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{checkingPassword === 'USER_PASS_INVESTOR' ? '...' : 'Check'}</button>
-                    <button onClick={() => handlePasswordChange('USER_PASS_INVESTOR', passwords.investor)} disabled={changingPassword === 'USER_PASS_INVESTOR' || !canManagePasswords} title={!canManagePasswords ? 'No permission to change passwords' : undefined} className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200 disabled:opacity-50">{changingPassword === 'USER_PASS_INVESTOR' ? 'Wait...' : 'Change'}</button>
-                  </div>
+                    </section>
+                  ))}
                 </div>
 
-                <div className="mb-6 space-y-1">
-                  <p className="text-gray-800 dark:text-gray-200 mb-1">API password is used for access to the server using Web API</p>
-                  <div className="flex gap-4 items-start">
-                    <div>
-                      <div className="relative">
-                        <input type={showPasswords.api ? "text" : "password"} value={passwords.api} onChange={(e) => setPasswords(p => ({ ...p, api: e.target.value }))} placeholder="" className="w-[180px] h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm pl-2 pr-12 text-gray-800 dark:text-gray-200 focus:outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <button onClick={() => togglePassword('api')} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {showPasswords.api ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                          <button onClick={() => handleCopy('api', passwords.api)} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {copiedField === 'api' ? <CheckIcon size={12} className="text-green-500" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-1 tracking-wide">minimum 8 characters</p>
-                    </div>
-                    <button className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200">Check</button>
-                    <button className="h-[22px] w-[90px] bg-[#2d2d30] border border-gray-300 dark:border-gray-500 rounded-sm hover:bg-[#3e3e42] text-gray-800 dark:text-gray-200">Change</button>
-                  </div>
+                <div className="account-settings-note">
+                  <ShieldCheck size={15} />
+                  <span>Passwords stay masked by default and are sent in an authenticated POST body. Generated values are not saved until you choose Change.</span>
                 </div>
-
-                <div className="mb-6 space-y-1">
-                  <p className="text-gray-800 dark:text-gray-200 mb-1">Phone password allows to identify the account owner when performing trade operations by phone</p>
-                  <div className="flex gap-4 items-start">
-                    <div>
-                      <div className="relative">
-                        <input type={showPasswords.phone ? "text" : "password"} value={passwords.phone} onChange={(e) => setPasswords(p => ({ ...p, phone: e.target.value }))} placeholder="" className="w-[180px] h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm pl-2 pr-12 text-gray-800 dark:text-gray-200 focus:outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <button onClick={() => togglePassword('phone')} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {showPasswords.phone ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                          <button onClick={() => handleCopy('phone', passwords.phone)} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {copiedField === 'phone' ? <CheckIcon size={12} className="text-green-500" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-1 tracking-wide">to view password set focus to field</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-4 space-y-1">
-                  <p className="text-gray-800 dark:text-gray-200 mb-1">Shared secret key in combination with the current timestamp is used to generate one-time password</p>
-                  <p className="text-gray-700 dark:text-gray-300 mt-2 mb-1">OTP secret key</p>
-                  <div className="flex gap-4 items-start">
-                    <div>
-                      <div className="relative">
-                        <input type={showPasswords.otp ? "text" : "password"} value={passwords.otp} onChange={(e) => setPasswords(p => ({ ...p, otp: e.target.value }))} placeholder="" className="w-[180px] h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm pl-2 pr-12 text-gray-800 dark:text-gray-200 focus:outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <button onClick={() => togglePassword('otp')} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {showPasswords.otp ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                          <button onClick={() => handleCopy('otp', passwords.otp)} className="text-gray-400 hover:text-gray-800 dark:text-gray-200 focus:outline-none">
-                            {copiedField === 'otp' ? <CheckIcon size={12} className="text-green-500" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
               </div>
             ) : activeTab === 'Balance' ? (
               <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar text-[13px] font-['Inter',sans-serif]">
                 <div className="max-w-[500px] mx-auto bg-white/60 dark:bg-purple-900/10 backdrop-blur-xl border border-white/50 dark:border-purple-500/20 shadow-2xl shadow-purple-500/10 rounded-2xl overflow-hidden">
                   <div className="h-10 bg-white/40 dark:bg-purple-800/30 border-b border-white/50 dark:border-purple-500/20 flex items-center px-4 select-none">
                     <h2 className="text-[12px] font-bold text-purple-800 dark:text-purple-200 tracking-wide uppercase">
-                      Deposit Funds
+                      Account Transaction
                     </h2>
                   </div>
 
@@ -1954,8 +1632,51 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       </div>
                     )}
                     {depositSuccess && (
-                      <div className="p-3 bg-green-100/50 dark:bg-green-900/30 backdrop-blur-sm border border-green-200/50 dark:border-green-800/50 text-green-800 dark:text-green-300 rounded-xl text-[12px]">
+                      <div className="p-3 bg-blue-100/50 dark:bg-blue-900/30 backdrop-blur-sm border border-blue-200/50 dark:border-blue-800/50 text-blue-800 dark:text-blue-300 rounded-xl text-[12px]">
                         {depositSuccess}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Transaction type</label>
+                      <div className="grid grid-cols-4 gap-1 rounded-xl border border-purple-100/60 dark:border-purple-500/20 bg-white/25 dark:bg-purple-950/20 p-1">
+                        {Object.entries(TRANSACTION_LABELS).map(([type, label]) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => {
+                              setTransactionType(type);
+                              setDepositError(null);
+                              setDepositSuccess(null);
+                            }}
+                            disabled={isDepositing}
+                            className={`h-8 rounded-lg text-[11px] font-medium transition-colors ${transactionType === type
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-purple-900/70 hover:bg-purple-100/70 dark:text-purple-200/70 dark:hover:bg-purple-800/40'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {transactionType === 'transfer' && (
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="transaction-destination-login" className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Destination account login *</label>
+                        <input
+                          id="transaction-destination-login"
+                          type="number"
+                          value={transferLogin}
+                          onChange={(event) => {
+                            setTransferLogin(event.target.value);
+                            setDepositError(null);
+                            setDepositSuccess(null);
+                          }}
+                          placeholder="Account login"
+                          min="1"
+                          step="1"
+                          className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all placeholder-purple-400/60"
+                        />
                       </div>
                     )}
 
@@ -1990,31 +1711,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       />
                     </div>
 
-                    <label className="flex items-start gap-2.5 rounded-xl border border-purple-100/50 dark:border-purple-500/20 bg-white/20 dark:bg-purple-950/20 px-3 py-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isCreditDeposit}
-                        onChange={(e) => {
-                          setIsCreditDeposit(e.target.checked);
-                          setDepositError(null);
-                          setDepositSuccess(null);
-                        }}
-                        disabled={isDepositing}
-                        className="mt-0.5 h-3.5 w-3.5 accent-purple-600"
-                      />
-                      <span className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Post as credit</span>
-                        <span className="text-[11px] text-purple-900/55 dark:text-purple-200/55">Use only when this transaction should be recorded as account credit.</span>
-                      </span>
-                    </label>
-
                     <button
-                      onClick={handleDeposit}
-                      disabled={isDepositing || !depositAmount || !canDeposit}
-                      title={!canDeposit ? 'You do not have permission to deposit funds' : undefined}
+                      onClick={handleTransaction}
+                      disabled={isDepositing || !depositAmount || !canManageFinances || (transactionType === 'transfer' && !transferLogin)}
+                      title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
                       className="mt-4 px-6 h-9 self-end bg-purple-600/80 hover:bg-purple-600 dark:bg-purple-500/80 dark:hover:bg-purple-500 backdrop-blur-md border border-purple-400/50 text-white text-[12px] font-medium rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center"
                     >
-                      {isDepositing ? 'Working...' : isCreditDeposit ? 'Add credit' : 'Deposit'}
+                      {isDepositing ? 'Working...' : TRANSACTION_LABELS[transactionType]}
                     </button>
                   </div>
                 </div>
@@ -2029,17 +1732,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Footer */}
-          <div className="account-details-footer flex items-center justify-between flex-shrink-0">
-            
+          <div className="account-details-footer flex items-center justify-end flex-shrink-0">
             <div className="flex gap-2">
-              <button onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
+              <button type="button" onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
                 {updateLoading ? 'Wait...' : 'Update'}
               </button>
-              <button onClick={onClose} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
-                Cancel
-              </button>
-              <button className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
-                Help
+              <button type="button" onClick={onClose} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
+                Close
               </button>
             </div>
           </div>

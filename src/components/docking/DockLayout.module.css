@@ -71,6 +71,40 @@
   pointer-events: none;
 }
 
+.bottomResizer {
+  position: relative;
+  height: 6px;
+  flex: 0 0 6px;
+  display: grid;
+  place-items: center;
+  border-block: 1px solid var(--bg);
+  background: var(--border);
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+  transition: background 120ms ease;
+}
+
+.bottomResizer span {
+  width: 34px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--muted);
+  pointer-events: none;
+}
+
+.bottomResizer:hover,
+.bottomResizer:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+.bottomResizer:hover span,
+.bottomResizer:focus-visible span {
+  background: var(--accent-contrast, #fff);
+}
+
 .maximizedPanelOverlay {
   position: absolute;
   inset: 0;

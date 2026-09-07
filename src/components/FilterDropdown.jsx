@@ -11,11 +11,14 @@ const FilterDropdown = ({
   loading = false,
   loadingLabel = 'Loading options…',
   emptyLabel = 'No options available',
+  fontSize,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const rootRef = useRef(null);
   const buttonId = useId();
+
+  const effectiveFontSize = fontSize || undefined;
 
   const availableOptions = useMemo(
     () => [...new Set(options.filter(Boolean).map((option) => String(option)))],
@@ -66,12 +69,12 @@ const FilterDropdown = ({
           if (isOpen) closeMenu();
           else setIsOpen(true);
         }}
-        className="ui-input ui-input-sm h-7 w-full text-left text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
-        style={{ display: 'flex', alignItems: 'center', padding: '0 28px 0 10px' }}
+        className="ui-input ui-input-sm h-7 w-full text-left cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+        style={{ display: 'flex', alignItems: 'center', padding: '0 28px 0 10px', fontSize: effectiveFontSize }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="block min-w-0 flex-1 truncate" style={{ color: 'var(--text-2)' }}>
+        <span className="block min-w-0 flex-1 truncate" style={{ color: 'var(--text-2)', fontSize: effectiveFontSize }}>
           {loading ? loadingLabel : value}
         </span>
         <ChevronDown
@@ -104,15 +107,15 @@ const FilterDropdown = ({
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search options…"
                 aria-label="Search filter options"
-                className="ui-input ui-input-sm h-7 w-full text-xs"
-                style={{ paddingLeft: 28 }}
+                className="ui-input ui-input-sm h-7 w-full"
+                style={{ paddingLeft: 28, fontSize: effectiveFontSize }}
               />
             </div>
           )}
 
           <div className="max-h-64 overflow-y-auto py-1">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs" style={{ color: 'var(--muted)' }}>
+              <div className="px-3 py-2 text-[10px]" style={{ color: 'var(--muted)', fontSize: '10px' }}>
                 {emptyLabel}
               </div>
             ) : filteredOptions.map((option) => {
@@ -124,11 +127,11 @@ const FilterDropdown = ({
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => selectOption(option)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--surface-2)]"
-                  style={{ background: isSelected ? 'var(--accent-soft)' : 'transparent', color: 'var(--text)' }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]"
+                  style={{ background: isSelected ? 'var(--accent-soft)' : 'transparent', color: 'var(--text)', fontSize: effectiveFontSize }}
                 >
                   <span className="min-w-0 flex-1 truncate">{option}</span>
-                  {isSelected && <Check size={14} style={{ color: 'var(--accent-text)' }} aria-hidden="true" />}
+                  {isSelected && <Check size={12} style={{ color: 'var(--accent-text)' }} aria-hidden="true" />}
                 </button>
               );
             })}

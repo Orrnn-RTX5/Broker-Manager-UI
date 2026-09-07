@@ -421,7 +421,7 @@ test('loginManager sends the selected opaque server handle to the broker backend
   );
 
   assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0].url, 'https://testbrokerbackend.orrnn.com/api/v2/auth/login');
+  assert.equal(fetchCalls[0].url, 'https://testbrokerbackend.orrnn.com/api/v1/manager/auth/login');
   assert.deepEqual(JSON.parse(fetchCalls[0].options.body), {
     user: '1001',
     password: 'secret',
@@ -429,7 +429,7 @@ test('loginManager sends the selected opaque server handle to the broker backend
   });
 });
 
-test('loginManager uses native auth route for MyProp broker backend', async () => {
+test('loginManager uses the documented native manager auth route for MyProp broker backend', async () => {
   globalThis.fetch = async (url, options = {}) => {
     fetchCalls.push({ url: String(url), options });
     return {
@@ -452,5 +452,5 @@ test('loginManager uses native auth route for MyProp broker backend', async () =
   );
 
   assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0].url, 'https://services.myprop.trade/api/v2/auth/login');
+  assert.equal(fetchCalls[0].url, 'https://services.myprop.trade/api/v1/manager/auth/login');
 });

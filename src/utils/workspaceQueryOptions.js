@@ -1,6 +1,9 @@
 export const WORKSPACE_DATA_PATHS = Object.freeze({
   clients: '/clients',
+  tradingAccounts: '/clients/trading-accounts',
   orders: '/clients/orders',
+  deals: '/dealing',
+  positions: '/clients/positions',
   groups: '/groups',
 });
 
@@ -18,9 +21,36 @@ export const CLIENTS_INITIAL_PARAMS = Object.freeze({
   offset: 0,
 });
 
+export const TRADING_ACCOUNTS_INITIAL_PARAMS = Object.freeze({
+  search: '',
+  sort_by: 'login',
+  sort_dir: 'asc',
+  filters: EMPTY_FILTERS,
+  limit: 30,
+  offset: 0,
+});
+
 export const ORDERS_INITIAL_PARAMS = Object.freeze({
   search: '',
   sort_by: 'ticket',
+  sort_dir: 'desc',
+  filters: EMPTY_FILTERS,
+  limit: 30,
+  offset: 0,
+});
+
+export const DEALS_INITIAL_PARAMS = Object.freeze({
+  search: '',
+  sort_by: 'ticket',
+  sort_dir: 'desc',
+  filters: EMPTY_FILTERS,
+  limit: 30,
+  offset: 0,
+});
+
+export const POSITIONS_INITIAL_PARAMS = Object.freeze({
+  search: '',
+  sort_by: 'time',
   sort_dir: 'desc',
   filters: EMPTY_FILTERS,
   limit: 30,
@@ -58,10 +88,34 @@ export const createClientsInitialQueryOptions = ({ request } = {}) => (
   })
 );
 
+export const createTradingAccountsInitialQueryOptions = ({ request } = {}) => (
+  createInitialPagedQueryOptions({
+    queryKey: ['trading-accounts', 'page'],
+    params: TRADING_ACCOUNTS_INITIAL_PARAMS,
+    request,
+  })
+);
+
 export const createOrdersInitialQueryOptions = ({ request } = {}) => (
   createInitialPagedQueryOptions({
     queryKey: ['orders', 'page'],
     params: ORDERS_INITIAL_PARAMS,
+    request,
+  })
+);
+
+export const createDealsInitialQueryOptions = ({ request } = {}) => (
+  createInitialPagedQueryOptions({
+    queryKey: ['deals', 'page'],
+    params: DEALS_INITIAL_PARAMS,
+    request,
+  })
+);
+
+export const createPositionsInitialQueryOptions = ({ request } = {}) => (
+  createInitialPagedQueryOptions({
+    queryKey: ['positions', 'page'],
+    params: POSITIONS_INITIAL_PARAMS,
     request,
   })
 );
@@ -73,3 +127,4 @@ export const createGroupsInitialQueryOptions = ({ request } = {}) => (
     request,
   })
 );
+

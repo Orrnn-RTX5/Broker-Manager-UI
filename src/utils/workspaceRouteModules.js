@@ -66,3 +66,14 @@ export const FREQUENT_WORKSPACE_ROUTE_KEYS = Object.freeze([
 export const preloadFrequentWorkspaceRoutes = () => Promise.allSettled(
   FREQUENT_WORKSPACE_ROUTE_KEYS.map((key) => workspaceRouteLoaders[key]())
 );
+
+export const preloadAllWorkspaceRoutes = () => Promise.allSettled(
+  Object.values(workspaceRouteLoaders).map((loader) => {
+    try {
+      return loader().catch(() => undefined);
+    } catch {
+      return Promise.resolve();
+    }
+  })
+);
+

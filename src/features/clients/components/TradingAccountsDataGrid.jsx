@@ -1,11 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw, Edit2 } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
-import { getTradingAccountsPage } from '../../../services/api';
+import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPositions } from '../../../services/api';
 import GridLoadingState from '../../../components/GridLoadingState';
+const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const TRADING_ACCOUNTS_CACHE_KEY = 'rtx5_trading_accounts_cache_v2';
+
+const getInitialCachedTradingAccounts = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(TRADING_ACCOUNTS_CACHE_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      const offset = Number(parsed.offset) || 0;
+      return {
+        ...parsed,
+        total: parsed.total ?? (!parsed.hasMore ? offset + parsed.rows.length : null),
+      };
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return undefined;
+};
+
+const saveCachedTradingAccounts = (data) => {
+  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(TRADING_ACCOUNTS_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
 
 const SortIcon = ({ col, sortCol, sortDir }) => {
   if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
@@ -24,6 +55,7 @@ const TradingAccountsDataGrid = ({
   canEditAccounts = true,
   refreshVersion = 0,
 }) => {
+  const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -44,6 +76,26 @@ const TradingAccountsDataGrid = ({
     filters,
   }), [search, sortCol, sortDir, filters]);
 
+  const isDefaultParams = !search && groupFilter === 'All Groups' && countryFilter === 'All Countries' && sortCol === 'login' && sortDir === 'asc';
+
+  const initialData = useMemo(() => {
+    if (!isDefaultParams) return undefined;
+    const sessionCache = getInitialCachedTradingAccounts();
+    if (sessionCache) return sessionCache;
+
+    const sidebarAccounts = queryClient.getQueryData(['sidebar-accounts', '']);
+    if (sidebarAccounts?.rows?.length > 0) {
+      const hasMore = Boolean(sidebarAccounts.hasMore);
+      return {
+        rows: sidebarAccounts.rows.map(normalizeTradingAccountRow),
+        total: sidebarAccounts.total ?? (!hasMore ? sidebarAccounts.rows.length : null),
+        hasMore,
+        nextOffset: sidebarAccounts.nextOffset ?? pageSize,
+      };
+    }
+    return undefined;
+  }, [isDefaultParams, queryClient]);
+
   const {
     rows,
     total,
@@ -59,10 +111,18 @@ const TradingAccountsDataGrid = ({
     prevPage,
   } = usePagedData({
     queryKey: ['trading-accounts', 'page'],
-    queryFn: getTradingAccountsPage,
+    queryFn: async (p, options) => {
+      const result = await getTradingAccountsPage(p, options);
+      if (p.offset === 0 && !p.search && result?.rows?.length > 0) {
+        saveCachedTradingAccounts(result);
+      }
+      return result;
+    },
     params,
     pageSize,
     enabled: hasRequestedData,
+    initialData,
+    placeholderData: (previousData) => previousData || initialData,
   });
 
   useEffect(() => {
@@ -116,10 +176,11 @@ const TradingAccountsDataGrid = ({
     : canEditAccounts ? 'Edit Account' : 'No permission to update accounts';
   const handleEditAccount = (row) => {
     if (!canUseEditAction) return;
+    void preloadAccountPositions(row.login);
     onEditAccount(row);
   };
-  const handleRowTap = (row, rowKey) => {
-    const now = Date.now();
+  const handleRowTap = (row, rowKey, eventTime) => {
+    const now = Number(eventTime);
     const lastTap = lastTapRef.current;
 
     if (lastTap.rowKey === rowKey && now - lastTap.time < 350) {
@@ -183,9 +244,13 @@ const TradingAccountsDataGrid = ({
               return (
                 <tr
                   key={rowKey}
+                  onPointerDown={(event) => {
+                    if (!canUseEditAction || (event.pointerType === 'mouse' && event.button !== 0)) return;
+                    void preloadAccountPositions(row.login);
+                  }}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
                   onDoubleClick={() => handleEditAccount(row)}
-                  onTouchEnd={() => handleRowTap(row, rowKey)}
+                  onTouchEnd={(event) => handleRowTap(row, rowKey, event.timeStamp)}
                   onContextMenu={(e) => onRowContext && onRowContext(e, row)}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}

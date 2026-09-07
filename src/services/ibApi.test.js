@@ -2,21 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIbEndpoint, sanitizeIbPayload } from './ibApiPaths.js';
 
-test('buildIbEndpoint uses query params for IB action endpoints and strips broker scope', () => {
+test('buildIbEndpoint uses query params for documented IB read endpoints and strips broker scope', () => {
   assert.equal(
-    buildIbEndpoint('/IBApprove', { login: 2001, notes: 'ok', broker_id: 'broker-a' }),
-    '/IBApprove?login=2001&notes=ok'
+    buildIbEndpoint('/IBGet', { login: 2001, broker_id: 'broker-a' }),
+    '/IBGet?login=2001'
   );
   assert.equal(
-    buildIbEndpoint('/IBPayoutApprove', { payout_id: 9, external_ref: 'WIRE-1', brokerId: 'broker-a' }),
-    '/IBPayoutApprove?payout_id=9&external_ref=WIRE-1'
+    buildIbEndpoint('/IBCommissions', { ib_login: 2001, brokerId: 'broker-a' }),
+    '/IBCommissions?ib_login=2001'
   );
 });
 
-test('buildIbEndpoint keeps false query values for explicit force/delete flows', () => {
+test('buildIbEndpoint keeps false query values for documented filters', () => {
   assert.equal(
-    buildIbEndpoint('/IBDelete', { login: 2001, force: false }),
-    '/IBDelete?login=2001&force=false'
+    buildIbEndpoint('/IBCommissions', { ib_login: 2001, paid: false }),
+    '/IBCommissions?ib_login=2001&paid=false'
   );
 });
 

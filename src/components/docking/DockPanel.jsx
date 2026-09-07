@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import { ChevronUp, ChevronDown, Maximize2, Minimize2, Users } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, ChevronUp, ChevronDown, FolderTree, Maximize2, Minimize2, TerminalSquare, Users } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
 import styles from './DockPanel.module.css';
@@ -24,7 +24,8 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   const pos     = panel?.position;
   const isFloat = pos === DOCK_POSITIONS.FLOAT;
   const isMaximized = Boolean(panel?.maximized);
-  const PanelIcon = panel?.icon === 'users' ? Users : null;
+  const panelIcons = { users: Users, navigator: FolderTree, market: BarChart3, owner: BriefcaseBusiness, terminal: TerminalSquare };
+  const PanelIcon = panelIcons[panel?.icon] || null;
 
   // ─── Drag to float ──────────────────────────────────────────────────────────
   const onTitleMouseDown = useCallback((e) => {
@@ -174,9 +175,24 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
 
   if (draggingId === id) containerClass += ' ' + styles.dragging;
 
+  if (pos === DOCK_POSITIONS.RIGHT) {
+    const width = Number(panel.size?.width);
+    if (Number.isFinite(width) && width > 0) containerStyle.width = `${Math.round(width)}px`;
+  }
+  if (pos === DOCK_POSITIONS.BOTTOM || pos === DOCK_POSITIONS.TOP || pos === DOCK_POSITIONS.CENTER) {
+    const configuredHeight = panel.size?.height;
+    const numericHeight = Number(configuredHeight);
+    if (Number.isFinite(numericHeight) && numericHeight > 0) {
+      containerStyle.height = `${Math.round(numericHeight)}px`;
+    } else if (typeof configuredHeight === 'string' && configuredHeight.trim()) {
+      containerStyle.height = configuredHeight;
+    }
+  }
+
   return (
     <div
       ref={panelRef}
+      data-panel-id={id}
       className={containerClass}
       style={{ ...containerStyle, ...layoutStyle }}
       onMouseDown={() => isFloat && bringToFront(id)}

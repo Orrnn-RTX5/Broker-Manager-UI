@@ -153,7 +153,10 @@ export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) =>
 
 // Versioned API routes are owned by the broker backend itself. They must not
 // receive the legacy `/manager` prefix used by the older Manager endpoints.
-const isNativeApiPath = (path = '') => /^\/api\/v\d+(?:\/|\?|$)/i.test(path);
+const isNativeApiPath = (path = '') => (
+  /^\/api\/v\d+(?:\/|\?|$)/i.test(path) ||
+  /^\/reports\/v\d+(?:\/|\?|$)/i.test(path)
+);
 
 export const buildManagerApiPath = (endpoint = '', useProxyPrefix = true) => {
   const raw = String(endpoint || '');
@@ -480,13 +483,17 @@ export const buildFeedWsUrl = () => {
 
 const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));
 
-export const buildPositionUpdatesWsUrl = (ticket) => {
-  if (!ticket) throw new Error('A one-time websocket ticket is required.');
+export const getPositionUpdatesWsPath = () => {
   const configuredPath = getRuntimeConfigValue(
     ['POSITION_UPDATES_WS_PATH', 'VITE_POSITION_UPDATES_WS_PATH'],
     '/OnPositionUpdate'
   );
-  const url = new URL(`${getBaseWsHost()}${configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`}`);
+  return configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`;
+};
+
+export const buildPositionUpdatesWsUrl = (ticket) => {
+  if (!ticket) throw new Error('A one-time websocket ticket is required.');
+  const url = new URL(`${getBaseWsHost()}${getPositionUpdatesWsPath()}`);
   url.searchParams.set('ticket', String(ticket));
   return url.toString();
 };

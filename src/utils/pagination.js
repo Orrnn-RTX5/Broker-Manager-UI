@@ -152,6 +152,21 @@ const readTotalFromText = (text) => {
   return null;
 };
 
+const readTotalFromHeaders = (headers) => {
+  if (!headers?.get) return null;
+
+  for (const key of ['x-total-count', 'x-total', 'total-count']) {
+    const rawValue = headers.get(key);
+    if (rawValue === null || rawValue === '') continue;
+    const value = Number(rawValue);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  const contentRange = headers.get('content-range');
+  const rangeTotal = /\/(\d+)\s*$/.exec(String(contentRange || ''));
+  return rangeTotal ? Number(rangeTotal[1]) : null;
+};
+
 const rowContainsSearch = (row, search) => {
   const needle = String(search || '').trim().toLowerCase();
   if (!needle) return true;
@@ -159,17 +174,59 @@ const rowContainsSearch = (row, search) => {
   return values.some((value) => String(value ?? '').toLowerCase().includes(needle));
 };
 
-const rowMatchesFilters = (row, filters = {}) => (
-  Object.entries(filters).every(([key, expected]) => {
-    if (!isPresent(expected)) return true;
-    if (Array.isArray(expected)) {
-      const allowed = expected.filter(isPresent).map((value) => String(value).toLowerCase());
-      return allowed.length === 0 || allowed.includes(String(row?.[key] ?? row?.[key[0]?.toUpperCase?.() + key.slice(1)] ?? '').toLowerCase());
+const matchesFilterValue = (rawVal, expected) => {
+  if (!isPresent(expected)) return true;
+  const expStr = String(expected).trim().toLowerCase();
+
+  if (Array.isArray(expected)) {
+    const allowed = expected.filter(isPresent).map((v) => String(v).trim().toLowerCase());
+    if (allowed.length === 0) return true;
+    const rawStr = String(rawVal ?? '').trim().toLowerCase();
+    return allowed.includes(rawStr);
+  }
+
+  if (isPresent(rawVal)) {
+    const rawStr = String(rawVal).trim().toLowerCase();
+    if (rawStr === expStr) return true;
+  }
+
+  if (expStr === 'buy') {
+    if (rawVal === 0 || rawVal === '0' || rawVal === 'buy' || rawVal === 'deal_buy') return true;
+  } else if (expStr === 'sell') {
+    if (rawVal === 1 || rawVal === '1' || rawVal === 'sell' || rawVal === 'deal_sell') return true;
+  }
+
+  if (expStr === 'client' && (rawVal === 0 || rawVal === '0' || rawVal === 'client')) return true;
+  if (expStr === 'expert' && (rawVal === 1 || rawVal === '1' || rawVal === 'expert' || String(rawVal).toLowerCase().includes('expert') || String(rawVal).toLowerCase().includes('ea'))) return true;
+  if (expStr === 'dealer' && (rawVal === 2 || rawVal === '2' || rawVal === 'dealer' || String(rawVal).toLowerCase().includes('dealer'))) return true;
+  if (expStr === 'mobile' && (rawVal === 5 || rawVal === '5' || rawVal === 'mobile' || String(rawVal).toLowerCase().includes('mobile') || String(rawVal).toLowerCase().includes('ios') || String(rawVal).toLowerCase().includes('android'))) return true;
+
+  return false;
+};
+
+const rowMatchesFilters = (row, filters = {}) => {
+  if (!filters || typeof filters !== 'object') return true;
+  const filterEntries = Object.entries(filters).filter(([_, expected]) => isPresent(expected));
+  if (filterEntries.length === 0) return true;
+
+  return filterEntries.every(([key, expected]) => {
+    const val = row?.[key];
+    if (matchesFilterValue(val, expected)) return true;
+
+    const capKey = key[0]?.toUpperCase?.() + key.slice(1);
+    const capVal = row?.[capKey];
+    if (matchesFilterValue(capVal, expected)) return true;
+
+    if (key === 'type') {
+      if (matchesFilterValue(row?.action ?? row?.Action ?? row?.side ?? row?.Side ?? row?.cmd ?? row?.Cmd, expected)) return true;
     }
-    const actual = row?.[key] ?? row?.[key[0]?.toUpperCase?.() + key.slice(1)];
-    return String(actual ?? '').toLowerCase() === String(expected).toLowerCase();
-  })
-);
+    if (key === 'reason') {
+      if (matchesFilterValue(row?.Reason ?? row?.comment ?? row?.Comment ?? row?.reason_type, expected)) return true;
+    }
+
+    return false;
+  });
+};
 
 const matchesPagedQuery = (rawRow, normalizedRow, query = {}) => {
   const filters = query.filters && typeof query.filters === 'object' ? query.filters : {};
@@ -217,6 +274,7 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
     let rawRow;
     try {
       rawRow = JSON.parse(itemText);
+      if (options.onRow) options.onRow(rawRow);
     } catch {
       continue;
     }
@@ -248,9 +306,13 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
       ? rows.length === limit
       : !reachedEnd && rows.length === limit;
 
+  const resolvedTotal = total ?? (!hasMore
+    ? (options.serverPaged ? offset + rows.length : matched)
+    : null);
+
   return {
     rows,
-    total,
+    total: resolvedTotal,
     hasMore,
     nextOffset: hasMore ? offset + rows.length : null,
     limit,
@@ -286,7 +348,7 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
   const decoder = new globalThis.TextDecoder();
   const rows = [];
   let matched = 0;
-  let total = null;
+  let total = readTotalFromHeaders(response.headers);
   let buffer = '';
   let arrayFound = false;
   let reachedEnd = false;
@@ -319,6 +381,7 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
       let rawRow;
       try {
         rawRow = JSON.parse(itemText);
+        if (options.onRow) options.onRow(rawRow);
       } catch {
         await maybeYield();
         continue;
@@ -371,7 +434,8 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
               continue;
             }
 
-            total = readTotalFromText(buffer.slice(0, arrayStart));
+            const prefixTotal = readTotalFromText(buffer.slice(0, arrayStart));
+            if (prefixTotal !== null) total = prefixTotal;
             buffer = buffer.slice(arrayStart + 1);
             arrayFound = true;
           }
@@ -392,7 +456,8 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
           continue;
         }
 
-        total = readTotalFromText(buffer.slice(0, arrayStart));
+        const prefixTotal = readTotalFromText(buffer.slice(0, arrayStart));
+        if (prefixTotal !== null) total = prefixTotal;
         buffer = buffer.slice(arrayStart + 1);
         arrayFound = true;
       }
@@ -407,6 +472,11 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
     return normalizePagedTextResult(buffer, query, normalizeRow, preferredKeys, options);
   }
 
+  // APIs commonly place `total` after the rows array. When the terminal page
+  // is smaller than the requested limit, the stream reaches that metadata and
+  // can expose an exact page count instead of leaving the UI at `?`.
+  if (total === null && reachedEnd) total = readTotalFromText(buffer);
+
   const hasKnownTotal = total !== null;
   const hasMore = hasKnownTotal
     ? offset + rows.length < total
@@ -414,9 +484,13 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
       ? rows.length === limit
       : !reachedEnd && rows.length === limit;
 
+  const resolvedTotal = total ?? (!hasMore
+    ? (options.serverPaged ? offset + rows.length : matched)
+    : null);
+
   return {
     rows,
-    total,
+    total: resolvedTotal,
     hasMore,
     nextOffset: hasMore ? offset + rows.length : null,
     limit,
@@ -430,10 +504,6 @@ export const normalizePagedResult = (payload, query = {}, normalizeRow = (row) =
   const sourceRows = extractRows(payload, preferredKeys);
   const total = extractTotal(payload);
   const hasKnownTotal = total !== null;
-  // A few manager endpoints can ignore limit/offset and send every row. Treat
-  // an oversized response as a local page so one grid cannot normalize and
-  // render thousands of records before its first paint. A normal server page
-  // (at most `limit` rows) retains its existing offset semantics.
   const needsLocalPagination = sourceRows.length > limit;
   const rowOffset = needsLocalPagination ? offset : 0;
   const filters = query.filters && typeof query.filters === 'object' ? query.filters : {};
@@ -445,8 +515,6 @@ export const normalizePagedResult = (payload, query = {}, normalizeRow = (row) =
     const rawMatches = rowContainsSearch(rawRow, query.search) && rowMatchesFilters(rawRow, filters);
     let normalizedRow = null;
 
-    // Most backend rows already contain searchable/filterable fields. Only
-    // normalize non-matching rows when the query could match a derived field.
     if (!rawMatches) {
       normalizedRow = normalizeRow(rawRow);
       if (!matchesPagedQuery(rawRow, normalizedRow, query)) continue;
@@ -473,9 +541,11 @@ export const normalizePagedResult = (payload, query = {}, normalizeRow = (row) =
       ? hasAdditionalRows
       : rows.length === limit;
 
+  const resolvedTotal = total ?? (!hasMore ? offset + rows.length : null);
+
   return {
     rows,
-    total,
+    total: resolvedTotal,
     hasMore,
     nextOffset: hasMore ? offset + rows.length : null,
     limit,

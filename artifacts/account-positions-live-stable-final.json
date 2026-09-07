@@ -1,0 +1,61 @@
+{
+  "accountLogin": "200008",
+  "performanceBudgetMs": 1000,
+  "preOpenWaitMs": 2500,
+  "hoverLeadMs": 0,
+  "blockPositionsAll": false,
+  "modalVisibleMs": 271,
+  "positionsSettledMs": 483,
+  "scrollDemo": {
+    "clientHeight": 118,
+    "scrollHeight": 605,
+    "scrollable": true
+  },
+  "rendered": {
+    "outcome": "rows",
+    "rowCount": 11,
+    "emptyVisible": false,
+    "loadingVisible": false,
+    "errorVisible": false,
+    "emptyText": "",
+    "errorText": "",
+    "stateTransitions": [
+      {
+        "state": "rows",
+        "atMs": 343
+      }
+    ]
+  },
+  "positionRequests": [
+    {
+      "endpoint": "Positions",
+      "pathname": "/api/manager/Positions",
+      "logins": [
+        "200001",
+        "200002",
+        "200003",
+        "200004",
+        "200008"
+      ],
+      "method": "GET",
+      "url": "http://localhost:5173/api/manager/Positions?logins%5B%5D=200001&logins%5B%5D=200002&logins%5B%5D=200003&logins%5B%5D=200004&logins%5B%5D=200008&limit=30&offset=0",
+      "status": 200,
+      "responseMs": 614,
+      "finishedMs": 615,
+      "failure": null,
+      "startedAtMs": -2589
+    },
+    {
+      "endpoint": "PositionsAll",
+      "pathname": "/api/manager/PositionsAll",
+      "logins": [],
+      "method": "GET",
+      "url": "http://localhost:5173/api/manager/PositionsAll?limit=1&offset=0",
+      "status": 200,
+      "responseMs": 793,
+      "finishedMs": 793,
+      "failure": null,
+      "startedAtMs": -1952
+    }
+  ]
+}

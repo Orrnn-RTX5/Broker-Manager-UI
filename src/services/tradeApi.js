@@ -18,6 +18,10 @@ const qs = (params) => new URLSearchParams(
   }, {})
 ).toString();
 
+// The broker keeps query parameters for compatibility, but mutation endpoints
+// expose POST successors so writes are not performed through cacheable GETs.
+const postQuery = (path, params) => tradeClient.post(`${path}?${qs(params)}`, {});
+
 const readJson = async (response) => {
   const text = await response.text();
   if (!text) return null;
@@ -179,23 +183,23 @@ export const orderModify = ({ ticket, stoploss, takeprofit }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });
   if (stoploss !== undefined && stoploss !== null) params.set('stoploss', String(stoploss));
   if (takeprofit !== undefined && takeprofit !== null) params.set('takeprofit', String(takeprofit));
-  return tradeClient.get(`/OrderModify?${params.toString()}`);
+  return tradeClient.post(`/OrderModify?${params.toString()}`, {});
 };
 
 export const orderDelete = (ticket) =>
-  tradeClient.get(`/OrderDelete?${qs({ ticket })}`);
+  postQuery('/OrderDelete', { ticket });
 
 export const positionPriceChange = (ticket, new_price) =>
-  tradeClient.get(`/PositionPriceChange?${qs({ ticket, new_price })}`);
+  postQuery('/PositionPriceChange', { ticket, new_price });
 
 export const positionVolumeChange = (ticket, new_lots) =>
-  tradeClient.get(`/PositionVolumeChange?${qs({ ticket, new_lots })}`);
+  postQuery('/PositionVolumeChange', { ticket, new_lots });
 
 export const positionCommentChange = ({ ticket, comment, magic }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });
   if (comment !== undefined) params.set('comment', comment);
   if (magic !== undefined) params.set('magic', String(magic));
-  return tradeClient.get(`/PositionCommentChange?${params.toString()}`);
+  return tradeClient.post(`/PositionCommentChange?${params.toString()}`, {});
 };
 
 export const positionForceClose = ({ ticket, price, comment }) => {
@@ -208,11 +212,11 @@ export const positionForceCloseAll = ({ login, symbol, comment }) => {
   const params = new URLSearchParams({ login: String(login) });
   if (symbol) params.set('symbol', symbol);
   if (comment) params.set('comment', comment);
-  return tradeClient.get(`/PositionForceCloseAll?${params.toString()}`);
+  return tradeClient.post(`/PositionForceCloseAll?${params.toString()}`, {});
 };
 
 export const positionFlip = (ticket) =>
-  tradeClient.get(`/PositionFlip?${qs({ ticket })}`);
+  postQuery('/PositionFlip', { ticket });
 
 export const dealAdd = (payload) => tradeClient.post('/DealAdd', payload);
 export const dealAddBatch = (payload) => tradeClient.post('/DealAddBatch', payload);
@@ -223,18 +227,18 @@ export const dealPerform = (payload) => tradeClient.post('/DealPerform', payload
 export const positionModifyStops = orderModify;
 
 export const orderPriceChange = (ticket, price) =>
-  tradeClient.get(`/OrderPriceChange?${qs({ ticket, price })}`);
+  postQuery('/OrderPriceChange', { ticket, price });
 
 export const orderReject = ({ ticket, comment }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });
   if (comment) params.set('comment', comment);
-  return tradeClient.get(`/OrderReject?${params.toString()}`);
+  return tradeClient.post(`/OrderReject?${params.toString()}`, {});
 };
 
 export const orderApprove = ({ ticket, comment }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });
   if (comment) params.set('comment', comment);
-  return tradeClient.get(`/OrderApprove?${params.toString()}`);
+  return tradeClient.post(`/OrderApprove?${params.toString()}`, {});
 };
 
 export const getDealerQueue = async () => {
@@ -248,7 +252,7 @@ export const getDealerQueue = async () => {
 export const dealRollback = ({ deal, comment }) => {
   const params = new URLSearchParams({ deal: String(deal) });
   if (comment) params.set('comment', comment);
-  return tradeClient.get(`/DealRollback?${params.toString()}`);
+  return tradeClient.post(`/DealRollback?${params.toString()}`, {});
 };
 
 export const accountRestrictGet = (login) =>
@@ -266,11 +270,11 @@ export const accountRestrictSet = (params) => {
     if (params[field] !== undefined) query.set(field, String(params[field]));
   });
   if (params.comment) query.set('comment', params.comment);
-  return tradeClient.get(`/AccountRestrictSet?${query.toString()}`);
+  return tradeClient.post(`/AccountRestrictSet?${query.toString()}`, {});
 };
 
 export const accountRestrictClear = (login) =>
-  tradeClient.get(`/AccountRestrictClear?${qs({ login })}`);
+  postQuery('/AccountRestrictClear', { login });
 
 export const accountRestrictList = async () => {
   const data = await fetchManagerJson('/AccountRestrictList');
@@ -278,10 +282,10 @@ export const accountRestrictList = async () => {
 };
 
 export const accountSpreadSet = ({ login, symbol, markup }) =>
-  tradeClient.get(`/AccountSpreadSet?${qs({ login, symbol, markup })}`);
+  postQuery('/AccountSpreadSet', { login, symbol, markup });
 
 export const accountExecutionSet = ({ login, mode, delay_ms }) =>
-  tradeClient.get(`/AccountExecutionSet?${qs({ login, mode, delay_ms })}`);
+  postQuery('/AccountExecutionSet', { login, mode, delay_ms });
 
 export const accountBookSet = ({ login, book }) =>
-  tradeClient.get(`/AccountBookSet?${qs({ login, book })}`);
+  postQuery('/AccountBookSet', { login, book });

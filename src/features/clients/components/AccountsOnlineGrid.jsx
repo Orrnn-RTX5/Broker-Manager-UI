@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   User, Shield, Laptop, Smartphone, Monitor, Clock,
   ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw
@@ -7,6 +8,37 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getAccountsOnlinePage } from '../../../services/api';
 import GridLoadingState from '../../../components/GridLoadingState';
+
+const ACCOUNTS_ONLINE_SNAPSHOT_KEY = 'rtx5_accounts_online_snapshot_v1';
+
+const getInitialAccountsOnlineSnapshot = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(ACCOUNTS_ONLINE_SNAPSHOT_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return undefined;
+};
+
+const saveAccountsOnlineSnapshot = (data) => {
+  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(ACCOUNTS_ONLINE_SNAPSHOT_KEY, JSON.stringify({
+        rows: data.rows.slice(0, 30),
+        total: data.total ?? data.rows.length,
+        hasMore: Boolean(data.hasMore),
+      }));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
 
 const formatDateTime = (ts) => {
   if (!ts) return '-';
@@ -34,11 +66,21 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
+  const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('accounts-online');
   const pageSize = 30;
+
+  const isDefaultParams = !search && sortCol === 'login' && sortDir === 'asc';
+
+  const initialData = useMemo(() => {
+    if (!isDefaultParams) return undefined;
+    const cached = queryClient.getQueryData(['accounts-online', 'page', { search: '', sort_by: 'login', sort_dir: 'asc', limit: 30, offset: 0 }]);
+    if (cached?.rows?.length > 0) return cached;
+    return getInitialAccountsOnlineSnapshot();
+  }, [isDefaultParams, queryClient]);
 
   const params = useMemo(() => ({
     search,
@@ -66,8 +108,26 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
     pageSize,
     enabled: hasRequestedData,
     refetchInterval: 10_000,
-    staleTime: 5_000,
+    staleTime: 30_000,
+    initialData,
+    placeholderData: (previousData) => previousData || initialData || getInitialAccountsOnlineSnapshot(),
   });
+
+  useEffect(() => {
+    if (rows && rows.length > 0 && isDefaultParams && offset === 0) {
+      saveAccountsOnlineSnapshot({ rows, total, hasMore });
+    }
+  }, [rows, total, hasMore, isDefaultParams, offset]);
+
+  // Prevent brief flash of loading skeleton on sub-120ms network fetches
+  const [showLoadingState, setShowLoadingState] = useState(false);
+  useEffect(() => {
+    if (isLoading && rows.length === 0) {
+      const timer = setTimeout(() => setShowLoadingState(true), 120);
+      return () => clearTimeout(timer);
+    }
+    setShowLoadingState(false);
+  }, [isLoading, rows.length]);
 
   useEffect(() => {
     if (onRowsChange) onRowsChange(rows);
@@ -104,10 +164,10 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="ui-card flex flex-col w-full overflow-hidden min-h-[400px]">
+    <div className="active-sessions-grid ui-card flex flex-col w-full overflow-hidden min-h-[400px]">
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border-2)' }}>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold tabular" style={{ color: 'var(--text-3)' }}>
+          <span className="active-sessions-heading font-semibold tabular" style={{ color: 'var(--text-3)' }}>
             {isIdle ? 'ACTIVE SESSIONS NOT LOADED' : `${total ?? rows.length} ACTIVE SESSIONS`}
           </span>
           {isFetching && <RefreshCcw size={12} className="animate-spin" style={{ color: 'var(--accent)' }} />}
@@ -118,7 +178,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </button>
       </div>
 
-      {isLoading && rows.length === 0 ? (
+      {isLoading && rows.length === 0 && showLoadingState ? (
         <GridLoadingState label="Loading active sessions…" />
       ) : (
       <div className="w-full overflow-x-auto flex-1">
@@ -186,8 +246,8 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                 >
                   <td className="tabular" style={{ textAlign: 'center' }}>
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                      <span className="font-bold" style={{ color: 'var(--text)' }}>{row.login}</span>
+                      <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                      <span className="tabular" style={{ color: 'var(--text)' }}>{row.login}</span>
                     </div>
                   </td>
                   <td className="tabular" style={{ color: 'var(--text-2)', textAlign: 'center' }}>{formatDateTime(row.connectedAt)}</td>
@@ -199,7 +259,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     {row.isAdmin ? (
-                      <span className="ui-badge ui-badge-accent font-bold">
+                      <span className="ui-badge ui-badge-accent">
                         <Shield size={10} className="mr-1" />
                         ADMIN
                       </span>

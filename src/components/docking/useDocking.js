@@ -13,7 +13,7 @@ const DEFAULT_SIZES = {
   left:   { width: 280, height: '100%' },
   right:  { width: 280, height: '100%' },
   top:    { width: '100%', height: 220 },
-  bottom: { width: '100%', height: 220 },
+  bottom: { width: '100%', height: 'clamp(118px, 15vh, 148px)' },
   float:  { width: 320, height: 400 },
   center: { width: '100%', height: '100%' },
 };

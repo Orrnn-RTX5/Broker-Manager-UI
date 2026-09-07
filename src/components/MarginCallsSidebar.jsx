@@ -1,61 +1,40 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { User, RefreshCw, AlertTriangle, Loader, WifiOff, Search, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { User, AlertTriangle, Loader, WifiOff, Search, ChevronDown } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
+import { deleteManagerAccount } from '../services/managerAccountApi';
+import { peekAccountDetailsManyPage, preloadAccountPositions, preloadAccountPositionsBatch } from '../services/api';
+import {
+  SIDEBAR_ACCOUNT_PAGE_SIZE,
+  fetchSidebarAccountDetails,
+  fetchSidebarAccounts,
+  getInitialCachedSidebarAccounts,
+  normalizeSidebarAccountPage,
+} from '../services/sidebarAccounts';
 import { usePermissions } from '../hooks/usePermissions';
 import { PERMISSIONS } from '../utils/permissions';
-import { normalizePagedStreamResult } from '../utils/pagination';
+import { TRADING_ACCOUNTS_INITIAL_PARAMS } from '../utils/workspaceQueryOptions';
 
-const SIDEBAR_ACCOUNT_PAGE_SIZE = 30;
-const ACCOUNT_SEARCH_DEBOUNCE_MS = 350;
+const ACCOUNT_SEARCH_DEBOUNCE_MS = 300;
 const MIN_ACCOUNT_SEARCH_LENGTH = 2;
 
-const isRecordObject = (value) =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+const emptySidebarPage = (page) => ({
+  rows: [],
+  total: page?.total ?? null,
+  hasMore: false,
+  nextOffset: 0,
+});
 
-const extractRows = (data) => {
-  if (Array.isArray(data)) return data;
-  if (!isRecordObject(data)) return [];
-
-  const rowKeys = ['accounts', 'answer', 'data', 'records', 'record', 'account', 'user'];
-  for (const key of rowKeys) {
-    const value = data[key];
-    if (Array.isArray(value)) return value;
-    if (isRecordObject(value) && (value.login || value.Login)) return [value];
-  }
-
-  return data.login || data.Login ? [data] : [];
-};
-
-const normalizeAccount = (acc) => {
-  if (typeof acc === 'number' || typeof acc === 'string') {
-    return {
-      login: String(acc),
-      Name: '',
-      balance: undefined,
-      MarginCallLevel: undefined,
-    };
-  }
-
-  return {
-    ...acc,
-    login: acc.login || acc.Login,
-    Name: acc.Name || acc.name || [acc.FirstName || acc.firstName, acc.LastName || acc.lastName].filter(Boolean).join(' ') || '',
-    balance: acc.balance !== undefined ? acc.balance : (acc.Balance !== undefined ? acc.Balance : undefined),
-    MarginCallLevel: acc.marginLevel || acc.MarginLevel || acc.MarginCallLevel,
-  };
-};
-
-const parseJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`Unexpected response: ${text.slice(0, 80)}`);
-  }
-};
+const hasBalance = (account) => (
+  account?.balance !== undefined
+  && account?.balance !== null
+  && account.balance !== ''
+  && Number.isFinite(Number(account.balance))
+);
 
 /**
  * MarginCallsSidebar — pure content component.
@@ -63,18 +42,13 @@ const parseJson = (text) => {
  * from the docking system. This component renders only data UI.
  */
 const MarginCallsSidebar = ({ isAuthenticated }) => {
-  const abortRef = useRef(null);
-  const inFlightKeyRef = useRef(null);
-  const [accounts, setAccounts] = useState([]);
-  const [totalAccounts, setTotalAccounts] = useState(null);
-  const [hasMoreAccounts, setHasMoreAccounts] = useState(false);
-  const [nextAccountsOffset, setNextAccountsOffset] = useState(0);
+  const queryClient = useQueryClient();
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
-  const [hasRequestedAccounts, setHasRequestedAccounts] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [extraRows, setExtraRows] = useState([]);
+  const [extraHasMore, setExtraHasMore] = useState(null);
+  const [nextOffset, setNextOffset] = useState(SIDEBAR_ACCOUNT_PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState(null);
   const [loadMoreError, setLoadMoreError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
   const [summaryAccount, setSummaryAccount] = useState(null);
@@ -95,160 +69,163 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     return () => clearTimeout(timer);
   }, [accountSearch]);
 
-  const fetchAccounts = useCallback(async ({
-    query = debouncedAccountSearch,
-    allowEmpty = false,
-    offset = 0,
-    append = false,
-  } = {}) => {
-    const searchValue = query.trim();
-    if (!allowEmpty && searchValue.length < MIN_ACCOUNT_SEARCH_LENGTH) return;
+  const isSearchValid = !debouncedAccountSearch || debouncedAccountSearch.length >= MIN_ACCOUNT_SEARCH_LENGTH;
 
-    const requestKey = `${searchValue || '__first_page__'}:${offset}:${append ? 'append' : 'replace'}`;
-    if (abortRef.current && inFlightKeyRef.current === requestKey) return;
+  // Check if workspace trading-accounts query is already warmed up in cache
+  const cachedTradingAccounts = !debouncedAccountSearch
+    ? queryClient.getQueryData(['trading-accounts', 'page', TRADING_ACCOUNTS_INITIAL_PARAMS])
+    : null;
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    inFlightKeyRef.current = requestKey;
-
-    setHasRequestedAccounts(true);
-    if (append) {
-      setLoadingMore(true);
-      setLoadMoreError(null);
-    } else {
-      setLoading(true);
-      setError(null);
-      setLoadMoreError(null);
-      setHasMoreAccounts(false);
-      setNextAccountsOffset(0);
+  const initialData = useMemo(() => {
+    if (debouncedAccountSearch) return undefined;
+    const candidates = [
+      peekAccountDetailsManyPage(),
+      cachedTradingAccounts,
+      getInitialCachedSidebarAccounts(),
+    ];
+    for (const candidate of candidates) {
+      const page = normalizeSidebarAccountPage(candidate);
+      if (page) return page;
     }
-    try {
-      const isExactLoginSearch = /^\d+$/.test(searchValue) && searchValue.length > 0;
-      const params = new URLSearchParams();
-      let endpoint = '/AccountDetailsMany';
+    return undefined;
+  }, [debouncedAccountSearch, cachedTradingAccounts]);
 
-      if (isExactLoginSearch) {
-        endpoint = '/AccountDetails';
-        params.set('login', searchValue);
-      } else {
-        params.set('limit', String(SIDEBAR_ACCOUNT_PAGE_SIZE));
-        params.set('offset', String(offset));
-        if (searchValue) params.set('search', searchValue);
-      }
+  const {
+    data: initialPage,
+    isLoading: isInitialLoading,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: ['sidebar-accounts', debouncedAccountSearch],
+    queryFn: ({ signal }) => fetchSidebarAccounts({
+      search: debouncedAccountSearch,
+      offset: 0,
+      limit: SIDEBAR_ACCOUNT_PAGE_SIZE,
+      signal,
+    }),
+    select: (page) => normalizeSidebarAccountPage(page) || emptySidebarPage(page),
+    initialData,
+    // Epoch timestamp keeps the cached page visible but stale, so React Query
+    // refreshes it in the background instead of trusting old session data.
+    initialDataUpdatedAt: initialData ? 1 : undefined,
+    placeholderData: (previousData) => previousData || initialData,
+    enabled: isAuthenticated && isSearchValid,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    meta: { suppressGlobalLoader: true },
+  });
 
-      const response = await fetchManagerApi(`${endpoint}?${params.toString()}`, {
-        method: 'GET',
-        headers: { 'accept': 'application/json' },
-        signal: controller.signal,
-      });
-
-      if (!isExactLoginSearch) {
-        const page = await normalizePagedStreamResult(
-          response,
-          { limit: SIDEBAR_ACCOUNT_PAGE_SIZE, offset, search: searchValue },
-          normalizeAccount,
-          ['accounts'],
-          { signal: controller.signal, serverPaged: true }
-        );
-        setTotalAccounts(page.total);
-        setHasMoreAccounts(page.hasMore);
-        setNextAccountsOffset(page.nextOffset ?? offset + page.rows.length);
-        setAccounts((current) => (
-          append
-            ? [...current, ...page.rows]
-            : page.rows
-        ));
-        return;
-      }
-
-      const text = await response.text();
-      const data = parseJson(text);
-
-      if (!response.ok) {
-        throw new Error(data?.error || data?.message || `API error ${response.status}`);
-      }
-
-      const raw = extractRows(data);
-      const list = raw.slice(0, SIDEBAR_ACCOUNT_PAGE_SIZE).map(normalizeAccount);
-
-      setTotalAccounts(list.length);
-      setHasMoreAccounts(false);
-      setNextAccountsOffset(list.length);
-      setAccounts(list);
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      console.error('[MarginCallsSidebar] fetch error:', err);
-      if (append) setLoadMoreError(err.message || 'Failed to load more accounts.');
-      else setError(err.message || 'Failed to load accounts.');
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        inFlightKeyRef.current = null;
-        if (append) setLoadingMore(false);
-        else setLoading(false);
-      }
-    }
-  }, [debouncedAccountSearch]);
+  const normalizedQueryPage = useMemo(
+    () => normalizeSidebarAccountPage(initialPage),
+    [initialPage],
+  );
+  const visiblePage = useMemo(() => {
+    return normalizedQueryPage || initialData || emptySidebarPage(initialPage);
+  }, [initialData, initialPage, normalizedQueryPage]);
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
-    if (debouncedAccountSearch && debouncedAccountSearch.length < MIN_ACCOUNT_SEARCH_LENGTH) return undefined;
-    fetchAccounts({
-      query: debouncedAccountSearch,
-      allowEmpty: !debouncedAccountSearch,
+    if (debouncedAccountSearch || !initialData) return;
+    const queryKey = ['sidebar-accounts', ''];
+    const cachedPage = queryClient.getQueryData(queryKey);
+    const normalizedCachedPage = normalizeSidebarAccountPage(cachedPage);
+    const cachedHasBalances = normalizedCachedPage?.rows?.some(hasBalance);
+    const initialHasBalances = initialData?.rows?.some(hasBalance);
+    if (cachedHasBalances || !initialHasBalances) return;
+
+    queryClient.setQueryData(queryKey, initialData, { updatedAt: 1 });
+    queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'active' });
+  }, [debouncedAccountSearch, initialData, queryClient]);
+
+  useEffect(() => {
+    setExtraRows([]);
+    setExtraHasMore(null);
+    setNextOffset(visiblePage?.nextOffset ?? SIDEBAR_ACCOUNT_PAGE_SIZE);
+  }, [debouncedAccountSearch, visiblePage?.nextOffset]);
+
+  const baseAccounts = useMemo(() => {
+    const base = visiblePage?.rows || [];
+    return extraRows.length > 0 ? [...base, ...extraRows] : base;
+  }, [visiblePage?.rows, extraRows]);
+
+  const missingBalanceLogins = useMemo(() => (
+    [...new Set(baseAccounts
+      .filter((account) => account?.login && !hasBalance(account))
+      .map((account) => String(account.login)))]
+  ), [baseAccounts]);
+
+  const { data: balanceDetails = [] } = useQuery({
+    queryKey: ['sidebar-account-balance-details', missingBalanceLogins],
+    queryFn: async ({ signal }) => {
+      const rows = await Promise.all(missingBalanceLogins.map((login) => (
+        fetchSidebarAccountDetails(login, { signal }).catch(() => null)
+      )));
+      return rows.filter(Boolean);
+    },
+    enabled: isAuthenticated && missingBalanceLogins.length > 0,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    meta: { suppressGlobalLoader: true },
+  });
+
+  const accounts = useMemo(() => {
+    if (balanceDetails.length === 0) return baseAccounts;
+    const detailsByLogin = new Map(balanceDetails.map((account) => [String(account.login), account]));
+    return baseAccounts.map((account) => {
+      const details = detailsByLogin.get(String(account.login));
+      return details ? { ...account, ...details, login: account.login } : account;
     });
-    return undefined;
-  }, [isAuthenticated, debouncedAccountSearch, fetchAccounts]);
+  }, [balanceDetails, baseAccounts]);
 
-  useEffect(() => () => {
-    abortRef.current?.abort();
-    inFlightKeyRef.current = null;
-  }, []);
+  const accountPositionPrefetchKey = useMemo(() => accounts
+    .map((account) => String(
+      typeof account === 'number' || typeof account === 'string' ? account : account?.login,
+    ).trim())
+    .filter(Boolean)
+    .join(','), [accounts]);
 
-  const loadedLabel = totalAccounts === null
-      ? `${accounts.length} accounts loaded`
-      : `${accounts.length} of ${totalAccounts} accounts`;
+  useLayoutEffect(() => {
+    if (!isAuthenticated || !accountPositionPrefetchKey) return;
+    void preloadAccountPositionsBatch(accountPositionPrefetchKey.split(','));
+  }, [accountPositionPrefetchKey, isAuthenticated]);
 
-  const resetAccounts = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    inFlightKeyRef.current = null;
-    setAccounts([]);
-    setTotalAccounts(null);
-    setHasMoreAccounts(false);
-    setNextAccountsOffset(0);
-    setHasRequestedAccounts(true);
-    setLoading(false);
-    setLoadingMore(false);
-    setError(null);
+  const hasMoreAccounts = extraHasMore !== null ? extraHasMore : Boolean(visiblePage?.hasMore);
+  const loading = isInitialLoading && accounts.length === 0;
+  const error = queryError ? (queryError.message || 'Failed to load accounts.') : null;
+
+  const handleRefresh = () => {
+    setExtraRows([]);
+    setExtraHasMore(null);
+    refetch();
+  };
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
     setLoadMoreError(null);
-  }, []);
+    try {
+      const res = await fetchSidebarAccounts({
+        search: debouncedAccountSearch,
+        offset: nextOffset,
+        limit: SIDEBAR_ACCOUNT_PAGE_SIZE,
+      });
+      setExtraRows((prev) => [...prev, ...(res.rows || [])]);
+      setExtraHasMore(res.hasMore);
+      setNextOffset(res.nextOffset);
+    } catch (err) {
+      setLoadMoreError(err.message || 'Failed to load more accounts.');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
 
   const handleSearchChange = (event) => {
     const nextValue = event.target.value;
     setAccountSearch(nextValue);
     if (!nextValue.trim()) {
-      resetAccounts();
       setDebouncedAccountSearch('');
     }
   };
 
-  const handleRefresh = () => {
-    fetchAccounts({
-      query: debouncedAccountSearch,
-      allowEmpty: !debouncedAccountSearch,
-    });
-  };
-
-  const handleLoadMore = () => {
-    fetchAccounts({
-      query: debouncedAccountSearch,
-      allowEmpty: !debouncedAccountSearch,
-      offset: nextAccountsOffset,
-      append: true,
-    });
-  };
 
   const balanceDisplay = (acc) =>
     acc.balance !== undefined
@@ -279,6 +256,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         alert("Error fetching summary: " + err.message);
       }
     } else if (action === 'details') {
+      void preloadAccountPositions(login);
       setSelectedAccountDetails(acc);
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
@@ -294,8 +272,9 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       try {
         const params = new URLSearchParams({ login: String(login) });
         const res = await fetchManagerApi(`/UserArchive?${params.toString()}`, {
-          method: 'GET',
-          headers: { 'accept': 'application/json' }
+          method: 'POST',
+          headers: { 'accept': 'application/json', 'Content-Type': 'application/json' },
+          body: '{}',
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await res.json();
@@ -312,8 +291,9 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       try {
         const params = new URLSearchParams({ login: String(login) });
         const res = await fetchManagerApi(`/UserRestore?${params.toString()}`, {
-          method: 'GET',
-          headers: { 'accept': 'application/json' }
+          method: 'POST',
+          headers: { 'accept': 'application/json', 'Content-Type': 'application/json' },
+          body: '{}',
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await res.json();
@@ -329,20 +309,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       }
       if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
       try {
-        const params = new URLSearchParams({ login: String(login) });
-        const res = await fetchManagerApi(`/AccountDelete?${params.toString()}`, {
-          method: 'GET',
-          headers: { 'accept': 'application/json' }
-        });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); } catch { throw new Error(`Unexpected response: ${text.slice(0, 80)}`); }
-
-        if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-
-        if (data.error || (typeof data === 'string' && data.toLowerCase().includes('error'))) {
-          throw new Error(data.error || data);
-        }
+        await deleteManagerAccount(login);
 
         alert(`Account ${login} deleted successfully.`);
         handleRefresh();
@@ -359,26 +326,8 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         className="shrink-0"
         style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
       >
-        <div className="h-8 flex items-center justify-between px-3">
-          <span className="text-xs font-medium tabular" style={{ color: 'var(--text-3)' }}>
-            {!loading && loadedLabel}
-          </span>
-          {isAuthenticated && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={loading}
-                title="Refresh accounts"
-                className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
-              >
-                <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          )}
-        </div>
         {isAuthenticated && (
-          <div className="px-2 pb-2">
+          <div className="p-2">
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
               <input
@@ -386,9 +335,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                 onChange={handleSearchChange}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
-                    const query = accountSearch.trim();
-                    setDebouncedAccountSearch(query);
-                    fetchAccounts({ query, allowEmpty: true });
+                    setDebouncedAccountSearch(accountSearch.trim());
                   }
                 }}
                 className="ui-input ui-input-sm w-full"
@@ -401,7 +348,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="accounts-sidebar-body flex-1 overflow-y-auto overflow-x-hidden">
         {!isAuthenticated && (
           <div className="flex flex-col items-center justify-center h-32 gap-2" style={{ color: 'var(--muted)' }}>
             <WifiOff size={18} />
@@ -426,8 +373,8 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           </div>
         )}
 
-        {isAuthenticated && !loading && !error && hasRequestedAccounts && (
-          <table className="ui-grid">
+        {isAuthenticated && !loading && !error && (
+          <table className="ui-grid accounts-sidebar-grid">
             <thead>
               <tr>
                 <th>Login</th>
@@ -452,6 +399,10 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                   return (
                     <tr
                       key={login ?? idx}
+                      onPointerDown={(event) => {
+                        if (event.pointerType === 'mouse' && event.button !== 0) return;
+                        void preloadAccountPositions(login);
+                      }}
                       onDoubleClick={() => setSelectedAccountDetails(acc)}
                       onContextMenu={(e) => handleContextMenu(e, acc)}
                       style={{
@@ -459,14 +410,23 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                         background: isUrgent ? 'var(--danger-soft)' : undefined,
                       }}
                     >
-                      <td style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
-                        <span className="inline-flex items-center ">
-                          <User  style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }} />
-                          <span className="tabular font-mono ">{login}</span>
+                      <td
+                        className="accounts-sidebar-login"
+                        style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}
+                      >
+                        <span className="accounts-sidebar-login-content">
+                          <User
+                            className="accounts-sidebar-account-icon"
+                            size={14}
+                            strokeWidth={1.8}
+                            aria-hidden="true"
+                            style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }}
+                          />
+                          <span className="tabular font-mono">{login}</span>
                         </span>
                       </td>
                      
-                      <td className="tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
+                      <td className="accounts-sidebar-balance tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
                         {bal}
                       </td>
                     </tr>
@@ -478,7 +438,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
         )}
       </div>
 
-      {isAuthenticated && !loading && !error && hasRequestedAccounts && accounts.length > 0 && (hasMoreAccounts || loadingMore || loadMoreError) && (
+      {isAuthenticated && !loading && !error && accounts.length > 0 && (hasMoreAccounts || loadingMore || loadMoreError) && (
         <div
           className="shrink-0 px-2 py-2 flex flex-col gap-1.5"
           style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}

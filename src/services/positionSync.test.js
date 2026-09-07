@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PositionSyncClient, getWsTicket, isPositionMutation } from './positionSyncCore.js';
+import { PositionSyncClient, getPositionUpdateLogin, getWsTicket, isPositionMutation } from './positionSyncCore.js';
 
 class FakeSocket {
   constructor(url) {
@@ -79,4 +79,11 @@ test('position event parsing accepts documented lifecycle actions and rejects co
   assert.equal(getWsTicket({ answer: { ticket: 'abc' } }), 'abc');
   assert.equal(isPositionMutation({ action: 'reversed' }), true);
   assert.equal(isPositionMutation({ type: 'heartbeat' }), false);
+});
+
+test('position event login extraction handles nested broker envelopes', () => {
+  assert.equal(getPositionUpdateLogin({ login: 200002 }), 200002);
+  assert.equal(getPositionUpdateLogin({ data: { data: { account_login: '200008' } } }), '200008');
+  assert.equal(getPositionUpdateLogin({ payload: { position: { accountLogin: 200003 } } }), 200003);
+  assert.equal(getPositionUpdateLogin({ type: 'heartbeat' }), undefined);
 });

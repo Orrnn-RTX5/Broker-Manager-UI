@@ -55,31 +55,31 @@ const DealsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getDealActions]);
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <Activity size={18} style={{ color: 'var(--accent)' }} />
-          <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dealing</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to update</p>
+    <div className="deals-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          <Activity size={16} style={{ color: 'var(--accent)' }} />
+          <div className="flex flex-col">
+            <h1 className="font-semibold deals-title" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '15px' }}>Dealing</h1>
+            <p className="deals-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '13px', marginTop: '4px' }}>Right-click for actions · Double-click a row to update</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-          <FilterDropdown value={actionFilter} className="w-[110px]" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
-          <FilterDropdown value={symbolFilter} className="w-[120px]" options={['All Symbols', 'GBPUSD', 'xauusd']} onChange={setSymbolFilter} />
-          <FilterDropdown value={entryFilter} className="w-[120px]" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />
+        <div className="deals-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <FilterDropdown value={actionFilter} className="w-[110px]" fontSize="10px" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[120px]" fontSize="10px" options={['All Symbols', 'GBPUSD', 'xauusd']} onChange={setSymbolFilter} />
+          <FilterDropdown value={entryFilter} className="w-[120px]" fontSize="10px" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />
         </div>
       </div>
 
-      <div className="relative w-full max-w-xs">
+      <div className="deals-search relative w-full max-w-xs">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"
           placeholder="Search login, ticket, symbol…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
+          className="ui-input ui-input-sm h-7"
+          style={{ paddingLeft: 32, fontSize: '10px' }}
         />
       </div>
 

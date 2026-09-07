@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { QueryClient } from '@tanstack/react-query';
 import {
   CLIENTS_INITIAL_PARAMS,
+  DEALS_INITIAL_PARAMS,
   GROUPS_INITIAL_PARAMS,
   ORDERS_INITIAL_PARAMS,
   WORKSPACE_QUERY_META,
   createClientsInitialQueryOptions,
+  createDealsInitialQueryOptions,
   createGroupsInitialQueryOptions,
   createOrdersInitialQueryOptions,
 } from './workspaceQueryOptions.js';
@@ -24,6 +26,9 @@ test('frequent workspace query keys match the first page rendered by each destin
   assert.deepEqual(createOrdersInitialQueryOptions({ request }).queryKey, [
     'orders', 'page', ORDERS_INITIAL_PARAMS,
   ]);
+  assert.deepEqual(createDealsInitialQueryOptions({ request }).queryKey, [
+    'deals', 'page', DEALS_INITIAL_PARAMS,
+  ]);
   assert.deepEqual(createGroupsInitialQueryOptions({ request }).queryKey, [
     'groups', 'all', GROUPS_INITIAL_PARAMS,
   ]);
@@ -33,6 +38,7 @@ test('prefetched workspace data is reused without duplicate requests', async () 
   for (const createOptions of [
     createClientsInitialQueryOptions,
     createOrdersInitialQueryOptions,
+    createDealsInitialQueryOptions,
     createGroupsInitialQueryOptions,
   ]) {
     const client = createClient();
@@ -57,6 +63,7 @@ test('workspace warmup queries never activate the global loader', () => {
 
   assert.equal(createClientsInitialQueryOptions({ request }).meta, WORKSPACE_QUERY_META);
   assert.equal(createOrdersInitialQueryOptions({ request }).meta, WORKSPACE_QUERY_META);
+  assert.equal(createDealsInitialQueryOptions({ request }).meta, WORKSPACE_QUERY_META);
   assert.equal(createGroupsInitialQueryOptions({ request }).meta, WORKSPACE_QUERY_META);
   assert.equal(WORKSPACE_QUERY_META.suppressGlobalLoader, true);
 });

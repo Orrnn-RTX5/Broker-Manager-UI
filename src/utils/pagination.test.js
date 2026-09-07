@@ -72,6 +72,7 @@ test('paged response infers hasMore when total is missing', () => {
   assert.equal(fullPage.total, null);
   assert.equal(fullPage.hasMore, true);
   assert.equal(fullPage.nextOffset, 2);
+  assert.equal(shortPage.total, 3);
   assert.equal(shortPage.hasMore, false);
   assert.equal(shortPage.nextOffset, null);
 });
@@ -203,6 +204,50 @@ test('paged stream fallback does not offset rows twice for server-paged payloads
   assert.equal(page.hasMore, true);
   assert.equal(page.nextOffset, 60);
   assert.equal(normalizedCount, 30);
+});
+
+test('paged stream infers an exact total from a short terminal server page', async () => {
+  const response = new Response(JSON.stringify({ accounts: [{ login: 200001 }, { login: 200002 }] }));
+  const page = await normalizePagedStreamResult(
+    response,
+    { limit: 30, offset: 30 },
+    (row) => row,
+    ['accounts'],
+    { serverPaged: true }
+  );
+
+  assert.equal(page.total, 32);
+  assert.equal(page.hasMore, false);
+});
+
+test('paged stream reads total metadata placed after the rows array', async () => {
+  const response = new Response(JSON.stringify({ accounts: [{ login: 200001 }], total_count: 61 }));
+  const page = await normalizePagedStreamResult(
+    response,
+    { limit: 30, offset: 0 },
+    (row) => row,
+    ['accounts'],
+    { serverPaged: true }
+  );
+
+  assert.equal(page.total, 61);
+  assert.equal(page.hasMore, true);
+});
+
+test('paged stream reads total count from pagination response headers', async () => {
+  const response = new Response(JSON.stringify({ accounts: [{ login: 200001 }] }), {
+    headers: { 'X-Total-Count': '91' },
+  });
+  const page = await normalizePagedStreamResult(
+    response,
+    { limit: 30, offset: 0 },
+    (row) => row,
+    ['accounts'],
+    { serverPaged: true }
+  );
+
+  assert.equal(page.total, 91);
+  assert.equal(page.hasMore, true);
 });
 
 test('paged stream fallback does not decode a whole large chunk for the first page', async () => {

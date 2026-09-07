@@ -37,7 +37,7 @@ const fmtDate = (value) => {
 };
 
 const StatusBadge = ({ status }) => (
-  <span className={`ui-badge text-[9px] px-1 ${STATUS_BADGE[status] || 'ui-badge-neutral'}`}>
+  <span className={`ui-badge text-[10px] px-1 ${STATUS_BADGE[status] || 'ui-badge-neutral'}`}>
     {String(status || '-').toUpperCase()}
   </span>
 );
@@ -161,14 +161,14 @@ const IBListPage = () => {
   const closeDetail = () => navigate('/ib');
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+    <div className="ib-management-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
         <div className="flex items-center gap-2">
           <Users size={18} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>IB Management</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-              Broker-scoped IB accounts, hierarchy, commissions, and payouts.
+            <h1 className="ib-management-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>IB Management</h1>
+            <p className="ib-management-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>
+              Broker-scoped IB accounts, hierarchy, commission plans, and ledger payments.
             </p>
           </div>
         </div>
@@ -185,18 +185,18 @@ const IBListPage = () => {
       </div>
 
       {error && (
-        <div className="text-xs px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
+        <div className="ib-management-message text-[10px] px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
           <AlertTriangle size={13} /> {error}
         </div>
       )}
       {notice && (
-        <div className="text-xs px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--ok-soft)', color: 'var(--ok-text)' }}>
+        <div className="ib-management-message text-[10px] px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--ok-soft)', color: 'var(--ok-text)' }}>
           <CheckCircle2 size={13} /> {notice}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
+      <div className="ib-management-filters flex flex-wrap items-center gap-2">
+        <div className="ib-management-search relative w-full max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"
@@ -214,12 +214,13 @@ const IBListPage = () => {
         </select>
       </div>
 
-      <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+      <div className="ib-management-grid ui-card flex flex-col w-full flex-1 overflow-hidden">
         {loading ? (
           <GridLoadingState label="Loading IB accounts…" />
         ) : (
-        <div className="w-full overflow-x-auto flex-1">
-          <table className="ui-grid min-w-max">
+        <div className="ib-management-table-shell relative w-full flex-1 min-h-0">
+          <div className="ib-management-scroll w-full h-full overflow-x-auto">
+            <table className="ui-grid min-w-max">
             <thead>
               <tr>
                 <th>Login</th>
@@ -235,15 +236,7 @@ const IBListPage = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan={10} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  <Loader size={16} className="animate-spin inline mr-2" /> Loading IB accounts...
-                </td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
-                  No IB accounts found.
-                </td></tr>
-              ) : filtered.map((account) => {
+              {filtered.length > 0 && filtered.map((account) => {
                 const actions = getIBStatusActions(account.status);
                 const busy = mutatingLogin === account.login;
                 return (
@@ -298,10 +291,16 @@ const IBListPage = () => {
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
+          {filtered.length === 0 && (
+            <div className="ib-management-empty-state" style={{ color: 'var(--muted)' }}>
+              No IB accounts found.
+            </div>
+          )}
         </div>
         )}
-        <div className="px-4 py-2 text-xs shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
+        <div className="ib-management-footer px-4 py-2 text-[10px] shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           <span>{filtered.length} IB account{filtered.length === 1 ? '' : 's'}</span>
           {!canManageIB && <span>No permission to perform IB actions</span>}
         </div>

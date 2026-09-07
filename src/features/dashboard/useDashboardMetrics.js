@@ -15,7 +15,57 @@ import {
 // calculate a card. If an endpoint provides a total, one row is enough to read
 // it; otherwise the KPI stays unavailable until a dedicated aggregate exists.
 const DASHBOARD_FALLBACK_PAGE_LIMIT = 1;
-const DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY = ['dashboard', 'metrics', 'account-limits'];
+export const DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY = ['dashboard', 'metrics', 'account-limits'];
+export const DASHBOARD_SUMMARY_QUERY_KEY = ['dashboard', 'metrics', 'summary'];
+
+const DASHBOARD_METRICS_CACHE_KEY = 'rtx5_dashboard_metrics_cache_v1';
+const DASHBOARD_ACCOUNT_LIMITS_CACHE_KEY = 'rtx5_dashboard_account_limits_cache_v1';
+
+const getInitialCachedDashboardMetrics = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(DASHBOARD_METRICS_CACHE_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.metrics) return parsed;
+  } catch {
+    // Ignore storage parse error
+  }
+  return undefined;
+};
+
+const saveCachedDashboardMetrics = (data) => {
+  if (!data || !data.metrics) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(DASHBOARD_METRICS_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
+
+const getInitialCachedAccountLimits = () => {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(DASHBOARD_ACCOUNT_LIMITS_CACHE_KEY) : null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.metrics) return parsed;
+  } catch {
+    // Ignore storage parse error
+  }
+  return undefined;
+};
+
+const saveCachedAccountLimits = (data) => {
+  if (!data || !data.metrics) return;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(DASHBOARD_ACCOUNT_LIMITS_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Storage full or private mode
+  }
+};
 
 const getErrorMessage = (error) => (
   error instanceof Error ? error.message : String(error || 'Request failed')
@@ -23,7 +73,17 @@ const getErrorMessage = (error) => (
 
 const hasAnyMetric = (metrics) => (
   Boolean(metrics) &&
-  [metrics.realAccounts, metrics.demoAccounts, metrics.openPositions, metrics.equity, metrics.deposits24h]
+  [
+    metrics.realAccounts,
+    metrics.demoAccounts,
+    metrics.openPositions,
+    metrics.equity,
+    metrics.deposits24h,
+    metrics.withdrawals24h,
+    metrics.activeAccounts,
+    metrics.totalDeals,
+    metrics.totalVolume,
+  ]
     .some((value) => value !== null && value !== undefined)
 );
 
@@ -57,7 +117,7 @@ const loadPagedFallbackMetrics = async (summaryError, signal) => {
   const summary = { key: 'summary', ok: false, data: null, error: getErrorMessage(summaryError) };
   const fallbackErrors = [accountLimit, accounts, positions].filter((source) => !source.ok);
 
-  return {
+  const result = {
     metrics,
     sourceMode: 'paged-fallback',
     sources: {
@@ -69,29 +129,57 @@ const loadPagedFallbackMetrics = async (summaryError, signal) => {
     errors: hasAnyMetric(metrics) ? fallbackErrors : [summary, ...fallbackErrors],
     asOf: Date.now(),
   };
+
+  if (result.metrics && hasAnyMetric(result.metrics)) {
+    saveCachedDashboardMetrics(result);
+  }
+
+  return result;
 };
 
-const loadDashboardMetrics = async ({ signal } = {}) => {
+export const loadDashboardMetrics = async ({ signal, reportDate, summaryOnly = false } = {}) => {
   try {
-    const summary = await getDashboardSummary({ signal });
-    const metrics = normalizeDashboardSummary(summary);
-    if (!metrics) throw new Error('Dashboard summary response did not include supported KPI fields');
+    const summary = await getDashboardSummary({ signal, date: reportDate });
+    const reportMetrics = normalizeDashboardSummary(summary);
+    if (!reportMetrics) throw new Error('Daily summary response did not include supported KPI fields');
 
-    return {
+    if (summaryOnly) {
+      return {
+        metrics: reportMetrics,
+        sourceMode: 'reports-summary',
+        sources: { summary: { key: 'summary', ok: true, data: summary, error: null } },
+        errors: [],
+        asOf: Date.now(),
+      };
+    }
+
+    // The report owns cash-flow/activity totals; the paged manager endpoints
+    // still provide account, equity, and position KPIs that the report omits.
+    const supporting = await loadPagedFallbackMetrics(null, signal);
+    const metrics = { ...(supporting.metrics || {}) };
+    Object.entries(reportMetrics).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) metrics[key] = value;
+    });
+
+    const result = {
       metrics,
-      sourceMode: 'summary',
+      sourceMode: 'reports-with-paged-support',
       sources: {
+        ...supporting.sources,
         summary: { key: 'summary', ok: true, data: summary, error: null },
       },
-      errors: [],
+      errors: supporting.errors || [],
       asOf: Date.now(),
     };
+    saveCachedDashboardMetrics(result);
+    return result;
   } catch (error) {
+    if (summaryOnly) throw error;
     return loadPagedFallbackMetrics(error, signal);
   }
 };
 
-const loadDashboardAccountLimits = async ({ signal } = {}) => {
+export const loadDashboardAccountLimits = async ({ signal } = {}) => {
   const status = await getAccountLimitStatus({ signal });
   const metrics = normalizeAccountLimitStatus(status);
 
@@ -99,24 +187,34 @@ const loadDashboardAccountLimits = async ({ signal } = {}) => {
     throw new Error('AccountLimitStatus response did not include account totals');
   }
 
-  return {
+  const result = {
     metrics,
     asOf: Date.now(),
   };
+  saveCachedAccountLimits(result);
+  return result;
 };
 
 export const useDashboardAccountLimits = () => useQuery({
   queryKey: DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY,
   queryFn: loadDashboardAccountLimits,
-  staleTime: 15_000,
+  initialData: getInitialCachedAccountLimits,
+  placeholderData: (previousData) => previousData || getInitialCachedAccountLimits(),
+  staleTime: 60_000,
   refetchInterval: 30_000,
   refetchIntervalInBackground: false,
 });
 
-export const useDashboardMetrics = () => useQuery({
-  queryKey: ['dashboard', 'metrics', 'summary'],
-  queryFn: loadDashboardMetrics,
-  staleTime: 15_000,
+export const useDashboardMetrics = ({ reportDate, summaryOnly = false } = {}) => useQuery({
+  queryKey: reportDate
+    ? [...DASHBOARD_SUMMARY_QUERY_KEY, reportDate, summaryOnly ? 'summary-only' : 'full']
+    : DASHBOARD_SUMMARY_QUERY_KEY,
+  queryFn: ({ signal }) => loadDashboardMetrics({ signal, reportDate, summaryOnly }),
+  initialData: reportDate ? undefined : getInitialCachedDashboardMetrics,
+  placeholderData: reportDate
+    ? undefined
+    : (previousData) => previousData || getInitialCachedDashboardMetrics(),
+  staleTime: 60_000,
   refetchInterval: 30_000,
   refetchIntervalInBackground: false,
 });

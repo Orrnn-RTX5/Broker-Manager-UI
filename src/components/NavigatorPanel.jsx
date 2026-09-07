@@ -1,5 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import { Children, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
+import {
+  Activity, BarChart2, ChevronDown, ChevronRight, CircleDollarSign, ClipboardCheck,
+  FileClock, Folder, Gavel, GitBranch, Handshake, Landmark, LayoutDashboard,
+  Network, Server, Settings2, Shield, ShieldCheck, TrendingUp, User, Users, Users2,
+} from 'lucide-react';
 import { useGroupList } from '../hooks/useGroupList';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
@@ -9,188 +15,136 @@ import { getGroupDetailsPath } from '../features/groups/groupRoutes';
 import { PERMISSIONS } from '../utils/permissions';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
 import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
-import {
-  Server, Folder, BarChart2, Users, User, Activity, Users2, ChevronRight, ChevronDown, Gavel, Shield, GitBranch, Handshake, TrendingUp, Settings2
-} from 'lucide-react';
 
-// Reusable Tree Node Component
-const TreeNode = ({ label, icon: Icon, iconColor, children, defaultExpanded = false, count = null, onClickNode, onExpandedChange, onIntent }) => {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const hasChildren = React.Children.count(children) > 0;
-
-  const handleClick = (event) => {
+const TreeNode = ({ label, icon: Icon, children, defaultExpanded = false, count, path, activePath, disabled, onClickNode, onExpandedChange, onIntent }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasChildren = Children.count(children) > 0;
+  const active = path && (activePath === path || (path !== '/dashboard' && activePath.startsWith(`${path}/`)));
+  const activate = (event) => {
+    if (disabled) return;
     if (hasChildren) {
-      const nextExpanded = !isExpanded;
-      setIsExpanded(nextExpanded);
-      onExpandedChange?.(nextExpanded);
+      const next = !expanded;
+      setExpanded(next);
+      onExpandedChange?.(next);
     }
-    if (onClickNode) onClickNode(event);
+    onClickNode?.(event);
   };
-
-  const handleKeyDown = (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    handleClick(event);
-  };
-
   return (
-    <div className={`tree-node ${hasChildren ? 'tree-node--branch' : 'tree-node--leaf'} flex flex-col text-[13px] select-none`} style={{ color: 'var(--text-2)' }}>
-      <div
-        className="flex items-center py-1 px-1 cursor-pointer rounded-md transition-colors"
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-        onPointerEnter={onIntent}
-        onFocus={onIntent}
-        role="treeitem"
-        tabIndex={hasChildren || onClickNode ? 0 : -1}
-        onMouseOver={(e) => e.currentTarget.style.background = 'var(--accent-soft)'}
-        onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-      >
-        <div className="w-4 h-full flex justify-center items-center shrink-0">
-          {hasChildren && (
-            isExpanded
-              ? <ChevronDown size={13} style={{ color: 'var(--muted)' }} />
-              : <ChevronRight size={13} style={{ color: 'var(--muted)' }} />
-          )}
-        </div>
-
-        <div className="w-5 flex justify-center items-center shrink-0">
-          {Icon && <Icon size={14} className={iconColor} strokeWidth={1.75} />}
-        </div>
-
-        <span className="whitespace-nowrap flex-1 truncate pr-2">
-          {label}
-          {count && <span className="ml-1 tabular" style={{ color: 'var(--muted)' }}>({count})</span>}
-        </span>
+    <div className={`cc-tree-node ${hasChildren ? 'is-branch' : 'is-leaf'} ${active ? 'is-active' : ''} ${disabled ? 'is-disabled' : ''}`}>
+      <div role="treeitem" tabIndex={disabled ? -1 : 0} aria-expanded={hasChildren ? expanded : undefined} aria-disabled={disabled || undefined} title={disabled ? 'Workspace adapter not connected yet' : label} onClick={activate} onPointerEnter={onIntent} onFocus={onIntent} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event); } }}>
+        <span className="cc-tree-chevron">{hasChildren ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : null}</span>
+        <span className="cc-tree-icon">{Icon && <Icon size={13} strokeWidth={1.65} />}</span>
+        <span>{label}</span>{count != null && <b>{count}</b>}
       </div>
-
-      {hasChildren && isExpanded && (
-        <div className="flex">
-          <div className="w-4 flex justify-center">
-            <div className="w-px h-full" style={{ background: 'var(--border)' }} />
-          </div>
-          <div className="flex-1 overflow-hidden">
-            {children}
-          </div>
-        </div>
-      )}
+      {hasChildren && expanded && <div className="cc-tree-children">{children}</div>}
     </div>
   );
 };
 
-const NavigatorPanel = () => {
+export default function NavigatorPanel() {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const navigate = useWorkspaceNavigation();
-  const [shouldLoadGroups, setShouldLoadGroups] = useState(false);
-  const { groups, total: groupsTotal, hasMore: groupsHasMore, loading: groupsLoading } = useGroupList({
-    limit: 100,
-    offset: 0,
-    sort_by: 'name',
-    sort_dir: 'asc',
-    enabled: shouldLoadGroups,
-  });
+  const [loadGroups, setLoadGroups] = useState(false);
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const { groups, total, loading } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc', enabled: loadGroups });
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [brokerInfo] = useState(() => getBrokerInfo());
-  const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
-  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || brokerInfo?.server_ip || 'Server';
+  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || 'RTX5-Live';
+  const go = (path) => () => navigate(path);
+  const node = (label, icon, path, preload = 'workspace') => (
+    <TreeNode key={label} label={label} icon={icon} path={path} activePath={location.pathname} onIntent={() => preload === 'analytics' ? preloadAnalyticsDestination(queryClient, path) : preloadWorkspaceDestination(queryClient, path)} onClickNode={go(path)} />
+  );
 
-  // The dashboard needs its metrics before an optional tree list. Load groups
-  // as soon as the browser becomes idle, or immediately when the user expands
-  // the Groups branch.
   useEffect(() => {
-    const startLoading = () => setShouldLoadGroups(true);
+    const start = () => setLoadGroups(true);
     if (typeof window.requestIdleCallback === 'function') {
-      const idleId = window.requestIdleCallback(startLoading, { timeout: 2_000 });
-      return () => window.cancelIdleCallback?.(idleId);
+      const id = window.requestIdleCallback(start, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(id);
     }
-
-    const timerId = window.setTimeout(startLoading, 1_000);
-    return () => window.clearTimeout(timerId);
+    const id = window.setTimeout(start, 1000);
+    return () => window.clearTimeout(id);
   }, []);
 
-  const navigateTo = (path) => navigate(path);
-  const preloadAnalytics = (path) => preloadAnalyticsDestination(queryClient, path);
-  const preloadDataWorkspace = (path) => preloadWorkspaceDestination(queryClient, path);
-
-  const openNewGroup = (event) => {
-    event?.stopPropagation();
-    if (!canManageGroups) {
-      alert('Your role does not have permission to manage groups.');
-      return;
-    }
-    setIsNewGroupOpen(true);
-  };
-
   return (
-    <div className="workspace-ui navigator-type h-full w-full flex flex-col" style={{ background: 'var(--surface)' }}>
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
-        <TreeNode label="RTX5 Manager" icon={Server} iconColor="text-blue-400" defaultExpanded>
+    <div className="cc-navigator workspace-ui" role="tree" aria-label="Brokerage workspaces">
+      <div className="cc-navigator-scroll">
+        <TreeNode label="Servers" icon={Server} defaultExpanded>
+          <TreeNode label={serverLabel} icon={Server} />
+          <TreeNode label="RTX5-Demo" icon={Server} />
+          <TreeNode label="Backup Servers" icon={Network} disabled />
+        </TreeNode>
 
-          <TreeNode label="Servers" icon={Server} iconColor="text-green-500" defaultExpanded>
-            <TreeNode label={serverLabel} icon={Folder} iconColor="text-yellow-500" defaultExpanded>
+        <TreeNode label="Analytics" icon={BarChart2} defaultExpanded>
+          {node('Dashboard', LayoutDashboard, '/dashboard', 'analytics')}
+          <TreeNode label="Reports" icon={FileClock} disabled />
+          {node('Trading Analytics', TrendingUp, '/analytics/trading-accounts', 'analytics')}
+          {node('Online Users', Users, '/analytics/online-users', 'analytics')}
+          {node('Open Positions', Activity, '/analytics/open-positions', 'analytics')}
+          {node('Open Orders', ClipboardCheck, '/analytics/open-orders', 'analytics')}
+        </TreeNode>
 
-              <TreeNode label="Analytics" icon={BarChart2} iconColor="text-blue-500" defaultExpanded>
+        <TreeNode label="Clients & Orders" icon={Users} defaultExpanded>
+          {node('Clients', User, '/clients')}
+          {node('Trading Accounts', User, '/clients/trading-accounts')}
+          {node('Orders', ClipboardCheck, '/clients/orders')}
+          {node('Position History', FileClock, '/clients/positions')}
+        </TreeNode>
 
-                <TreeNode label="Online Users" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/online-users')} onClickNode={() => navigateTo('/analytics/online-users')} />
-                <TreeNode label="Open Positions" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/open-positions')} onClickNode={() => navigateTo('/analytics/open-positions')} />
-                <TreeNode label="Open Orders" icon={BarChart2} iconColor="text-blue-400" onIntent={() => preloadAnalytics('/analytics/open-orders')} onClickNode={() => navigateTo('/analytics/open-orders')} />
+        <TreeNode label="Dealing" icon={Gavel} defaultExpanded>
+          {node('Dealing Desk', Activity, '/dealing')}
+          {node('Dealer Queue', Gavel, '/dealer/queue')}
+          <TreeNode label="Price Management" icon={TrendingUp} disabled />
+          <TreeNode label="Liquidity Providers" icon={Network} disabled />
+        </TreeNode>
 
+        <TreeNode label="IB Management" icon={Handshake} defaultExpanded>
+          {node('IB Accounts', Handshake, '/ib')}
+          {node('IB Tree', GitBranch, '/ib/tree')}
+          <TreeNode label="Commissions" icon={CircleDollarSign} disabled />
+          <TreeNode label="Payouts" icon={Landmark} disabled />
+        </TreeNode>
 
-              </TreeNode>
+        <TreeNode label="Risk Management" icon={Shield} defaultExpanded>
+          {node('Risk Monitor', ShieldCheck, '/dealer/restrictions')}
+          {node('Exposure', Activity, '/analytics/open-positions')}
+          <TreeNode label="Margin Rules" icon={Settings2} disabled />
+          {node('Restricted Accounts', Shield, '/dealer/restrictions')}
+        </TreeNode>
 
-              <TreeNode label="Clients & Orders" icon={Users} iconColor="text-blue-500" defaultExpanded>
-                <TreeNode label="Online Users" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/online-users')} />
-                <TreeNode label="Clients" icon={User} iconColor="text-blue-400" onIntent={() => preloadDataWorkspace('/clients')} onClickNode={() => navigateTo('/clients')} />
-                <TreeNode label="Trading Accounts" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/trading-accounts')} />
-                <TreeNode label="Position History" icon={User} iconColor="text-blue-400" onClickNode={() => navigateTo('/clients/positions')} />
-                <TreeNode label="Orders" icon={User} iconColor="text-blue-400" onIntent={() => preloadDataWorkspace('/clients/orders')} onClickNode={() => navigateTo('/clients/orders')} />
-              </TreeNode>
+        <TreeNode label="Compliance" icon={ShieldCheck}>
+          <TreeNode label="KYC / AML" icon={ShieldCheck} disabled />
+          <TreeNode label="Verification Queue" icon={ClipboardCheck} disabled />
+          <TreeNode label="Approval Queue" icon={ClipboardCheck} disabled />
+          <TreeNode label="Audit Review" icon={FileClock} disabled />
+        </TreeNode>
 
-              <TreeNode label="Dealing" icon={Activity} iconColor="text-red-500" onClickNode={() => navigateTo('/dealing')} />
+        <TreeNode label="Finance" icon={Landmark}>
+          <TreeNode label="Deposits / Withdrawals" icon={CircleDollarSign} disabled />
+          <TreeNode label="Revenue & Payouts" icon={Landmark} disabled />
+          <TreeNode label="Cash Flow" icon={Activity} disabled />
+        </TreeNode>
 
-              <TreeNode label="Dealer Operations" icon={Gavel} iconColor="text-orange-500" defaultExpanded>
-                <TreeNode label="Dealer Queue" icon={Gavel} iconColor="text-orange-400" onClickNode={() => navigateTo('/dealer/queue')} />
-                <TreeNode label="Restricted Accounts" icon={Shield} iconColor="text-red-400" onClickNode={() => navigateTo('/dealer/restrictions')} />
-              </TreeNode>
+        <TreeNode label="Markets" icon={TrendingUp}>
+          {node('Symbols Browser', TrendingUp, '/symbols')}
+          {node('Symbol Management', Settings2, '/symbol-management')}
+        </TreeNode>
 
-              <TreeNode label="IB Management" icon={Handshake} iconColor="text-emerald-500" defaultExpanded>
-                <TreeNode label="IB Accounts" icon={Handshake} iconColor="text-emerald-400" onClickNode={() => navigateTo('/ib')} />
-                <TreeNode label="IB Tree" icon={GitBranch} iconColor="text-emerald-400" onClickNode={() => navigateTo('/ib/tree')} />
-              </TreeNode>
+        <TreeNode label="Account Groups" icon={Users2} count={loadGroups ? (loading ? '…' : total ?? groups.length) : null} onExpandedChange={(open) => open && setLoadGroups(true)}>
+          {groups.map((group) => <TreeNode key={group.name} label={group.name} icon={Folder} path={getGroupDetailsPath(group.name)} activePath={location.pathname} onClickNode={go(getGroupDetailsPath(group.name))} />)}
+          {canManageGroups && <TreeNode label="New Group" icon={Users2} onClickNode={() => setNewGroupOpen(true)} />}
+        </TreeNode>
 
-              <TreeNode label="Market Overview" icon={TrendingUp} iconColor="text-indigo-500" defaultExpanded>
-                <TreeNode label="Symbols Browser" icon={BarChart2} iconColor="text-indigo-400" onClickNode={() => navigateTo('/symbols')} />
-                <TreeNode label="Symbol Management" icon={Settings2} iconColor="text-indigo-400" onClickNode={() => navigateTo('/symbol-management')} />
-              </TreeNode>
-
-              <TreeNode
-                label="Groups"
-                count={shouldLoadGroups ? (groupsLoading ? '...' : (groupsTotal ?? groups?.length ?? 0).toString()) : null}
-                icon={Users2}
-                iconColor="text-blue-500"
-                onIntent={() => preloadDataWorkspace('/groups')}
-                onClickNode={() => navigateTo('/groups')}
-                onExpandedChange={(expanded) => {
-                  if (expanded) setShouldLoadGroups(true);
-                }}
-              >
-                {groups?.map(g => (
-                  <TreeNode key={g.name} label={g.name} iconColor="text-gray-400" onClickNode={() => navigateTo(getGroupDetailsPath(g.name))} />
-                ))}
-                {groupsHasMore && <TreeNode label="View all groups" iconColor="text-gray-400" onClickNode={() => navigateTo('/groups')} />}
-                {canManageGroups && <TreeNode label="+ New Group" iconColor="text-green-500" onClickNode={openNewGroup} />}
-              </TreeNode>
-
-            </TreeNode>
-          </TreeNode>
-
+        <TreeNode label="System" icon={Settings2}>
+          <TreeNode label="Servers" icon={Server} disabled />
+          <TreeNode label="Users & Permissions" icon={Users} disabled />
+          <TreeNode label="Configuration" icon={Settings2} disabled />
+          <TreeNode label="API Connections" icon={Network} disabled />
+          <TreeNode label="Audit Logs" icon={FileClock} disabled />
         </TreeNode>
       </div>
-      {isNewGroupOpen && canManageGroups && <NewGroupModal onClose={() => setIsNewGroupOpen(false)} onSuccess={() => alert('Group Created!')} />}
+      {newGroupOpen && canManageGroups && <NewGroupModal onClose={() => setNewGroupOpen(false)} onSuccess={() => setNewGroupOpen(false)} />}
     </div>
   );
-};
-
-export default NavigatorPanel;
-
+}

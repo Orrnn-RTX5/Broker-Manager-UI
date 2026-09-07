@@ -116,7 +116,7 @@
 }
 
 .titleText {
-  font-size: var(--workspace-ui-font-size, 13px);
+  font-size: 12px;
   font-weight: var(--workspace-ui-title-font-weight, 600);
   color: var(--dock-title-text, #101828);
   letter-spacing: -0.01em;

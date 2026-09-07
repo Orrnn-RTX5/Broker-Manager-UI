@@ -1,6 +1,6 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeManagerPosition } from './managerTradeApi.js';
+import { closeManagerPosition, getManagerOrderStatus, placeManagerOrder } from './managerTradeApi.js';
 
 const createStorage = () => {
   const values = new Map();
@@ -46,4 +46,29 @@ test('closeManagerPosition uses the versioned POST contract with JSON and the ma
   assert.equal(calls[0].options.headers['content-type'], 'application/json');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer manager-test-token');
   assert.doesNotMatch(calls[0].url, /OrderClose/i);
+});
+
+test('placeManagerOrder supplies a unique client order id to the authoritative writer', async () => {
+  await placeManagerOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0].url).pathname, '/api/v1/manager/orders');
+  assert.equal(calls[0].options.method, 'POST');
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.login, 200001);
+  assert.equal(body.operation, 'buy');
+  assert.equal(body.lots, 0.1);
+  assert.equal(typeof body.client_order_id, 'string');
+  assert.ok(body.client_order_id.length > 0);
+});
+
+test('getManagerOrderStatus encodes the durable command lookup route', async () => {
+  await getManagerOrderStatus(200001, 'desktop/123');
+
+  assert.equal(calls.length, 1);
+  assert.equal(
+    new URL(calls[0].url).pathname,
+    '/api/v1/manager/accounts/200001/orders/by-client-id/desktop%2F123',
+  );
+  assert.equal(calls[0].options.method, 'GET');
 });

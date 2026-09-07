@@ -48,8 +48,8 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
       <td className={`${compact ? 'px-2 py-1.5 text-center font-medium' : 'px-3 py-2 font-medium'} market-quote-symbol`} style={{ borderRight: '1px solid var(--border)' }}>
         <div className={compact ? 'flex items-center justify-center gap-1 whitespace-nowrap' : 'flex items-center gap-1.5'}>
           {isUp
-            ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--ok-text)' }} strokeWidth={2.5} />
-            : <ArrowDownRight size={compact ? 11 : 14} style={{ color: 'var(--danger-text)' }} strokeWidth={2.5} />}
+            ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={2.5} />
+            : <ArrowDownRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={2.5} />}
           <span>{quote.symbol}</span>
           {!compact && quote.isStale && (
             <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>
@@ -58,12 +58,12 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
           )}
         </div>
       </td>
-      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
         <span key={`${quote.symbol}-bid-${quote.bid}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.bid}
         </span>
       </td>
-      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--ok-text)' : 'var(--danger-text)' }}>
+      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
         <span key={`${quote.symbol}-ask-${quote.ask}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.ask}
         </span>
@@ -470,9 +470,9 @@ const MarketData = ({ compact = false }) => {
                 <td className="py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
                   {item.label}
                 </td>
-                <td className="py-2.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--ok-text)' : (item.isUp === false ? 'var(--danger-text)' : 'var(--text)') }}>
-                  {item.isUp === true ? <ArrowUpRight size={14} strokeWidth={2.5} /> : null}
-                  {item.isUp === false ? <ArrowDownRight size={14} strokeWidth={2.5} /> : null}
+                <td className="py-2.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--market-value-up)' : (item.isUp === false ? 'var(--market-value-down)' : 'var(--text)') }}>
+                  {item.isUp === true ? <ArrowUpRight size={14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={2.5} /> : null}
+                  {item.isUp === false ? <ArrowDownRight size={14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={2.5} /> : null}
                   <span className="font-mono text-[13px]">{item.value}</span>
                 </td>
               </tr>
@@ -508,7 +508,7 @@ const MarketData = ({ compact = false }) => {
     const maxPrice = maxBid + range * 0.1;
     const finalRange = maxPrice - minPrice;
     const isUp = tickHistory.length > 1 && tickHistory[tickHistory.length - 1].bid >= tickHistory[0].bid;
-    const lineColor = isUp ? 'var(--ok-text)' : 'var(--danger-text)';
+    const lineColor = isUp ? 'var(--market-value-up)' : 'var(--market-value-down)';
 
     const points = tickHistory.map((tick, index) => {
       const x = (index / Math.max(tickHistory.length - 1, 1)) * 100;
@@ -560,13 +560,21 @@ const MarketData = ({ compact = false }) => {
           font-weight: var(--workspace-ui-font-weight, 400) !important;
           line-height: 1.35;
         }
+        .market-watch-type .market-data-tab {
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          line-height: 1.35 !important;
+        }
+        .market-watch-type .market-data-tab.is-active {
+          font-weight: 600 !important;
+        }
         @keyframes flashTextUp {
-          0% { color: var(--ok-text); text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
-          100% { color: var(--ok-text); text-shadow: none; }
+          0% { color: var(--market-value-up); text-shadow: 0 0 8px var(--cc-market-glow-up, rgba(0, 168, 255, 0.4)); }
+          100% { color: var(--market-value-up); text-shadow: none; }
         }
         @keyframes flashTextDown {
-          0% { color: var(--danger-text); text-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
-          100% { color: var(--danger-text); text-shadow: none; }
+          0% { color: var(--market-value-down); text-shadow: 0 0 8px var(--cc-market-glow-down, rgba(255, 59, 82, 0.4)); }
+          100% { color: var(--market-value-down); text-shadow: none; }
         }
         .flash-up { animation: flashTextUp 0.8s ease-out forwards; }
         .flash-down { animation: flashTextDown 0.8s ease-out forwards; }
@@ -592,9 +600,9 @@ const MarketData = ({ compact = false }) => {
               key={tab}
               onClick={() => handleTabChange(tab)}
               className={`
-                ${compact ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
+                market-data-tab ${compact ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
                 ${activeTab === tab
-                  ? 'bg-[var(--surface)] text-[var(--accent)] z-10'
+                  ? 'is-active bg-[var(--surface)] text-[var(--accent)] z-10'
                   : 'bg-transparent text-[var(--text-3)] border-transparent hover:text-[var(--text-2)] hover:bg-[var(--surface-hover)]'}
               `}
               style={{

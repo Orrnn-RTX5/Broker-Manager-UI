@@ -1,16 +1,17 @@
 import apiClient from './apiClient';
-import { buildPositionUpdatesWsUrl } from '../config/endpoints';
+import { buildPositionUpdatesWsUrl, getPositionUpdatesWsPath } from '../config/endpoints';
 import {
   PositionSyncClient,
   POSITION_SYNC_POLL_MS,
   getWsTicket,
+  getPositionUpdateLogin,
   isPositionMutation,
 } from './positionSyncCore';
 
-export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, isPositionMutation };
+export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, getPositionUpdateLogin, isPositionMutation };
 
 const positionSync = new PositionSyncClient({
-  requestTicket: () => apiClient.get('/api/v1/manager/ws-ticket'),
+  requestTicket: () => apiClient.post('/api/v1/manager/ws-ticket', { path: getPositionUpdatesWsPath() }),
   buildUrl: buildPositionUpdatesWsUrl,
 });
 

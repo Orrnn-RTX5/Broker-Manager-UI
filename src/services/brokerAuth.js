@@ -10,6 +10,7 @@ import {
   updateDynamicEndpoints,
 } from '../config/endpoints.js';
 import { normalizeTokenExpiresAt, setSession } from './authService.js';
+import { MANAGER_API } from '../config/managerApiContract.js';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
@@ -459,7 +460,7 @@ export const loginManager = async (brokerInfo, { user, password, server }) => {
   saveBrokerInfo(resolvedBrokerInfo);
   try {
     return await postJson(
-      buildManagerApiUrl('/api/v2/auth/login'),
+      buildManagerApiUrl(MANAGER_API.login),
       { user, password, server: serverHandle }
     );
   } catch (error) {

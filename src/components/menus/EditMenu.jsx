@@ -13,12 +13,22 @@ const CopyAsMenu = ({ onAction, disabled }) => {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <MenuItem icon={Copy} text="Copy As" iconColor="text-blue-500" hasSubmenu disabled={disabled} />
+    <div className="relative">
+      <MenuItem
+        icon={Copy}
+        text="Copy As"
+        iconColor="text-blue-500"
+        hasSubmenu
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((current) => !current);
+        }}
+      />
       {open && !disabled && (
-        <div className="absolute left-full top-0 ml-1 min-w-[180px] bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-lg py-1 z-[70]">
-          <MenuItem icon={FileSpreadsheet} text="CSV" iconColor="text-green-600" onClick={() => onAction('copy-csv')} />
-          <MenuItem icon={FileSpreadsheet} text="Excel-compatible" iconColor="text-green-600" onClick={() => onAction('copy-excel')} />
+        <div className="manager-menu-dropdown absolute left-full top-0 ml-1 min-w-[180px] bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-lg py-1 z-[70]">
+          <MenuItem icon={FileSpreadsheet} text="CSV" iconColor="text-blue-600" onClick={() => onAction('copy-csv')} />
+          <MenuItem icon={FileSpreadsheet} text="Excel-compatible" iconColor="text-blue-600" onClick={() => onAction('copy-excel')} />
           <MenuItem icon={FileJson} text="JSON" iconColor="text-yellow-600" onClick={() => onAction('copy-json')} />
         </div>
       )}
@@ -52,7 +62,7 @@ const EditMenu = ({ onClose }) => {
   const hasSelectedGroup = context.selectedCount > 0;
 
   return (
-    <div className="absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[235px] z-[60]">
+    <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[235px] z-[60]">
       <MenuItem icon={Undo2} text="Undo" shortcut="Ctrl+Z" iconColor="text-blue-500" onClick={() => run('undo')} />
       <MenuItem icon={Redo2} text="Redo" shortcut="Ctrl+Y" iconColor="text-blue-500" onClick={() => run('redo')} />
       <MenuDivider />

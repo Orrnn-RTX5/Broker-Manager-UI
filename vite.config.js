@@ -55,6 +55,8 @@ export default defineConfig(({ mode, command }) => {
     // (command === 'serve') keeps console output for debugging.
     esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
     server: {
+      port: 5173,
+      strictPort: true,
       proxy: {
         // Broker discovery does not consistently send browser CORS headers.
         // Keep the browser request same-origin during local development while
@@ -72,6 +74,11 @@ export default defineConfig(({ mode, command }) => {
           rewrite: rewriteManagerProxyPath,
         },
         '^/api/v\\d+(?:/|$)': {
+          target: apiHost,
+          changeOrigin: true,
+          secure: proxySecure,
+        },
+        '^/reports/v\\d+(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,

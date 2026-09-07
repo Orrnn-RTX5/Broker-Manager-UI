@@ -53,18 +53,18 @@ const TradingAccountsPage = () => {
 
   return (
     <div className="trading-accounts-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <User size={18} style={{ color: 'var(--accent)' }} />
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          <User size={16} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="trading-accounts-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
-            <p className="trading-accounts-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>
+            <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
+            <p className="trading-accounts-subtitle" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>
           </div>
         </div>
-        <div className="trading-accounts-filters flex flex-wrap items-center gap-2 mt-2 md:mt-0">
+        <div className="trading-accounts-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
           <FilterDropdown
             value={groupFilter}
-            className="w-[160px]"
+            className="w-[150px]"
             options={groupOptions}
             loading={groupsLoading}
             loadingLabel="Loading groups…"
@@ -72,7 +72,7 @@ const TradingAccountsPage = () => {
           />
           <FilterDropdown
             value={countryFilter}
-            className="w-[160px]"
+            className="w-[150px]"
             options={countryOptions}
             onChange={setCountryFilter}
           />

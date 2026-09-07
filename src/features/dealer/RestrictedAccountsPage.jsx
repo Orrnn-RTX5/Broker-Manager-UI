@@ -32,13 +32,13 @@ const RestrictedAccountsPage = () => {
   };
 
   return (
-    <div className="p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
+    <div className="restricted-accounts-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
         <div className="flex items-center gap-2">
           <Shield size={18} style={{ color: 'var(--accent)' }} />
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Restricted Accounts</h1>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Accounts with active trading restrictions. Double-click to edit.</p>
+            <h1 className="restricted-accounts-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Restricted Accounts</h1>
+            <p className="restricted-accounts-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Accounts with active trading restrictions. Double-click to edit.</p>
           </div>
         </div>
         <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5 mt-2 md:mt-0" onClick={refetch} disabled={isLoading}>
@@ -46,20 +46,21 @@ const RestrictedAccountsPage = () => {
         </button>
       </div>
 
-      <div className="relative w-full max-w-xs">
+      <div className="restricted-accounts-search relative w-full max-w-xs">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input type="text" placeholder="Search login, notes…" value={search}
           onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" style={{ paddingLeft: 32 }} />
       </div>
 
-      <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+      <div className="restricted-accounts-grid ui-card flex flex-col w-full flex-1 overflow-hidden">
         {error && (
-          <div className="px-4 py-2 text-xs" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
+          <div className="restricted-accounts-error px-4 py-2 text-[10px]" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
             <AlertTriangle size={12} className="inline mr-1" /> {error}
           </div>
         )}
-        <div className="w-full overflow-x-auto flex-1">
-          <table className="ui-grid min-w-max">
+        <div className="restricted-accounts-table-shell relative w-full flex-1 min-h-0">
+          <div className="restricted-accounts-scroll w-full h-full overflow-x-auto">
+            <table className="ui-grid min-w-max">
             <thead>
               <tr>
                 <th>Login</th>
@@ -77,14 +78,10 @@ const RestrictedAccountsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {isLoading && filtered.length === 0 ? (
-                <tr><td colSpan={12} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>Loading…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={12} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>No restricted accounts</td></tr>
-              ) : (
+              {filtered.length > 0 && (
                 filtered.map((row, idx) => {
                   const Flag = ({ val }) => (
-                    <span className={`ui-badge text-[9px] px-1 py-0 ${val ? 'ui-badge-danger' : 'ui-badge-neutral'}`}>
+                    <span className={`ui-badge text-[10px] px-1 py-0 ${val ? 'ui-badge-danger' : 'ui-badge-neutral'}`}>
                       {val ? 'YES' : 'no'}
                     </span>
                   );
@@ -121,10 +118,16 @@ const RestrictedAccountsPage = () => {
                 })
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
+          {filtered.length === 0 && (
+            <div className="restricted-accounts-empty-state" style={{ color: 'var(--muted)' }}>
+              {isLoading ? 'Loading…' : 'No restricted accounts'}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center px-4 py-2.5 text-xs shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
+        <div className="restricted-accounts-footer flex items-center px-4 py-2.5 text-[10px] shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           {filtered.length} restricted account{filtered.length !== 1 ? 's' : ''}
         </div>
       </div>

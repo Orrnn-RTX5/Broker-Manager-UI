@@ -49,13 +49,13 @@ export const expandPermissionKeys = (permission) => {
  *    state-changing action MUST additionally check `resolved` before firing.
  *  - Once the permission set has resolved (loaded, or errored) for a non-admin,
  *    access is granted ONLY if the explicit permission is present. An ERROR
- *    fetching SessionInfo therefore denies (fail-closed), it no longer grants.
+ *    fetching manager auth/me therefore denies (fail-closed), it no longer grants.
  *
  * @param {Object}   p
  * @param {boolean}  p.isAdmin       - synchronous admin claim OR wildcard holder
  * @param {string[]} p.permissions   - resolved permission list
- * @param {boolean}  p.isLoading     - SessionInfo query still loading
- * @param {boolean}  p.isError       - SessionInfo query errored
+ * @param {boolean}  p.isLoading     - manager session query still loading
+ * @param {boolean}  p.isError       - manager session query errored
  * @param {string}   [permission]    - permission key to check
  * @returns {boolean}
  */
@@ -80,7 +80,7 @@ export const decidePermission = (
 
 /**
  * Whether the permission decision is final (safe for a non-admin to act on).
- * Admins are always resolved. A non-admin is resolved once SessionInfo has
+ * Admins are always resolved. A non-admin is resolved once manager auth/me has
  * loaded or errored.
  */
 export const isPermissionResolved = ({ isAdmin = false, isLoading = false, isError = false } = {}) =>

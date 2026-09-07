@@ -46,6 +46,47 @@ export const buildDashboardMetrics = ({ accounts = [], positions = [] } = {}) =>
 export const normalizeDashboardSummary = (summary = {}) => {
   if (!summary || typeof summary !== 'object') return null;
 
+  // ReportsSummaryEnvelope is one row per currency. Never add rows together:
+  // doing so would mix unlike currencies. Prefer USD for this USD dashboard,
+  // otherwise accept a single-currency response and retain its currency label.
+  const reportRows = Array.isArray(summary.data) ? summary.data : [];
+  const reportRow = reportRows.find((row) => String(row?.currency || '').toUpperCase() === 'USD') ||
+    (reportRows.length === 1 ? reportRows[0] : null);
+
+  if (reportRow) {
+    const deposits24h = toFiniteNumber(reportRow.total_deposits);
+    const rawWithdrawals = toFiniteNumber(reportRow.total_withdrawals);
+    const withdrawals24h = rawWithdrawals === null ? null : Math.abs(rawWithdrawals);
+    const activeAccounts = toFiniteNumber(reportRow.active_accounts);
+    const totalAccounts = toFiniteNumber(reportRow.total_accounts);
+    const totalDeals = toFiniteNumber(reportRow.total_deals);
+    const totalVolume = toFiniteNumber(reportRow.total_volume);
+    const totalProfit = toFiniteNumber(reportRow.total_profit);
+
+    if ([deposits24h, withdrawals24h, activeAccounts, totalAccounts, totalDeals, totalVolume, totalProfit]
+      .every((value) => value === null)) return null;
+
+    return {
+      realAccounts: null,
+      demoAccounts: null,
+      openPositions: null,
+      equity: null,
+      deposits24h,
+      withdrawals24h,
+      netFlow24h: deposits24h === null || withdrawals24h === null
+        ? null
+        : Math.round((deposits24h - withdrawals24h) * 100) / 100,
+      activeAccounts,
+      totalAccounts,
+      totalDeals,
+      totalVolume,
+      totalProfit,
+      reportCurrency: String(reportRow.currency || summary.meta?.currency || '').toUpperCase() || null,
+      reportDate: reportRow.date || null,
+      reportFinalized: reportRow.finalized ?? summary.meta?.finalized ?? null,
+    };
+  }
+
   const realAccounts = toFiniteNumber(summary.realAccounts) ??
     toFiniteNumber(summary.real_accounts) ??
     toFiniteNumber(summary.realAccountCount) ??
@@ -64,7 +105,10 @@ export const normalizeDashboardSummary = (summary = {}) => {
     toFiniteNumber(summary.deposits_24h) ??
     toFiniteNumber(summary.cashflow24h);
 
-  if (realAccounts === null && demoAccounts === null && openPositions === null && equity === null && deposits24h === null) {
+  const withdrawals24h = toFiniteNumber(summary.withdrawals24h) ??
+    toFiniteNumber(summary.withdrawals_24h);
+
+  if (realAccounts === null && demoAccounts === null && openPositions === null && equity === null && deposits24h === null && withdrawals24h === null) {
     return null;
   }
 
@@ -74,6 +118,10 @@ export const normalizeDashboardSummary = (summary = {}) => {
     openPositions,
     equity,
     deposits24h,
+    withdrawals24h,
+    netFlow24h: deposits24h === null || withdrawals24h === null
+      ? null
+      : Math.round((deposits24h - Math.abs(withdrawals24h)) * 100) / 100,
   };
 };
 
@@ -136,5 +184,7 @@ export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage
     openPositions,
     equity,
     deposits24h: null,
+    withdrawals24h: null,
+    netFlow24h: null,
   };
 };
