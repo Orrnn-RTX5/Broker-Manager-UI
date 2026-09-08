@@ -19,7 +19,7 @@ export const ONLINE_USERS_INITIAL_PARAMS = Object.freeze({
   search: '',
   sort_by: 'login',
   sort_dir: 'asc',
-  limit: 30,
+  limit: 3,
   offset: 0,
 });
 

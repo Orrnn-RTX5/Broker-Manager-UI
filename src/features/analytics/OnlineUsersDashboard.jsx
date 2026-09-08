@@ -15,22 +15,19 @@ const formatMoney = (value) => new Intl.NumberFormat('en-US', {
 }).format(value);
 
 const MetricCard = ({ icon, label, value, hint }) => (
-  <div className="online-users-metric-card ui-card ui-card-hover min-h-[122px] h-full p-4 flex items-start gap-3">
+  <div title={hint} className="online-users-metric-card ui-card h-full px-3 py-2 flex items-center gap-2">
     <div
-      className="online-users-metric-icon w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+      className="online-users-metric-icon w-7 h-7 rounded flex items-center justify-center shrink-0"
       style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
     >
       {icon}
     </div>
     <div className="online-users-metric-content min-w-0 flex-1 flex flex-col self-stretch">
-      <div className="online-users-metric-label min-h-8 text-xs leading-4 uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+      <div className="online-users-metric-label text-xs leading-4 uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
         {label}
       </div>
-      <div className="online-users-metric-value tabular mt-1" style={{ color: 'var(--text)' }}>
+      <div className="online-users-metric-value tabular" style={{ color: 'var(--text)' }}>
         {value}
-      </div>
-      <div className="online-users-metric-hint min-h-4 text-[11px] leading-4 mt-auto truncate" style={{ color: 'var(--muted)' }}>
-        {hint}
       </div>
     </div>
   </div>
@@ -48,8 +45,8 @@ const OnlineUsersDashboard = () => {
   const metrics = useMemo(() => buildOnlineUserMetrics(visibleRows), [visibleRows]);
 
   return (
-    <div className="online-users-page p-6 w-full h-full flex flex-col gap-5 overflow-y-auto">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+    <div className="online-users-page p-3 w-full h-full flex flex-col gap-3 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
         <div>
           <h1 className="online-users-title" style={{ color: 'var(--text)' }}>
             Online Users
@@ -76,12 +73,12 @@ const OnlineUsersDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
         <MetricCard
           icon={<Users size={18} />}
           label="Online Users"
           value={formatInteger(metrics.activeUsers)}
-          hint="Matching current filter"
+          hint="Users on the current page"
         />
         <MetricCard
           icon={<ShieldCheck size={18} />}

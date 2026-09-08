@@ -1,4 +1,5 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
+import { DockTitleSlotContext } from './DockTitleSlotContext';
 import { BarChart3, BriefcaseBusiness, ChevronUp, ChevronDown, FolderTree, Maximize2, Minimize2, TerminalSquare, Users } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
@@ -18,6 +19,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   const panel = panels[id];
 
   const panelRef    = useRef(null);
+  const [titleSlot, setTitleSlot] = useState(null);
   const dragState   = useRef(null);
   const resizeState = useRef(null);
 
@@ -204,6 +206,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
       >
         <span className={styles.panelIcon}>{PanelIcon ? <PanelIcon size={15} strokeWidth={1.9} /> : panel.icon}</span>
         <span className={styles.titleText}>{panel.title}</span>
+        {id === 'terminal' && <div ref={setTitleSlot} className="cc-terminal-title-slot" onMouseDown={event => event.stopPropagation()} />}
         <div className={styles.titleActions}>
           {canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
             <button
@@ -253,7 +256,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
 
       {/* Content */}
       <div className={styles.content}>
-        {children}
+        <DockTitleSlotContext.Provider value={titleSlot}>{children}</DockTitleSlotContext.Provider>
       </div>
 
       {/* Resize Handles (float only) */}

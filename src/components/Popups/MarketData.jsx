@@ -4,7 +4,6 @@ import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
 import {
   sortMarketWatchQuotes,
-  summarizeMarketWatchQuotes,
 } from '../../utils/marketWatchQuotes';
 
 const MAX_TICKS = 1000;
@@ -122,10 +121,6 @@ const MarketData = ({ compact = false }) => {
     }));
   }, [symbols, searchRegex]);
 
-  const quoteSummary = useMemo(
-    () => summarizeMarketWatchQuotes(liveQuotes),
-    [liveQuotes]
-  );
   const columnCount = compact ? 4 : 3;
 
   const compactQuoteWindow = useMemo(() => {
@@ -359,20 +354,6 @@ const MarketData = ({ compact = false }) => {
           </tr>}
         </thead>
         <tbody className={compact ? 'text-[11px]' : 'text-sm'}>
-          <tr>
-            <td colSpan={columnCount} className={compact ? 'px-2 py-1.5 text-[10px]' : 'px-3 py-2 text-[11px]'} style={{ color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="inline-block h-1.5 w-1.5 rounded-full"
-                  style={{ background: isConnected ? 'var(--ok-text)' : 'var(--muted)' }}
-                  aria-hidden="true"
-                />
-                {isConnected
-                  ? (compact ? `Live · ${quoteSummary.live} updating` : `Live feed connected · ${quoteSummary.live} updating · ${quoteSummary.cached} without a fresh tick`)
-                  : 'Connecting to live feed…'}
-              </span>
-            </td>
-          </tr>
           {feedError && liveQuotes.length > 0 && (
             <tr>
               <td colSpan={columnCount} className="px-3 py-2 text-[11px]" style={{ color: 'var(--warning, var(--muted))', borderBottom: '1px solid var(--border)' }}>

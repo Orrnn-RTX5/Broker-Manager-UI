@@ -1,7 +1,7 @@
 import { createElement, useState } from 'react';
 import {
   Activity, BarChart3, CalendarDays, ChevronRight, CircleGauge, DollarSign,
-  MoreVertical, RefreshCw, Server, ShieldCheck, TrendingDown,
+  MoreVertical, Server, ShieldCheck, TrendingDown,
   TrendingUp, UserRoundCheck, UsersRound, WalletCards,
 } from 'lucide-react';
 import {
@@ -57,22 +57,19 @@ const PanelTitle = ({ children, meta }) => (
 
 export default function Dashboard() {
   const [range, setRange] = useState('24H');
-  const { data, isLoading, isFetching, refetch } = useDashboardMetrics();
-  const { data: limitData, isFetching: isLimitFetching, refetch: refetchLimits } = useDashboardAccountLimits();
+  const { data, isLoading } = useDashboardMetrics();
+  const { data: limitData } = useDashboardAccountLimits();
   const metrics = data?.metrics || {};
   const limits = limitData?.metrics || {};
   const realAccounts = limits.realAccounts ?? metrics.realAccounts;
   const demoAccounts = limits.demoAccounts ?? metrics.demoAccounts;
-  const refreshing = isFetching || isLimitFetching;
-  const refresh = () => { refetch(); refetchLimits(); };
 
   return (
     <main className="cc-dashboard" data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}>
       <header className="cc-dashboard-header">
-        <div><h1>Executive Dashboard</h1><p>Live brokerage operations, exposure, account activity and infrastructure health.</p></div>
+        <div><h1>Dashboard</h1><p>Live brokerage operations, exposure, account activity and infrastructure health.</p></div>
         <div className="cc-dashboard-controls">
           <button type="button"><CalendarDays size={13} />Last 24 Hours</button>
-          <button type="button" onClick={refresh} disabled={refreshing}><RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />Refresh</button>
           <button type="button" aria-label="More dashboard actions" title="More dashboard actions"><MoreVertical size={15} /></button>
         </div>
       </header>
@@ -84,7 +81,7 @@ export default function Dashboard() {
         <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" points={[8,6,9,5,11,8,14,12]} tone="neutral" />
         <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? '—' : money(metrics.equity, true)} change="+3.5%" points={[2,5,4,7,6,9,8,13]} />
         <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? '—' : integer(metrics.openPositions)} change="−6.2%" points={[12,9,11,7,8,5,6,3]} tone="danger" />
-        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? 'Awaiting API' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} points={[4,7,5,11,8,14,10,16]} placeholder={metrics.deposits24h == null} />
+        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? '—' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} points={[4,7,5,11,8,14,10,16]} placeholder={metrics.deposits24h == null} />
         <MetricCard icon={ShieldCheck} label="MARGIN EXPOSURE" value={`${preview.marginExposure}%`} detail="Used $1.2M / $1.8M" points={[10,8,12,5,9,4,7,3]} tone="danger" placeholder />
         <MetricCard icon={Server} label="ACTIVE SERVERS" value={`${preview.activeServers} / ${preview.totalServers}`} detail="All systems operational" points={[3,3,4,4,4,5,5,5]} placeholder />
         <MetricCard icon={CircleGauge} label="RISK SCORE" value={`${preview.riskScore} / 100`} detail="Low Risk" points={[2,3,3,4,5,4,6,7]} placeholder />

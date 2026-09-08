@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, User } from 'lucide-react';
+import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -55,7 +55,6 @@ const TradingAccountsPage = () => {
     <div className="trading-accounts-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
         <div className="flex items-center gap-2 shrink-0">
-          <User size={16} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
             <p className="trading-accounts-subtitle" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>

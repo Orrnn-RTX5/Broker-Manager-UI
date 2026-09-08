@@ -13,7 +13,7 @@
     "dev:electron": "npm run electron:dev",
     "dev:electron:renderer": "vite --mode electron",
     "dev:desktop": "vite --mode desktop",
-    "electron:dev": "concurrently -k \"vite --mode electron\" \"npm:desktop:main:watch\" \"wait-on http://localhost:5173 dist-electron/main.cjs && electron . --dev-server=http://localhost:5173\"",
+    "electron:dev": "concurrently -k \"vite --mode electron\" \"npm:desktop:main:watch\" \"wait-on http://localhost:5180 dist-electron/main.cjs && electron . --dev-server=http://localhost:5180\"",
     "build": "vite build --mode web",
     "build:web": "vite build --mode web",
     "build:normal": "vite build --mode web",

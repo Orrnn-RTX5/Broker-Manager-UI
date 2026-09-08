@@ -118,44 +118,43 @@
   --dock-btn-hover-text: var(--text);
 }
 
-/* Dark mode kept minimal — theme is light-first; dark is a tinted inversion
-   so the docking system still works if user toggles it. Full dark tokens TBD. */
+/* Charcoal dark theme, including dialogs rendered outside the workspace. */
 .dark {
-  --bg: #0f172a;
-  --surface: #111827;
-  --surface-2: #1e293b;
-  --surface-3: #334155;
-  --border: #334155;
-  --border-2: #1e293b;
-  --border-3: #475569;
-  --text: #f8fafc;
-  --text-2: #e2e8f0;
-  --text-3: #cbd5e1;
-  --muted: #94a3b8;
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-press: #2563eb;
-  --accent-soft: rgba(59, 130, 246, 0.16);
-  --accent-soft-2: rgba(59, 130, 246, 0.09);
-  --accent-border: rgba(96, 165, 250, 0.38);
-  --accent-text: #93c5fd;
-  --ok: #3b82f6;
-  --ok-soft: rgba(59, 130, 246, 0.16);
-  --ok-text: #93c5fd;
-  --ok-border: rgba(96, 165, 250, 0.38);
-  --danger: #f97066;
-  --danger-soft: rgba(249, 112, 102, 0.14);
-  --danger-text: #fda29b;
-  --danger-border: rgba(249, 112, 102, 0.34);
+  --bg: #181818;
+  --surface: #181818;
+  --surface-2: #292929;
+  --surface-3: #2f2f2f;
+  --border: #3b3b3b;
+  --border-2: #303030;
+  --border-3: #575757;
+  --text: #a9b1d6;
+  --text-2: #b5b5bd;
+  --text-3: #a2a2ac;
+  --muted: #a2a2ac;
+  --accent: #007ecf;
+  --accent-hover: #0075c2;
+  --accent-press: #0069ad;
+  --accent-soft: #2f2f2f;
+  --accent-soft-2: #292929;
+  --accent-border: #007ecf;
+  --accent-text: #80c6f4;
+  --ok: #8fbd9d;
+  --ok-soft: #252e28;
+  --ok-text: #a4cfb0;
+  --ok-border: #3e5946;
+  --danger: #ed968a;
+  --danger-soft: #351e1a;
+  --danger-text: #f0a296;
+  --danger-border: #744238;
   --warn: #fec84b;
   --warn-soft: rgba(254, 200, 75, 0.14);
   --warn-text: #fedf89;
   --warn-border: rgba(254, 200, 75, 0.32);
-  --info: #53b1fd;
-  --info-soft: rgba(83, 177, 253, 0.14);
-  --info-text: #b2ddff;
-  --info-border: rgba(83, 177, 253, 0.34);
-  --ring: 0 0 0 4px rgba(59, 130, 246, 0.22);
+  --info: #66b8ed;
+  --info-soft: #23313b;
+  --info-text: #80c6f4;
+  --info-border: #34566d;
+  --ring: 0 0 0 3px rgba(0, 126, 207, .3);
 }
 
 html,
@@ -2623,6 +2622,22 @@ h4 {
   font-weight: 500 !important;
 }
 
+/* Compact Trading Accounts analytics: preserve room for the working workspace. */
+.trading-analytics-page { width:100%; height:100%; min-width:0; padding:12px; overflow:auto; background:var(--bg); }
+.trading-analytics-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+#root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size:12px !important; font-weight:600 !important; line-height:1.4; color:var(--text); }
+#root .trading-analytics-page p { margin:3px 0 0; color:var(--text-3); font-size:10px; line-height:1.4; }
+.trading-analytics-heading > button { flex-shrink:0; }
+.trading-analytics-toolbar { display:flex; align-items:center; gap:8px; min-width:0; padding-bottom:12px; }
+.trading-analytics-toolbar > * { flex-shrink:0; }
+.trading-analytics-reports { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; background:var(--surface); }
+.trading-analytics-reports > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+.trading-analytics-reports > header > span { font-size:10px; color:var(--text-3); }
+.trading-analytics-report { display:flex; align-items:center; gap:10px; min-height:58px; padding:10px 12px; border-bottom:1px solid var(--border-2); }
+.trading-analytics-report-icon { display:grid; place-items:center; width:30px; height:30px; flex-shrink:0; border-radius:4px; background:var(--accent-soft); color:var(--accent-text); }
+.trading-analytics-report-value { margin-left:auto; color:var(--text-3); font-size:14px; }
+.trading-analytics-reports > footer { padding:10px 12px; color:var(--text-3); font-size:10px; line-height:1.5; }
+
 /* Symbol Browser: enforce the 12px/10px scale inside every category card. */
 #root .symbol-browser-page,
 #root .symbol-browser-page .symbol-browser-card {
@@ -2631,11 +2646,12 @@ h4 {
 }
 
 #root .symbol-browser-page {
-  padding-top: 64px !important;
+  padding-top: 12px;
+  gap: 12px;
 }
 
 #root .symbol-browser-page .symbol-browser-header {
-  transform: translateY(-12px);
+  flex-shrink: 0;
 }
 
 #root .symbol-browser-page :is(
@@ -2703,6 +2719,11 @@ h4 {
 #root .symbol-management-page .ui-grid tbody td * {
   font-size: 12px !important;
   line-height: 1.35 !important;
+}
+
+#root .symbol-management-page .ui-grid tbody td.symbol-name-cell {
+  font-size: 11px !important;
+  font-weight: 400;
 }
 
 #root .symbol-management-page .ui-grid tbody td .ui-badge {

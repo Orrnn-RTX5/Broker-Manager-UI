@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
 
 const WORKSPACE_TABS = [
-  { label: 'Executive Dashboard', path: '/dashboard', match: (path) => ['/', '/dashboard', '/admin-dashboard'].includes(path) },
+  { label: 'Dashboard', path: '/dashboard', match: (path) => ['/', '/dashboard', '/admin-dashboard'].includes(path) },
   { label: 'Exposure', path: '/analytics/open-positions' },
   { label: 'Liquidity', path: '/symbols' },
   { label: 'Risk Monitor', path: '/dealer/restrictions' },

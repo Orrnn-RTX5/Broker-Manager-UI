@@ -1,3 +1,4 @@
+import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
@@ -8,7 +9,7 @@ import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOnlineUsersAnalyticsPage } from '../analyticsQueries.js';
 import { ANALYTICS_VIEWS, ONLINE_USERS_STALE_MS, ONLINE_USERS_INITIAL_PARAMS } from '../../../utils/analyticsQueryOptions.js';
 
-const ONLINE_USERS_SNAPSHOT_KEY = 'rtx5_online_users_snapshot_v1';
+const ONLINE_USERS_SNAPSHOT_KEY = 'rtx5_online_users_snapshot_v2';
 
 const getInitialOnlineUsersSnapshot = () => {
   try {
@@ -29,8 +30,8 @@ const saveOnlineUsersSnapshot = (data) => {
   try {
     if (typeof window !== 'undefined' && window.sessionStorage) {
       window.sessionStorage.setItem(ONLINE_USERS_SNAPSHOT_KEY, JSON.stringify({
-        rows: data.rows.slice(0, 30),
-        total: data.total ?? data.rows.length,
+        rows: data.rows.slice(0, ONLINE_USERS_INITIAL_PARAMS.limit),
+        total: data.total ?? null,
         hasMore: Boolean(data.hasMore),
       }));
     }
@@ -54,7 +55,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('analytics-online-users');
-  const pageSize = 30;
+  const pageSize = ONLINE_USERS_INITIAL_PARAMS.limit;
 
   const isDefaultParams = !search && sortCol === 'login' && sortDir === 'asc';
 
@@ -159,9 +160,9 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="online-users-grid ui-card flex flex-col w-full overflow-hidden">
+    <div className="online-users-grid ui-card flex flex-col w-full shrink-0 overflow-hidden">
       <div
-        className="online-users-grid-header flex items-center justify-between px-4 py-3"
+        className="online-users-grid-header flex items-center justify-between px-3 py-1"
         style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}
       >
         <div>
@@ -188,7 +189,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </div>
       )}
       {isLoading && rows.length === 0 && showLoadingState ? (
-        <GridLoadingState label="Loading online users…" />
+        <GridLoadingState label="Loading online users…" compact />
       ) : (
       <div className="w-full overflow-x-auto">
         <table className="ui-grid min-w-max">
@@ -248,7 +249,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
       )}
 
       <div
-        className="online-users-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="online-users-grid-footer flex items-center justify-between px-3 py-1 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-2">
@@ -270,7 +271,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </span>
         <div className="flex items-center gap-2">
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
           <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
         </div>
       </div>

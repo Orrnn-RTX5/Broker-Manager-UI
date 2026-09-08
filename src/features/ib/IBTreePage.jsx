@@ -106,13 +106,37 @@ const IBTreePage = () => {
 
   return (
     <div className="ib-tree-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+      <div className="ib-tree-header flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <GitBranch size={18} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="ib-tree-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>IB Tree</h1>
             <p className="ib-tree-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Recursive broker-scoped IB hierarchy.</p>
           </div>
+        </div>
+        <div className="ib-tree-controls flex items-center gap-2 shrink-0">
+          <div className="ib-tree-search relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+            <input
+              type="number"
+              list="ib-tree-roots"
+              placeholder="Root IB login"
+              value={rootLogin}
+              onChange={(event) => setRootLogin(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && loadTree()}
+              className="ui-input ui-input-sm"
+              style={{ paddingLeft: 32, width: 190 }}
+            />
+            <datalist id="ib-tree-roots">
+              {rootOptions.map((account) => (
+                <option key={account.login} value={account.login}>{account.company_name || account.referral_code}</option>
+              ))}
+            </datalist>
+          </div>
+          <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={loadTree} disabled={loadingTree || loadingAccounts || !rootLogin}>
+            {loadingTree ? <Loader size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Load Tree
+          </button>
         </div>
       </div>
 
@@ -121,31 +145,6 @@ const IBTreePage = () => {
           <AlertTriangle size={13} /> {error}
         </div>
       )}
-
-      <div className="ib-tree-controls flex flex-wrap items-center gap-2">
-        <div className="ib-tree-search relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-          <input
-            type="number"
-            list="ib-tree-roots"
-            placeholder="Root IB login"
-            value={rootLogin}
-            onChange={(event) => setRootLogin(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && loadTree()}
-            className="ui-input ui-input-sm"
-            style={{ paddingLeft: 32, width: 190 }}
-          />
-          <datalist id="ib-tree-roots">
-            {rootOptions.map((account) => (
-              <option key={account.login} value={account.login}>{account.company_name || account.referral_code}</option>
-            ))}
-          </datalist>
-        </div>
-        <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={loadTree} disabled={loadingTree || loadingAccounts || !rootLogin}>
-          {loadingTree ? <Loader size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-          Load Tree
-        </button>
-      </div>
 
       <div className="ib-tree-content flex gap-4 flex-1 overflow-hidden">
         <div className="ib-tree-canvas ui-card flex-1 p-3 overflow-y-auto">

@@ -2,7 +2,7 @@ const DEFAULT_BACKEND_TARGET = 'web';
 const DEFAULT_DIRECT_BACKEND_PORT = 8091;
 const DEFAULT_WS_PATH = '/ws/feed';
 
-const GTA_PUBLIC_BACKEND_URL = 'https://services.growtradingacademy.com';
+const GTA_PUBLIC_BACKEND_URL = 'https://fxtrustbrokerbackend.orrnn.com';
 const GTA_DIRECT_HOST = '103.91.186.142';
 const GTA_DIRECT_PORT = 8091;
 
@@ -311,6 +311,7 @@ const resolveDesktopBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
   const explicit = getValue(brokerInfo, DESKTOP_BACKEND_KEYS);
   const normalizedExplicit = explicit ? normalizeDesktopHttpUrl(explicit) : '';
   const explicitHost = hostnameFromUrl(normalizedExplicit);
+  if (normalizedExplicit && hasGtaMarker(normalizedExplicit)) return GTA_PUBLIC_BACKEND_URL;
   if (normalizedExplicit && explicitHost && !isIpAddress(explicitHost)) return normalizedExplicit;
 
   if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) {
@@ -347,6 +348,7 @@ export const resolveBrokerExtApiUrl = (brokerInfo = {}, backendUrl = '') => {
 
   const explicit = getValue(brokerInfo, explicitKeys);
   if (explicit) {
+    if (hasGtaMarker(explicit)) return GTA_PUBLIC_BACKEND_URL;
     return isDesktopBackendTarget()
       ? normalizeDesktopHttpUrl(explicit)
       : sanitizeWebBackendCandidate(explicit, brokerInfo, backendUrl);
@@ -430,7 +432,7 @@ const buildWsEndpoint = (baseUrl = '', path = DEFAULT_WS_PATH) => {
 const sanitizeWebWsCandidate = (candidate = '', brokerInfo = {}, fallbackUrl = '') => {
   if (!candidate) return '';
   if (isGtaBrokerInfo(brokerInfo, fallbackUrl) || hasGtaMarker(candidate)) {
-    return 'wss://services.growtradingacademy.com';
+    return 'wss://fxtrustbrokerbackend.orrnn.com';
   }
 
   const wsUrl = toWsUrl(candidate, 'wss');
@@ -492,7 +494,7 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
   const explicit = runtimeFeedOverride || getValue(brokerInfo, explicitKeys) || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']);
   if (explicit) {
     const resolvedExplicit = isDesktopBackendTarget()
-      ? toDesktopWsUrl(explicit)
+      ? toDesktopWsUrl(hasGtaMarker(explicit) ? GTA_PUBLIC_BACKEND_URL : explicit)
       : sanitizeWebWsCandidate(explicit, brokerInfo, fallbackUrl);
     if (resolvedExplicit) return buildWsEndpoint(resolvedExplicit, path);
   }

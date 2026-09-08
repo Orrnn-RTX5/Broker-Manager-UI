@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, BarChart3 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -10,6 +10,7 @@ import { useDealerMenu } from '../../hooks/useDealerMenu';
 import { useAnalyticsRouteTiming } from '../../hooks/useAnalyticsTiming.js';
 import { ANALYTICS_VIEWS } from '../../utils/analyticsQueryOptions.js';
 import useSymbolStore from '../../store/symbolStore';
+import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
 
 const POSITION_COLUMNS = [
   { key: 'position',     label: 'Ticket' },
@@ -37,6 +38,8 @@ const POPULAR_SYMBOLS = [
 const DEFAULT_REASONS = ['Client', 'Mobile', 'Expert', 'Dealer', 'Web', 'Auto', 'Signal'];
 
 const OpenPositionsPage = () => {
+  const headerRef = useOwnerConsoleAutoCollapse('.open-positions-filters');
+
   useAnalyticsRouteTiming(ANALYTICS_VIEWS.openPositions);
   const symbolsMap = useSymbolStore((state) => state.symbols);
   const [search, setSearch] = useState('');
@@ -81,11 +84,10 @@ const OpenPositionsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getPositionActions]);
 
   return (
-    <div className="open-positions-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+    <div className="open-positions-page py-6 px-3 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
       {/* Header with Title and Dropdown Filters */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+      <div ref={headerRef} className="flex flex-row items-center justify-between pb-2 gap-2">
         <div className="flex items-center gap-2 shrink-0">
-          <BarChart3 size={16} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="open-positions-title" style={{ color: 'var(--text)' }}>Open Positions</h1>
             <p className="open-positions-subtitle" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>

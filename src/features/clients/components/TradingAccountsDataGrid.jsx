@@ -1,6 +1,7 @@
+import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { User, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw, Edit2 } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Edit2 } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPositions } from '../../../services/api';
@@ -36,13 +37,6 @@ const saveCachedTradingAccounts = (data) => {
   } catch {
     // Storage full or private mode
   }
-};
-
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const TradingAccountsDataGrid = ({
@@ -160,8 +154,10 @@ const TradingAccountsDataGrid = ({
   };
 
   const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th onClick={() => handleSort(col)} style={{ textAlign: align }}
+      aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      title={`Sort by ${label}`}>
+      {label}
     </th>
   );
 
@@ -256,10 +252,7 @@ const TradingAccountsDataGrid = ({
                   style={{ cursor: 'pointer' }}
                 >
                   <td style={{ color: 'var(--text-3)' }}>
-                    <span className="inline-flex items-center gap-2">
-                      <User size={13} style={{ color: 'var(--accent)' }} />
-                      <span className="tabular">{row.login}</span>
-                    </span>
+                    <span className="tabular">{row.login}</span>
                   </td>
                   <td>
                     <span className={`ui-badge text-[9px] px-1 py-0 ${
@@ -305,7 +298,7 @@ const TradingAccountsDataGrid = ({
       )}
 
       <div
-        className="trading-accounts-grid-footer flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
+        className="trading-accounts-grid-footer flex items-center justify-between px-3 py-1 text-xs shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
       >
         <span className="flex items-center gap-2">
@@ -333,7 +326,7 @@ const TradingAccountsDataGrid = ({
             {isIdle ? 'Load' : 'Refresh'}
           </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
           <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
         </div>
       </div>

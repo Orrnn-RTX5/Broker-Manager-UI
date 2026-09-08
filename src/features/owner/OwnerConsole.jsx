@@ -1,11 +1,10 @@
 import { createElement, useState } from 'react';
 import {
-  Activity, ArrowRight, CalendarDays, CheckCircle2, CircleDollarSign, ClipboardCheck,
-  FileBarChart, Gavel, Handshake, Landmark, ServerCog, Settings,
+  Activity, ArrowRight, CheckCircle2, CircleDollarSign, ClipboardCheck,
+  FileBarChart, Gavel, Handshake, ServerCog, Settings,
   ShieldCheck, UserPlus, UserRoundCheck, Users,
 } from 'lucide-react';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
-import useDashboardMetrics from '../dashboard/useDashboardMetrics';
 import {
   OWNER_CONSOLE_ALERTS,
   OWNER_CONSOLE_APPROVALS,
@@ -15,10 +14,6 @@ import {
   markOwnerConsoleWorkflowReviewed,
   readOwnerConsoleReviewState,
 } from './ownerConsoleReviewState';
-
-const money = (value, currency = 'USD') => new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0,
-}).format(value || 0);
 
 const ACTIONS = [
   { label: 'Add New Client', icon: UserPlus, path: '/clients' },
@@ -77,21 +72,8 @@ const WorkflowPanel = ({ title, description, items, navigate, panelId, labelledB
 
 export default function OwnerConsole() {
   const [tab, setTab] = useState('Insights');
-  const [reportDate, setReportDate] = useState('');
   const [reviewed, setReviewed] = useState(readOwnerConsoleReviewState);
   const navigate = useWorkspaceNavigation();
-  const { data, isLoading, isError } = useDashboardMetrics({
-    reportDate: reportDate || undefined,
-    summaryOnly: Boolean(reportDate),
-  });
-  const metrics = data?.metrics || {};
-  const deposits = metrics.deposits24h;
-  const withdrawals = metrics.withdrawals24h;
-  const netFlow = metrics.netFlow24h;
-  const currency = metrics.reportCurrency || 'USD';
-  const loadingReport = isLoading && !data;
-  const reportAvailable = deposits != null || withdrawals != null;
-  const cashFlowMax = Math.max(deposits || 0, withdrawals || 0, 1);
   const alertCount = countUnreviewedOwnerWorkflows(OWNER_CONSOLE_ALERTS, reviewed.alerts);
   const approvalCount = countUnreviewedOwnerWorkflows(OWNER_CONSOLE_APPROVALS, reviewed.approvals);
   const markReviewed = (collection, id) => {
@@ -126,7 +108,7 @@ export default function OwnerConsole() {
 
       {tab === 'Insights' && (
         <div id="owner-panel-insights" role="tabpanel" aria-labelledby="owner-tab-insights">
-          <section className="cc-owner-section">
+          <section className="cc-owner-section cc-owner-quick-actions">
             <div className="cc-section-title"><strong>Quick Actions</strong></div>
             <div className="cc-quick-grid">
               {ACTIONS.map(({ label, icon: Icon, path }) => (
@@ -143,35 +125,6 @@ export default function OwnerConsole() {
             </div>
           </section>
 
-          <section className="cc-owner-section cc-cashflow">
-            <div className="cc-section-title">
-              <strong><Landmark size={14} />Cash Flow (Report Day)</strong>
-              <label className="cc-report-date" title="Select a UTC report day">
-                <CalendarDays size={11} />
-                <input
-                  type="date"
-                  aria-label="Cash flow report day"
-                  max={new Date().toISOString().slice(0, 10)}
-                  value={reportDate || metrics.reportDate || ''}
-                  onChange={(event) => setReportDate(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="cc-cashflow-values">
-              <div><small>Total Deposits</small><strong>{loadingReport ? 'Loading…' : deposits == null ? '—' : money(deposits, currency)}</strong><span>{currency}</span></div>
-              <div><small>Total Withdrawals</small><strong>{loadingReport ? 'Loading…' : withdrawals == null ? '—' : money(withdrawals, currency)}</strong><span>{currency}</span></div>
-              <div><small>Net Flow</small><strong className={netFlow >= 0 ? 'is-positive' : 'is-negative'}>{loadingReport ? 'Loading…' : netFlow == null ? '—' : money(netFlow, currency)}</strong><span>{metrics.reportFinalized ? 'Finalized' : 'Provisional'}</span></div>
-            </div>
-            {reportAvailable && !loadingReport ? (
-              <div className="cc-cashflow-breakdown" aria-label="Daily cash flow totals">
-                <div><span>Deposits</span><i><b style={{ width: `${((deposits || 0) / cashFlowMax) * 100}%` }} /></i></div>
-                <div className="is-outflow"><span>Withdrawals</span><i><b style={{ width: `${((withdrawals || 0) / cashFlowMax) * 100}%` }} /></i></div>
-              </div>
-            ) : !loadingReport && (
-              <div className="cc-cashflow-empty">{isError ? 'No daily report is available for this date.' : 'Cash-flow totals are unavailable for this report day.'}</div>
-            )}
-          </section>
-          <div className="cc-owner-footnote"><Activity size={11} /> Daily totals from the Manager report API. Intraday candles are not exposed.</div>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { formatPageLabel } from '../../utils/pageLabel.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -388,7 +389,7 @@ const GroupsPage = () => {
               </span>
               <div className="flex items-center gap-2">
                 <button onClick={prevPage} disabled={page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-                <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{page + 1} / {totalPages ?? '?'}</span>
+                <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{formatPageLabel(page, totalPages)}</span>
                 <button onClick={nextPage} disabled={!hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
               </div>
             </div>

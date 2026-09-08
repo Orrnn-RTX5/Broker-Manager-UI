@@ -230,7 +230,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
     [PANEL_MARKET_DATA]: <MarketData compact />,
     [PANEL_OWNER]: <OwnerConsole />,
-    [PANEL_TERMINAL]: <TerminalDock />,
+    [PANEL_TERMINAL]: <TerminalDock isAuthenticated={isAuthenticated} />,
   };
 
   return (

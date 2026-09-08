@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Settings2, List, FolderTree, ArrowLeftRight, Clock, DollarSign, Layers } from 'lucide-react';
 import SymbolsTab from './tabs/SymbolsTab';
 import CategoriesTab from './tabs/CategoriesTab';
 import LpMappingsTab from './tabs/LpMappingsTab';
@@ -8,12 +7,12 @@ import CommissionSwapTab from './tabs/CommissionSwapTab';
 import AdvancedTab from './tabs/AdvancedTab';
 
 const TABS = [
-  { id: 'symbols',    label: 'Symbols',          icon: List },
-  { id: 'categories', label: 'Categories',        icon: FolderTree },
-  { id: 'mappings',   label: 'LP Mappings',       icon: ArrowLeftRight },
-  { id: 'sessions',   label: 'Trading Sessions',  icon: Clock },
-  { id: 'commission', label: 'Commission & Swap',  icon: DollarSign },
-  { id: 'advanced',   label: 'Advanced',          icon: Layers },
+  { id: 'symbols', label: 'Symbols' },
+  { id: 'categories', label: 'Categories' },
+  { id: 'mappings', label: 'LP Mappings' },
+  { id: 'sessions', label: 'Trading Sessions' },
+  { id: 'commission', label: 'Commission & Swap' },
+  { id: 'advanced', label: 'Advanced' },
 ];
 
 const SymbolManagementPage = () => {
@@ -24,7 +23,6 @@ const SymbolManagementPage = () => {
       <div className="flex items-end justify-between shrink-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Settings2 size={20} style={{ color: 'var(--accent)' }} />
             <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Symbol Management</h1>
           </div>
           <p className="text-sm" style={{ color: 'var(--text-3)' }}>
@@ -35,7 +33,7 @@ const SymbolManagementPage = () => {
 
       {/* Tab bar */}
       <div className="flex items-center gap-1 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -46,7 +44,6 @@ const SymbolManagementPage = () => {
               background: 'transparent',
             }}
           >
-            <Icon size={13} />
             {label}
           </button>
         ))}

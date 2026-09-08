@@ -6,6 +6,7 @@ import ClientsContextMenu from './components/ClientsContextMenu';
 import ClientDetailsModal from '../../components/Popups/ClientDetailsModal';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridController from '../../hooks/useGridController';
+import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
 import { rowsToCSV, rowsToTSV, rowsToJSON, copyToClipboard, downloadBlob, stampedFilename } from '../../utils/gridUtils';
 import { ALL_COUNTRIES } from '../../utils/countries';
 
@@ -22,6 +23,7 @@ const CLIENT_COLUMNS = [
 ];
 
 const ClientsDashboard = () => {
+  const headerRef = useOwnerConsoleAutoCollapse('.clients-filters');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
@@ -92,7 +94,7 @@ const ClientsDashboard = () => {
       className="clients-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto"
       onContextMenu={handleContextMenu}
     >
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
+      <div ref={headerRef} className="flex flex-row items-center justify-between pb-2 gap-2">
         <div className="flex items-center gap-2 shrink-0">
           <Users2 size={16} style={{ color: 'var(--accent)' }} />
           <div>

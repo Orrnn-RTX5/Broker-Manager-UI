@@ -138,6 +138,9 @@ const loadPagedFallbackMetrics = async (summaryError, signal) => {
 };
 
 export const loadDashboardMetrics = async ({ signal, reportDate, summaryOnly = false } = {}) => {
+  // Start independent account/position requests alongside the report request.
+  // Keep the settled promise reusable if the report endpoint is unavailable.
+  const supportingRequest = summaryOnly ? null : loadPagedFallbackMetrics(null, signal);
   try {
     const summary = await getDashboardSummary({ signal, date: reportDate });
     const reportMetrics = normalizeDashboardSummary(summary);
@@ -155,7 +158,7 @@ export const loadDashboardMetrics = async ({ signal, reportDate, summaryOnly = f
 
     // The report owns cash-flow/activity totals; the paged manager endpoints
     // still provide account, equity, and position KPIs that the report omits.
-    const supporting = await loadPagedFallbackMetrics(null, signal);
+    const supporting = await supportingRequest;
     const metrics = { ...(supporting.metrics || {}) };
     Object.entries(reportMetrics).forEach(([key, value]) => {
       if (value !== null && value !== undefined) metrics[key] = value;
@@ -175,7 +178,14 @@ export const loadDashboardMetrics = async ({ signal, reportDate, summaryOnly = f
     return result;
   } catch (error) {
     if (summaryOnly) throw error;
-    return loadPagedFallbackMetrics(error, signal);
+    const supporting = await supportingRequest;
+    const summary = { key: 'summary', ok: false, data: null, error: getErrorMessage(error) };
+    const fallbackErrors = Object.values(supporting.sources).filter((source) => source.key !== 'summary' && !source.ok);
+    return {
+      ...supporting,
+      sources: { ...supporting.sources, summary },
+      errors: hasAnyMetric(supporting.metrics) ? fallbackErrors : [summary, ...fallbackErrors],
+    };
   }
 };
 

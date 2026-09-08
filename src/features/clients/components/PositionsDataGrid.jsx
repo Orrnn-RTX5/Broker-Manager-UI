@@ -1,3 +1,4 @@
+import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
@@ -323,7 +324,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
       )}
 
       <div
-        className="open-positions-grid-footer flex items-center justify-between px-4 py-2 text-[10px] shrink-0"
+        className="open-positions-grid-footer flex items-center justify-between px-3 py-0.5 text-[10px] shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: '10px' }}
       >
         <span className="flex items-center gap-3">
@@ -347,7 +348,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
             {isIdle ? 'Load' : 'Refresh'}
           </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : `${page + 1} / ${totalPages ?? '?'}`}</span>
+          <span className="tabular px-1" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
           <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>
         </div>
       </div>

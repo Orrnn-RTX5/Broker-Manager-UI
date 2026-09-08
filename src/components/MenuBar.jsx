@@ -294,11 +294,18 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           title="Go to dashboard"
           aria-label="Go to dashboard"
         >
+          {isDarkMode ? (
+            <span className="manager-brand-stacked">
+              <img className="manager-brand-symbol" src="/manager-symbol-dark.png" alt="" />
+              <span className="manager-brand-caption">Manager</span>
+            </span>
+          ) : <>
           <img className="manager-menu-logo" src="/rtx5-logo.png" alt="RTX5" />
           <div className="ml-2 leading-tight">
             <div className="manager-menu-brand-name text-[12px] font-bold" style={{ color: 'var(--text)' }}>RTX5 Manager</div>
             <div className="manager-menu-brand-subtitle text-[9px] font-semibold" style={{ color: 'var(--text-3)' }}>Brokerage Operations &amp; Owner Console</div>
           </div>
+          </>}
         </button>
 
         {/* Menu Items */}

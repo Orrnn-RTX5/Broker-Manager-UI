@@ -15,7 +15,7 @@
       "nginx": {
         "listen_host": "103.91.186.142"
       },
-      "backend_url": "https://services.growtradingacademy.com",
+      "backend_url": "https://fxtrustbrokerbackend.orrnn.com",
       "server_ip": "103.91.186.142",
       "server_port": 8091,
       "backend_host": "127.0.0.1",
@@ -25,12 +25,12 @@
         "BROKER_ID": "gta_broker",
         "VITE_BROKER_ID": "gta_broker",
         "BACKEND_TARGET": "web",
-        "API_HOST": "https://services.growtradingacademy.com",
-        "API_HOST_EXT": "https://services.growtradingacademy.com",
-        "WS_HOST": "wss://services.growtradingacademy.com",
+        "API_HOST": "https://fxtrustbrokerbackend.orrnn.com",
+        "API_HOST_EXT": "https://fxtrustbrokerbackend.orrnn.com",
+        "WS_HOST": "wss://fxtrustbrokerbackend.orrnn.com",
         "FEED_BROKER_ID": "gta_broker",
         "DEFAULT_MT5_SERVER": "103.91.186.142",
-        "DISCOVERY_BASE_URL": "https://services.growtradingacademy.com",
+        "DISCOVERY_BASE_URL": "https://fxtrustbrokerbackend.orrnn.com",
         "USE_MOCK_DISCOVERY": "false"
       }
     },

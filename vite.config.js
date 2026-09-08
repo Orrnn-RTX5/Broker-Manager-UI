@@ -55,7 +55,7 @@ export default defineConfig(({ mode, command }) => {
     // (command === 'serve') keeps console output for debugging.
     esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
     server: {
-      port: 5173,
+      port: 5180,
       strictPort: true,
       proxy: {
         // Broker discovery does not consistently send browser CORS headers.

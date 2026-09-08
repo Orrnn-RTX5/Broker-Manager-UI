@@ -1,15 +1,15 @@
 import { LoaderCircle } from 'lucide-react';
 
-const GridLoadingState = ({ label = 'Loading data…' }) => (
+const GridLoadingState = ({ label = 'Loading data…', compact = false }) => (
   <div
-    className="grid-loading-soft-landing relative flex-1 min-h-[260px] flex flex-col w-full overflow-hidden"
+    className={`grid-loading-soft-landing relative flex flex-col w-full overflow-hidden ${compact ? 'flex-none h-[144px] min-h-0' : 'flex-1 min-h-[260px]'}`}
     role="status"
     aria-live="polite"
   >
     {/* Subtle realistic skeleton rows that maintain table structure without sudden shifts */}
     <div className="w-full flex-1 flex flex-col p-3 gap-2.5 pointer-events-none opacity-40 select-none">
       <div className="h-7 w-full rounded bg-[var(--surface-3)] animate-pulse" />
-      {[...Array(6)].map((_, i) => (
+      {[...Array(compact ? 3 : 6)].map((_, i) => (
         <div
           key={i}
           className="h-7 w-full rounded flex items-center gap-4 px-3"

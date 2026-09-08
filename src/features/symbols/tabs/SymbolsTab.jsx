@@ -398,7 +398,7 @@ const SymbolsTab = () => {
                 <tr><td colSpan={9} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>No symbols found.</td></tr>
               ) : filtered.map(s => (
                 <tr key={s.symbol}>
-                  <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>
+                  <td className="symbol-name-cell" style={{ color: 'var(--accent-text)', fontWeight: 400 }}>
                     {s.symbol}
                     {s.symbolType === 'derived' && s.parentSymbol && (
                       <span className="ml-2 ui-badge ui-badge-primary text-[10px]">derived: {s.parentSymbol}</span>
