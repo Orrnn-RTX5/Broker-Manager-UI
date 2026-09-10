@@ -292,9 +292,9 @@
 
 /* IDE workspace tabs */
 .cc-workspace-tabs { display: flex; flex: 0 0 35px; align-items: stretch; min-width: 0; overflow: visible; background: var(--cc-titlebar); border-bottom: 1px solid var(--border); }
-.cc-workspace-tab-scroll { display:flex; flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
+.cc-workspace-tab-scroll { display:flex; flex:0 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
 .cc-workspace-tab-scroll::-webkit-scrollbar { display:none; width:0; height:0; }
-.cc-workspace-tab-shell { position:relative; display:flex; flex:1 0 124px; min-width:124px; border-right:1px solid var(--border); background:transparent; }
+.cc-workspace-tab-shell { position:relative; display:flex; flex:0 0 160px; width:160px; min-width:160px; border-right:1px solid var(--border); background:transparent; }
 .cc-workspace-tab-shell:hover { background:var(--bg-hover); }
 .cc-workspace-tab-shell.is-active { background:var(--bg-panel); }
 .cc-workspace-tab-shell.is-active::before { content:""; position:absolute; inset:0 0 auto; z-index:1; height:2px; background:var(--accent); }
@@ -307,10 +307,11 @@
 .cc-workspace-add { display: grid; width: 35px; flex: 0 0 35px; place-items: center; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; }
 .cc-workspace-add:hover,.cc-workspace-add.is-open { color:var(--text-primary); background:var(--bg-hover); }
 .cc-workspace-add-menu { position:absolute; top:calc(100% + 1px); right:0; z-index:115; display:grid; width:190px; padding:5px; border:1px solid var(--border); border-radius:0 0 5px 5px; background:var(--bg-elevated); box-shadow:var(--cc-popover-shadow); }
+.cc-workspace-tabs:has(.cc-workspace-tab-scroll:empty) .cc-workspace-add-menu { left: 0; right: auto; }
 .cc-workspace-add-menu > strong { padding:6px 7px 7px; color:var(--text-primary); font-size:9px; font-weight:600; }
 .cc-workspace-add-menu > button { display:flex; min-height:27px; align-items:center; gap:7px; padding:0 7px; border:0; border-radius:3px; background:transparent; color:var(--text-secondary); font-size:9px; text-align:left; cursor:pointer; }.cc-workspace-add-menu > button:hover { background:var(--bg-hover); color:var(--text-primary); }
 .cc-workspace-add-menu > small { padding:7px; color:var(--text-tertiary); font-size:8px; line-height:1.4; }
-.cc-workspace-spacer { display: none; }
+.cc-workspace-spacer { display: block; flex: 1 1 0; min-width: 0; }
 
 /* Executive dashboard */
 .cc-dashboard { display: flex; min-height: 100%; flex-direction: column; gap: 8px; padding: 8px 12px 12px; background: var(--bg-app); }
@@ -319,7 +320,7 @@
 .cc-dashboard-header h1 { grid-column:1; grid-row:1; }
 .cc-dashboard-header p { grid-column:1 / -1; grid-row:2; }
 .cc-dashboard-header .cc-dashboard-controls { grid-column:2; grid-row:1; }
-#root .cc-dashboard-header h1 { margin: 0; color: var(--text-primary); font-size: 20px !important; font-weight: 600 !important; line-height: 1.2 !important; }
+#root .cc-dashboard-header h1 { margin: 0; color: var(--text-primary); font-size: 12px !important; font-weight: 600 !important; line-height: 1.4 !important; }
 #root .cc-dashboard-header p { margin: 3px 0 0; color: var(--text-secondary); font-size: 10px !important; }
 .cc-dashboard-controls { display: flex; align-items: center; gap: 6px; }
 .cc-dashboard-controls button { display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-panel); color: var(--text-secondary); font-size: 10px; cursor: pointer; }
@@ -330,13 +331,15 @@
 .cc-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(135px, 1fr)); gap: 8px; }
 .cc-metric-card { position: relative; display: grid; min-height: 78px; grid-template-columns: 34px minmax(0, 1fr) 54px; align-items: start; gap: 7px; overflow: hidden; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-panel); }
 .cc-metric-card:hover { border-color: var(--border-3); background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-hover)); }
+.cc-metric-card[role="button"] { cursor: pointer; }
+.cc-metric-card[role="button"]:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; box-shadow: none; }
 .cc-metric-card[data-placeholder="true"]::after { content: "ADAPTER"; position: absolute; top: 4px; right: 5px; color: var(--text-tertiary); font-size: 7px; letter-spacing: .08em; opacity: .55; }
 .cc-metric-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--ok-border); border-radius: 5px; background: var(--ok-soft); color: var(--success); }
 .cc-metric-icon.is-danger { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger); }
 .cc-metric-icon.is-neutral { border-color: var(--border); background: var(--bg-elevated); color: var(--text-secondary); }
 .cc-metric-main { min-width: 0; }
 .cc-metric-main small { display: block; overflow: hidden; color: var(--text-secondary); font-size: 8px; line-height: 1.2; letter-spacing: .04em; text-overflow: ellipsis; white-space: nowrap; }
-.cc-metric-main strong { display: block; overflow: hidden; margin-top: 2px; color: var(--text-primary); font-size: 18px; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.cc-metric-main strong { display: block; overflow: hidden; margin-top: 2px; color: var(--text-primary); font-size: 12px; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .cc-metric-main > span { display: flex; align-items: center; gap: 3px; margin-top: 4px; color: var(--success); font-size: 9px; white-space: nowrap; }
 .cc-metric-main > span.is-danger { color: var(--danger); }
 .cc-metric-main > span.is-neutral { color: var(--text-secondary); }
@@ -398,10 +401,10 @@
 .cc-owner-tabs b { min-width: 15px; padding: 1px 4px; border-radius: 8px; background: var(--danger); color: white; font-size: 7px; }
 .cc-owner-tabs b.is-clear { background:var(--ok-soft); color:var(--ok-text); }
 .cc-owner-section { padding: 10px; border-bottom: 1px solid var(--border); }
-.cc-owner-quick-actions { padding:12px; border-bottom:0; }
+.cc-owner-quick-actions { padding:8px; border-bottom:0; }
 .cc-owner-quick-actions .cc-section-title { margin-bottom:6px; }
-.cc-owner-quick-actions .cc-quick-grid { gap:8px; }
-.cc-owner-quick-actions .cc-quick-grid button { min-height:44px; padding:8px; }
+.cc-owner-quick-actions .cc-quick-grid { gap:6px; }
+.cc-owner-quick-actions .cc-quick-grid button { min-height:40px; padding:6px; }
 .cc-section-title { display: flex; min-height: 23px; align-items: center; justify-content: space-between; }.cc-section-title strong { display:flex; align-items:center; gap:5px; color:var(--text-primary); font-size:10px; }.cc-section-title > span { display:flex; align-items:center; gap:2px; color:var(--info-text); font-size:8px; }
 .cc-quick-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }.cc-quick-grid button { display:flex; min-height:36px; align-items:center; gap:6px; padding:0 7px; border:1px solid var(--border); border-radius:4px; background:var(--bg-elevated); color:var(--text-secondary); font-size:8px; text-align:left; cursor:pointer; }.cc-quick-grid button:hover { border-color:var(--border-3); background:var(--bg-hover); color:var(--text-primary); }.cc-quick-grid svg { flex:0 0 auto; color:var(--info-text); }
 .cc-cashflow-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; margin-top:5px; }.cc-cashflow-values > div { min-width:0; }.cc-cashflow-values small,.cc-cashflow-values span { display:block; color:var(--text-tertiary); font-size:7px; }.cc-cashflow-values strong { display:block; overflow:hidden; margin:2px 0; color:var(--text-primary); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }.cc-cashflow-values .is-positive { color:var(--success); }.cc-cashflow-values .is-negative { color:var(--danger); }
@@ -512,3 +515,4 @@
   .rtx5-command-shell [data-panel-id="owner_console"] { display:none; }
   .rtx5-command-shell .manager-menu-brand { min-width:210px; }
 }
+

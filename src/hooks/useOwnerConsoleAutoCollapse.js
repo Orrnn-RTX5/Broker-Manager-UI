@@ -7,10 +7,11 @@ export default function useOwnerConsoleAutoCollapse(filterSelector) {
   const { panels, updatePanel } = useDockingContext();
   const ownerVisible = panels.owner_console?.visible;
   const ownerPosition = panels.owner_console?.position;
+  const ownerPinned = panels.owner_console?.userPinned;
 
   useEffect(() => {
     const header = headerRef.current;
-    if (!header || !ownerVisible || !['left', 'right'].includes(ownerPosition)) return undefined;
+    if (!header || !ownerVisible || ownerPinned || !['left', 'right'].includes(ownerPosition)) return undefined;
     let frame;
     const checkFit = () => {
       cancelAnimationFrame(frame);
@@ -31,6 +32,6 @@ export default function useOwnerConsoleAutoCollapse(filterSelector) {
     observer.observe(header.querySelector(filterSelector));
     checkFit();
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
-  }, [ownerVisible, ownerPosition, updatePanel, filterSelector]);
+  }, [ownerVisible, ownerPosition, ownerPinned, updatePanel, filterSelector]);
   return headerRef;
 }

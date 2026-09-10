@@ -16,14 +16,14 @@ import {
   isActiveFeedSocket,
   markSymbolMapCached,
   resolveFallbackFeedFields,
+  resolveTickFeedFields,
 } from '../utils/symbolFeedLifecycle';
 
 const WS_CONNECT_TIMEOUT_MS = 10_000;
 const WS_RECONNECT_DELAY_MS = 5_000;
 const WS_METADATA_FALLBACK_DELAY_MS = 3_000;
-// Two visual quote updates per second remain live to the eye while leaving
-// deterministic scheduler space for direct Navigator input and route commits.
-const MARKET_TICK_BATCH_MS = 500;
+// Coalesce bursts over roughly one display frame for responsive live quotes.
+const MARKET_TICK_BATCH_MS = 16;
 const SYMBOL_CACHE_WRITE_DELAY_MS = 2_000;
 const REHYDRATED_SYMBOL_REASON = 'Cached quote awaiting a tick from the current feed connection.';
 
@@ -258,15 +258,21 @@ const useSymbolStore = create(
             const nextAsk = ask !== undefined && ask !== null
               ? formatPrice(ask, current?.ask || '0.00000')
               : (current?.ask || '0.00000');
-            const hasFreshLiveTick = current?.feedState === FEED_DATA_STATE.LIVE && !current?.isStale;
+            const feedFields = resolveTickFeedFields(data);
+            const feedStateChanged = current?.feedState !== feedFields.feedState
+              || current?.isStale !== feedFields.isStale
+              || current?.staleReason !== feedFields.staleReason;
 
             // Identical live ticks do not affect anything the user can see, so
             // avoid cloning the entire map and triggering a React update.
-            if (current && current.bid === nextBid && current.ask === nextAsk && hasFreshLiveTick) return;
+            const detailFields = ['session', 'daily_open', 'previous_close'];
+            const detailsChanged = detailFields.some((key) => data[key] !== undefined
+              && JSON.stringify(data[key]) !== JSON.stringify(current?.[key]));
+            if (current && current.bid === nextBid && current.ask === nextAsk && !feedStateChanged && !detailsChanged) return;
 
             if (nextSymbols === state.symbols) nextSymbols = { ...state.symbols };
             if (!current) newSymbolAdded = true;
-            if (!hasFreshLiveTick) metadataNeedsRefresh = true;
+            if (feedStateChanged) metadataNeedsRefresh = true;
             updatedSymbols.add(symbol);
 
             const previousBid = Number(current?.bid);
@@ -278,15 +284,14 @@ const useSymbolStore = create(
             const category = getCategory(symbol);
             nextSymbols[symbol] = {
               ...(current || {}),
+              ...Object.fromEntries(detailFields.filter((key) => data[key] !== undefined).map((key) => [key, data[key]])),
               symbol,
               bid: nextBid,
               ask: nextAsk,
               lastUpdate: now,
               category,
               dir,
-              feedState: FEED_DATA_STATE.LIVE,
-              isStale: false,
-              staleReason: '',
+              ...feedFields,
             };
           });
 
@@ -318,8 +323,11 @@ const useSymbolStore = create(
           const reason = staleReason || SYMBOL_METADATA_FALLBACK_REASON;
 
           set((state) => {
+            // A fallback started by a failed socket must not downgrade a
+            // connection that has recovered while the HTTP request was pending.
+            const setFeedError = options.setFeedError && !state.isConnected;
             if (!Array.isArray(result.symbols) || result.symbols.length === 0) {
-              return options.setFeedError
+              return setFeedError
                 ? {
                     ...markCachedSymbolData(state, reason),
                     feedError: reason,
@@ -330,8 +338,8 @@ const useSymbolStore = create(
             const nextSymbols = buildFallbackSymbols(result.symbols, reason, state.symbols);
             return {
               symbols: nextSymbols,
-              symbolMetadata: buildSymbolMetadata(nextSymbols, reason),
-              ...(options.setFeedError ? { feedError: reason } : {}),
+              symbolMetadata: buildSymbolMetadata(nextSymbols),
+              ...(setFeedError ? { feedError: reason } : {}),
             };
           });
 
@@ -344,6 +352,7 @@ const useSymbolStore = create(
       },
 
       initWebSocket: () => {
+        if (reconnectTimer) return;
         const currentSocket = get().ws;
         if (isActiveFeedSocket(currentSocket)) return;
 
@@ -453,6 +462,8 @@ const useSymbolStore = create(
               return;
             }
             console.debug('[SymbolStore] Connected to feed WebSocket');
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
             set({ isConnected: true, isConnecting: false, feedError: '' });
             ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
             scheduleMetadataFallback();
@@ -477,7 +488,11 @@ const useSymbolStore = create(
             clearMetadataFallback();
             if (get().ws !== ws) return;
             console.log('[SymbolStore] Disconnected. Reconnecting...');
-            set({ isConnected: false, isConnecting: false, ws: null });
+            const message = 'Market feed unavailable: websocket disconnected. Reconnecting...';
+            set((state) => ({
+              ...markCachedSymbolData(state, message),
+              isConnected: false, isConnecting: false, ws: null, feedError: message,
+            }));
             if (!get().feedError?.includes('Market feed disabled') && !reconnectTimer) {
               reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
@@ -487,6 +502,9 @@ const useSymbolStore = create(
           };
 
           ws.onerror = () => {
+            clearTimeout(connectWatchdog);
+            connectWatchdog = null;
+            if (get().ws !== ws) return;
             const message = 'Market feed unavailable: websocket connection failed.';
             clearMetadataFallback();
             set((state) => ({

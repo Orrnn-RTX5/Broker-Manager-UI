@@ -1,8 +1,15 @@
 import {
   getRuntimeConfigValue,
+  isTestBrokerInfo,
   normalizeBrokerInfo,
   resolveBrokerBackendUrl,
   resolveBrokerDefaultMt5Server,
+  TEST_BROKER_PUBLIC_BACKEND_URL,
+  TEST_BROKER_DIRECT_HOST,
+  TEST_BROKER_DIRECT_PORT,
+  TEST_BROKER_WS_URL,
+  TEST_BROKER_FEED_STATUS_URL,
+  TEST_BROKER_DEFAULT_MT5_SERVER,
 } from '../config/backendTarget.js';
 import {
   buildManagerApiUrl,
@@ -24,10 +31,28 @@ export const DISCOVERY_BASE_URL = getRuntimeConfigValue(
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
 const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';
 
+export const TEST_BROKER_DEFAULT_ENTRY = {
+  broker_id: 'TEST',
+  name: 'TEST',
+  broker_name: 'TEST',
+  status: 'active',
+  server: 'fxtrustbrokerbackend.orrnn.com:443',
+  backend_url: TEST_BROKER_PUBLIC_BACKEND_URL,
+  server_url: TEST_BROKER_PUBLIC_BACKEND_URL,
+  market_api_url: TEST_BROKER_PUBLIC_BACKEND_URL,
+  server_ip: TEST_BROKER_DIRECT_HOST,
+  server_port: TEST_BROKER_DIRECT_PORT,
+  ws_url: TEST_BROKER_WS_URL,
+  feed_ws_url: TEST_BROKER_WS_URL,
+  feed_status_url: TEST_BROKER_FEED_STATUS_URL,
+  default_mt5_server: TEST_BROKER_DEFAULT_MT5_SERVER,
+};
+
 // ---------------------------------------------------------------------------
 // Mock broker list — mirrors what the real /api/v2/broker/servers returns.
 // ---------------------------------------------------------------------------
-const MOCK_BROKER_LIST = [
+export const MOCK_BROKER_LIST = [
+  TEST_BROKER_DEFAULT_ENTRY,
   {
     broker_id: 'testorrnn',
     name: 'Test Orrnn Broker (Demo)',
@@ -104,9 +129,19 @@ export const fetchBrokerList = async () => {
 
   // API may return array directly or wrapped: { servers: [...] } / { brokers: [...] } / { data: [...] }
   const list = Array.isArray(data) ? data : (data?.servers ?? data?.brokers ?? data?.data ?? []);
-  return list
+  const normalized = list
     .filter((b) => !b.status || b.status === 'active')
     .map((broker) => normalizeBrokerInfo(broker));
+
+  const runtimeBrokerId = String(getRuntimeBrokerId() || '').trim().toLowerCase();
+  const wantsTestBroker = runtimeBrokerId === 'test' || runtimeBrokerId === 'test-broker';
+  const usable = normalized.filter((broker) => !isOpaqueLocalTestBroker(broker));
+  const hasTestBroker = usable.some((broker) => isTestBrokerInfo(broker));
+  if (!hasTestBroker && (wantsTestBroker || normalized.length === 0 || normalized.some((broker) => isTestBrokerInfo(broker)))) {
+    usable.push(normalizeBrokerInfo(TEST_BROKER_DEFAULT_ENTRY));
+  }
+
+  return usable;
 };
 
 // ---------------------------------------------------------------------------
@@ -114,6 +149,24 @@ export const fetchBrokerList = async () => {
 // ---------------------------------------------------------------------------
 export const getBrokerSelectionId = (broker = {}) =>
   broker.server || broker.server_handle || broker.handle || broker.broker_id || broker.id || '';
+
+const isOpaqueBrokerServerHandle = (value = '') => /^broker-server-\d+$/i.test(String(value || '').trim());
+
+const hasPublicBrokerBackend = (broker = {}) =>
+  [broker.server_url, broker.backend_url, broker.market_api_url, broker.api_url]
+    .some((value) => /^https:\/\//i.test(String(value || '').trim()));
+
+const isOpaqueLocalTestBroker = (broker = {}) =>
+  isTestBrokerInfo(broker) && isOpaqueBrokerServerHandle(getBrokerSelectionId(broker));
+
+const pickPreferredBrokerMatch = (matches = []) => {
+  if (matches.length <= 1) return matches[0];
+  return (
+    matches.find((broker) => hasPublicBrokerBackend(broker) && !isOpaqueBrokerServerHandle(getBrokerSelectionId(broker)))
+    || matches.find((broker) => !isOpaqueBrokerServerHandle(getBrokerSelectionId(broker)))
+    || matches[0]
+  );
+};
 
 const HOSTNAME_DOMAIN_KEYS = [
   'domain',
@@ -367,7 +420,9 @@ export const resolveBrokerSelection = (
     storedBrokerId = '',
   } = {}
 ) => {
-  const runtimeBroker = brokerList.find((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId));
+  const runtimeBroker = pickPreferredBrokerMatch(
+    brokerList.filter((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId))
+  );
   if (runtimeBroker) return createBrokerSelectionResult(runtimeBroker, 'runtime-broker-id', true);
 
   const hostnameMatchedBroker = brokerList.find((broker) => brokerMatchesHostname(broker, currentHostname));

@@ -116,8 +116,8 @@ const OpenOrdersDashboard = () => {
   };
 
   return (
-    <div className="opened-orders-page p-6 w-full h-full flex flex-col gap-5 overflow-y-auto">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+    <div className="opened-orders-page p-6 w-full h-full min-h-0 flex flex-col gap-5 overflow-hidden">
+      <div className="opened-orders-header flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
         <div>
           <h1 className="opened-orders-title text-2xl font-semibold" style={{ color: 'var(--text)' }}>
             Opened Orders
@@ -129,8 +129,8 @@ const OpenOrdersDashboard = () => {
           </p>
         </div>
 
-        <form onSubmit={handleFetchOrders} className="opened-orders-search flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-          <div className="relative w-full sm:w-80">
+        <form onSubmit={handleFetchOrders} className="opened-orders-search flex flex-col sm:flex-row sm:items-center gap-2 w-full xl:w-auto shrink-0">
+          <div className="opened-orders-search-field relative w-full sm:w-80">
             <Search
               size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -166,8 +166,9 @@ const OpenOrdersDashboard = () => {
         </form>
       </div>
 
+      <section className="opened-orders-content flex-1 min-h-0 overflow-y-auto">
       {!hasSearched ? (
-        <div className="ui-card min-h-[480px] flex flex-col items-center justify-center gap-5 text-center px-6">
+        <div className="opened-orders-state ui-card h-full min-h-0 flex flex-col items-center justify-center gap-5 text-center px-6">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center"
             style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
@@ -184,14 +185,14 @@ const OpenOrdersDashboard = () => {
           </div>
         </div>
       ) : detailLoading ? (
-        <div className="ui-card min-h-[480px] flex flex-col items-center justify-center gap-3">
+        <div className="opened-orders-state ui-card h-full min-h-0 flex flex-col items-center justify-center gap-3">
           <Loader2 size={30} className="animate-spin" style={{ color: 'var(--accent)' }} />
           <div className="opened-orders-loading-label text-sm font-medium" style={{ color: 'var(--text-3)' }}>
             Fetching opened orders from backend...
           </div>
         </div>
       ) : detailError ? (
-        <div className="ui-card min-h-[480px] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <div className="opened-orders-state ui-card h-full min-h-0 flex flex-col items-center justify-center gap-4 text-center px-6">
           <div className="p-4 rounded-full" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
             <AlertCircle size={34} />
           </div>
@@ -208,7 +209,7 @@ const OpenOrdersDashboard = () => {
           </button>
         </div>
       ) : detailOrders.length === 0 ? (
-        <div className="ui-card min-h-[480px] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <div className="opened-orders-state ui-card h-full min-h-0 flex flex-col items-center justify-center gap-4 text-center px-6">
           <ShoppingBag size={42} style={{ color: 'var(--muted)' }} />
           <div>
             <h2 className="opened-orders-state-title text-xl font-semibold" style={{ color: 'var(--text)' }}>
@@ -220,8 +221,8 @@ const OpenOrdersDashboard = () => {
           </div>
         </div>
       ) : (
-        <>
-        <div className="opened-orders-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div className="opened-orders-results flex flex-col gap-5">
+          <div className="opened-orders-metrics grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
             <MetricCard
               icon={<Hash size={18} />}
               label="Opened Orders"
@@ -271,8 +272,9 @@ const OpenOrdersDashboard = () => {
               ))}
             </div>
           </div>
-        </>
+        </div>
       )}
+      </section>
     </div>
   );
 };

@@ -33,6 +33,7 @@ export function useDocking(initialPanels = {}) {
         floatPos: config.floatPos || { x: 100 + panelIndex * 30, y: 100 + panelIndex * 30 },
         size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
         visible: config.visible !== false,
+        userPinned: false,
         minimized: false,
         maximized: false,
         zIndex: 100 + panelIndex,
@@ -59,6 +60,7 @@ export function useDocking(initialPanels = {}) {
         floatPos: config.floatPos || { x: 100 + tempCounter * 30, y: 100 + tempCounter * 30 },
         size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
         visible: config.visible !== false,
+        userPinned: false,
         minimized: false,
         maximized: false,
         zIndex: 100 + tempCounter,
@@ -82,6 +84,7 @@ export function useDocking(initialPanels = {}) {
         floatPos: config.floatPos || { x: 100 + idCounter * 30, y: 100 + idCounter * 30 },
         size: config.size || DEFAULT_SIZES[config.defaultPosition || 'float'],
         visible: config.visible !== false,
+        userPinned: false,
         minimized: false,
         maximized: false,
         zIndex: 100 + idCounter,
@@ -135,6 +138,9 @@ export function useDocking(initialPanels = {}) {
         [id]: {
           ...prev[id],
           visible,
+          // Opening a panel through a click or keyboard shortcut is an
+          // explicit user choice. Layout guards must keep that panel open.
+          userPinned: visible,
           maximized: visible ? prev[id].maximized : false,
         },
       };
@@ -144,7 +150,7 @@ export function useDocking(initialPanels = {}) {
   const closePanel = useCallback((id) => {
     setPanels(prev => {
       if (!prev[id]) return prev;
-      return { ...prev, [id]: { ...prev[id], visible: false, maximized: false } };
+      return { ...prev, [id]: { ...prev[id], visible: false, userPinned: false, maximized: false } };
     });
   }, []);
 

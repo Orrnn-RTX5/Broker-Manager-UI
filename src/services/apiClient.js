@@ -225,7 +225,7 @@ const apiClient = {
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
         console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text.slice(0, 500)));
-        throw new Error(errMsg);
+        throw Object.assign(new Error(errMsg), { status: response.status, statusText: response.statusText });
       }
 
       if (API_DEBUG_ENABLED) {
@@ -247,7 +247,7 @@ const apiClient = {
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
         console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
-        throw new Error(errMsg);
+        throw Object.assign(new Error(errMsg), { status: response.status, statusText: response.statusText });
       }
       if (API_DEBUG_ENABLED) {
         console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {
@@ -264,7 +264,7 @@ const apiClient = {
       }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;
       console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
-      throw new Error(errorMsg);
+      throw Object.assign(new Error(errorMsg), { status: response.status, statusText: response.statusText, code: data?.error?.code || data?.code });
     }
 
     if (API_DEBUG_ENABLED) {

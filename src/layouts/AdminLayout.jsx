@@ -36,7 +36,7 @@ const INITIAL_PANELS = {
     defaultPosition: 'left',
     visible: true,
     order: 1,
-    size: { width: 216, height: '100%' },
+    size: { width: 180, height: '100%' },
   },
   [PANEL_ACCOUNTS]: {
     title: 'Accounts',
@@ -52,14 +52,17 @@ const INITIAL_PANELS = {
     visible: true,
     canMaximize: true,
     order: 0,
-    size: { width: 244, height: '100%' },
+    size: { width: 280, height: '100%' },
   },
   [PANEL_OWNER]: {
     title: 'Owner Console',
     icon: 'owner',
     defaultPosition: 'right',
     visible: true,
-    size: { width: 310, height: '100%' },
+    // The default/reset workspace includes this rail even when the dashboard
+    // is narrower than the automatic overflow guard's preferred width.
+    userPinned: true,
+    size: { width: 210, height: '100%' },
   },
   [PANEL_TERMINAL]: {
     title: 'Operations Terminal',
@@ -114,6 +117,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   }, [togglePanel]);
 
   const toggleAccountsPanel = useCallback(() => {
+    updatePanel(PANEL_ACCOUNTS, { accountType: 'all', title: 'Accounts' });
     const isOpeningAccounts = !panels[PANEL_ACCOUNTS]?.visible;
 
     if (isOpeningAccounts && panels[PANEL_OWNER]?.visible) {
@@ -227,7 +231,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   // ── panel content map ──────────────────────────────────────────────────────
   const panelContents = {
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
-    [PANEL_ACCOUNTS]:  <MarginCallsSidebar isAuthenticated={isAuthenticated} />,
+    [PANEL_ACCOUNTS]:  <MarginCallsSidebar key={panels[PANEL_ACCOUNTS]?.accountType || 'all'} isAuthenticated={isAuthenticated} accountType={panels[PANEL_ACCOUNTS]?.accountType || 'all'} />,
     [PANEL_MARKET_DATA]: <MarketData compact />,
     [PANEL_OWNER]: <OwnerConsole />,
     [PANEL_TERMINAL]: <TerminalDock isAuthenticated={isAuthenticated} />,

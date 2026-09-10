@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Search, Users2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import ClientsDataGrid from './components/ClientsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -44,6 +44,7 @@ const ClientsDashboard = () => {
   const grid = useGridController({
     columns: CLIENT_COLUMNS,
     rowKey: 'id',
+    singleSelect: true,
     onClearFilter: () => {
       setSearch('');
       setTypeFilter('All Types');
@@ -91,12 +92,11 @@ const ClientsDashboard = () => {
 
   return (
     <div
-      className="clients-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto"
+      className="clients-page p-6 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden"
       onContextMenu={handleContextMenu}
     >
-      <div ref={headerRef} className="flex flex-row items-center justify-between pb-2 gap-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <Users2 size={16} style={{ color: 'var(--accent)' }} />
+      <div ref={headerRef} className="clients-header flex flex-row items-center justify-between gap-2 shrink-0">
+        <div className="clients-heading flex items-center gap-2 min-w-0">
           <div>
             <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '18px' }}>Clients</h1>
             <p className="clients-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '14px' }}>
@@ -112,7 +112,7 @@ const ClientsDashboard = () => {
         </div>
       </div>
 
-      <div className="clients-search relative w-full max-w-xs">
+      <div className="clients-search relative w-full max-w-xs shrink-0">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Search, RefreshCw, User, AlertTriangle, Edit3, Trash2 } from 'lucide-react';
+import { User, AlertTriangle, Edit3, Trash2 } from 'lucide-react';
 import useDataSource from '../../hooks/useDataSource';
 import { accountRestrictList, accountRestrictClear } from '../../services/tradeApi';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
@@ -32,24 +32,19 @@ const RestrictedAccountsPage = () => {
   };
 
   return (
-    <div className="restricted-accounts-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
+    <div className="restricted-accounts-page px-6 pt-4 pb-6 w-full h-full flex flex-col gap-2 overflow-y-auto">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
         <div className="flex items-center gap-2">
-          <Shield size={18} style={{ color: 'var(--accent)' }} />
           <div>
             <h1 className="restricted-accounts-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Restricted Accounts</h1>
             <p className="restricted-accounts-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Accounts with active trading restrictions. Double-click to edit.</p>
           </div>
         </div>
-        <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5 mt-2 md:mt-0" onClick={refetch} disabled={isLoading}>
-          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} /> Refresh
-        </button>
       </div>
 
       <div className="restricted-accounts-search relative w-full max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input type="text" placeholder="Search login, notes…" value={search}
-          onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" style={{ paddingLeft: 32 }} />
+          onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" />
       </div>
 
       <div className="restricted-accounts-grid ui-card flex flex-col w-full flex-1 overflow-hidden">

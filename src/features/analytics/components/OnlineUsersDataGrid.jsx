@@ -1,7 +1,7 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { RefreshCcw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import GridLoadingState from '../../../components/GridLoadingState';
@@ -41,13 +41,6 @@ const saveOnlineUsersSnapshot = (data) => {
 };
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
-};
 
 const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const queryClient = useQueryClient();
@@ -148,8 +141,8 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
   };
 
   const renderHeader = (col, label) => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }} className="cursor-pointer">
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th onClick={() => handleSort(col)} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} title={`Sort by ${label}`} style={{ textAlign: 'center' }} className="cursor-pointer">
+      {label}
     </th>
   );
 
@@ -202,7 +195,7 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
               {renderHeader('version', 'Build')}
               {renderHeader('ip', 'IP Address')}
               {renderHeader('equity', 'Equity')}
-              {renderHeader('currency', 'Cu.')}
+              {renderHeader('currency', 'Currency')}
             </tr>
           </thead>
           <tbody>
@@ -261,12 +254,6 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
               {' '}of{' '}
               <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
             </>
-          )}
-          {isFetching && !isLoading && (
-            <span className="ui-badge ui-badge-danger">
-              <AlertTriangle size={10} />
-              Updating
-            </span>
           )}
         </span>
         <div className="flex items-center gap-2">

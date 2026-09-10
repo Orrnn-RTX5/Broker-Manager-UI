@@ -1,0 +1,11 @@
+.deposit-dialog { width:min(360px,calc(100vw - 32px)); max-height:calc(100vh - 40px); overflow:auto; box-sizing:border-box; padding:28px 24px 24px; margin:auto; text-align:center; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text); box-shadow:0 18px 60px #0008; font-family:inherit; }
+.deposit-dialog::backdrop { background:rgba(0,0,0,.6); }
+.deposit-dialog-mark { display:grid; place-items:center; width:54px; height:54px; margin:0 auto 18px; border:1px solid var(--accent); border-radius:50%; background:var(--accent-soft); color:var(--accent-text); font-size:30px; font-weight:500; }
+.deposit-dialog.is-error .deposit-dialog-mark { border-color:var(--danger-border); background:var(--danger-soft); color:var(--danger-text); }
+.deposit-dialog h2 { margin:0 0 10px; font-size:16px !important; line-height:1.4; font-weight:600; }
+.deposit-dialog p { margin:0; font-size:12px !important; line-height:1.6; color:var(--text-3); overflow-wrap:anywhere; }
+.deposit-dialog-actions { display:flex; justify-content:center; gap:10px; margin-top:24px; }
+.deposit-dialog button { min-height:34px; padding:0 16px; border:1px solid var(--accent); border-radius:5px; background:var(--accent); color:#fff; font:inherit; font-size:11px; cursor:pointer; }
+.deposit-dialog button.is-secondary { background:transparent; border-color:var(--border-3); color:var(--text); }
+.deposit-dialog button:disabled { cursor:wait; opacity:.6; }
+.deposit-dialog.is-error button { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger-text); }

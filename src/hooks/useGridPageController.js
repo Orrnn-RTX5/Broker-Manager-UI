@@ -17,8 +17,9 @@ export default function useGridPageController({
   exportName = 'rows',
   onClearFilter,
   entityLabel = 'row',
+  singleSelect = false,
 }) {
-  const grid = useGridController({ columns, rowKey, onClearFilter });
+  const grid = useGridController({ columns, rowKey, onClearFilter, singleSelect });
   const [contextMenu, setContextMenu] = useState(null);
   const [currentRows, setCurrentRows] = useState([]);
   const rowsRef = useRef([]);

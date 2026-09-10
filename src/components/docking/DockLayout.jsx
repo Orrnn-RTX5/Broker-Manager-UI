@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useRef } from 'react';
+import { Fragment, useCallback, useLayoutEffect, useRef } from 'react';
 import { ChevronsLeftRight } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
 import { DOCK_POSITIONS } from './useDocking';
@@ -7,11 +7,14 @@ import GlobalDockOverlay from './GlobalDockOverlay';
 import styles from './DockLayout.module.css';
 
 const MIN_LEFT_PANEL_WIDTH = 180;
-const MIN_NAVIGATOR_WIDTH = 200;
-const MIN_MARKET_WATCH_WIDTH = 230;
+const MIN_NAVIGATOR_WIDTH = 170;
+// The 320px quote table needs 82% of its width plus the scrollbar for Symbol/Bid/Ask.
+const MIN_MARKET_WATCH_WIDTH = 276;
 const MIN_CENTER_WIDTH = 360;
+const MIN_USABLE_CENTER_CONTENT_WIDTH = 720;
 const MIN_BOTTOM_PANEL_HEIGHT = 96;
 const MIN_MIDDLE_AREA_HEIGHT = 260;
+const CENTER_OVERFLOW_TOLERANCE = 2;
 
 const getMinimumPanelWidth = (panel) => {
   if (panel?.id === 'market_data') return MIN_MARKET_WATCH_WIDTH;
@@ -23,10 +26,65 @@ const getLeftPanelWidth = (panel) => {
   const width = Number(panel?.size?.width);
   const fallback = panel?.id === 'market_data'
     ? 280
-    : panel?.id === 'navigator' ? 260 : 280;
+    : panel?.id === 'navigator' ? 180 : 280;
   const preferredWidth = Number.isFinite(width) && width > 0 ? width : fallback;
   return Math.max(getMinimumPanelWidth(panel), preferredWidth);
 };
+
+function useRightPanelOverflowGuard(centerAreaRef, rightPanelStateKey, updatePanel) {
+  useLayoutEffect(() => {
+    if (!rightPanelStateKey) return undefined;
+
+    const centerArea = centerAreaRef.current;
+    const viewport = centerArea?.querySelector('.cc-route-viewport');
+    if (!viewport) return undefined;
+
+    const rightPanels = rightPanelStateKey.split('|').map((entry) => {
+      const [id, userPinned] = entry.split(':');
+      return { id, userPinned: userPinned === 'pinned' };
+    });
+    let frameId = null;
+    const closeRightPanelsIfContentOverflows = () => {
+      const contentIsTooNarrow = viewport.clientWidth < MIN_USABLE_CENTER_CONTENT_WIDTH;
+      const contentOverflows = viewport.scrollWidth > viewport.clientWidth + CENTER_OVERFLOW_TOLERANCE;
+      if (!contentIsTooNarrow && !contentOverflows) return;
+
+      rightPanels.filter((panel) => !panel.userPinned).forEach((panel) => {
+        updatePanel(panel.id, { visible: false, maximized: false });
+      });
+    };
+    const scheduleCheck = () => {
+      if (typeof globalThis.requestAnimationFrame !== 'function') {
+        closeRightPanelsIfContentOverflows();
+        return;
+      }
+      if (frameId !== null) globalThis.cancelAnimationFrame(frameId);
+      frameId = globalThis.requestAnimationFrame(() => {
+        frameId = null;
+        closeRightPanelsIfContentOverflows();
+      });
+    };
+
+    // Check synchronously when a side panel opens so the cramped layout is
+    // never presented as an intermediate state.
+    closeRightPanelsIfContentOverflows();
+
+    const ResizeObserverImpl = globalThis.ResizeObserver;
+    const resizeObserver = ResizeObserverImpl ? new ResizeObserverImpl(scheduleCheck) : null;
+    resizeObserver?.observe(centerArea);
+    resizeObserver?.observe(viewport);
+
+    const MutationObserverImpl = globalThis.MutationObserver;
+    const mutationObserver = MutationObserverImpl ? new MutationObserverImpl(scheduleCheck) : null;
+    mutationObserver?.observe(viewport, { childList: true, subtree: true });
+
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      if (frameId !== null) globalThis.cancelAnimationFrame?.(frameId);
+    };
+  }, [centerAreaRef, rightPanelStateKey, updatePanel]);
+}
 
 const DockedPaneResizer = ({ panel, centerAreaRef, onResize }) => {
   const minimumWidth = getMinimumPanelWidth(panel);
@@ -246,6 +304,8 @@ export default function DockLayout({ panelContents = {}, children }) {
   const rightPanels  = get(DOCK_POSITIONS.RIGHT);
   const centerPanels = get(DOCK_POSITIONS.CENTER);
   const floatPanels  = get(DOCK_POSITIONS.FLOAT);
+  const rightPanelStateKey = rightPanels.map((panel) => `${panel.id}:${panel.userPinned ? 'pinned' : 'auto'}`).join('|');
+  useRightPanelOverflowGuard(centerAreaRef, rightPanelStateKey, updatePanel);
   const resizeLeftPanel = useCallback((id, width) => {
     const panel = panels[id];
     if (!panel) return;

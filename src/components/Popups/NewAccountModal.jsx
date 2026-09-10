@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle2, AlertCircle, Loader2, UserPlus, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
 import { createManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -257,9 +257,6 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     >
       <div className="ui-modal new-account-modal" role="dialog" aria-modal="true" aria-labelledby="new-account-title">
         <div className="ui-modal-header new-account-modal-header">
-          <span className="new-account-header-icon" aria-hidden="true">
-            <UserPlus size={17} />
-          </span>
           <span className="new-account-header-copy">
             <span id="new-account-title">New account</span>
             <small>Configure account settings and secure access</small>

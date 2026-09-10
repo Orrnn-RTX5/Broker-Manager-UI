@@ -10,7 +10,9 @@ import {
   resolveBrokerSelection,
   resolveDefaultBrokerSelectionId,
   resolveInteractiveBrokerSelection,
+  MOCK_BROKER_LIST,
 } from './brokerAuth.js';
+import { normalizeBrokerInfo } from '../config/backendTarget.js';
 
 const createStorage = () => {
   const store = new Map();
@@ -453,4 +455,57 @@ test('loginManager uses the documented native manager auth route for MyProp brok
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, 'https://services.myprop.trade/api/v1/manager/auth/login');
+});
+
+test('normalizeBrokerInfo attaches backend to test broker records that lack backend metadata', () => {
+  const normalized = normalizeBrokerInfo({
+    broker_id: 'TEST',
+    broker_name: 'RTX5-Local-Test-Broker',
+    server: 'broker-server-3',
+  });
+
+  assert.equal(normalized.broker_id, 'TEST');
+  assert.equal(normalized.server, 'broker-server-3');
+  assert.equal(normalized.backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
+  assert.equal(normalized.api_url, 'https://fxtrustbrokerbackend.orrnn.com');
+  assert.equal(normalized.server_ip, '100.120.168.28');
+  assert.equal(normalized.server_port, 8091);
+  assert.equal(normalized.ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
+  assert.equal(normalized.feed_ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
+  assert.equal(normalized.default_mt5_server, '100.120.168.28');
+});
+
+test('fetchBrokerList attaches backend to test broker returned from discovery', async () => {
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        servers: [
+          {
+            broker_id: 'TEST',
+            broker_name: 'RTX5-Local-Test-Broker',
+            server: 'broker-server-3',
+          },
+        ],
+      }),
+    };
+  };
+
+  const brokers = await fetchBrokerList();
+  assert.equal(brokers.length, 1);
+  assert.equal(brokers[0].broker_id, 'TEST');
+  assert.equal(brokers[0].backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
+  assert.equal(brokers[0].server_ip, '100.120.168.28');
+  assert.equal(brokers[0].server_port, 8091);
+});
+
+test('MOCK_BROKER_LIST includes test broker with backend', () => {
+  const testBroker = MOCK_BROKER_LIST.find((b) => b.broker_id === 'TEST');
+  assert.ok(testBroker);
+  assert.equal(testBroker.backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
+  assert.equal(testBroker.server_ip, '100.120.168.28');
+  assert.equal(testBroker.server_port, 8091);
+  assert.equal(testBroker.ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
 });

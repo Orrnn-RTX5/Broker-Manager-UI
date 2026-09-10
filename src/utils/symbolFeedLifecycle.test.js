@@ -8,7 +8,25 @@ import {
   isActiveFeedSocket,
   markSymbolMapCached,
   resolveFallbackFeedFields,
+  resolveTickFeedFields,
 } from './symbolFeedLifecycle.js';
+
+test('server-marked stale snapshot prices are not labeled live', () => {
+  for (const flags of [{ stale: true }, { fresh: false }, { isStale: true }]) {
+    const fields = resolveTickFeedFields({ ...flags, freshness_reason: 'LP_QUOTE_STALE' });
+    assert.equal(fields.feedState, FEED_DATA_STATE.CACHED);
+    assert.equal(fields.isStale, true);
+    assert.equal(fields.staleReason, 'LP_QUOTE_STALE');
+  }
+});
+
+test('fresh and legacy ticks can restore live status', () => {
+  for (const tick of [{ fresh: true, stale: false }, { symbol: 'EURUSD', bid: 1.1 }]) {
+    assert.deepEqual(resolveTickFeedFields(tick), {
+      feedState: FEED_DATA_STATE.LIVE, isStale: false, staleReason: '',
+    });
+  }
+});
 
 test('feed socket creation does not wait for an unresolved metadata fallback', async () => {
   const socket = { readyState: 0 };

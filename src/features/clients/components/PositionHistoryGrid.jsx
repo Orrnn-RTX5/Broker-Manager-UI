@@ -56,7 +56,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
   const hasNoHistory = !isLoading && sortedData.length === 0;
 
   return (
-    <div className="ui-card flex flex-col w-full flex-1 overflow-hidden">
+    <div className="position-history-grid ui-card flex flex-col w-full flex-1 min-h-0 overflow-hidden">
       {error && (
         <div className="px-4 py-2 text-xs flex items-center gap-1.5" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
           <AlertTriangle size={12} /> {error}
@@ -64,7 +64,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
       )}
 
       {isLoading ? (
-        <div className="flex-1 min-h-[300px] flex items-center justify-center px-6 text-center">
+        <div className="position-history-grid-state flex-1 min-h-0 flex items-center justify-center px-6 text-center">
           <div className="flex flex-col items-center gap-3">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -87,7 +87,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
           </div>
         </div>
       ) : hasNoHistory ? (
-        <div className="flex-1 min-h-[300px] flex items-center justify-center px-6 text-center">
+        <div className="position-history-grid-state flex-1 min-h-0 flex items-center justify-center px-6 text-center">
           <div className="max-w-sm flex flex-col items-center gap-3">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -110,7 +110,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
           </div>
         </div>
       ) : (
-      <div className="w-full overflow-x-auto flex-1">
+      <div className="position-history-grid-scroll w-full min-h-0 overflow-auto flex-1">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>

@@ -12,6 +12,15 @@ export const isActiveFeedSocket = (socket) => (
   socket?.readyState === 0 || socket?.readyState === 1
 );
 
+export const resolveTickFeedFields = (tick = {}) => {
+  const isStale = tick.stale === true || tick.fresh === false || tick.isStale === true;
+  return {
+    feedState: isStale ? FEED_DATA_STATE.CACHED : FEED_DATA_STATE.LIVE,
+    isStale,
+    staleReason: isStale ? (tick.freshness_reason || tick.staleReason || 'Upstream quote is stale.') : '',
+  };
+};
+
 export const hasCurrentSessionLiveTick = (entry = {}) => (
   entry.feedState === FEED_DATA_STATE.LIVE
   && entry.isStale !== true

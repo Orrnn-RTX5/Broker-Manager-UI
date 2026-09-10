@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, ClipboardList } from 'lucide-react';
+import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import OrdersDataGrid from './components/OrdersDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -53,16 +53,15 @@ const OrdersPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getOrderActions]);
 
   return (
-    <div className="orders-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pb-2">
+    <div className="orders-page p-3 w-full h-full flex flex-col gap-2 overflow-y-auto" {...ctl.pageProps}>
+      <div className="orders-header grid grid-cols-1 gap-2.5 shrink-0">
         <div className="flex min-w-0 items-center gap-2">
-          <ClipboardList size={18} style={{ color: 'var(--accent)' }} />
           <div className="min-w-0">
             <h1 className="orders-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Orders</h1>
             <p className="orders-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to modify</p>
           </div>
         </div>
-        <div className="orders-filters flex flex-nowrap items-center justify-end gap-2">
+        <div className="orders-filters grid grid-cols-3 gap-1.5 min-w-0">
           <FilterDropdown value={typeFilter} className="w-[96px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
           <FilterDropdown value={symbolFilter} className="w-[112px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
           <FilterDropdown value={reasonFilter} className="w-[112px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
@@ -70,8 +69,8 @@ const OrdersPage = () => {
       </div>
 
       {/* Search */}
-      <div className="orders-search-row relative -top-1 flex items-center justify-start">
-        <div className="orders-search relative w-full max-w-[420px]">
+      <div className="orders-search-row flex items-center justify-start shrink-0">
+        <div className="orders-search relative w-full max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
             type="text"

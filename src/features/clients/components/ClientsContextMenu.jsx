@@ -85,6 +85,7 @@ const ClientsContextMenu = ({
   const selectByMenu = [
     {
       text: `All (${rows.length})`, icon: CheckSquare, iconTone: 'accent',
+      disabled: grid?.singleSelect,
       onClick: () => grid?.selectAll(rows.map(r => r[rowKey])),
     },
     {
@@ -94,6 +95,7 @@ const ClientsContextMenu = ({
     },
     {
       text: 'Invert', icon: MinusSquare, iconTone: 'accent',
+      disabled: grid?.singleSelect,
       onClick: () => grid?.invert(rows.map(r => r[rowKey])),
     },
   ];

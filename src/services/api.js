@@ -7,7 +7,8 @@ import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 import { buildPagedEndpoint, extractRows, normalizePagedResult, normalizePagedStreamResult, normalizePagedTextResult } from '../utils/pagination';
 import { chunkSymbolNames } from '../utils/symbolParams';
 import { createKeyedRequestCache } from './keyedRequestCache';
-import { buildReportsSummaryEndpoint, MANAGER_API } from '../config/managerApiContract.js';
+import { MANAGER_API } from '../config/managerApiContract.js';
+import { requestReportsSummary } from './reportsSummary.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
@@ -957,7 +958,7 @@ export const getOpenedOrders = async (login, options = {}) => {
 
 // ─── Analytics ─────────────────────────────────────────────────────────────────
 export const getTradingAccountsAnalytics = async (options = {}) => {
-  return apiClient.get(MANAGER_API.reportsSummary, options);
+  return getDashboardSummary(options);
 };
 
 export const getOpenOrders = async () => {
@@ -989,7 +990,7 @@ export const getOpenPositions = async () => {
 };
 
 export const getDashboardSummary = async ({ date, ...options } = {}) => {
-  return apiClient.get(buildReportsSummaryEndpoint(date), options);
+  return requestReportsSummary((endpoint, requestOptions) => apiClient.get(endpoint, requestOptions), { date, ...options });
 };
 
 export const getAccountLimitStatus = async (options = {}) => {
@@ -1103,7 +1104,7 @@ const writeStoredSymbolManagementData = (data) => {
 export const peekSymbolManagementData = () => {
   if (symbolManagementCache?.symbols?.length) return symbolManagementCache;
   symbolManagementCache = readStoredSymbolManagementData();
-  return symbolManagementCache;
+  return symbolManagementCache || symbolManagementProgress;
 };
 
 export const invalidateSymbolManagementData = () => {

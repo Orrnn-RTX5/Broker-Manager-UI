@@ -117,14 +117,30 @@ const joinUrl = (base, path = '') => {
   return `${trimTrailingSlash(base)}/${normalizedPath.replace(/^\/+/, '')}`;
 };
 
-const isLocalHttpOrigin = () => {
+const isLoopbackHost = (hostname = '') =>
+  /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(String(hostname || '').trim());
+
+const isForwardedDevHost = (hostname = '') => {
+  const host = String(hostname || '').trim().toLowerCase();
+  if (!host) return false;
+  return (
+    host.endsWith('.devtunnels.ms') ||
+    host.endsWith('.github.dev') ||
+    host.endsWith('.app.github.dev') ||
+    host.endsWith('.trycloudflare.com') ||
+    host.endsWith('.ngrok-free.app') ||
+    host.endsWith('.ngrok.app') ||
+    host.endsWith('.ngrok.io') ||
+    host.endsWith('.loca.lt')
+  );
+};
+
+const isProxyableDevOrigin = () => {
   if (typeof window === 'undefined' || !window.location?.origin) return false;
   try {
     const url = new URL(window.location.origin);
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname)
-    );
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return isLoopbackHost(url.hostname) || isForwardedDevHost(url.hostname);
   } catch {
     return false;
   }
@@ -132,14 +148,14 @@ const isLocalHttpOrigin = () => {
 
 export const shouldUseManagerDevProxy = (
   isDev = import.meta.env?.DEV === true,
-  isLocalOrigin = isLocalHttpOrigin()
+  isProxyableOrigin = isProxyableDevOrigin()
 ) => {
   const explicit = getRuntimeConfigValue([
     'MANAGER_USE_DEV_PROXY',
     'VITE_MANAGER_USE_DEV_PROXY',
   ], 'false');
 
-  return isDev && isLocalOrigin && explicit.toLowerCase() === 'true';
+  return isDev && isProxyableOrigin && explicit.toLowerCase() === 'true';
 };
 
 export const shouldUseManagerProxyPrefix = (backendUrl = '', brokerInfo = {}) => {
@@ -388,10 +404,10 @@ const getExistingFeedQueryToken = (wsUrl = '') => {
 
 export const shouldUseFeedDevProxy = (
   isDev = import.meta.env?.DEV === true,
-  isLocalOrigin = isLocalHttpOrigin()
+  isProxyableOrigin = isProxyableDevOrigin()
 ) => {
   const explicit = getRuntimeConfigValue(['FEED_USE_DEV_PROXY', 'VITE_FEED_USE_DEV_PROXY'], 'true');
-  return isDev && explicit !== 'false' && isLocalOrigin;
+  return isDev && explicit !== 'false' && isProxyableOrigin;
 };
 
 export const toLocalDevFeedProxyUrl = (

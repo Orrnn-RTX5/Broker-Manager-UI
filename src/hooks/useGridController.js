@@ -21,28 +21,32 @@ import { useState, useMemo, useCallback } from 'react';
  *   grid.showGridlines     : boolean — drive CSS class on table
  *   grid.toggleGridlines() : flip
  */
-export default function useGridController({ columns, rowKey = 'id', onClearFilter } = {}) {
+export default function useGridController({ columns, rowKey = 'id', onClearFilter, singleSelect = false } = {}) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [hiddenColumns, setHiddenColumns] = useState(() => new Set());
   const [showGridlines, setShowGridlines] = useState(true);
 
   const toggle = useCallback((id) => {
     setSelectedIds(prev => {
+      if (singleSelect) return prev.has(id) ? new Set() : new Set([id]);
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }, []);
+  }, [singleSelect]);
 
-  const selectAll = useCallback((ids) => setSelectedIds(new Set(ids)), []);
+  const selectAll = useCallback((ids) => setSelectedIds(new Set(singleSelect ? [...ids].slice(0, 1) : ids)), [singleSelect]);
   const clear = useCallback(() => setSelectedIds(new Set()), []);
   const invert = useCallback((allIds) => {
     setSelectedIds(prev => {
       const next = new Set();
-      for (const id of allIds) if (!prev.has(id)) next.add(id);
+      for (const id of allIds) {
+        if (!prev.has(id)) next.add(id);
+        if (singleSelect && next.size) break;
+      }
       return next;
     });
-  }, []);
+  }, [singleSelect]);
 
   const toggleColumn = useCallback((key) => {
     setHiddenColumns(prev => {
@@ -64,6 +68,7 @@ export default function useGridController({ columns, rowKey = 'id', onClearFilte
   }, [onClearFilter]);
 
   return {
+    singleSelect,
     rowKey,
     columns: columns || [],
     hiddenColumns,

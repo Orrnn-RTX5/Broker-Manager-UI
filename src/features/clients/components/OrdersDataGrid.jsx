@@ -1,6 +1,6 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getOrdersPage } from '../../../services/api';
@@ -21,13 +21,6 @@ const fmtDate = (ts) => {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
-};
-
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
@@ -98,8 +91,8 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
   };
 
   const renderHeader = (col, label) => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }}>
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th onClick={() => handleSort(col)} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} title={`Sort by ${label}`} style={{ textAlign: 'center' }}>
+      {label}
     </th>
   );
 
@@ -239,7 +232,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>Prev</button>
           <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ paddingBlock: 2 }}>Next</button>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>Next</button>
         </div>
       </div>
 

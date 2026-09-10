@@ -172,9 +172,11 @@ function CommandPalette({ onClose, actions }) {
     <div className="manager-command-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="manager-command-palette" role="dialog" aria-modal="true" aria-label="Quick command menu" onMouseDown={(event) => event.stopPropagation()}>
         <div className="manager-command-input-wrap">
-          <Search size={18} aria-hidden="true" />
-          <input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0); }} placeholder="Search commands, screens, and actions..." aria-label="Search commands" />
-          <button type="button" onClick={onClose} aria-label="Close quick command menu"><X size={17} /></button>
+          <label className="manager-command-search-field">
+            <Search size={20} strokeWidth={1.8} aria-hidden="true" />
+            <input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0); }} placeholder="Search commands, screens, and actions…" aria-label="Search commands" autoComplete="off" spellCheck={false} />
+          </label>
+          <button type="button" onClick={onClose} aria-label="Close quick command menu" title="Close (Esc)"><X size={18} strokeWidth={1.8} aria-hidden="true" /></button>
         </div>
         <div className="manager-command-results">
           {matchingActions.map((action, index) => {

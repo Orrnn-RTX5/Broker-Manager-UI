@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -66,6 +65,7 @@ const OpenPositionsPage = () => {
   const ctl = useGridPageController({
     columns: POSITION_COLUMNS,
     rowKey: 'position',
+    singleSelect: true,
     exportName: 'open-positions',
     entityLabel: 'position',
     onClearFilter: () => {
@@ -84,9 +84,9 @@ const OpenPositionsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getPositionActions]);
 
   return (
-    <div className="open-positions-page py-6 px-3 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
+    <div className="open-positions-page pt-4 pb-6 px-3 w-full h-full flex flex-col gap-2 overflow-y-auto" {...ctl.pageProps}>
       {/* Header with Title and Dropdown Filters */}
-      <div ref={headerRef} className="flex flex-row items-center justify-between pb-2 gap-2">
+      <div ref={headerRef} className="flex flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2 shrink-0">
           <div>
             <h1 className="open-positions-title" style={{ color: 'var(--text)' }}>Open Positions</h1>
@@ -117,18 +117,17 @@ const OpenPositionsPage = () => {
 
       {/* Search Bar */}
       <div className="open-positions-search relative w-full max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"
           placeholder="Search login, position, symbol…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
         />
       </div>
 
       <PositionsDataGrid
+        grid={ctl.grid}
         search={search}
         typeFilter={typeFilter}
         symbolFilter={symbolFilter}

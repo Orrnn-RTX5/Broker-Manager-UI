@@ -1,23 +1,23 @@
-import { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { User, AlertTriangle, Loader, WifiOff, Search, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Loader, WifiOff, Search } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
 import { deleteManagerAccount } from '../services/managerAccountApi';
-import { peekAccountDetailsManyPage, preloadAccountPositions, preloadAccountPositionsBatch } from '../services/api';
+import { peekAccountDetailsManyPage, preloadAccountPositions } from '../services/api';
 import {
-  SIDEBAR_ACCOUNT_PAGE_SIZE,
   fetchSidebarAccountDetails,
-  fetchSidebarAccounts,
+  fetchAllSidebarAccounts,
   getInitialCachedSidebarAccounts,
   normalizeSidebarAccountPage,
 } from '../services/sidebarAccounts';
 import { usePermissions } from '../hooks/usePermissions';
 import { PERMISSIONS } from '../utils/permissions';
 import { TRADING_ACCOUNTS_INITIAL_PARAMS } from '../utils/workspaceQueryOptions';
+import { getSidebarAccountType } from '../utils/sidebarAccountRows';
 
 const ACCOUNT_SEARCH_DEBOUNCE_MS = 300;
 const MIN_ACCOUNT_SEARCH_LENGTH = 2;
@@ -41,15 +41,10 @@ const hasBalance = (account) => (
  * All panel chrome (title bar, drag, resize, float) is handled by DockPanel
  * from the docking system. This component renders only data UI.
  */
-const MarginCallsSidebar = ({ isAuthenticated }) => {
+const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const queryClient = useQueryClient();
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
-  const [extraRows, setExtraRows] = useState([]);
-  const [extraHasMore, setExtraHasMore] = useState(null);
-  const [nextOffset, setNextOffset] = useState(SIDEBAR_ACCOUNT_PAGE_SIZE);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState(null);
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
   const [summaryAccount, setSummaryAccount] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -79,9 +74,9 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   const initialData = useMemo(() => {
     if (debouncedAccountSearch) return undefined;
     const candidates = [
-      peekAccountDetailsManyPage(),
-      cachedTradingAccounts,
       getInitialCachedSidebarAccounts(),
+      cachedTradingAccounts,
+      peekAccountDetailsManyPage(),
     ];
     for (const candidate of candidates) {
       const page = normalizeSidebarAccountPage(candidate);
@@ -97,10 +92,8 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     refetch,
   } = useQuery({
     queryKey: ['sidebar-accounts', debouncedAccountSearch],
-    queryFn: ({ signal }) => fetchSidebarAccounts({
+    queryFn: ({ signal }) => fetchAllSidebarAccounts({
       search: debouncedAccountSearch,
-      offset: 0,
-      limit: SIDEBAR_ACCOUNT_PAGE_SIZE,
       signal,
     }),
     select: (page) => normalizeSidebarAccountPage(page) || emptySidebarPage(page),
@@ -108,7 +101,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     // Epoch timestamp keeps the cached page visible but stale, so React Query
     // refreshes it in the background instead of trusting old session data.
     initialDataUpdatedAt: initialData ? 1 : undefined,
-    placeholderData: (previousData) => previousData || initialData,
+    placeholderData: initialData,
     enabled: isAuthenticated && isSearchValid,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
@@ -120,6 +113,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     [initialPage],
   );
   const visiblePage = useMemo(() => {
+    if (initialPage && initialPage.rows?.length === 0) return emptySidebarPage(initialPage);
     return normalizedQueryPage || initialData || emptySidebarPage(initialPage);
   }, [initialData, initialPage, normalizedQueryPage]);
 
@@ -136,24 +130,15 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
     queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'active' });
   }, [debouncedAccountSearch, initialData, queryClient]);
 
-  useEffect(() => {
-    setExtraRows([]);
-    setExtraHasMore(null);
-    setNextOffset(visiblePage?.nextOffset ?? SIDEBAR_ACCOUNT_PAGE_SIZE);
-  }, [debouncedAccountSearch, visiblePage?.nextOffset]);
-
-  const baseAccounts = useMemo(() => {
-    const base = visiblePage?.rows || [];
-    return extraRows.length > 0 ? [...base, ...extraRows] : base;
-  }, [visiblePage?.rows, extraRows]);
+  const baseAccounts = useMemo(() => visiblePage?.rows || [], [visiblePage]);
 
   const missingBalanceLogins = useMemo(() => (
     [...new Set(baseAccounts
-      .filter((account) => account?.login && !hasBalance(account))
+      .filter((account) => account?.login && (!hasBalance(account) || (accountType !== 'all' && !getSidebarAccountType(account))))
       .map((account) => String(account.login)))]
-  ), [baseAccounts]);
+  ), [baseAccounts, accountType]);
 
-  const { data: balanceDetails = [] } = useQuery({
+  const { data: balanceDetails = [], isFetching: isFetchingDetails } = useQuery({
     queryKey: ['sidebar-account-balance-details', missingBalanceLogins],
     queryFn: async ({ signal }) => {
       const rows = await Promise.all(missingBalanceLogins.map((login) => (
@@ -168,55 +153,17 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
   });
 
   const accounts = useMemo(() => {
-    if (balanceDetails.length === 0) return baseAccounts;
     const detailsByLogin = new Map(balanceDetails.map((account) => [String(account.login), account]));
     return baseAccounts.map((account) => {
       const details = detailsByLogin.get(String(account.login));
       return details ? { ...account, ...details, login: account.login } : account;
-    });
-  }, [balanceDetails, baseAccounts]);
+    }).filter((account) => accountType === 'all' || getSidebarAccountType(account) === accountType);
+  }, [balanceDetails, baseAccounts, accountType]);
 
-  const accountPositionPrefetchKey = useMemo(() => accounts
-    .map((account) => String(
-      typeof account === 'number' || typeof account === 'string' ? account : account?.login,
-    ).trim())
-    .filter(Boolean)
-    .join(','), [accounts]);
-
-  useLayoutEffect(() => {
-    if (!isAuthenticated || !accountPositionPrefetchKey) return;
-    void preloadAccountPositionsBatch(accountPositionPrefetchKey.split(','));
-  }, [accountPositionPrefetchKey, isAuthenticated]);
-
-  const hasMoreAccounts = extraHasMore !== null ? extraHasMore : Boolean(visiblePage?.hasMore);
-  const loading = isInitialLoading && accounts.length === 0;
+  const loading = (isInitialLoading || (accountType !== 'all' && isFetchingDetails)) && accounts.length === 0;
   const error = queryError ? (queryError.message || 'Failed to load accounts.') : null;
 
-  const handleRefresh = () => {
-    setExtraRows([]);
-    setExtraHasMore(null);
-    refetch();
-  };
-
-  const handleLoadMore = async () => {
-    setLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      const res = await fetchSidebarAccounts({
-        search: debouncedAccountSearch,
-        offset: nextOffset,
-        limit: SIDEBAR_ACCOUNT_PAGE_SIZE,
-      });
-      setExtraRows((prev) => [...prev, ...(res.rows || [])]);
-      setExtraHasMore(res.hasMore);
-      setNextOffset(res.nextOffset);
-    } catch (err) {
-      setLoadMoreError(err.message || 'Failed to load more accounts.');
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
+  const handleRefresh = () => refetch();
 
   const handleSearchChange = (event) => {
     const nextValue = event.target.value;
@@ -373,11 +320,11 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           </div>
         )}
 
-        {isAuthenticated && !loading && !error && (
+        {isAuthenticated && !loading && (!error || accounts.length > 0) && (
           <table className="ui-grid accounts-sidebar-grid">
             <thead>
               <tr>
-                <th>Login</th>
+                <th>login_id</th>
               
                 <th style={{ textAlign: 'right' }}>Balance</th>
               </tr>
@@ -414,16 +361,7 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
                         className="accounts-sidebar-login"
                         style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}
                       >
-                        <span className="accounts-sidebar-login-content">
-                          <User
-                            className="accounts-sidebar-account-icon"
-                            size={14}
-                            strokeWidth={1.8}
-                            aria-hidden="true"
-                            style={{ color: isUrgent ? 'var(--danger)' : 'var(--accent)' }}
-                          />
-                          <span className="tabular font-mono">{login}</span>
-                        </span>
+                        <span className="tabular font-mono">{login}</span>
                       </td>
                      
                       <td className="accounts-sidebar-balance tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
@@ -437,32 +375,6 @@ const MarginCallsSidebar = ({ isAuthenticated }) => {
           </table>
         )}
       </div>
-
-      {isAuthenticated && !loading && !error && accounts.length > 0 && (hasMoreAccounts || loadingMore || loadMoreError) && (
-        <div
-          className="shrink-0 px-2 py-2 flex flex-col gap-1.5"
-          style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}
-        >
-          {loadMoreError && (
-            <div className="text-[11px] text-center" style={{ color: 'var(--danger-text)' }}>
-              {loadMoreError}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            disabled={loadingMore || !hasMoreAccounts}
-            className="ui-btn ui-btn-secondary ui-btn-sm w-full flex items-center justify-center gap-1.5"
-          >
-            {loadingMore ? (
-              <Loader size={13} className="animate-spin" />
-            ) : (
-              <ChevronDown size={13} />
-            )}
-            {loadingMore ? 'Loading more...' : `Load next ${SIDEBAR_ACCOUNT_PAGE_SIZE}`}
-          </button>
-        </div>
-      )}
 
       {/* Popups */}
       {selectedAccountDetails && (

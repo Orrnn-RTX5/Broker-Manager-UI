@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Gavel, RefreshCw, Loader, AlertTriangle, User, CheckCircle2, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Search, AlertTriangle, User, CheckCircle2, XCircle } from 'lucide-react';
 import { getDealerQueue, orderApprove, orderReject } from '../../services/tradeApi';
 import useDataSource from '../../hooks/useDataSource';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -55,6 +55,15 @@ const DealerQueuePage = () => {
   const [selectedRow, setSelectedRow] = useState(null);
   const [actionDialog, setActionDialog] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [hasSettledInitialLoad, setHasSettledInitialLoad] = useState(false);
+
+  // Polling stays invisible after the first response so an empty queue does not
+  // flash back to a loading skeleton every four seconds.
+  useEffect(() => {
+    if (!isLoading && !hasSettledInitialLoad) setHasSettledInitialLoad(true);
+  }, [hasSettledInitialLoad, isLoading]);
+
+  const showInitialLoading = isLoading && !hasSettledInitialLoad;
 
   const filtered = rawData.filter(row => {
     if (!search) return true;
@@ -110,37 +119,31 @@ const DealerQueuePage = () => {
   };
 
   return (
-    <div className="dealer-queue-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <Gavel size={18} style={{ color: 'var(--accent)' }} />
-          <div>
-            <h1 className="dealer-queue-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
-            <p className="dealer-queue-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
-          </div>
+    <div className="dealer-queue-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden">
+      <div className="dealer-queue-header shrink-0">
+        <div className="dealer-queue-heading min-w-0">
+          <h1 className="dealer-queue-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
+          <p className="dealer-queue-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
         </div>
-        <button className="ui-btn ui-btn-secondary ui-btn-sm flex items-center gap-1.5 mt-2 md:mt-0" onClick={refetch} disabled={isLoading}>
-          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} /> Refresh
-        </button>
       </div>
 
-      <div className="dealer-queue-search relative w-full max-w-xs">
+      <div className="dealer-queue-search relative w-full max-w-xs shrink-0">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input type="text" placeholder="Search ticket, login, symbol…" value={search}
           onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" style={{ paddingLeft: 32 }} />
       </div>
 
-      <div className="dealer-queue-grid ui-card flex flex-col w-full flex-1 overflow-hidden">
+      <div className="dealer-queue-grid ui-card flex flex-col w-full flex-1 min-h-0 overflow-hidden">
         {error && (
           <div className="dealer-queue-error px-4 py-2 text-[10px]" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)', borderBottom: '1px solid var(--danger-border)' }}>
             <AlertTriangle size={12} className="inline mr-1" /> {error}
           </div>
         )}
-        {isLoading && filtered.length === 0 ? (
+        {showInitialLoading ? (
           <GridLoadingState label="Loading dealer queue…" />
         ) : (
         <div className="dealer-queue-table-shell relative w-full flex-1 min-h-0">
-          <div className="dealer-queue-scroll w-full h-full overflow-x-auto">
+          <div className="dealer-queue-scroll w-full h-full overflow-auto">
             <table className="ui-grid min-w-max">
             <thead>
               <tr>

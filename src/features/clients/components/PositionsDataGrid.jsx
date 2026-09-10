@@ -44,11 +44,10 @@ const savePositionsSnapshot = (pageData) => {
   }
 };
 
-const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', onRowsChange, onRowContext }) => {
+const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', grid, onRowsChange, onRowContext }) => {
   const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('position');
   const [sortDir, setSortDir] = useState('asc');
-  const [selectedRow, setSelectedRow] = useState(null);
   const [activeAccountDetailsId, setActiveAccountDetailsId] = useState(null);
   const [activeAccountTicket, setActiveAccountTicket] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('open-positions');
@@ -99,7 +98,6 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     isError,
     error,
     dataUpdatedAt,
-    refetch,
     nextPage,
     prevPage,
   } = usePagedData({
@@ -204,14 +202,11 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   };
 
   const handleLoadData = () => markDataRequested();
-
-  const handleRefresh = () => {
-    invalidatePositionsCache();
-    if (!hasRequestedData) {
-      markDataRequested();
-      return;
-    }
-    refetch();
+  const selectedPosition = rows.find(row => grid?.selectedIds.has(row.position));
+  const openPositionDetails = (row) => {
+    if (!row) return;
+    setActiveAccountDetailsId(row.login);
+    setActiveAccountTicket(row.position);
   };
 
   const renderHeader = (col, label) => (
@@ -249,6 +244,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
         <table className="ui-grid min-w-max">
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
+              <th aria-label="Select position" style={{ width: 32, cursor: 'default' }} />
               {renderHeader('position', 'Ticket')}
               {renderHeader('login', 'Login')}
               {renderHeader('name', 'User Name')}
@@ -268,7 +264,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={14} className="open-positions-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={15} className="open-positions-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Open positions are not loaded.</span>
@@ -280,23 +276,24 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                   ) : isLoading ? 'Loading positions...' : 'No positions match the current filters.'}
                 </td>
               </tr>
-            ) : rows.map((row, idx) => {
-              const rowKey = `${row.position}-${idx}`;
+            ) : rows.map((row) => {
+              const rowKey = row.position;
+              const isSelected = grid?.selectedIds.has(rowKey) ?? false;
               const isBuy = row.type === 'buy';
               const swapTone = row.swap < 0 ? 'var(--danger-text)' : 'var(--text-2)';
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
               return (
                 <tr
                   key={rowKey}
-                  onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
-                  onDoubleClick={() => {
-                    setActiveAccountDetailsId(row.login);
-                    setActiveAccountTicket(row.position);
-                  }}
+                  onClick={() => grid?.toggle(rowKey)}
+                  onDoubleClick={() => openPositionDetails(row)}
                   onContextMenu={(e) => onRowContext && onRowContext(e, row)}
-                  className={selectedRow === rowKey ? 'is-selected' : ''}
+                  className={isSelected ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
+                  <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select position ${row.position}`} checked={isSelected} onChange={() => grid?.toggle(rowKey)} />
+                  </td>
                   <td className="tabular" style={{ textAlign: 'center' }}>{row.position}</td>
                   <td className="tabular" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.login}</td>
                   <td style={{ textAlign: 'center' }}>{row.name}</td>
@@ -341,12 +338,16 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
           </span>
           {!isIdle && <span style={{ color: 'var(--muted)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{pageBuys}</span></span>}
           {!isIdle && <span style={{ color: 'var(--muted)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{pageSells}</span></span>}
+          {grid?.selectedIds.size > 0 && (
+            <button type="button" className="ui-badge ui-badge-brand" disabled={!selectedPosition}
+              title={selectedPosition ? `Open details for position ${selectedPosition.position}` : 'Selected position is not on this page'}
+              style={{ cursor: selectedPosition ? 'pointer' : 'default' }}
+              onClick={() => openPositionDetails(selectedPosition)}>
+              Selected
+            </button>
+          )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>
-            <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
-            {isIdle ? 'Load' : 'Refresh'}
-          </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
           <span className="tabular px-1" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
           <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>

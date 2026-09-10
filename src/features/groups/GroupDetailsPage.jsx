@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
-import { ArrowLeft, Users2, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
 import { fetchManagerApi } from '../../services/managerFetch';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -167,12 +167,11 @@ const GroupDetailsPage = () => {
     <div className="p-5 w-full h-full flex flex-col gap-4 overflow-y-auto" style={{ background: 'var(--bg)' }}>
 
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button className="ui-btn ui-btn-ghost ui-btn-sm p-1.5" onClick={() => navigate('/groups')}>
+      <div className="group-details-heading flex items-center gap-2 shrink-0">
+        <button aria-label="Back to groups" className="ui-btn ui-btn-ghost ui-btn-sm p-1.5" onClick={() => navigate('/groups')}>
           <ArrowLeft size={15} />
         </button>
-        <Users2 size={17} style={{ color: 'var(--accent)' }} />
-        <div>
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Group: {group.name}</h1>
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>Group configuration &amp; live statistics</p>
         </div>

@@ -34,7 +34,7 @@ export default function WorkspaceTabs() {
         ? current.filter((label) => label !== matchingTab.label)
         : current);
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.key]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -78,11 +78,9 @@ export default function WorkspaceTabs() {
               >
                 <span>{tab.label}</span>
               </button>
-              {!isActive && (
                 <button type="button" className="cc-workspace-tab-close" title={`Close ${tab.label}`} aria-label={`Close ${tab.label}`} onClick={() => closeTab(tab)}>
                   <X size={12} />
                 </button>
-              )}
             </div>
           );
         })}

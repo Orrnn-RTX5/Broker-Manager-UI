@@ -19,7 +19,13 @@ import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
 const TreeNode = ({ label, icon: Icon, children, defaultExpanded = false, count, path, activePath, disabled, onClickNode, onExpandedChange, onIntent }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasChildren = Children.count(children) > 0;
-  const active = path && (activePath === path || (path !== '/dashboard' && activePath.startsWith(`${path}/`)));
+  // Clients and IB Tree are separate destinations, not child views of their
+  // neighboring list pages. Only detail routes inherit a list highlight.
+  const active = path && (
+    activePath === path
+    || (path === '/symbols' && activePath.startsWith('/symbols/'))
+    || (path === '/ib' && /^\/ib\/\d+(?:\/|$)/.test(activePath))
+  );
   const activate = (event) => {
     if (disabled) return;
     if (hasChildren) {
@@ -107,7 +113,6 @@ export default function NavigatorPanel() {
         </TreeNode>
 
         <TreeNode label="Risk Management" icon={Shield} defaultExpanded>
-          {node('Risk Monitor', ShieldCheck, '/dealer/restrictions')}
           {node('Exposure', Activity, '/analytics/open-positions')}
           <TreeNode label="Margin Rules" icon={Settings2} disabled />
           {node('Restricted Accounts', Shield, '/dealer/restrictions')}

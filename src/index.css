@@ -780,44 +780,82 @@ body {
 }
 
 .manager-command-input-wrap {
-  min-height: 58px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-  color: var(--accent-text);
+  gap: 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
-.manager-command-input-wrap input {
+.manager-command-search-field {
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
+  min-height: 40px;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  cursor: text;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.manager-command-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.manager-command-search-field > svg { flex-shrink: 0; }
+.manager-command-search-field:focus-within > svg { color: var(--accent-text); }
+.manager-command-palette .manager-command-search-field input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0;
   border: 0;
   outline: 0;
+  box-shadow: none;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 14px;
+  line-height: 1.5;
+  caret-color: var(--accent-text);
 }
-.manager-command-input-wrap input::placeholder { color: var(--muted); }
+.manager-command-palette .manager-command-search-field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.manager-command-input-wrap input::placeholder { color: var(--text-3); opacity: 1; }
 .manager-command-input-wrap button {
   display: inline-flex;
-  padding: 5px;
-  border: 0;
-  border-radius: var(--radius-sm);
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
-.manager-command-input-wrap button:hover { color: var(--text); background: var(--surface-3); }
+.manager-command-input-wrap button:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); }
+.manager-command-input-wrap button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 
 .manager-command-results { max-height: min(460px, 56vh); overflow-y: auto; padding: 7px; }
 .manager-command-results > button {
   width: 100%;
-  min-height: 52px;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 5px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -828,8 +866,8 @@ body {
 .manager-command-results > button:hover,
 .manager-command-results > button.is-selected { background: var(--accent-soft); border-color: var(--accent-border); }
 .manager-command-icon {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -837,9 +875,9 @@ body {
   background: var(--surface-2);
 }
 .manager-command-results > button.is-selected .manager-command-icon { background: var(--surface); }
-.manager-command-label { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
-.manager-command-label strong { font-size: 13px; font-weight: 600; }
-.manager-command-label small { color: var(--text-3); font-size: 11px; }
+.manager-command-label { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; }
+.manager-command-label strong { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.manager-command-label small { color: var(--text-3); font-size: 11px; line-height: 1.2; }
 .manager-command-empty { padding: 28px 16px; color: var(--text-3); font-size: 13px; text-align: center; }
 .manager-command-footer {
   min-height: 38px;
@@ -853,6 +891,29 @@ body {
   font-size: 11px;
 }
 .manager-command-footer span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Search fields use a single crisp accent border. Keep the focus state clear
+   without the blue halo that makes compact search controls look swollen. */
+#root :is(
+  input[type='search'],
+  input[placeholder*='search' i],
+  input[aria-label*='search' i]
+):is(:focus, :focus-visible) {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+#root :is([class*='search'], [class*='Search']):has(> input):focus-within,
+#root :is(div, label):has(> input[type='search'], > input[placeholder*='search' i], > input[aria-label*='search' i]):focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+#root .manager-account-lookup-popover > div:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
 
 @media (max-width: 1450px) {
   .manager-toolbar { gap: 8px; padding-inline: 12px; }
@@ -2371,28 +2432,35 @@ h4 {
   line-height: 1.35;
 }
 
-#root .accounts-sidebar-login-content {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-}
-
-#root .accounts-sidebar-account-icon {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-}
-
 #root .accounts-sidebar-balance {
   letter-spacing: -0.01em;
 }
 
 /* Dealer Queue: 12px primary content and 10px supporting text/controls. */
 #root .dealer-queue-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 10px;
   font-weight: 400;
   line-height: 1.35;
+}
+
+#root .dealer-queue-header,
+#root .dealer-queue-heading,
+#root .dealer-queue-search {
+  min-width: 0;
+}
+
+#root .dealer-queue-header,
+#root .dealer-queue-search {
+  flex: 0 0 auto;
+}
+
+#root .dealer-queue-header {
+  padding-bottom: 0 !important;
 }
 
 #root .dealer-queue-page :is(
@@ -2406,7 +2474,7 @@ h4 {
 #root .dealer-queue-page :is(h1, h2, h3, .dealer-queue-title) {
   font-size: 12px !important;
   font-weight: 600 !important;
-  line-height: 1.3 !important;
+  line-height: 1.2 !important;
 }
 
 #root .dealer-queue-page .dealer-queue-search .ui-input,
@@ -2449,6 +2517,21 @@ h4 {
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td :is(.ui-badge, .ui-btn),
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td :is(.ui-badge, .ui-btn) * {
   font-size: 10px !important;
+}
+
+#root .dealer-queue-page .dealer-queue-subtitle {
+  line-height: 1.25 !important;
+}
+
+#root .dealer-queue-page .dealer-queue-search .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
+#root .dealer-queue-page .dealer-queue-scroll {
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
 }
 
 /* Restricted Accounts: 12px primary content and 10px supporting text/controls. */
@@ -2512,6 +2595,11 @@ h4 {
 
 /* IB Management: 12px primary content and 10px supporting text/controls. */
 #root .ib-management-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 10px;
   font-weight: 400;
   line-height: 1.35;
@@ -2528,7 +2616,32 @@ h4 {
 #root .ib-management-page :is(h1, h2, h3, .ib-management-title) {
   font-size: 12px !important;
   font-weight: 600 !important;
-  line-height: 1.3 !important;
+  line-height: 1.2 !important;
+}
+
+#root .ib-management-page .ib-management-header .ib-management-subtitle {
+  line-height: 1.25 !important;
+}
+
+#root .ib-management-filters .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
+#root .ib-management-scroll {
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
+@container (max-width: 480px) {
+  #root .ib-management-header {
+    flex-wrap: wrap;
+  }
+
+  #root .ib-management-filters .ib-management-search {
+    max-width: none;
+  }
 }
 
 #root .ib-management-page .ib-management-search .ui-input,
@@ -2573,6 +2686,11 @@ h4 {
 
 /* IB Tree: 12px primary content and 10px supporting text/controls. */
 #root .ib-tree-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 10px;
   font-weight: 400;
   line-height: 1.35;
@@ -2589,15 +2707,13 @@ h4 {
 #root .ib-tree-page :is(h1, h2, h3, .ib-tree-title, .ib-tree-selected-title) {
   font-size: 12px !important;
   font-weight: 600 !important;
-  line-height: 1.3 !important;
+  line-height: 1.2 !important;
 }
 
 #root .ib-tree-page .ib-tree-subtitle,
 #root .ib-tree-page .ib-tree-error,
 #root .ib-tree-page .ib-tree-search .ui-input,
 #root .ib-tree-page .ib-tree-search .ui-input::placeholder,
-#root .ib-tree-page .ib-tree-controls :is(button, .ui-btn),
-#root .ib-tree-page .ib-tree-empty,
 #root .ib-tree-page .ib-tree-node-expander,
 #root .ib-tree-page .ib-tree-node-meta,
 #root .ib-tree-page .ui-badge {
@@ -2622,8 +2738,58 @@ h4 {
   font-weight: 500 !important;
 }
 
+#root .ib-tree-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+#root .ib-tree-controls {
+  display: contents;
+}
+
+#root .ib-tree-controls > button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#root .ib-tree-search {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
+}
+
+#root .ib-tree-search .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
+#root .ib-tree-page .ib-tree-subtitle {
+  line-height: 1.25 !important;
+}
+
+#root .ib-tree-page .ib-tree-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  font-size: 12px !important;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+#root .ib-tree-canvas {
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
 /* Compact Trading Accounts analytics: preserve room for the working workspace. */
-.trading-analytics-page { width:100%; height:100%; min-width:0; padding:12px; overflow:auto; background:var(--bg); }
+.trading-analytics-page { width:100%; height:100%; min-width:0; padding:12px; overflow:auto; background:var(--bg); container-type:inline-size; }
 .trading-analytics-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
 #root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size:12px !important; font-weight:600 !important; line-height:1.4; color:var(--text); }
 #root .trading-analytics-page p { margin:3px 0 0; color:var(--text-3); font-size:10px; line-height:1.4; }
@@ -2637,6 +2803,33 @@ h4 {
 .trading-analytics-report-icon { display:grid; place-items:center; width:30px; height:30px; flex-shrink:0; border-radius:4px; background:var(--accent-soft); color:var(--accent-text); }
 .trading-analytics-report-value { margin-left:auto; color:var(--text-3); font-size:14px; }
 .trading-analytics-reports > footer { padding:10px 12px; color:var(--text-3); font-size:10px; line-height:1.5; }
+
+/* A user can keep the right workspace panel open. Reflow this report view
+   into the remaining center space instead of allowing its filters to clip. */
+@container (max-width: 700px) {
+  .trading-analytics-toolbar { flex-wrap:wrap; align-items:stretch; gap:6px; }
+  .trading-analytics-toolbar > * { flex:1 1 150px; min-width:0; }
+  .trading-analytics-date-range > div,
+  .trading-analytics-date-range > div > div:first-child { width:100%; min-width:0 !important; }
+  .trading-analytics-date-range > div > .ui-card {
+    min-width:0 !important;
+    max-width:calc(100cqi - 24px);
+    overflow-x:auto;
+  }
+}
+
+@container (max-width: 420px) {
+  .trading-analytics-page { padding:8px; }
+  .trading-analytics-heading { flex-wrap:wrap; align-items:flex-start; gap:8px; margin-bottom:8px; }
+  .trading-analytics-heading > button { width:100%; justify-content:center; }
+  .trading-analytics-toolbar { display:grid; grid-template-columns:minmax(0, 1fr); padding-bottom:8px; }
+  .trading-analytics-toolbar > * { width:100% !important; }
+  .trading-analytics-reports > header,
+  .trading-analytics-report,
+  .trading-analytics-reports > footer { padding-inline:8px; }
+  .trading-analytics-report { min-width:0; gap:7px; }
+  .trading-analytics-report > div { min-width:0; }
+}
 
 /* Symbol Browser: enforce the 12px/10px scale inside every category card. */
 #root .symbol-browser-page,
@@ -2733,6 +2926,72 @@ h4 {
 
 #root .symbol-management-page :is(input, textarea)::placeholder {
   font-size: 10px !important;
+}
+
+/* Compact symbol controls reserve space for the instrument list. */
+#root .symbol-management-page .symbol-management-tab {
+  flex: 1 0 auto;
+  justify-content: center;
+  white-space: nowrap;
+  padding: 6px 8px;
+  font-size: 10px !important;
+}
+
+#root .symbol-management-page .symbols-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#root .symbol-management-page .symbols-toolbar .ui-input {
+  width: 100% !important;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding-block: 3px;
+}
+
+#root .symbol-management-page .symbols-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#root .symbol-management-page .symbols-header-actions .ui-btn {
+  height: 26px;
+  min-height: 26px;
+  padding-block: 3px;
+}
+
+#root .symbol-management-page .symbols-table .ui-grid :is(th, td) {
+  height: 30px;
+  padding-block: 4px;
+}
+
+#root .symbol-management-page .symbols-table .ui-btn-icon {
+  height: 22px;
+  min-height: 22px;
+  padding: 3px;
+}
+
+/* Fixed row geometry keeps virtual scrolling stable as new parameters arrive. */
+#root .symbol-management-page .symbols-table .ui-grid {
+  table-layout: fixed;
+  min-width: 1050px;
+}
+
+#root .symbol-management-page .symbols-table .ui-grid tbody td {
+  height: 32px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-width: 450px) {
+  #root .symbol-management-page .symbols-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Clients, Trading Accounts, Positions, Orders & Dealer Views */
@@ -2922,10 +3181,91 @@ h4 {
   line-height: 1.35;
 }
 
+/* Compact Online Users table: consistent 10px text and shorter table chrome. */
+#root .online-users-page .online-users-grid :is(th, td, td *, button, span, .online-users-grid-title) {
+  font-size: 10px !important;
+  line-height: 14px;
+}
+
+#root .online-users-page .online-users-grid .ui-grid :is(th, td):not(.online-users-grid-empty) {
+  height: 28px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+#root .online-users-page :is(.online-users-grid-header, .online-users-grid-footer) {
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+#root .online-users-page :is(.online-users-grid-header, .online-users-grid-footer) .ui-btn {
+  height: 22px;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  font-size: 10px !important;
+}
+
+/* Orders follows the compact Clients layout without a selection column. */
+#root .orders-page .orders-filters > * {
+  width: 100% !important;
+  min-width: 0;
+}
+
+#root .orders-page :is(.orders-subtitle, .orders-search .ui-input, .orders-search .ui-input::placeholder, .orders-filters button, .orders-filters span) {
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+
+#root .orders-page .orders-grid .ui-grid thead th {
+  height: 28px;
+  padding-block: 5px;
+  font-weight: 400 !important;
+}
+
+#root .orders-page .orders-grid-footer {
+  min-height: 32px;
+  padding-block: 0;
+  align-items: center;
+}
+
+#root .orders-page .orders-grid-footer > div {
+  display: flex;
+  align-items: center;
+  align-self: center;
+}
+
+#root .orders-page .orders-grid-footer > div > .tabular {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+}
+
+#root .orders-page .orders-grid-footer .ui-btn {
+  height: 22px;
+  min-height: 22px;
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
 /* Clients: 12px primary text, 10px supporting copy and controls. */
 #root .clients-page {
+  min-width: 0;
+  min-height: 0;
   font-size: 10px;
   line-height: 1.35;
+}
+
+#root .clients-header,
+#root .clients-heading,
+#root .clients-heading > div,
+#root .clients-filters {
+  min-width: 0;
+}
+
+#root .clients-subtitle {
+  overflow-wrap: anywhere;
 }
 
 #root .clients-page :is(h1, h2, h3, .clients-title) {
@@ -2948,6 +3288,21 @@ h4 {
 #root .clients-grid .ui-grid thead th {
   font-size: 10px !important;
   line-height: 1.35 !important;
+  height: 28px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+#root .clients-grid .clients-grid-footer {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+#root .clients-grid .clients-grid-footer .ui-btn {
+  height: 22px;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 #root .clients-grid .ui-grid tbody td,
@@ -2965,10 +3320,108 @@ h4 {
   line-height: 1.35 !important;
 }
 
+/* Reflow the filter row inside the available center workspace when a docked
+   panel is open, rather than letting fixed-width controls run beneath it. */
+@container (max-width: 740px) {
+  #root .clients-page {
+    padding: 12px !important;
+    gap: 8px !important;
+  }
+
+  #root .clients-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start !important;
+    justify-content: stretch !important;
+    gap: 10px !important;
+  }
+
+  #root .clients-filters {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100% !important;
+    margin-top: 0 !important;
+    gap: 6px !important;
+  }
+
+  #root .clients-filters > * {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+@container (max-width: 480px) {
+  #root .clients-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #root .clients-filters > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (max-width: 330px) {
+  #root .clients-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #root .clients-filters > :last-child {
+    grid-column: auto;
+  }
+}
+
 /* Dealing: 10px for small font size (subtitles, search box, filter dropdown boxes, headers, badges, footer summary & buttons), 12px for big font size (title, table data cells) */
 #root .deals-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  gap: 8px;
+  overflow: hidden;
   font-size: 10px;
+  font-weight: var(--workspace-ui-font-weight);
   line-height: 1.35;
+}
+
+#root .deals-header,
+#root .deals-search {
+  flex: 0 0 auto;
+}
+
+#root .deals-subtitle {
+  margin-top: 0 !important;
+}
+
+#root .deals-filters > * {
+  width: 100px;
+  min-width: 0;
+}
+
+#root .deals-grid .ui-grid tbody tr {
+  height: 46px;
+}
+
+#root .deals-search .ui-input,
+#root .deals-filters .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
+#root .deals-grid .grid-scroll-area {
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
+@container (max-width: 560px) {
+  #root .deals-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #root .deals-filters > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 
 #root .deals-page :is(h1, h2, h3, .deals-title) {
@@ -2985,6 +3438,7 @@ h4 {
 
 #root .deals-page :is(button, input, select, textarea, .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs) {
   font-size: 10px !important;
+  line-height: 1.35 !important;
 }
 
 #root .deals-page .deals-search .ui-input,
@@ -3027,9 +3481,44 @@ h4 {
 
 /* Position History: 12px headings, 10px supporting text. */
 #root .position-history-page {
+  min-width: 0;
+  min-height: 0;
   font-size: 10px;
   font-weight: var(--workspace-ui-font-weight);
   line-height: 1.35;
+}
+
+#root .position-history-header,
+#root .position-history-search-panel,
+#root .position-history-search-form,
+#root .position-history-search-actions,
+#root .position-history-content,
+#root .position-history-grid {
+  min-width: 0;
+}
+
+#root .position-history-search-form {
+  flex: 1 1 auto;
+}
+
+/* The login field keeps a clear focus border without the oversized blue glow. */
+#root .position-history-search-panel .ui-input:is(:focus, :focus-visible) {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+#root .position-history-empty-state,
+#root .position-history-grid-state,
+#root .position-history-grid {
+  min-height: 0;
+}
+
+#root .position-history-grid-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
 }
 
 #root .position-history-page :is(
@@ -3056,6 +3545,52 @@ h4 {
 
 #root .position-history-page .ui-grid thead th {
   font-weight: 600 !important;
+}
+
+/* Keep the lookup panel compact when a docked panel reduces the center area. */
+@container (max-width: 640px) {
+  #root .position-history-page {
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  #root .position-history-search-panel {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  #root .position-history-search-form {
+    flex: 1 1 auto;
+    flex-direction: row !important;
+    align-items: center !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  #root .position-history-search-actions {
+    flex: 0 0 auto;
+  }
+
+  #root .position-history-search-status {
+    display: none;
+  }
+}
+
+@container (max-width: 420px) {
+  #root .position-history-search-panel {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  #root .position-history-search-form {
+    width: 100% !important;
+  }
+
+  #root .position-history-search-actions {
+    width: 100%;
+    justify-content: flex-end !important;
+  }
 }
 
 /* Active Sessions: 12px headings, 10px supporting text. */
@@ -3101,14 +3636,41 @@ h4 {
 
 /* Trading Accounts: 12px headings, 10px supporting text. */
 #root .trading-accounts-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 10px;
   font-weight: var(--workspace-ui-font-weight);
   line-height: 1.35;
 }
 
+#root .trading-accounts-header,
+#root .trading-accounts-heading,
+#root .trading-accounts-heading > div,
+#root .trading-accounts-filters {
+  min-width: 0;
+}
+
+#root .trading-accounts-header,
+#root .trading-accounts-search {
+  flex: 0 0 auto;
+}
+
+#root .trading-accounts-header {
+  padding-bottom: 0 !important;
+}
+
+#root .trading-accounts-search .ui-input,
+#root .trading-accounts-filters .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
 #root .trading-accounts-page :is(
-  *,
-  button, input, select, textarea, span, p, td, th, label, small,
+  button, input, select, textarea, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
   font-size: 10px !important;
@@ -3127,8 +3689,6 @@ h4 {
 #root .trading-accounts-page .trading-accounts-filters button,
 #root .trading-accounts-page .trading-accounts-filters span,
 #root .trading-accounts-page .ui-grid thead th,
-#root .trading-accounts-page .trading-accounts-grid .ui-grid tbody td,
-#root .trading-accounts-page .trading-accounts-grid .ui-grid tbody td *,
 #root .trading-accounts-page .trading-accounts-grid-footer,
 #root .trading-accounts-page .trading-accounts-grid-footer :is(button, span) {
   font-size: 10px !important;
@@ -3139,10 +3699,106 @@ h4 {
   font-weight: 600 !important;
 }
 
+#root .trading-accounts-page .trading-accounts-grid .ui-grid tbody td {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
+#root .trading-accounts-page .trading-accounts-grid .ui-badge {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+#root .trading-accounts-grid .grid-scroll-area {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
+/* Keep the compact desktop header intact until the remaining workspace
+   genuinely needs the controls to contract or stack. */
+@container (max-width: 560px) {
+  #root .trading-accounts-filters {
+    gap: 6px !important;
+  }
+
+  #root .trading-accounts-filters > * {
+    width: 130px !important;
+    min-width: 0 !important;
+  }
+}
+
+@container (max-width: 440px) {
+  #root .trading-accounts-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  #root .trading-accounts-filters {
+    width: 100% !important;
+    margin-top: 0 !important;
+  }
+
+  #root .trading-accounts-filters > * {
+    flex: 1 1 0;
+    width: auto !important;
+  }
+}
+
 /* Opened Orders: 12px primary text, 10px supporting copy and controls. */
 #root .opened-orders-page {
+  min-width: 0;
+  min-height: 0;
   font-size: 10px;
   line-height: 1.35;
+  container-type: inline-size;
+}
+
+#root .opened-orders-header {
+  min-width: 0;
+}
+
+#root .opened-orders-header > * {
+  min-width: 0;
+}
+
+#root .opened-orders-search {
+  align-self: center;
+}
+
+#root .opened-orders-search-field {
+  flex: 1 1 320px;
+  min-width: 0;
+  width: 320px;
+  max-width: 100%;
+}
+
+#root .opened-orders-search .ui-btn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+#root .opened-orders-search svg {
+  flex: 0 0 auto;
+}
+
+#root .opened-orders-content {
+  min-height: 0;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
+#root .opened-orders-state {
+  height: 100%;
+  min-height: 100%;
+}
+
+#root .opened-orders-results {
+  min-width: 0;
+  padding-bottom: 12px;
 }
 
 #root .opened-orders-page :is(
@@ -3156,6 +3812,54 @@ h4 {
 
 #root .opened-orders-page .opened-orders-search .ui-input::placeholder {
   font-size: 10px !important;
+}
+
+@container (min-width: 581px) {
+  #root .opened-orders-header {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  #root .opened-orders-search {
+    flex-direction: row !important;
+    align-items: center !important;
+    width: auto !important;
+  }
+}
+
+@container (max-width: 580px) {
+  #root .opened-orders-page {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  #root .opened-orders-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  #root .opened-orders-search {
+    width: 100% !important;
+  }
+
+  #root .opened-orders-search-field {
+    flex: 1 1 auto;
+    width: auto !important;
+  }
+}
+
+@container (max-width: 450px) {
+  #root .opened-orders-search {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  #root .opened-orders-search-field,
+  #root .opened-orders-search .ui-btn {
+    width: 100% !important;
+  }
 }
 
 #root .opened-orders-page :is(
@@ -3512,28 +4216,15 @@ h4 {
 }
 
 .new-account-modal {
-  width: min(760px, 100%);
+  width: min(720px, 100%);
   max-height: min(720px, calc(100dvh - 32px));
 }
 
 .new-account-modal-header {
-  min-height: 70px;
+  min-height: 64px;
   gap: 12px;
   padding: 14px 20px;
   background: var(--surface);
-}
-
-.new-account-header-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
-  color: var(--accent-text);
 }
 
 .new-account-header-copy {
@@ -3542,15 +4233,15 @@ h4 {
   flex-direction: column;
   gap: 2px;
   color: var(--text);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.2;
 }
 
 .new-account-header-copy small {
   overflow: hidden;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3568,15 +4259,19 @@ h4 {
 
 .new-account-form {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .new-account-section {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface-2);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.new-account-form > .new-account-section {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .new-account-security-section {
@@ -3594,15 +4289,15 @@ h4 {
 .new-account-section-heading h2 {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.3;
 }
 
 .new-account-section-heading p {
   margin: 3px 0 0;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
 }
 
@@ -3611,7 +4306,7 @@ h4 {
 .new-account-password-grid {
   display: grid;
   min-width: 0;
-  gap: 14px;
+  gap: 12px;
 }
 
 .new-account-settings-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3623,7 +4318,7 @@ h4 {
   display: grid;
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .new-account-field { min-width: 0; }
@@ -3632,14 +4327,14 @@ h4 {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 6px;
 }
 
 .new-account-field-label label {
   overflow: hidden;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 10px;
+  font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3653,8 +4348,8 @@ h4 {
 
 .new-account-modal .ui-input,
 .new-account-modal .ui-select {
-  min-height: 40px;
-  padding-block: 8px;
+  height: 32px; min-height: 32px; font-size: 10px; font-weight: 400; line-height: 1.35;
+  padding-block: 0;
 }
 
 .new-account-modal .ui-select { cursor: pointer; }
@@ -3693,15 +4388,15 @@ h4 {
   position: absolute;
   top: 50%;
   right: 4px;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   transform: translateY(-50%);
 }
 
 .new-account-modal-footer {
   align-items: center;
-  min-height: 62px;
+  min-height: 56px;
   padding: 12px 20px;
   background: var(--surface-2);
 }
@@ -3709,10 +4404,30 @@ h4 {
 .new-account-required-note,
 .new-account-permission-note {
   margin-right: auto;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
+.new-account-modal .ui-btn, .new-account-group-combobox [role='listbox'] { font-size: 10px; line-height: 1.35; }
+
+#root .new-account-modal :is(input, select, button, small, label, p, [role='option']) {
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+
+#root .new-account-modal :is(input, select) {
+  font-weight: 400 !important;
+}
+
+/* Consistent surfaces and spacing keep the form hierarchy clear. */
+.new-account-modal { border-radius: 10px; box-shadow: 0 24px 64px rgb(0 0 0 / 35%); }
+.new-account-form, .new-account-details-grid { gap: 20px; }
+.new-account-security-section { padding-left: 20px; border-left: 1px solid var(--border); background: transparent; }
+.new-account-modal .ui-input, .new-account-modal .ui-select { border-radius: 5px; background: var(--surface-2); }
+.new-account-modal-footer .ui-btn { min-height: 30px; min-width: 72px; justify-content: center; }
+@media (max-width: 640px) {
+  .new-account-security-section { padding-left: 0; padding-top: 16px; border-left: 0; border-top: 1px solid var(--border); }
+}
 .new-account-result {
   display: flex;
   min-height: 310px;
@@ -4273,10 +4988,13 @@ h4 {
   cursor: pointer;
 }
 .account-details-tab:hover { color: var(--text); background: var(--surface-2); }
-.account-details-tab.is-active { color: var(--accent-text); }
-.account-details-tab.is-active::after { content: ''; position: absolute; left: 11px; right: 11px; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+.account-details-window .account-details-tab { border: 1px solid transparent; box-shadow: none; }
+.account-details-window .account-details-tab.is-active,
+.account-details-window .account-details-tab:focus-visible { border-color: var(--accent); background: transparent; box-shadow: none; outline: none; }
+.account-details-tab.is-active { color: var(--text); }
 
 .account-details-content { gap: 20px; padding: 20px; background: var(--bg); }
+body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connection, .manager-menu-connection) { display: none !important; }
 .account-details-status { display: flex; min-height: 30px; flex: 0 0 auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 10px !important; font-weight: 500; }
 .account-details-status.is-loading { background: var(--surface); color: var(--text-3); }
 .account-details-status.is-error { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger-text); }
@@ -4301,21 +5019,26 @@ h4 {
 .account-overview-timestamps { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.3; }
 .account-overview-timestamps > span { font-size: 10px !important; font-weight: 400; }
 
-.account-personal-tab { display: flex; width: 100%; margin: 0; flex-direction: column; gap: 12px; padding: 2px 4px 2px 0; }
+.account-personal-tab { display: flex; width: 100%; margin: 0; flex-direction: column; gap: 16px; padding: 0; }
+.account-personal-intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-personal-intro h2 { margin: 0; font-size: 15px !important; font-weight: 600; color: var(--text); }
+.account-personal-intro p { margin: 4px 0 0; font-size: 11px !important; color: var(--text-3); }
+.account-personal-account-ref { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 .account-personal-section { flex: 0 0 auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
 .account-personal-section-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-2); }
 .account-personal-section-header h3 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; line-height: 1.35; }
 .account-personal-section-header p { margin: 2px 0 0; color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.35; }
-.account-personal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 180px)); justify-content: start; gap: 10px 12px; }
+.account-personal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
 .account-personal-grid-three { grid-template-columns: repeat(3, minmax(0, 180px)); }
-.account-personal-span-full { grid-column: span 2; }
-.account-personal-field { display: flex; min-width: 0; width: 100%; max-width: 180px; flex-direction: column; gap: 4px; }
-.account-personal-field.account-personal-span-full { max-width: 372px; }
+.account-personal-span-full { grid-column: 1 / -1; }
+.account-personal-field { display: flex; min-width: 0; width: 100%; flex-direction: column; gap: 6px; }
+.account-personal-field.account-personal-span-full { max-width: none; }
 .account-personal-field > span { color: var(--text-3); font-size: 10px !important; font-weight: 500; line-height: 1.3; }
 .account-personal-field > :is(input, select) { width: 100%; height: 28px; min-height: 28px; padding: 0 9px !important; border: 1px solid var(--border-3) !important; border-radius: var(--radius-md) !important; background: var(--surface-2) !important; color: var(--text) !important; font-size: 12px !important; font-weight: 500; line-height: 1.35; outline: none; transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease; }
 .account-personal-field > select { padding-right: 28px !important; }
 .account-personal-field > :is(input, select):hover { border-color: var(--muted) !important; }
-.account-personal-field > :is(input, select):focus { border-color: var(--accent) !important; background: var(--surface) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
+.account-personal-field > :is(input, select):focus { border-color: var(--accent) !important; background: var(--surface) !important; box-shadow: none; }
+.account-details-window .account-personal-field > :is(input, select) { height: 32px; min-height: 32px; border-radius: 4px !important; font-weight: 400; }
 .account-personal-field > input[readonly] { cursor: default; border-color: var(--border) !important; background: var(--surface-3) !important; color: var(--text-3) !important; font-weight: 400; }
 
 /* Keep the Account form compact instead of stretching controls across the dialog. */
@@ -4459,18 +5182,24 @@ h4 {
 .account-deposit-actions > button:hover:not(:disabled) { border-color: var(--accent-hover); background: var(--accent-hover); box-shadow: var(--shadow-sm); }
 .account-deposit-actions > button:disabled { cursor: not-allowed; opacity: .5; box-shadow: none; }
 
-.account-details-content.is-overview { min-height: 0; overflow: hidden !important; }
-.account-positions-card { min-height: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
-.account-positions-table-shell { display: flex; min-width: 0; min-height: 0; flex: 1 1 0; flex-direction: column; overflow-x: auto; overflow-y: hidden; }
+.account-details-content.is-overview { min-height: 0; gap: 12px; padding-top: 14px; padding-bottom: 14px; overflow: auto !important; }
+.is-overview .account-overview-summary { flex-shrink: 0; padding-bottom: 12px; }
+.is-overview .account-overview-details { margin-top: 12px; }
+.is-overview .account-overview-timestamps { margin-top: 10px; }
+.account-positions-card { min-height: 272px; flex-shrink: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
+.account-positions-table-shell { min-width: 0; min-height: 138px; flex: 1 1 0; overflow: auto; scrollbar-gutter: stable; }
 .account-positions-grid { display: grid; grid-template-columns: minmax(88px, 1.3fr) 58px 68px 80px 80px 80px 88px 62px minmax(64px, 1fr) 76px; min-width: 744px; }
-.account-positions-header { flex: 0 0 auto; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-3); font-size: var(--account-ui-small); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.account-positions-header { position: sticky; top: 0; z-index: 1; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-3); font-size: var(--account-ui-small); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .account-positions-header > div { padding: 11px 12px !important; border-right: 0 !important; }
-.account-positions-body { min-width: 744px; min-height: 0; flex: 1 1 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
-.account-positions-row { border-bottom: 1px solid var(--border-2); background: var(--surface); font-size: var(--account-ui-base); }
+.account-positions-body { min-width: 744px; }
+.account-positions-row { min-height: 46px; align-items: center; border-bottom: 1px solid var(--border-2); background: var(--surface); font-size: var(--account-ui-base); }
 .account-positions-row:hover { background: var(--accent-soft-2); }
-.account-positions-row > div { padding: 12px !important; border-right: 0 !important; }
+.account-positions-row > div { min-width: 0; padding: 7px 12px !important; border-right: 0 !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .account-positions-grid [title*="Double-click"] { background: transparent !important; border: 0 !important; border-radius: 0 !important; }
 .account-positions-empty { display: grid; width: 100%; height: 100%; min-height: 0; place-items: center; padding: 16px 24px; color: var(--text-3); font-size: var(--account-ui-base); text-align: center; }
+.account-positions-card:has(.account-positions-empty) { flex: 0 0 auto; min-height: 0; }
+.account-positions-table-shell:has(.account-positions-empty) { flex: 0 0 auto; min-height: 0; }
+.account-positions-body > .account-positions-empty { height: auto; min-height: 56px; }
 .account-positions-state { display: flex; width: 100%; height: 100%; min-height: 0; align-items: center; justify-content: center; gap: 10px; padding: 16px 24px; color: var(--text-3); font-size: var(--account-ui-base); font-weight: 500; text-align: center; }
 .account-positions-state-content { display: inline-flex; align-items: center; gap: 8px; }
 .account-positions-state.is-loading svg { color: var(--accent-text); }
@@ -4499,6 +5228,7 @@ h4 {
 .account-position-close-button:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
 .account-position-close-button:disabled { cursor: not-allowed; opacity: .45; }
 .account-balance-summary {
+  flex-shrink: 0;
   overflow: hidden;
   border-top: 1px solid var(--border);
   background: var(--surface);
@@ -4605,6 +5335,10 @@ h4 {
 .account-settings-tab,
 .account-security-tab,
 .account-history-tab { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 14px; overflow-y: auto; }
+.account-trading-settings > * { flex-shrink: 0; }
+.account-trading-settings { padding-right: 4px; scrollbar-gutter: stable; }
+.account-trading-settings .account-settings-grid { gap: 10px 14px; padding: 12px 14px; }
+.account-trading-settings .account-section-heading > div { min-width: 0; }
 .account-section-heading { display: flex; min-height: 42px; align-items: center; gap: 10px; }
 .account-section-heading-icon { display: inline-flex; width: 34px; height: 34px; flex: 0 0 34px; align-items: center; justify-content: center; border: 1px solid var(--accent-border); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-text); }
 .account-section-heading > div:nth-child(2) { min-width: 0; }
@@ -4636,6 +5370,47 @@ h4 {
 .account-risk-preview > span { color: var(--ok-text); font-size: 10px !important; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .account-risk-preview > strong { color: var(--text); font-size: 12px !important; font-weight: 600; }
 .account-risk-preview > small { color: var(--text-3); font-size: 10px !important; }
+.account-limits-tab { gap: 18px; padding-right: 4px; }
+.account-transaction-tab { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px; }
+.account-transaction-card { flex-shrink: 0; width: min(500px, 100%); margin: auto; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.account-transaction-header { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.account-transaction-header h2 { color: var(--text); font-size: 12px !important; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.account-transaction-body { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.account-transaction-balance { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; color: var(--text-2); font-size: 11px; }
+.account-transaction-body label { color: var(--text-3); font-size: 11px !important; font-weight: 400; }
+.account-transaction-types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); }
+.account-transaction-types button { border: 1px solid transparent; border-radius: 3px; color: var(--text-3); background: transparent; font-weight: 400; }
+.account-transaction-types button.is-selected { border-color: var(--accent); color: var(--accent-text); background: var(--surface); box-shadow: none; }
+.account-transaction-body input { height: 32px; min-height: 32px; border: 1px solid var(--border-3) !important; border-radius: 4px !important; background: var(--surface-2) !important; color: var(--text) !important; font-size: 11px !important; font-weight: 400; }
+.account-transaction-body input::placeholder { color: var(--text-3) !important; opacity: 1; }
+.account-transaction-body input:focus { border-color: var(--accent) !important; box-shadow: none !important; }
+.account-transaction-body .account-transaction-submit { align-self: flex-end; min-width: 90px; min-height: 32px; margin-top: 4px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 500; box-shadow: none; cursor: pointer; }
+.account-transaction-body .account-transaction-submit:disabled { opacity: .45; cursor: not-allowed; }
+.account-trade-workspace { display: grid; grid-template-columns: minmax(240px, 0.85fr) minmax(380px, 1.25fr); gap: 12px; flex: 1; min-height: 0; padding: 4px; overflow: auto; color: var(--text); }
+.account-trade-workspace .account-trade-chart { width: auto; min-height: 320px; border-color: var(--border); box-shadow: none; }
+.account-trade-workspace .account-trade-order { min-width: 0; min-height: 0; overflow-y: auto; padding: 12px; border-color: var(--border); box-shadow: none; }
+.account-trade-workspace :is(input, select) { font-size: 11px !important; font-weight: 400 !important; color: var(--text); }
+.account-trade-workspace .font-extrabold, .account-trade-workspace .font-bold { font-weight: 500; }
+.account-trade-workspace .shadow-md { box-shadow: none; }
+@media (max-width: 760px) { .account-trade-workspace { grid-template-columns: 1fr; } .account-trade-workspace .account-trade-order { height: auto; overflow: visible; } }
+.account-limits-tab > * { flex-shrink: 0; }
+.account-limits-tab .account-section-heading h2 { font-size: 15px !important; }
+.account-limits-tab .account-section-heading p { margin-top: 5px; font-size: 11px !important; }
+.account-limits-tab .account-risk-card { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.account-limits-tab .account-risk-grid { padding: 16px 20px; gap: 24px; }
+.account-limits-tab .account-settings-field { gap: 8px; }
+.account-limits-tab .account-settings-field > span { font-size: 11px !important; font-weight: 500; }
+.account-limits-tab .account-percent-field { height: 32px; border-radius: 4px; background: var(--surface-2); }
+.account-limits-tab .account-percent-field > input { min-width: 0; height: 30px; min-height: 30px; background: transparent !important; font-size: 10px !important; font-weight: 400; font-variant-numeric: tabular-nums; }
+.account-limits-tab .account-percent-field:focus-within { box-shadow: none; }
+.account-limits-tab .account-risk-preview { padding: 10px 20px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--surface-2); gap: 8px; }
+.account-limits-tab .account-risk-preview > span { color: var(--text-3); font-weight: 500; }
+.account-limits-tab .account-risk-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; }
+.account-limits-tab .account-risk-preview dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.account-limits-tab .account-risk-preview dt { color: var(--text-3); font-size: 11px; }
+.account-limits-tab .account-risk-preview dd { margin: 0; color: var(--text); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.account-limits-tab .account-settings-note { flex-direction: column; gap: 4px; border-color: var(--border); background: transparent; padding: 10px 16px; color: var(--text-3); }
+.account-limits-tab .account-settings-note strong { color: var(--text-2); font-size: 11px; font-weight: 500; }
 
 .account-security-list { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .account-security-card { display: grid; grid-template-columns: minmax(180px, .75fr) minmax(430px, 1.4fr); align-items: center; gap: 18px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }

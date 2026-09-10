@@ -51,14 +51,22 @@ export const normalizeAccount = (account) => {
     'balanceValue', 'BalanceValue', 'currentBalance', 'CurrentBalance',
   ]);
   const name = firstPresent(sources, ['Name', 'name', 'accountName', 'AccountName', 'username', 'Username']);
+  const group = firstPresent(sources, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
 
   return {
     ...source,
+    ...(group !== undefined ? { group: String(group).trim() } : {}),
     login: login === undefined || login === null ? '' : String(login).trim(),
     Name: name || [source.FirstName || source.firstName, source.LastName || source.lastName].filter(Boolean).join(' ') || '',
     balance,
     MarginCallLevel: source.marginLevel || source.MarginLevel || source.MarginCallLevel,
   };
+};
+
+export const getSidebarAccountType = (account = {}) => {
+  const group = String(account.group ?? account.Group ?? account.accountGroup ?? account.AccountGroup ?? '').trim();
+  if (!group) return null;
+  return /demo/i.test(group) ? 'demo' : 'real';
 };
 
 export const normalizeSidebarAccountPage = (page) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Minus, Square, User, PlusSquare, MinusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, SlidersHorizontal, WalletCards } from 'lucide-react';
+import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionUpdateLogin, subscribeToPositionSync } from '../../services/positionSync';
@@ -7,6 +7,7 @@ import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import AccountTradeTab from './AccountTradeTab';
+import DepositDialog from './DepositDialog';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
 import { closeManagerPosition } from '../../services/managerTradeApi';
@@ -34,12 +35,6 @@ const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
 });
 const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 5_000;
 
-const TRANSACTION_LABELS = Object.freeze({
-  deposit: 'Deposit',
-  withdraw: 'Withdraw',
-  credit: 'Credit',
-  transfer: 'Transfer',
-});
 
 const pendingAccountDetailsRequests = new Map();
 
@@ -292,11 +287,18 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [depositAmount, setDepositAmount] = useState('');
   const [depositComment, setDepositComment] = useState('');
-  const [transactionType, setTransactionType] = useState('deposit');
-  const [transferLogin, setTransferLogin] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositSuccess, setDepositSuccess] = useState(null);
+  const [depositConfirmation, setDepositConfirmation] = useState(null);
+  const depositConfirmationRef = useRef(null);
+  useEffect(() => () => depositConfirmationRef.current?.(false), []);
+  const finishDepositConfirmation = (confirmed) => {
+    const resolve = depositConfirmationRef.current;
+    depositConfirmationRef.current = null;
+    setDepositConfirmation(null);
+    resolve?.(confirmed);
+  };
 
   const [positions, setPositions] = useState(() => initialPositions || []);
   const [positionsLoading, setPositionsLoading] = useState(() => initialPositions === undefined);
@@ -329,7 +331,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   });
   const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
   const [isMaximized, setIsMaximized] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
   const [preMaxState, setPreMaxState] = useState({ x: 0, y: 0, w: 0, h: 0 });
 
   const handleHeaderMouseDown = (e) => {
@@ -359,7 +360,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handleResizeMouseDown = (e, edge) => {
-    if (isMaximized || isMinimized) return;
+    if (isMaximized) return;
     e.preventDefault();
     e.stopPropagation();
     let startX = e.clientX;
@@ -409,7 +410,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const toggleMaximize = () => {
-    if (isMinimized) setIsMinimized(false);
     if (!isMaximized) {
       setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
       setIsMaximized(true);
@@ -437,11 +437,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     window.addEventListener('resize', keepPopupVisible);
     return () => window.removeEventListener('resize', keepPopupVisible);
   }, [size]);
-
-  const toggleMinimize = () => {
-    if (isMaximized) setIsMaximized(false);
-    setIsMinimized(!isMinimized);
-  };
 
   const requireTradeMutationPermission = () => {
     if (canManipulateTrades) return true;
@@ -846,48 +841,34 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       return;
     }
 
-    const parsedTransferLogin = Number(transferLogin);
-    if (transactionType === 'transfer' &&
-        (!Number.isSafeInteger(parsedTransferLogin) || parsedTransferLogin <= 0)) {
-      setDepositError('Enter a valid destination account login.');
-      return;
-    }
-    if (transactionType === 'transfer' && parsedTransferLogin === parsedLogin) {
-      setDepositError('The destination account must be different from the source account.');
-      return;
-    }
-
-    const transactionLabel = TRANSACTION_LABELS[transactionType];
-    const targetDescription = transactionType === 'transfer'
-      ? ` from ${parsedLogin} to ${parsedTransferLogin}`
-      : ` for account ${parsedLogin}`;
-    if (!window.confirm(`${transactionLabel} ${amountVal}${targetDescription}?`)) return;
+    if (depositConfirmationRef.current || isDepositing) return;
+    const confirmed = await new Promise((resolve) => {
+      depositConfirmationRef.current = resolve;
+      setDepositConfirmation(`Deposit ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} into account #${parsedLogin}?`);
+    });
+    if (!confirmed) return;
 
     setIsDepositing(true);
     setDepositError(null);
     setDepositSuccess(null);
 
     try {
-      const accountFields = transactionType === 'transfer'
-        ? { from_login: parsedLogin, to_login: parsedTransferLogin }
-        : { login: parsedLogin };
-      const result = await submitManagerTransaction(transactionType, {
-        ...accountFields,
+      const result = await submitManagerTransaction('deposit', {
+        login: parsedLogin,
         amount: amountVal,
         comment: depositComment.trim(),
       });
 
       if (result && typeof result === 'object' && (result.success === false || result.ok === false)) {
-        throw new Error(result.error || result.message || `${transactionLabel} failed`);
+        throw new Error(result.error || result.message || 'Deposit failed');
       }
 
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      setDepositSuccess(responseMessage || `${transactionLabel} transaction submitted successfully.`);
+      setDepositSuccess(responseMessage || 'Deposit submitted successfully.');
       setDepositAmount('');
       setDepositComment('');
-      if (transactionType === 'transfer') setTransferLogin('');
       onAccountUpdated?.(loginId);
 
       // Do not wait for the next grid/websocket interval after the backend has
@@ -982,16 +963,17 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         position: 'fixed',
         left: isMaximized ? 0 : position.x,
         top: isMaximized ? 0 : position.y,
-        width: isMaximized ? '100vw' : (isMinimized ? 300 : size.width),
-        height: isMaximized ? '100vh' : (isMinimized ? 32 : size.height),
+        width: isMaximized ? '100vw' : size.width,
+        height: isMaximized ? '100vh' : size.height,
         zIndex: 100000
       }}
       className="account-details-window legacy-popup flex flex-col shadow-2xl rounded-xl font-sans select-none overflow-hidden"
+      data-maximized={isMaximized}
       role="dialog"
       aria-modal="true"
       aria-label={`Account details for ${loginId}`}
     >
-      {!isMaximized && !isMinimized && (
+      {!isMaximized && (
         <>
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'left')} className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10 -ml-0.5" />
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'right')} className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10" />
@@ -1006,17 +988,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         className="account-details-titlebar flex items-center justify-between cursor-move flex-shrink-0"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <User size={16} className="account-details-title-icon shrink-0" />
           <span className="account-details-title truncate">{titleText}</span>
         </div>
         <div className="account-details-window-controls ml-2 shrink-0">
-          <button type="button" onClick={toggleMinimize} aria-label="Minimize account details"><Minus size={15} /></button>
-          <button type="button" onClick={toggleMaximize} aria-label="Maximize account details"><Square size={13} /></button>
+          <button type="button" onClick={toggleMaximize} aria-label={isMaximized ? 'Restore account details' : 'Maximize account details'}><Square size={13} /></button>
           <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={16} /></button>
         </div>
       </div>
 
-      {!isMinimized && (
         <>
           {/* Tab Bar */}
           <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections">
@@ -1108,7 +1087,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <div className="p-3 text-center">Action</div>
                     </div>
 
-                    {/* Only this body scrolls when the account has many positions. */}
+                    {/* Header and rows share one scroll area to keep columns aligned. */}
                     <div className="account-positions-body custom-scrollbar">
                     {(() => {
                       const displayPositions = targetTicket ? positions.filter(p => p.position === targetTicket) : positions;
@@ -1167,7 +1146,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             className="account-positions-grid account-positions-row cursor-pointer transition-colors group"
                           >
                             <div className="p-2 px-3 border-r border-[var(--border)] flex items-center gap-2 text-[var(--text)] font-medium">
-                              <MinusSquare size={12} className="text-blue-500" />
                               {pos.symbol}
                             </div>
                             <div className={`p-2 px-3 border-r border-[var(--border)] text-[11px] uppercase font-bold ${pos.type === 'buy' ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
@@ -1224,15 +1202,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   <div className="account-balance-summary mt-auto" role="group" aria-label="Account financial snapshot">
                     <div className="account-balance-summary-header">
                       <div className="account-balance-summary-title">
-                        <span className="account-balance-summary-icon" aria-hidden="true">
-                          <WalletCards size={13} />
-                        </span>
                         <span>Financial snapshot</span>
                       </div>
-                      <span className="account-balance-summary-status">
-                        <RefreshCw size={11} aria-hidden="true" />
-                        Refreshes every 15s
-                      </span>
                     </div>
                     <dl className="account-balance-metrics">
                       {financialSnapshot.map(({ label, value, tone }) => (
@@ -1320,109 +1291,54 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 </div>
               </div>
             ) : activeTab === 'Personal' ? (
-              <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar text-[13px] font-sans">
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Name:</span>
-                  <input type="text" value={getValue('FirstName', fullNameValue)} onChange={(e) => handleInputChange('FirstName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_1fr_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Last name:</span>
-                  <input type="text" value={getValue('LastName')} onChange={(e) => handleInputChange('LastName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Middle name:</span>
-                  <input type="text" value={getValue('MiddleName')} onChange={(e) => handleInputChange('MiddleName', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Company:</span>
-                  <input type="text" value={getValue('Company')} onChange={(e) => handleInputChange('Company', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Registered:</span>
-                  <div className="flex w-full">
-                    <input type="text" readOnly value={formatDate(registrationValue)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-l-sm px-2 text-gray-500 focus:outline-none flex-1 border-r-0 cursor-not-allowed" />
-                    <button className="h-[22px] bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-r-sm px-1 flex items-center justify-center hover:bg-[#3e3e42]"><Square size={12} className="text-[#3794ff]" /></button>
-                  </div>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right opacity-0">-</span>
-                  <span></span>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Language:</span>
-                  <select value={languageValue} onChange={(e) => handleInputChange('Language', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none">
-                    {!LANGUAGE_OPTIONS.includes(languageValue) && (
-                      <option value={languageValue}>{languageValue}</option>
-                    )}
-                    {LANGUAGE_OPTIONS.map((l) => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Status:</span>
-                  <select 
-                    value={String(getValue('Status', statusValue)).toLowerCase()} 
-                    onChange={(e) => handleInputChange('Status', e.target.value)}
-                    className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-1 text-gray-800 dark:text-gray-200 focus:outline-none w-full appearance-none"
-                  >
-                    <option value="active">Active</option>
-                    <option value="disabled">Disabled</option>
-                    <option value="readonly">Read-only</option>
-                  </select>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">ID number:</span>
-                  <input type="text" value={getValue('IDNumber')} onChange={(e) => handleInputChange('IDNumber', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Lead campaign:</span>
-                  <input type="text" value={getValue('LeadCampaign')} onChange={(e) => handleInputChange('LeadCampaign', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">MetaQuotes ID:</span>
-                  <div className="flex gap-2 w-full">
-                    <input type="text" value={getValue('MQID')} onChange={(e) => handleInputChange('MQID', e.target.value)} className="h-[22px] flex-1 bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none" />
-                    <button className="h-[22px] px-2 bg-[#2d2d30] border border-gray-300 dark:border-gray-600 rounded-sm hover:bg-[#3e3e42] flex items-center justify-center text-[10px] whitespace-nowrap">&gt;&gt;</button>
-                  </div>
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Lead source:</span>
-                  <input type="text" value={getValue('LeadSource')} onChange={(e) => handleInputChange('LeadSource', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Email:</span>
-                  <input type="text" value={getValue('Email')} onChange={(e) => handleInputChange('Email', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Phone:</span>
-                  <input type="text" value={getValue('Phone')} onChange={(e) => handleInputChange('Phone', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-[200px]" />
-                </div>
-
-                <div className="grid grid-cols-[110px_200px_110px_1fr] items-center gap-x-2 gap-y-2 mb-2">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Country:</span>
-                  <input type="text" value={getValue('Country')} onChange={(e) => handleInputChange('Country', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">State:</span>
-                  <input type="text" value={getValue('State')} onChange={(e) => handleInputChange('State', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">City:</span>
-                  <input type="text" value={getValue('City')} onChange={(e) => handleInputChange('City', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Zip code:</span>
-                  <input type="text" value={getValue('ZipCode')} onChange={(e) => handleInputChange('ZipCode', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2 mb-6">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Address:</span>
-                  <input type="text" value={getValue('Address')} onChange={(e) => handleInputChange('Address', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-                </div>
-
-                <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2">
-                  <span className="text-gray-700 dark:text-gray-300 text-right">Comment:</span>
-                  <input type="text" value={getValue('Comment')} onChange={(e) => handleInputChange('Comment', e.target.value)} className="h-[22px] bg-[#1a1b1f] border border-gray-300 dark:border-gray-600 rounded-sm px-2 text-gray-800 dark:text-gray-200 focus:outline-none w-full" />
-                </div>
-
+              <div className="account-personal-tab">
+                <header className="account-personal-intro">
+                  <div><h2>Personal details</h2><p>Identity, contact information and account preferences.</p></div>
+                  <span className="account-personal-account-ref">#{loginId}</span>
+                </header>
+                {[
+                  { title: 'Identity', description: 'Account holder information', fields: [
+                    ['FirstName', 'First name', fullNameValue], ['LastName', 'Last name'], ['MiddleName', 'Middle name'],
+                    ['Company', 'Company'], ['IDNumber', 'ID number'], ['MQID', 'MetaQuotes ID'],
+                  ] },
+                  { title: 'Contact & address', description: 'Contact details and location', fields: [
+                    ['Email', 'Email address'], ['Phone', 'Phone number'], ['Country', 'Country'],
+                    ['State', 'State / province'], ['City', 'City'], ['ZipCode', 'Postal code'],
+                    ['Address', 'Street address', '', 'wide'],
+                  ] },
+                  { title: 'Account information', description: 'Preferences and registration', fields: [
+                    ['Language', 'Language', '', 'language'], ['Status', 'Status', '', 'status'],
+                    ['Registered', 'Registered', '', 'registered'],
+                    ['LeadCampaign', 'Lead campaign'], ['LeadSource', 'Lead source'], ['Comment', 'Comment'],
+                  ] },
+                ].map(({ title, description, fields }) => (
+                  <section className="account-personal-section" key={title}>
+                    <div className="account-personal-section-header"><h3>{title}</h3><p>{description}</p></div>
+                    <div className="account-personal-grid">
+                      {fields.map(([key, label, fallback = '', kind]) => (
+                        <label className={'account-personal-field' + (kind === 'wide' ? ' account-personal-span-full' : '')} key={key}>
+                          <span>{label}</span>
+                          {kind === 'language' ? (
+                            <select value={languageValue} onChange={(e) => handleInputChange('Language', e.target.value)}>
+                              {!LANGUAGE_OPTIONS.includes(languageValue) && <option value={languageValue}>{languageValue}</option>}
+                              {LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}
+                            </select>
+                          ) : kind === 'status' ? (
+                            <select value={String(getValue('Status', statusValue)).toLowerCase()} onChange={(e) => handleInputChange('Status', e.target.value)}>
+                              <option value="active">Active</option><option value="disabled">Disabled</option><option value="readonly">Read-only</option>
+                            </select>
+                          ) : (
+                            <input type="text" readOnly={kind === 'registered'} value={kind === 'registered' ? formatDate(registrationValue) : getValue(key, fallback)} onChange={kind === 'registered' ? undefined : (e) => handleInputChange(key, e.target.value)} />
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                ))}
               </div>
             ) : activeTab === 'Account' ? (
-              <div className="account-settings-tab">
+              <div className="account-settings-tab account-trading-settings custom-scrollbar">
                 <div className="account-section-heading">
-                  <div className="account-section-heading-icon"><WalletCards size={16} /></div>
                   <div>
                     <h2>Trading configuration</h2>
                     <p>Review the account profile and update supported trading settings.</p>
@@ -1472,9 +1388,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 </div>
               </div>
             ) : activeTab === 'Limits' ? (
-              <div className="account-settings-tab">
+              <div className="account-settings-tab account-limits-tab custom-scrollbar">
                 <div className="account-section-heading">
-                  <div className="account-section-heading-icon"><SlidersHorizontal size={16} /></div>
                   <div>
                     <h2>Risk thresholds</h2>
                     <p>Configure the server-enforced margin protection levels for this account.</p>
@@ -1486,7 +1401,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     <label className="account-settings-field">
                       <span>Margin call level</span>
                       <div className="account-percent-field">
-                        <input type="number" min="0" max="10000" step="0.01" value={getValue('MarginCallLevel', '100') ?? ''} onChange={(event) => handleInputChange('MarginCallLevel', event.target.value)} />
+                        <input aria-label="Margin call level" type="number" min="0" max="10000" step="0.01" value={getValue('MarginCallLevel', '100') ?? ''} onChange={(event) => handleInputChange('MarginCallLevel', event.target.value)} />
                         <span>%</span>
                       </div>
                       <small>Warning threshold shown to managers.</small>
@@ -1494,22 +1409,24 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     <label className="account-settings-field">
                       <span>Stop out level</span>
                       <div className="account-percent-field">
-                        <input type="number" min="0" max="10000" step="0.01" value={getValue('StopOutLevel', '50') ?? ''} onChange={(event) => handleInputChange('StopOutLevel', event.target.value)} />
+                        <input aria-label="Stop out level" type="number" min="0" max="10000" step="0.01" value={getValue('StopOutLevel', '50') ?? ''} onChange={(event) => handleInputChange('StopOutLevel', event.target.value)} />
                         <span>%</span>
                       </div>
                       <small>Liquidation threshold enforced by the server.</small>
                     </label>
                   </div>
                   <div className="account-risk-preview">
-                    <span>Current policy</span>
-                    <strong>{getValue('MarginCallLevel', '100')}% margin call</strong>
-                    <small>{getValue('StopOutLevel', '50')}% stop out</small>
+                    <span>Threshold preview</span>
+                    <dl>
+                      <div><dt>Margin call</dt><dd>{getValue('MarginCallLevel', '100') || '—'}%</dd></div>
+                      <div><dt>Stop out</dt><dd>{getValue('StopOutLevel', '50') || '—'}%</dd></div>
+                    </dl>
                   </div>
                 </section>
 
                 <div className="account-settings-note">
-                  <ShieldCheck size={15} />
-                  <span>Trading permissions, reporting, API access, and order caps are inherited from the assigned group. This panel only shows controls supported by the account update API.</span>
+                  <strong>Group settings</strong>
+                  <span>Trading permissions, reporting, API access and order limits are inherited from the assigned group.</span>
                 </div>
               </div>
             ) : activeTab === 'Trade' ? (
@@ -1613,78 +1530,35 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 </div>
               </div>
             ) : activeTab === 'Balance' ? (
-              <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar text-[13px] font-['Inter',sans-serif]">
-                <div className="max-w-[500px] mx-auto bg-white/60 dark:bg-purple-900/10 backdrop-blur-xl border border-white/50 dark:border-purple-500/20 shadow-2xl shadow-purple-500/10 rounded-2xl overflow-hidden">
-                  <div className="h-10 bg-white/40 dark:bg-purple-800/30 border-b border-white/50 dark:border-purple-500/20 flex items-center px-4 select-none">
-                    <h2 className="text-[12px] font-bold text-purple-800 dark:text-purple-200 tracking-wide uppercase">
-                      Account Transaction
+              <div className="account-transaction-tab custom-scrollbar">
+                <div className="account-transaction-card">
+                  <div className="account-transaction-header">
+                    <h2 className="text-[12px] font-bold   tracking-wide uppercase">
+                      Deposit funds
                     </h2>
                   </div>
 
-                  <div className="p-5 flex flex-col gap-4">
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-purple-100/50 dark:border-purple-500/20 bg-white/30 dark:bg-purple-950/20 px-3 py-2 text-[12px]">
-                      <span className="text-purple-900/70 dark:text-purple-200/70">Current balance</span>
-                      <span className="font-semibold tabular text-purple-900 dark:text-white">{balanceVal}</span>
+                  <div className="account-transaction-body">
+                    <div className="account-transaction-balance">
+                      <span className=" ">Current balance</span>
+                      <span className="font-semibold tabular  ">{balanceVal}</span>
                     </div>
                     {depositError && (
-                      <div className="p-3 bg-red-100/50 dark:bg-red-900/30 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl text-[12px]">
+                      <div className="p-3 bg-red-100/50 dark:bg-red-900/30  border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-md text-[12px]">
                         {depositError}
                       </div>
                     )}
                     {depositSuccess && (
-                      <div className="p-3 bg-blue-100/50 dark:bg-blue-900/30 backdrop-blur-sm border border-blue-200/50 dark:border-blue-800/50 text-blue-800 dark:text-blue-300 rounded-xl text-[12px]">
+                      <div className="p-3 bg-blue-100/50 dark:bg-blue-900/30  border border-blue-200/50 dark:border-blue-800/50 text-blue-800 dark:text-blue-300 rounded-md text-[12px]">
                         {depositSuccess}
                       </div>
                     )}
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Transaction type</label>
-                      <div className="grid grid-cols-4 gap-1 rounded-xl border border-purple-100/60 dark:border-purple-500/20 bg-white/25 dark:bg-purple-950/20 p-1">
-                        {Object.entries(TRANSACTION_LABELS).map(([type, label]) => (
-                          <button
-                            key={type}
-                            type="button"
-                            onClick={() => {
-                              setTransactionType(type);
-                              setDepositError(null);
-                              setDepositSuccess(null);
-                            }}
-                            disabled={isDepositing}
-                            className={`h-8 rounded-lg text-[11px] font-medium transition-colors ${transactionType === type
-                              ? 'bg-purple-600 text-white shadow-sm'
-                              : 'text-purple-900/70 hover:bg-purple-100/70 dark:text-purple-200/70 dark:hover:bg-purple-800/40'}`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {transactionType === 'transfer' && (
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="transaction-destination-login" className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Destination account login *</label>
-                        <input
-                          id="transaction-destination-login"
-                          type="number"
-                          value={transferLogin}
-                          onChange={(event) => {
-                            setTransferLogin(event.target.value);
-                            setDepositError(null);
-                            setDepositSuccess(null);
-                          }}
-                          placeholder="Account login"
-                          min="1"
-                          step="1"
-                          className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all placeholder-purple-400/60"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Amount *</label>
+                      <label htmlFor="transaction-amount" className="text-[12px] font-medium">Amount *</label>
                       <input
                         type="number"
-                        value={depositAmount}
+                        id="transaction-amount" value={depositAmount}
                         onChange={(e) => {
                           setDepositAmount(e.target.value);
                           setDepositError(null);
@@ -1693,12 +1567,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                         placeholder="Max 1,000,000"
                         min="0.01"
                         step="0.01"
-                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all placeholder-purple-400/60"
+                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
                       />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[12px] font-medium text-purple-900/80 dark:text-purple-200/80">Comment</label>
+                      <label className="text-[12px] font-medium  ">Comment</label>
                       <input
                         type="text"
                         value={depositComment}
@@ -1707,17 +1581,17 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                           setDepositError(null);
                           setDepositSuccess(null);
                         }}
-                        className="w-full h-9 bg-white/50 dark:bg-purple-950/30 backdrop-blur-sm border border-purple-100 dark:border-purple-500/30 rounded-xl px-3 text-[12px] text-purple-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition-all"
+                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all"
                       />
                     </div>
 
                     <button
                       onClick={handleTransaction}
-                      disabled={isDepositing || !depositAmount || !canManageFinances || (transactionType === 'transfer' && !transferLogin)}
+                      disabled={isDepositing || !depositAmount || !canManageFinances}
                       title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
-                      className="mt-4 px-6 h-9 self-end bg-purple-600/80 hover:bg-purple-600 dark:bg-purple-500/80 dark:hover:bg-purple-500 backdrop-blur-md border border-purple-400/50 text-white text-[12px] font-medium rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center"
+                      className="account-transaction-submit"
                     >
-                      {isDepositing ? 'Working...' : TRANSACTION_LABELS[transactionType]}
+                      {isDepositing ? 'Depositing...' : 'Deposit'}
                     </button>
                   </div>
                 </div>
@@ -1732,6 +1606,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Footer */}
+          {activeTab !== 'Overview' && (
           <div className="account-details-footer flex items-center justify-end flex-shrink-0">
             <div className="flex gap-2">
               <button type="button" onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
@@ -1742,8 +1617,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
               </button>
             </div>
           </div>
+          )}
         </>
-      )}
 
       {ctxMenu.isOpen && (
         <TradeContextMenu
@@ -1781,6 +1656,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         </div>
       )}
     </div>
+    {(depositConfirmation || isDepositing || depositSuccess || depositError) && (
+      <DepositDialog
+        status={depositConfirmation ? 'confirm' : isDepositing ? 'pending' : depositError ? 'error' : 'success'}
+        message={depositConfirmation || (isDepositing ? 'Waiting for the broker to confirm your deposit. Please do not submit it again.' : depositError || depositSuccess)}
+        onConfirm={() => finishDepositConfirmation(true)}
+        onDismiss={() => { finishDepositConfirmation(false); setDepositError(null); setDepositSuccess(null); }}
+      />
+    )}
     </>
   );
 };

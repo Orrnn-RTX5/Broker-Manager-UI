@@ -52,9 +52,9 @@ const TradingAccountsPage = () => {
   });
 
   return (
-    <div className="trading-accounts-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
-        <div className="flex items-center gap-2 shrink-0">
+    <div className="trading-accounts-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden" {...ctl.pageProps}>
+      <div className="trading-accounts-header flex flex-col md:flex-row items-start md:items-center justify-between pb-0 gap-2 shrink-0">
+        <div className="trading-accounts-heading flex items-center gap-2 min-w-0">
           <div>
             <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
             <p className="trading-accounts-subtitle" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>
@@ -78,7 +78,7 @@ const TradingAccountsPage = () => {
         </div>
       </div>
 
-      <div className="trading-accounts-search relative w-full max-w-xs">
+      <div className="trading-accounts-search relative w-full max-w-xs shrink-0">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
         <input
           type="text"

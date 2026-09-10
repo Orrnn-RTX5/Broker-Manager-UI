@@ -6,6 +6,13 @@ const GTA_PUBLIC_BACKEND_URL = 'https://fxtrustbrokerbackend.orrnn.com';
 const GTA_DIRECT_HOST = '103.91.186.142';
 const GTA_DIRECT_PORT = 8091;
 
+export const TEST_BROKER_PUBLIC_BACKEND_URL = 'https://fxtrustbrokerbackend.orrnn.com';
+export const TEST_BROKER_DIRECT_HOST = '100.120.168.28';
+export const TEST_BROKER_DIRECT_PORT = 8091;
+export const TEST_BROKER_WS_URL = 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed';
+export const TEST_BROKER_FEED_STATUS_URL = 'https://fxtrustbrokerbackend.orrnn.com/ws/feed/status';
+export const TEST_BROKER_DEFAULT_MT5_SERVER = '100.120.168.28';
+
 export const trimTrailingSlash = (value = '') => String(value || '').replace(/\/+$/, '');
 
 const hasProtocol = (value = '') => /^[a-z][a-z\d+.-]*:\/\//i.test(value);
@@ -168,6 +175,49 @@ const hasGtaMarker = (value = '') => {
   );
 };
 
+export const hasTestBrokerMarker = (value = '') => {
+  const text = String(value || '').toLowerCase().trim();
+  if (!text) return false;
+  return (
+    text === 'test' ||
+    text === 'test-broker' ||
+    text.includes('100.120.168.28') ||
+    text.includes('fxtrust') ||
+    text.includes('rtx5-local-test-broker') ||
+    text.includes('test broker')
+  );
+};
+
+export const isTestBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
+  const markerFields = [
+    'id',
+    'broker_id',
+    'slug',
+    'name',
+    'broker_name',
+    'server',
+    'server_handle',
+    'backend_url',
+    'api_url',
+    'server_url',
+    'web_backend_url',
+    'web_api_url',
+    'public_backend_url',
+    'public_api_url',
+    'desktop_backend_url',
+    'desktop_api_url',
+    'server_ip',
+    'host',
+    'ip',
+  ];
+
+  return (
+    markerFields.some((field) => hasTestBrokerMarker(getValue(brokerInfo, [field]))) ||
+    hasTestBrokerMarker(JSON.stringify(brokerInfo?.env || {})) ||
+    hasTestBrokerMarker(fallbackUrl)
+  );
+};
+
 const isGtaBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
   const markerFields = [
     'id',
@@ -278,6 +328,17 @@ const DIRECT_HOST_KEYS = ['server_ip', 'host', 'ip'];
 const DIRECT_PORT_KEYS = ['server_port', 'backend_port', 'api_port', 'port'];
 
 const resolveWebBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
+  if (isTestBrokerInfo(brokerInfo, fallbackUrl)) {
+    const explicitCandidates = [
+      ...WEB_BACKEND_KEYS.map((key) => getValue(brokerInfo, [key])),
+      ...WEB_BACKEND_DOMAIN_KEYS.map((key) => normalizeDomainCandidate(getValue(brokerInfo, [key]))),
+    ];
+    for (const candidate of explicitCandidates) {
+      const resolved = sanitizeWebBackendCandidate(candidate, brokerInfo, fallbackUrl);
+      if (resolved) return resolved;
+    }
+    return TEST_BROKER_PUBLIC_BACKEND_URL;
+  }
   if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) return GTA_PUBLIC_BACKEND_URL;
 
   const candidates = [
@@ -313,6 +374,16 @@ const resolveDesktopBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
   const explicitHost = hostnameFromUrl(normalizedExplicit);
   if (normalizedExplicit && hasGtaMarker(normalizedExplicit)) return GTA_PUBLIC_BACKEND_URL;
   if (normalizedExplicit && explicitHost && !isIpAddress(explicitHost)) return normalizedExplicit;
+
+  if (isTestBrokerInfo(brokerInfo, fallbackUrl)) {
+    if (normalizedExplicit && !hasGtaMarker(normalizedExplicit)) return normalizedExplicit;
+    const publicBackend = resolveBrokerPublicBackendUrl(brokerInfo, fallbackUrl);
+    if (publicBackend) return publicBackend;
+    const host = getValue(brokerInfo, DIRECT_HOST_KEYS) || TEST_BROKER_DIRECT_HOST;
+    const port = getValue(brokerInfo, DIRECT_PORT_KEYS, String(TEST_BROKER_DIRECT_PORT));
+    if (host) return buildDirectBackendUrl(host, port);
+    return TEST_BROKER_PUBLIC_BACKEND_URL;
+  }
 
   if (isGtaBrokerInfo(brokerInfo, fallbackUrl)) {
     return GTA_PUBLIC_BACKEND_URL;
@@ -499,6 +570,10 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
     if (resolvedExplicit) return buildWsEndpoint(resolvedExplicit, path);
   }
 
+  if (isTestBrokerInfo(brokerInfo, fallbackUrl)) {
+    return buildWsEndpoint(TEST_BROKER_WS_URL, path);
+  }
+
   const backendUrl = resolveBrokerBackendUrl(brokerInfo, fallbackUrl);
   const defaultProtocol = backendUrl.startsWith('https://') ? 'wss' : 'ws';
   return buildWsEndpoint(toWsUrl(backendUrl || fallbackUrl, defaultProtocol), path);
@@ -522,32 +597,47 @@ export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {
 export const resolveBrokerDefaultMt5Server = (brokerInfo = {}, backendUrl = '') => (
   getValue(brokerInfo, ['env.DEFAULT_MT5_SERVER', 'env.VITE_DEFAULT_MT5_SERVER', 'default_mt5_server', 'mt5_server']) ||
   getValue(brokerInfo, ['server_ip', 'host', 'ip']) ||
+  (isTestBrokerInfo(brokerInfo, backendUrl) ? TEST_BROKER_DEFAULT_MT5_SERVER : '') ||
   hostnameFromUrl(backendUrl) ||
   getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER'])
 );
 
 export const normalizeBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
   const source = brokerInfo || {};
-  const backendUrl = resolveBrokerBackendUrl(source, fallbackUrl);
-  const desktopUrl = resolveDesktopBackendUrl(source, fallbackUrl);
+  const isTest = isTestBrokerInfo(source, fallbackUrl);
+  const isGta = isGtaBrokerInfo(source, fallbackUrl);
+
+  const fallbackBackend = isTest
+    ? TEST_BROKER_PUBLIC_BACKEND_URL
+    : (isGta ? GTA_PUBLIC_BACKEND_URL : fallbackUrl);
+
+  const backendUrl = resolveBrokerBackendUrl(source, fallbackBackend);
+  const desktopUrl = resolveDesktopBackendUrl(source, fallbackBackend);
   const serverIp =
-    (isGtaBrokerInfo(source, fallbackUrl) ? GTA_DIRECT_HOST : getValue(source, DIRECT_HOST_KEYS)) ||
+    (isTest ? (getValue(source, DIRECT_HOST_KEYS) || TEST_BROKER_DIRECT_HOST) : (isGta ? GTA_DIRECT_HOST : getValue(source, DIRECT_HOST_KEYS))) ||
     hostnameFromUrl(desktopUrl || backendUrl);
   const serverPort =
-    (isGtaBrokerInfo(source, fallbackUrl) ? String(GTA_DIRECT_PORT) : getValue(source, DIRECT_PORT_KEYS)) ||
+    (isTest ? (getValue(source, DIRECT_PORT_KEYS) || String(TEST_BROKER_DIRECT_PORT)) : (isGta ? String(GTA_DIRECT_PORT) : getValue(source, DIRECT_PORT_KEYS))) ||
     portFromUrl(desktopUrl || backendUrl) ||
     String(DEFAULT_DIRECT_BACKEND_PORT);
 
   const normalized = {
     ...source,
-    broker_id: source.broker_id || source.id,
-    name: source.name || source.broker_name || source.broker_id || source.id,
+    broker_id: source.broker_id || source.id || (isTest ? 'TEST' : undefined),
+    name: source.name || source.broker_name || (isTest ? 'FXTrust / Test Broker' : source.broker_id || source.id),
     status: source.status || 'active',
     backend_url: backendUrl,
     api_url: backendUrl || source.api_url,
     server_ip: serverIp,
     server_port: Number(serverPort),
   };
+
+  if (isTest) {
+    if (!normalized.ws_url) normalized.ws_url = TEST_BROKER_WS_URL;
+    if (!normalized.feed_ws_url) normalized.feed_ws_url = TEST_BROKER_WS_URL;
+    if (!normalized.feed_status_url) normalized.feed_status_url = TEST_BROKER_FEED_STATUS_URL;
+    if (!normalized.default_mt5_server) normalized.default_mt5_server = TEST_BROKER_DEFAULT_MT5_SERVER;
+  }
 
   if (backendUrl && !isDesktopBackendTarget()) normalized.web_backend_url = backendUrl;
   if (desktopUrl) normalized.desktop_backend_url = desktopUrl;

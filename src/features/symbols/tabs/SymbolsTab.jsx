@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
 import {
   symbolManagementList, peekSymbolManagementData,
   symbolAdd, symbolUpdate, symbolEnable, symbolDisable, symbolClone,
 } from '../../../services/api';
 import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
+import { getSymbolTableWindow } from '../../../utils/symbolTableWindow.js';
 
 // ─── Add / Edit Modal ──────────────────────────────────────────────────────────
 const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) => {
@@ -258,7 +260,7 @@ const CloneModal = ({ categories, onClose, onSuccess }) => {
 };
 
 // ─── Main Tab ──────────────────────────────────────────────────────────────────
-const SymbolsTab = () => {
+const SymbolsTab = ({ actionsHost }) => {
   const initialData = useMemo(() => peekSymbolManagementData(), []);
   const [symbols, setSymbols] = useState(() => initialData?.symbols || []);
   const [categories, setCategories] = useState(() => initialData?.categories || []);
@@ -272,6 +274,22 @@ const SymbolsTab = () => {
   const [togglingSymbol, setTogglingSymbol] = useState(null);
   const hasSymbolsRef = useRef(Boolean(initialData?.symbols?.length));
   const mountedRef = useRef(true);
+  const tableRef = useRef(null);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 200 });
+
+  useEffect(() => {
+    const element = tableRef.current;
+    const observer = new ResizeObserver(() => {
+      setViewport(current => ({ ...current, height: element.clientHeight }));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    tableRef.current.scrollTop = 0;
+    setViewport(current => ({ ...current, scrollTop: 0 }));
+  }, [search, filterCategory, filterType, filterEnabled]);
 
   const load = useCallback(async ({ force = false, blocking = !hasSymbolsRef.current } = {}) => {
     if (blocking) setLoading(true);
@@ -341,11 +359,13 @@ const SymbolsTab = () => {
     });
   }, [symbols, search, filterCategory, filterType, filterEnabled]);
 
+  const rowWindow = getSymbolTableWindow(filtered.length, viewport.scrollTop, viewport.height);
+
   return (
-    <div className="h-full flex flex-col gap-3 overflow-hidden">
+    <div className="symbols-tab h-full min-h-0 flex flex-col gap-3 overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap shrink-0">
-        <div className="relative">
+      <div className="symbols-toolbar shrink-0">
+        <div className="symbols-search relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input className="ui-input ui-input-sm" style={{ paddingLeft: 30, width: 200 }} placeholder="Search symbols…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
@@ -363,23 +383,28 @@ const SymbolsTab = () => {
           <option value="enabled">Enabled</option>
           <option value="disabled">Disabled</option>
         </select>
-        <div className="flex-1" />
+      </div>
+        {actionsHost && createPortal(<>
         <button onClick={() => setModal('clone')} className="ui-btn ui-btn-secondary ui-btn-sm">
           <Copy size={13} /> Clone
         </button>
         <button onClick={() => { setEditTarget(null); setModal('add'); }} className="ui-btn ui-btn-primary ui-btn-sm">
           <Plus size={13} /> Add Symbol
         </button>
-      </div>
+        </>, actionsHost)}
 
       {/* Table */}
-      <div className="ui-card flex-1 overflow-auto">
+      <div ref={tableRef} className="symbols-table ui-card flex-1 min-h-0 overflow-auto"
+        onScroll={event => {
+          const scrollTop = event.currentTarget.scrollTop;
+          setViewport(current => current.scrollTop === scrollTop ? current : { ...current, scrollTop });
+        }}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-sm" style={{ color: 'var(--muted)' }}>
             <Loader2 size={16} className="animate-spin mr-2" /> Loading symbols…
           </div>
         ) : (
-          <table className="ui-grid w-full">
+          <table className="ui-grid w-full" aria-rowcount={filtered.length + 1}>
             <thead>
               <tr>
                 <th>Symbol</th>
@@ -394,10 +419,11 @@ const SymbolsTab = () => {
               </tr>
             </thead>
             <tbody>
+              {rowWindow.top > 0 && <tr aria-hidden="true"><td colSpan={9} style={{ height: rowWindow.top, padding: 0, border: 0 }} /></tr>}
               {filtered.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>No symbols found.</td></tr>
-              ) : filtered.map(s => (
-                <tr key={s.symbol}>
+              ) : filtered.slice(rowWindow.start, rowWindow.end).map((s, index) => (
+                <tr key={s.symbol} aria-rowindex={rowWindow.start + index + 2}>
                   <td className="symbol-name-cell" style={{ color: 'var(--accent-text)', fontWeight: 400 }}>
                     {s.symbol}
                     {s.symbolType === 'derived' && s.parentSymbol && (
@@ -447,6 +473,7 @@ const SymbolsTab = () => {
                   </td>
                 </tr>
               ))}
+              {rowWindow.bottom > 0 && <tr aria-hidden="true"><td colSpan={9} style={{ height: rowWindow.bottom, padding: 0, border: 0 }} /></tr>}
             </tbody>
           </table>
         )}

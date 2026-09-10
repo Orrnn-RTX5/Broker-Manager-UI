@@ -102,6 +102,27 @@ test('manager dev proxy is enabled only for local Vite development', () => {
   assert.equal(shouldUseManagerDevProxy(true, false), false);
 });
 
+test('manager dev proxy is enabled for VS Code / Dev Tunnels origins', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_MANAGER_USE_DEV_PROXY: 'true',
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      origin: 'https://9whxgxzq-5180.inc1.devtunnels.ms',
+      hostname: '9whxgxzq-5180.inc1.devtunnels.ms',
+    },
+  };
+
+  try {
+    assert.equal(shouldUseManagerDevProxy(true), true);
+    assert.equal(shouldUseFeedDevProxy(true), true);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test('manager dev proxy remains opt-in', () => {
   assert.equal(shouldUseManagerDevProxy(true, true), false);
 });

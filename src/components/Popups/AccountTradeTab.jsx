@@ -12,12 +12,18 @@ import {
   Trash2,
   ChevronDown,
 } from 'lucide-react';
-import { buildFeedWsUrl, getFeedWsDisabledMessage } from '../../config/endpoints';
-import { extractFeedTicks } from '../../utils/feedMessages';
+
+
 import useSymbolStore from '../../store/symbolStore';
 import { placeManagerOrder } from '../../services/managerTradeApi';
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 
+const readTradeQuote = (symbol) => {
+  const quote = useSymbolStore.getState().symbols[symbol];
+  const bid = Number(quote?.bid), ask = Number(quote?.ask);
+  if (!Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) return null;
+  return { symbol, bid, ask, time: quote.lastUpdate || Date.now() };
+};
 const getSymbolDigits = (sym) => {
   const s = String(sym || '').toUpperCase();
   if (s.includes('JPY')) return 3;
@@ -82,13 +88,12 @@ const AccountTradeTab = ({
   const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
-  const [tickHistory, setTickHistory] = useState([]);
-  const [feedError, setFeedError] = useState('');
+  const [tickHistory, setTickHistory] = useState(() => { const tick = readTradeQuote(modalSymbol); return tick ? [tick] : []; });
+  const feedError = useSymbolStore((state) => state.feedError);
+  const isConnected = useSymbolStore((state) => state.isConnected);
+  const isQuoteStale = useSymbolStore((state) => state.symbols[modalSymbol]?.isStale !== false);
 
-  const modalSymbolRef = useRef(modalSymbol);
-  useEffect(() => {
-    modalSymbolRef.current = modalSymbol;
-  }, [modalSymbol]);
+
 
   const selectedTicketRowRef = useRef(selectedTicketRow);
   useEffect(() => {
@@ -145,106 +150,34 @@ const AccountTradeTab = ({
     return Array.from(set).sort();
   }, [modalSymbol, positions]);
 
-  // Seed tick history from store if available
+  // Reuse the shared feed; opening or switching this tab never creates a socket.
   useEffect(() => {
-    const storeSymbols = useSymbolStore.getState().symbols || {};
-    const quote = storeSymbols[modalSymbol];
-    if (quote && quote.bid != null && quote.ask != null) {
-      setTickHistory((prev) => {
-        if (prev.length === 0 || prev[prev.length - 1].symbol !== modalSymbol) {
-          return [{ symbol: modalSymbol, bid: parseFloat(quote.bid), ask: parseFloat(quote.ask), time: Date.now() }];
-        }
-        return prev;
-      });
-    }
-  }, [modalSymbol]);
-
-  // WebSocket connection for real-time market ticks
-  useEffect(() => {
-    let ws;
-    let reconnectTimeout;
-
-    const connectWebSocket = () => {
-      let wsUrl;
-      try {
-        wsUrl = buildFeedWsUrl();
-      } catch (err) {
-        setFeedError(getFeedWsDisabledMessage(err));
-        return;
-      }
-
-      ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        setFeedError('');
-        ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
-      };
-
-      ws.onmessage = (e) => {
-        try {
-          let newTick = null;
-          extractFeedTicks(e.data).forEach((msg) => {
-            if (msg.symbol === modalSymbolRef.current && msg.bid != null && msg.ask != null) {
-              newTick = {
-                symbol: msg.symbol,
-                bid: parseFloat(msg.bid),
-                ask: parseFloat(msg.ask),
-                time: Date.now(),
-              };
-            }
-          });
-
-          if (newTick) {
-            setTickHistory((prev) => {
-              const updated = [...prev, newTick];
-              if (updated.length > 300) return updated.slice(-300);
-              return updated;
-            });
-
-            // Auto-track SL/TP if enabled
-            if (isAutoPipTrackRef.current && selectedTicketRowRef.current) {
-              const type = selectedTicketRowRef.current.type;
-              const d = getSymbolDigits(modalSymbolRef.current);
-              const pSize = 1 / getPipMultiplier(d);
-              const offset = pSize * 5; // 5 pips
-              if (type === 'buy') {
-                setTradeTP((newTick.ask + offset).toFixed(d));
-                setTradeSL((newTick.bid - offset).toFixed(d));
-              } else if (type === 'sell') {
-                setTradeTP((newTick.bid - offset).toFixed(d));
-                setTradeSL((newTick.ask + offset).toFixed(d));
-              }
-            }
-          }
-        } catch {
-          // Ignore malformed tick payloads
-        }
-      };
-
-      ws.onerror = () => {
-        setFeedError('Market feed unavailable: websocket connection failed.');
-      };
-
-      ws.onclose = () => {
-        reconnectTimeout = setTimeout(connectWebSocket, 3000);
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      clearTimeout(reconnectTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        } else if (ws.readyState === WebSocket.CONNECTING) {
-          ws.onopen = () => ws.close();
+    let previousQuote;
+    const update = (state, seed = false) => {
+      const quote = state.symbols[modalSymbol];
+      if (!seed && quote === previousQuote) return;
+      previousQuote = quote;
+      const tick = readTradeQuote(modalSymbol);
+      if (seed) setTickHistory(tick ? [tick] : []);
+      else if (tick) setTickHistory((history) => [...history.filter((item) => item.symbol === modalSymbol).slice(-79), tick]);
+      if (!seed && tick && !quote.isStale && state.isConnected && isAutoPipTrackRef.current && selectedTicketRowRef.current) {
+        const type = selectedTicketRowRef.current.type;
+        const d = getSymbolDigits(modalSymbol);
+        const offset = 5 / getPipMultiplier(d);
+        if (type === 'buy') {
+          setTradeTP((tick.ask + offset).toFixed(d));
+          setTradeSL((tick.bid - offset).toFixed(d));
+        } else if (type === 'sell') {
+          setTradeTP((tick.bid - offset).toFixed(d));
+          setTradeSL((tick.ask + offset).toFixed(d));
         }
       }
     };
+    update(useSymbolStore.getState(), true);
+    const unsubscribe = useSymbolStore.subscribe((state) => update(state));
+    useSymbolStore.getState().initWebSocket();
+    return unsubscribe;
   }, [modalSymbol]);
-
   // Adjust SL / TP values
   const adjustValue = (setter, amount) => {
     setIsAutoPipTrack(false);
@@ -343,7 +276,7 @@ const AccountTradeTab = ({
   };
 
   // Chart scaling calculations
-  const recentHistory = tickHistory.slice(-80);
+  const recentHistory = tickHistory.filter((tick) => tick.symbol === modalSymbol).slice(-80);
   const latestTick = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
   const currentAsk = latestTick ? latestTick.ask : 0;
   const currentBid = latestTick ? latestTick.bid : 0;
@@ -405,13 +338,13 @@ const AccountTradeTab = ({
   });
 
   return (
-    <div className="flex-1 flex gap-2 overflow-hidden p-0.5 select-none h-full min-h-0">
+    <div className="account-trade-workspace">
       {/* ========================================================================= */}
       {/* LEFT: Professional Tick Chart                                              */}
       {/* ========================================================================= */}
-      <div className="w-[340px] shrink-0 border border-[#232733] bg-[#0c0e14] rounded-lg flex flex-col relative overflow-hidden shadow-md">
+      <div className="account-trade-chart w-[340px] shrink-0 border border-[var(--border)] bg-[var(--surface)] rounded-lg flex flex-col relative overflow-hidden shadow-md">
         {/* Top Chart Header */}
-        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#131620] border-b border-[#232733] z-10 shrink-0">
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--surface-2)] border-b border-[var(--border)] z-10 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-[12px] text-white tracking-wide font-sans">{modalSymbol}</span>
             <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-blue-400 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded">
@@ -426,10 +359,10 @@ const AccountTradeTab = ({
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-[10px] text-blue-400 font-mono font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> LIVE
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> {recentHistory.length === 0 ? 'WAITING' : isConnected && !isQuoteStale ? 'LIVE' : 'CACHED'}
               </span>
             )}
-            <span className="text-[10px] font-mono font-medium text-gray-300 bg-[#1b1f2b] border border-[#2c3245] px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-mono font-medium text-gray-300 bg-[var(--surface-2)] border border-[var(--border)] px-1.5 py-0.5 rounded">
               Spread: {spreadPips}
             </span>
           </div>
@@ -438,19 +371,19 @@ const AccountTradeTab = ({
         {/* Chart Canvas & Y-Axis Container */}
         <div className="flex-1 flex relative overflow-hidden">
           {/* Main SVG Area */}
-          <div className="flex-1 relative overflow-hidden bg-[#0c0e14]">
+          <div className="flex-1 relative overflow-hidden bg-[var(--surface)]">
             {/* Background Grid Lines */}
             <div className="absolute inset-0 pointer-events-none">
               {yAxisTicks.map((tick, i) => (
                 <div
                   key={i}
-                  className="absolute left-0 right-0 border-t border-dashed border-[#1a1e2b]"
+                  className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]"
                   style={{ top: `${tick.y}%` }}
                 />
               ))}
-              <div className="absolute top-0 bottom-0 left-1/4 border-l border-dashed border-[#161a26]" />
-              <div className="absolute top-0 bottom-0 left-2/4 border-l border-dashed border-[#161a26]" />
-              <div className="absolute top-0 bottom-0 left-3/4 border-l border-dashed border-[#161a26]" />
+              <div className="absolute top-0 bottom-0 left-1/4 border-l border-dashed border-[var(--border)]" />
+              <div className="absolute top-0 bottom-0 left-2/4 border-l border-dashed border-[var(--border)]" />
+              <div className="absolute top-0 bottom-0 left-3/4 border-l border-dashed border-[var(--border)]" />
             </div>
 
             {/* SVG Tick Curves */}
@@ -466,7 +399,7 @@ const AccountTradeTab = ({
                   y1={askY}
                   x2="100"
                   y2={askY}
-                  stroke="#ef4444"
+                  stroke="var(--danger)"
                   strokeWidth="0.8"
                   strokeDasharray="2,2"
                   opacity="0.5"
@@ -476,7 +409,7 @@ const AccountTradeTab = ({
                   y1={bidY}
                   x2="100"
                   y2={bidY}
-                  stroke="#3b82f6"
+                  stroke="var(--accent)"
                   strokeWidth="0.8"
                   strokeDasharray="2,2"
                   opacity="0.5"
@@ -485,8 +418,8 @@ const AccountTradeTab = ({
                 {/* Polyline Ask (Red) */}
                 <polyline
                   fill="none"
-                  stroke="#ef4444"
-                  strokeWidth="1.5"
+                  stroke="var(--danger)"
+                  strokeWidth="1.5" vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   points={getPoints(true)}
@@ -495,8 +428,8 @@ const AccountTradeTab = ({
                 {/* Polyline Bid (Blue) */}
                 <polyline
                   fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="1.5"
+                  stroke="var(--accent)"
+                  strokeWidth="1.5" vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   points={getPoints(false)}
@@ -513,7 +446,7 @@ const AccountTradeTab = ({
           </div>
 
           {/* Right Y-Axis Column (Fixed width: 68px) */}
-          <div className="w-[68px] shrink-0 relative bg-[#10131a] border-l border-[#232733] select-none">
+          <div className="w-[68px] shrink-0 relative bg-[var(--surface)] border-l border-[var(--border)] select-none">
             {/* 5 Distinct Price Levels */}
             {yAxisTicks.map((tick, i) => (
               <div
@@ -528,7 +461,7 @@ const AccountTradeTab = ({
             {/* Current Ask Badge (Red) */}
             {currentAsk > 0 && (
               <div
-                className="absolute right-1 px-1.5 py-0.5 bg-[#ef4444] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
+                className="absolute right-1 px-1.5 py-0.5 bg-[var(--surface-2)] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
                 style={{ top: `${askBadgeY}%`, transform: 'translateY(-50%)' }}
               >
                 {currentAsk.toFixed(digits)}
@@ -538,7 +471,7 @@ const AccountTradeTab = ({
             {/* Current Bid Badge (Blue) */}
             {currentBid > 0 && (
               <div
-                className="absolute right-1 px-1.5 py-0.5 bg-[#3b82f6] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
+                className="absolute right-1 px-1.5 py-0.5 bg-[var(--surface-2)] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
                 style={{ top: `${bidBadgeY}%`, transform: 'translateY(-50%)' }}
               >
                 {currentBid.toFixed(digits)}
@@ -548,14 +481,14 @@ const AccountTradeTab = ({
         </div>
 
         {/* Bottom Legend Bar */}
-        <div className="px-2.5 py-1 bg-[#10131a] border-t border-[#232733] flex items-center justify-between text-[10px] font-mono text-gray-400 z-10 shrink-0">
+        <div className="px-2.5 py-1 bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between text-[10px] font-mono text-gray-400 z-10 shrink-0">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-1 bg-[#ef4444] rounded-sm inline-block" />
+            <span className="w-2.5 h-1 bg-[var(--surface-2)] rounded-sm inline-block" />
             <span className="font-normal text-[10px]">Ask:</span>
             <strong className="text-red-400 font-bold text-[12px]">{currentAsk ? currentAsk.toFixed(digits) : '--'}</strong>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-1 bg-[#3b82f6] rounded-sm inline-block" />
+            <span className="w-2.5 h-1 bg-[var(--surface-2)] rounded-sm inline-block" />
             <span className="font-normal text-[10px]">Bid:</span>
             <strong className="text-blue-400 font-bold text-[12px]">{currentBid ? currentBid.toFixed(digits) : '--'}</strong>
           </div>
@@ -565,9 +498,9 @@ const AccountTradeTab = ({
       {/* ========================================================================= */}
       {/* RIGHT: Professional MT5 Order / Position Modifier Panel                   */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col bg-[#111319] border border-[#232733] rounded-lg p-2.5 text-[12px] overflow-hidden shadow-md h-full">
+      <div className="account-trade-order flex-1 flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-lg p-2.5 text-[12px] overflow-hidden shadow-md h-full">
         {/* Header Bar */}
-        <div className="flex items-center justify-between pb-1.5 border-b border-[#232733] mb-1.5 shrink-0">
+        <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border)] mb-1.5 shrink-0">
           {selectedTicketRow ? (
             <div className="flex items-center gap-2">
               <span className="p-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -618,7 +551,7 @@ const AccountTradeTab = ({
                   const pos = positions.find((p) => String(p.position || p.ticket) === e.target.value);
                   if (pos) handleModifySLTP(pos);
                 }}
-                className="text-[10px] font-mono font-medium bg-[#1a1e2b] border border-[#2d3347] rounded px-1.5 py-0.5 text-gray-300 focus:outline-none cursor-pointer"
+                className="text-[10px] font-mono font-medium bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 py-0.5 text-gray-300 focus:outline-none cursor-pointer"
                 title="Switch position"
               >
                 <option value="" disabled>Switch Position</option>
@@ -644,7 +577,7 @@ const AccountTradeTab = ({
                   setModalSymbol(e.target.value);
                   setTickHistory([]);
                 }}
-                className="w-full h-6.5 bg-[#171a24] border border-[#2a2f42] rounded px-2 text-white font-bold text-[12px] font-mono focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
+                className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-white font-bold text-[12px] font-mono focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
               >
                 {availableSymbols.map((sym) => (
                   <option key={sym} value={sym}>
@@ -662,7 +595,7 @@ const AccountTradeTab = ({
           {/* Type */}
           <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Type:</span>
-            <div className="h-6.5 flex items-center px-2 bg-[#141720] border border-[#262b3b] rounded text-gray-200 font-semibold text-[12px] truncate">
+            <div className="h-6.5 flex items-center px-2 bg-[var(--surface-2)] border border-[var(--border)] rounded text-gray-200 font-semibold text-[12px] truncate">
               {selectedTicketRow
                 ? `${selectedTicketRow.type === 'buy' ? 'Buy' : 'Sell'} Position S/L · T/P Modification`
                 : 'Market Order Execution'}
@@ -673,11 +606,11 @@ const AccountTradeTab = ({
           <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Volume:</span>
             <div className="flex items-center gap-2">
-              <div className="flex items-center bg-[#171a24] border border-blue-500/40 rounded overflow-hidden h-6.5">
+              <div className="flex items-center bg-[var(--surface-2)] border border-blue-500/40 rounded overflow-hidden h-6.5">
                 <button
                   type="button"
                   onClick={() => adjustVolume(-0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[#1c212e] hover:bg-[#252b3d] text-gray-300 transition-colors"
+                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Decrease volume"
                 >
                   <Minus size={11} />
@@ -691,7 +624,7 @@ const AccountTradeTab = ({
                 <button
                   type="button"
                   onClick={() => adjustVolume(0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[#1c212e] hover:bg-[#252b3d] text-gray-300 transition-colors"
+                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Increase volume"
                 >
                   <Plus size={11} />
@@ -708,7 +641,7 @@ const AccountTradeTab = ({
                     className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
                       tradeVolume === vol
                         ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 font-bold'
-                        : 'bg-[#171a24] text-gray-400 border-[#2a2f42] hover:bg-[#202533] font-medium'
+                        : 'bg-[var(--surface-2)] text-gray-400 border-[var(--border)] hover:bg-[var(--surface-2)] font-medium'
                     }`}
                   >
                     {vol}
@@ -722,7 +655,7 @@ const AccountTradeTab = ({
           <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">At Price:</span>
             <div className="flex items-center gap-2.5">
-              <div className="h-6.5 px-2.5 bg-[#141720] border border-[#262b3b] rounded flex items-center font-mono font-bold text-[12px] text-white">
+              <div className="h-6.5 px-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded flex items-center font-mono font-bold text-[12px] text-white">
                 {currentAsk ? currentAsk.toFixed(digits) : 'Market Price'}
               </div>
               <label className="flex items-center gap-1.5 text-[10px] text-gray-300 font-normal cursor-pointer select-none">
@@ -730,7 +663,7 @@ const AccountTradeTab = ({
                   type="checkbox"
                   checked={isAutoPipTrack}
                   onChange={(e) => setIsAutoPipTrack(e.target.checked)}
-                  className="rounded bg-[#171a24] border-[#2a2f42] text-blue-500 focus:ring-0 w-3.5 h-3.5"
+                  className="rounded bg-[var(--surface-2)] border-[var(--border)] text-blue-500 focus:ring-0 w-3.5 h-3.5"
                 />
                 <span>Auto-track live ticks</span>
               </label>
@@ -740,18 +673,18 @@ const AccountTradeTab = ({
           {/* Stop Loss & Take Profit Cards */}
           <div className="grid grid-cols-2 gap-2 my-1">
             {/* Stop Loss Card */}
-            <div className="bg-[#151822] border border-red-500/20 rounded-md p-1.5 flex flex-col justify-between">
+            <div className="bg-[var(--surface-2)] border border-red-500/20 rounded-md p-1.5 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
                 <span className="flex items-center gap-1 text-[10px] font-bold text-red-400">
                   <ArrowDown size={11} /> Stop Loss
                 </span>
                 <span className="text-[10px] font-mono font-medium text-gray-400">SL</span>
               </div>
-              <div className="flex items-center bg-[#0e1017] border border-[#2a2f42] rounded h-6.5 overflow-hidden">
+              <div className="flex items-center bg-[var(--surface-2)] border border-[var(--border)] rounded h-6.5 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeSL, -1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[#181c27] hover:bg-[#222838] text-gray-300 transition-colors"
+                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Decrease SL"
                 >
                   <Minus size={10} />
@@ -768,24 +701,24 @@ const AccountTradeTab = ({
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeSL, 1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[#181c27] hover:bg-[#222838] text-gray-300 transition-colors"
+                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Increase SL"
                 >
                   <Plus size={10} />
                 </button>
               </div>
-              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#1f2433]">
+              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[var(--border)]">
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeSL, -5)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1e2230] text-red-400 hover:bg-[#272d40] transition-colors"
+                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-red-400 hover:bg-[var(--surface-2)] transition-colors"
                 >
                   -5 pips
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeSL, -10)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1e2230] text-red-400 hover:bg-[#272d40] transition-colors"
+                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-red-400 hover:bg-[var(--surface-2)] transition-colors"
                 >
                   -10 pips
                 </button>
@@ -793,18 +726,18 @@ const AccountTradeTab = ({
             </div>
 
             {/* Take Profit Card */}
-            <div className="bg-[#151822] border border-blue-500/20 rounded-md p-1.5 flex flex-col justify-between">
+            <div className="bg-[var(--surface-2)] border border-blue-500/20 rounded-md p-1.5 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
                 <span className="flex items-center gap-1 text-[10px] font-bold text-blue-400">
                   <ArrowUp size={11} /> Take Profit
                 </span>
                 <span className="text-[10px] font-mono font-medium text-gray-400">TP</span>
               </div>
-              <div className="flex items-center bg-[#0e1017] border border-[#2a2f42] rounded h-6.5 overflow-hidden">
+              <div className="flex items-center bg-[var(--surface-2)] border border-[var(--border)] rounded h-6.5 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeTP, -1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[#181c27] hover:bg-[#222838] text-gray-300 transition-colors"
+                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Decrease TP"
                 >
                   <Minus size={10} />
@@ -821,24 +754,24 @@ const AccountTradeTab = ({
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeTP, 1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[#181c27] hover:bg-[#222838] text-gray-300 transition-colors"
+                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
                   aria-label="Increase TP"
                 >
                   <Plus size={10} />
                 </button>
               </div>
-              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#1f2433]">
+              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[var(--border)]">
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeTP, 5)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1e2230] text-blue-400 hover:bg-[#272d40] transition-colors"
+                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-blue-400 hover:bg-[var(--surface-2)] transition-colors"
                 >
                   +5 pips
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustByPips(setTradeTP, 10)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1e2230] text-blue-400 hover:bg-[#272d40] transition-colors"
+                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-blue-400 hover:bg-[var(--surface-2)] transition-colors"
                 >
                   +10 pips
                 </button>
@@ -854,7 +787,7 @@ const AccountTradeTab = ({
               value={tradeComment}
               onChange={(e) => setTradeComment(e.target.value)}
               placeholder="Order comment (optional)..."
-              className="w-full h-6.5 bg-[#171a24] border border-[#2a2f42] rounded px-2 text-gray-200 text-[12px] font-normal focus:border-blue-500 focus:outline-none placeholder-gray-500"
+              className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 text-[12px] font-normal focus:border-blue-500 focus:outline-none placeholder-gray-500"
             />
           </div>
 
@@ -938,7 +871,7 @@ const AccountTradeTab = ({
               )}
             </div>
           ) : (
-            <div className="mt-0.5 p-1.5 rounded bg-[#151822] border border-[#232733] shrink-0">
+            <div className="mt-0.5 p-1.5 rounded bg-[var(--surface-2)] border border-[var(--border)] shrink-0">
               {positions.length > 0 ? (
                 <div>
                   <div className="flex items-center justify-between text-[10px] mb-1 text-gray-400">
@@ -951,7 +884,7 @@ const AccountTradeTab = ({
                         key={p.position || p.ticket}
                         type="button"
                         onClick={() => handleModifySLTP(p)}
-                        className="px-2 py-0.5 rounded bg-[#1d2230] hover:bg-blue-600/25 border border-[#2c3347] text-[10px] font-mono font-medium text-gray-200 flex items-center gap-1.5 transition-colors"
+                        className="px-2 py-0.5 rounded bg-[var(--surface-2)] hover:bg-blue-600/25 border border-[var(--border)] text-[10px] font-mono font-medium text-gray-200 flex items-center gap-1.5 transition-colors"
                       >
                         <span
                           className={`font-bold ${

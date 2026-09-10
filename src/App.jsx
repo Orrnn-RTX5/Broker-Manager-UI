@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useRef, useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
+import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 import { AdminLogin, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import DesktopWindowControls from './components/DesktopWindowControls';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
@@ -42,7 +43,7 @@ const IBListPage = lazy(workspaceRouteLoaders.ibListPage);
 const IBTreePage = lazy(workspaceRouteLoaders.ibTreePage);
 const SymbolsOverviewPage = lazy(workspaceRouteLoaders.symbolsOverviewPage);
 const SymbolListPage = lazy(workspaceRouteLoaders.symbolListPage);
-const SymbolManagementPage = lazy(workspaceRouteLoaders.symbolManagementPage);
+// The symbol screen is frequent navigation; keep its shell ready at click time.
 
 const AUTH_STORAGE_POLL_MS = 2000;
 const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);

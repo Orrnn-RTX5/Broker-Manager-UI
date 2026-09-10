@@ -2,6 +2,7 @@ import { fetchManagerApi } from './managerFetch';
 import { getAccountDetailsManyPage } from './api';
 import { normalizePagedStreamResult } from '../utils/pagination';
 import { normalizeAccount, normalizeSidebarAccountPage } from '../utils/sidebarAccountRows.js';
+import { collectAccountPages } from '../utils/collectAccountPages.js';
 
 export { normalizeAccount, normalizeSidebarAccountPage } from '../utils/sidebarAccountRows.js';
 
@@ -43,7 +44,7 @@ export const getInitialCachedSidebarAccounts = () => {
 };
 
 const saveCachedAccounts = (data) => {
-  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  if (!data || !Array.isArray(data.rows)) return;
   try {
     if (typeof window !== 'undefined' && window.sessionStorage) {
       window.sessionStorage.setItem(SIDEBAR_CACHE_KEY, JSON.stringify(data));
@@ -83,7 +84,6 @@ export const fetchSidebarAccounts = async ({
       hasMore: false,
       nextOffset: 0,
     };
-    if (result.rows.length > 0) saveCachedAccounts(result);
     return result;
   } else {
     params.set('limit', String(limit));
@@ -111,7 +111,6 @@ export const fetchSidebarAccounts = async ({
       hasMore: Boolean(page.hasMore),
       nextOffset: page.nextOffset ?? offset + (page.rows?.length || 0),
     };
-    if (offset === 0 && !searchValue && result.rows.length > 0) saveCachedAccounts(result);
     return result;
   }
 
@@ -145,12 +144,18 @@ export const fetchSidebarAccountDetails = async (login, { signal } = {}) => {
   return { ...account, login: account.login || String(login) };
 };
 
+export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
+  const result = await collectAccountPages((offset) => fetchSidebarAccounts({
+    search, offset, limit: 500, signal,
+  }), { signal });
+  if (!String(search).trim()) saveCachedAccounts(result);
+  return result;
+};
+
 export const getSidebarAccountsQueryOptions = (search = '') => ({
   queryKey: ['sidebar-accounts', String(search || '').trim()],
-  queryFn: ({ signal }) => fetchSidebarAccounts({
+  queryFn: ({ signal }) => fetchAllSidebarAccounts({
     search,
-    offset: 0,
-    limit: SIDEBAR_ACCOUNT_PAGE_SIZE,
     signal,
   }),
   staleTime: 5 * 60 * 1000,

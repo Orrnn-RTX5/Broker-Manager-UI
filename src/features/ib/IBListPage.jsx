@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Eye, GitBranch, Loader, Plus, RefreshCw, Search, Trash2, User, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, GitBranch, Loader, Plus, RefreshCw, Search, Trash2, User } from 'lucide-react';
 import ibApi from '../../services/ibApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -161,10 +161,9 @@ const IBListPage = () => {
   const closeDetail = () => navigate('/ib');
 
   return (
-    <div className="ib-management-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Users size={18} style={{ color: 'var(--accent)' }} />
+    <div className="ib-management-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden">
+      <div className="ib-management-header flex items-center justify-between gap-2 shrink-0">
+        <div className="ib-management-heading min-w-0">
           <div>
             <h1 className="ib-management-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>IB Management</h1>
             <p className="ib-management-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -172,7 +171,7 @@ const IBListPage = () => {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ib-management-actions flex gap-2 shrink-0">
           <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => load({ quiet: true })} disabled={loading || refreshing}>
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
             Refresh
@@ -195,7 +194,7 @@ const IBListPage = () => {
         </div>
       )}
 
-      <div className="ib-management-filters flex flex-wrap items-center gap-2">
+      <div className="ib-management-filters flex flex-wrap items-center gap-2 shrink-0">
         <div className="ib-management-search relative w-full max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
           <input
@@ -214,12 +213,12 @@ const IBListPage = () => {
         </select>
       </div>
 
-      <div className="ib-management-grid ui-card flex flex-col w-full flex-1 overflow-hidden">
+      <div className="ib-management-grid ui-card flex flex-col w-full flex-1 min-h-0 overflow-hidden">
         {loading ? (
           <GridLoadingState label="Loading IB accounts…" />
         ) : (
         <div className="ib-management-table-shell relative w-full flex-1 min-h-0">
-          <div className="ib-management-scroll w-full h-full overflow-x-auto">
+          <div className="ib-management-scroll w-full h-full overflow-auto">
             <table className="ui-grid min-w-max">
             <thead>
               <tr>
@@ -300,7 +299,7 @@ const IBListPage = () => {
           )}
         </div>
         )}
-        <div className="ib-management-footer px-4 py-2 text-[10px] shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
+        <div className="ib-management-footer px-4 py-2.5 text-[10px] shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}>
           <span>{filtered.length} IB account{filtered.length === 1 ? '' : 's'}</span>
           {!canManageIB && <span>No permission to perform IB actions</span>}
         </div>

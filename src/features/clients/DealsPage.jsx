@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Activity } from 'lucide-react';
+import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import DealsDataGrid from './components/DealsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
@@ -55,16 +55,15 @@ const DealsPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getDealActions]);
 
   return (
-    <div className="deals-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto" {...ctl.pageProps}>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2 gap-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <Activity size={16} style={{ color: 'var(--accent)' }} />
+    <div className="deals-page w-full h-full flex flex-col" {...ctl.pageProps}>
+      <div className="deals-header flex items-center justify-between gap-2">
+        <div className="deals-heading min-w-0">
           <div className="flex flex-col">
             <h1 className="font-semibold deals-title" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '15px' }}>Dealing</h1>
             <p className="deals-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '13px', marginTop: '4px' }}>Right-click for actions · Double-click a row to update</p>
           </div>
         </div>
-        <div className="deals-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+        <div className="deals-filters flex items-center gap-2 shrink-0">
           <FilterDropdown value={actionFilter} className="w-[110px]" fontSize="10px" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
           <FilterDropdown value={symbolFilter} className="w-[120px]" fontSize="10px" options={['All Symbols', 'GBPUSD', 'xauusd']} onChange={setSymbolFilter} />
           <FilterDropdown value={entryFilter} className="w-[120px]" fontSize="10px" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />

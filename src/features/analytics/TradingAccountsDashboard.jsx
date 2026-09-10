@@ -31,7 +31,7 @@ export default function TradingAccountsDashboard() {
         <FilterSelect value="All Lead Campaign" width={156} />
         <FilterSelect value="All Lead Source" width={140} />
         <FilterSelect value="All Countries" width={140} options={ALL_COUNTRIES} />
-        <DateRangePicker />
+        <div className="trading-analytics-date-range"><DateRangePicker /></div>
       </div>
 
       <section className="trading-analytics-reports" aria-labelledby="trading-report-title">

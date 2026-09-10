@@ -1,31 +1,14 @@
-import { 
-  HelpCircle, 
-  Lightbulb, 
-  Globe, 
-  Send,
-  Monitor,
-  CheckCircle2,
-  Info 
-} from 'lucide-react';
-import { MenuItem, MenuDivider } from './MenuItem';
-
-const HelpMenu = () => {
-  return (
-    <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[240px] z-[60] transition-colors">
-      <MenuItem icon={HelpCircle} text="Help Topics" shortcut="F1" iconColor="text-blue-500" />
-      <MenuItem icon={Lightbulb} text="What's New" iconColor="text-blue-500" />
-      <MenuDivider />
-      <MenuItem icon={Globe} text="RTX5 Platform" iconColor="text-blue-600" />
-      <MenuItem icon={Send} text="Official News Channel" iconColor="text-blue-400" />
-      <MenuDivider />
-      {/* Mocking the Mac/Linux icons with Lucide equivalents */}
-      <MenuItem icon={Monitor} text="Manager For Mac" iconColor="text-gray-700" />
-      <MenuItem icon={CheckCircle2} text="Manager For Linux" iconColor="text-yellow-500" />
-      <MenuItem text="Check For Updates" hasSubmenu />
-      <MenuDivider />
-      <MenuItem icon={Info} text="About" iconColor="text-blue-500" />
-    </div>
-  );
-};
-
-export default HelpMenu;
+import { createElement } from 'react';
+import { HelpCircle, Lightbulb, Info, MessageSquare, RefreshCw } from 'lucide-react';
+const items = [
+  ['Guide', 'Help topics', HelpCircle, 'F1'],
+  ['Updates', 'Release notes', Lightbulb],
+  ['Updates', 'Check for updates', RefreshCw],
+  ['Support', 'Contact & support', MessageSquare],
+  ['About', 'About RTX5 Manager', Info],
+];
+export default function HelpMenu({ onOpenHelp }) {
+  return <div className="manager-menu-dropdown absolute top-full left-0 bg-[var(--surface)] border border-[var(--border)] shadow-lg py-1 min-w-[220px] z-[60]" role="menu" aria-label="Help">
+    {items.map(([section, label, Icon, shortcut]) => <button type="button" role="menuitem" key={label} onClick={() => onOpenHelp(section)} className="manager-menu-dropdown-item flex items-center gap-3 w-full px-4 py-2 text-left text-[11px] text-[var(--text)] hover:bg-[var(--surface-2)]">{createElement(Icon, { size: 14, 'aria-hidden': true })}<span className="flex-1">{label}</span>{shortcut && <span className="text-[var(--text-3)]">{shortcut}</span>}</button>)}
+  </div>;
+}

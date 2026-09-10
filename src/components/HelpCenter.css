@@ -1,0 +1,25 @@
+.manager-help-center { width:min(680px,calc(100vw - 32px)); max-height:calc(100vh - 40px); padding:0; margin:auto; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-family:inherit; box-shadow:0 18px 60px #0006; }
+.manager-help-center::backdrop { background:rgba(0,0,0,.55); }
+.manager-help-center[open] { display:flex; flex-direction:column; }
+.manager-help-center header,.manager-help-center footer { display:flex; flex-shrink:0; align-items:center; justify-content:space-between; gap:16px; padding:16px 20px; background:var(--surface-2); }
+.manager-help-center header { border-bottom:1px solid var(--border); }
+.manager-help-center h2 { margin:0; font-size:16px; font-weight:600; }
+.manager-help-center h3 { margin:0 0 6px; font-size:12px; font-weight:600; }
+.manager-help-center p { margin:5px 0; font-size:11px; line-height:1.6; color:var(--text-3); }
+.manager-help-center button,.manager-help-center a { font:inherit; font-size:11px; }
+.manager-help-center button { padding:7px 12px; border:1px solid var(--border-3); border-radius:4px; color:var(--text); background:var(--surface); cursor:pointer; }
+.manager-help-center button:disabled { opacity:.6; cursor:wait; }
+.manager-help-center a { color:var(--accent-text); }
+.manager-help-center nav { display:flex; gap:6px; padding:10px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.manager-help-center nav button { border-color:transparent; background:transparent; }
+.manager-help-center nav button[aria-pressed=true] { border-color:var(--accent); }
+.manager-help-content { min-height:0; overflow:auto; padding:18px 20px; }
+.manager-help-content section { padding:14px; margin-bottom:12px; border:1px solid var(--border); border-radius:6px; }
+.manager-help-center label { display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-2); }
+.manager-help-search { margin-bottom:16px; }
+.manager-help-center input,.manager-help-center textarea { box-sizing:border-box; width:100%; padding:9px; background:var(--surface-2); color:var(--text); border:1px solid var(--border-3); border-radius:4px; font:inherit; font-size:11px; }
+.manager-help-center textarea { resize:vertical; min-height:120px; }
+.manager-help-actions { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin-top:12px; }
+.manager-help-center .manager-help-status { padding:10px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); border-radius:4px; }
+.manager-help-center .manager-help-status.is-error { color:var(--danger-text); border-color:var(--danger-border); }
+.manager-help-center footer { border-top:1px solid var(--border); font-size:10px; color:var(--text-3); }

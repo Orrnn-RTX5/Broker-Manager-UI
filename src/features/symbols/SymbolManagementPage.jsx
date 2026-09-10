@@ -17,22 +17,20 @@ const TABS = [
 
 const SymbolManagementPage = () => {
   const [activeTab, setActiveTab] = useState('symbols');
+  const [actionsHost, setActionsHost] = useState(null);
 
   return (
-    <div className="symbol-management-page p-6 w-full h-full flex flex-col gap-4 overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div className="flex items-end justify-between shrink-0">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+    <div className="symbol-management-page p-3 w-full h-full min-h-0 flex flex-col gap-2.5 overflow-hidden" style={{ background: 'var(--bg)' }}>
+      <div className="symbol-management-header grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 shrink-0">
             <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Symbol Management</h1>
-          </div>
-          <p className="text-sm" style={{ color: 'var(--text-3)' }}>
+          <div ref={setActionsHost} className="symbols-header-actions" />
+          <p className="text-sm col-span-2" style={{ color: 'var(--text-3)' }}>
             Configure instruments, categories, LP mappings, sessions, commissions, and visibility.
           </p>
-        </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+      <div className="symbol-management-tabs flex items-center border-b shrink-0 overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
         {TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -50,8 +48,8 @@ const SymbolManagementPage = () => {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'symbols'    && <SymbolsTab />}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {activeTab === 'symbols'    && <SymbolsTab actionsHost={actionsHost} />}
         {activeTab === 'categories' && <CategoriesTab />}
         {activeTab === 'mappings'   && <LpMappingsTab />}
         {activeTab === 'sessions'   && <SessionsTab />}

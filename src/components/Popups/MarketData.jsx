@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
@@ -7,6 +8,7 @@ import {
 } from '../../utils/marketWatchQuotes';
 
 const MAX_TICKS = 1000;
+const SYMBOL_CLICK_DELAY_MS = 300;
 const COMPACT_QUOTE_ROW_HEIGHT = 27;
 const COMPACT_QUOTE_OVERSCAN = 10;
 const COMPACT_QUOTE_FALLBACK_VIEWPORT_HEIGHT = 540;
@@ -24,7 +26,7 @@ const formatSpread = (bid, ask) => {
 const formatDetailValue = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && value !== '' && value !== null && value !== undefined
-    ? number.toFixed(2)
+    ? number.toFixed(5)
     : '-';
 };
 
@@ -82,6 +84,9 @@ const MarketData = ({ compact = false }) => {
   const [tickHistory, setTickHistory] = useState([]);
   const chartRef = useRef(null);
   const selectedSymbolRef = useRef(null);
+  const tickCacheRef = useRef(new Map());
+  const symbolClickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(symbolClickTimer.current), []);
   const symbolsViewportRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [symbolsViewport, setSymbolsViewport] = useState({ height: 0, scrollTop: 0 });
@@ -95,7 +100,7 @@ const MarketData = ({ compact = false }) => {
     feedError: state.feedError,
     initWebSocket: state.initWebSocket,
     isConnected: state.isConnected,
-    symbols: state.symbols,
+    symbols: activeTab === 'Symbols' ? state.symbols : null,
   })));
 
   useEffect(() => {
@@ -158,10 +163,7 @@ const MarketData = ({ compact = false }) => {
     };
   }, [compact, liveQuotes, symbolsViewport.height, symbolsViewport.scrollTop]);
 
-  const selectedQuote = useMemo(
-    () => liveQuotes.find((quote) => quote.symbol === selectedSymbol) || null,
-    [liveQuotes, selectedSymbol]
-  );
+  const selectedQuote = useSymbolStore((state) => state.symbols?.[selectedSymbol] || null);
 
   useEffect(() => {
     selectedSymbolRef.current = selectedSymbol;
@@ -230,42 +232,59 @@ const MarketData = ({ compact = false }) => {
       time: quote.lastUpdate || Date.now(),
     };
 
-    setTickHistory((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.bid === nextTick.bid && last.ask === nextTick.ask) return prev;
-      const next = [...prev, nextTick];
-      return next.length > MAX_TICKS ? next.slice(-MAX_TICKS) : next;
-    });
+    const previousTicks = tickCacheRef.current.get(symbol) || [];
+    const next = [...previousTicks.slice(-(MAX_TICKS - 1)), nextTick];
+    tickCacheRef.current.set(symbol, next);
+    setTickHistory(next);
   }), []);
 
   const selectQuote = useCallback((quote, nextTab) => {
+    selectedSymbolRef.current = quote.symbol;
     setSelectedSymbol(quote.symbol);
-    setTickHistory([{
-      bid: toNumber(quote.bid),
-      ask: toNumber(quote.ask),
-      time: quote.lastUpdate || 0,
-    }]);
+    const latestQuote = useSymbolStore.getState().symbols?.[quote.symbol] || quote;
+    const cached = tickCacheRef.current.get(quote.symbol) || [];
+    const latestTick = {
+      bid: toNumber(latestQuote.bid),
+      ask: toNumber(latestQuote.ask),
+      time: latestQuote.lastUpdate || 0,
+    };
+    const last = cached[cached.length - 1];
+    const history = last?.bid === latestTick.bid && last?.ask === latestTick.ask
+      ? cached : [...cached.slice(-(MAX_TICKS - 1)), latestTick];
+    tickCacheRef.current.delete(quote.symbol);
+    tickCacheRef.current.set(quote.symbol, history);
+    if (tickCacheRef.current.size > 32) tickCacheRef.current.delete(tickCacheRef.current.keys().next().value);
+    setTickHistory(history);
     setActiveTab(nextTab);
   }, []);
 
-  const handleSelectQuote = useCallback(
-    (quote) => selectQuote(quote, activeTab),
-    [activeTab, selectQuote]
-  );
+  const handleSelectQuote = useCallback((quote) => {
+    clearTimeout(symbolClickTimer.current);
+    // Keep the row mounted briefly so the second click can open Ticks.
+    symbolClickTimer.current = setTimeout(() => selectQuote(quote, 'Details'), SYMBOL_CLICK_DELAY_MS);
+  }, [selectQuote]);
 
   const handleOpenTicks = useCallback(
-    (quote) => selectQuote(quote, 'Ticks'),
+    (quote) => {
+      clearTimeout(symbolClickTimer.current);
+      flushSync(() => selectQuote(quote, 'Ticks'));
+    },
     [selectQuote]
   );
 
   const handleTabChange = useCallback((tab) => {
+    clearTimeout(symbolClickTimer.current);
+    if (tab !== 'Symbols' && !selectedQuote && liveQuotes.length > 0) {
+      selectQuote(liveQuotes[0], tab);
+      return;
+    }
     if (tab === 'Symbols' && activeTab !== 'Symbols') {
       // The symbols viewport is remounted when returning from Details/Ticks,
       // so its native scroll position starts at the top as well.
       setSymbolsViewport((current) => ({ ...current, scrollTop: 0 }));
     }
     setActiveTab(tab);
-  }, [activeTab]);
+  }, [activeTab, selectedQuote, liveQuotes, selectQuote]);
 
   const handleSearchSymbol = useCallback(() => {
     if (liveQuotes && liveQuotes.length > 0) {
@@ -427,6 +446,7 @@ const MarketData = ({ compact = false }) => {
     const details = [
       { label: 'Bid', value: formatDetailValue(selectedQuote.bid), isUp: selectedQuote.dir === 'up' },
       { label: 'Ask', value: formatDetailValue(selectedQuote.ask), isUp: selectedQuote.dir === 'up' },
+      { label: 'Spread', value: formatSpread(selectedQuote.bid, selectedQuote.ask) },
       { label: 'Bid High', value: formatDetailValue(session.high_bid) },
       { label: 'Bid Low', value: formatDetailValue(session.low_bid) },
       { label: 'Ask High', value: formatDetailValue(session.high_ask) },
@@ -437,21 +457,21 @@ const MarketData = ({ compact = false }) => {
     ];
 
     return (
-      <div className="ui-card p-5 mx-auto max-w-sm bg-[var(--surface)] shadow-md border" style={{ borderColor: 'var(--border)' }}>
+      <div className="market-quote-details w-full p-2 bg-[var(--surface)]">
         <div className="font-semibold text-lg pb-3 mb-3 border-b flex justify-between items-center" style={{ color: 'var(--accent)', borderColor: 'var(--border)' }}>
           <span>{selectedQuote.symbol}</span>
           <span className="text-xs px-2 py-1 bg-[var(--surface-2)] rounded font-mono font-normal tracking-wide text-[var(--text-2)]">
-            {isConnected ? 'Live' : 'Cached'}
+            {isConnected && !selectedQuote.isStale ? 'Live' : 'Cached'}
           </span>
         </div>
         <table className="w-full text-left border-collapse text-sm">
           <tbody className="tabular-nums">
             {details.map((item) => (
               <tr key={item.label} className="market-row">
-                <td className="py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+                <td className="py-1.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
                   {item.label}
                 </td>
-                <td className="py-2.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--market-value-up)' : (item.isUp === false ? 'var(--market-value-down)' : 'var(--text)') }}>
+                <td className="py-1.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--market-value-up)' : (item.isUp === false ? 'var(--market-value-down)' : 'var(--text)') }}>
                   {item.isUp === true ? <ArrowUpRight size={14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={2.5} /> : null}
                   {item.isUp === false ? <ArrowDownRight size={14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={2.5} /> : null}
                   <span className="font-mono text-[13px]">{item.value}</span>
@@ -498,18 +518,16 @@ const MarketData = ({ compact = false }) => {
     }).join(' ');
 
     return (
-      <div className="flex-1 overflow-hidden relative flex flex-col p-3 bg-[var(--surface-2)]">
-        <div className="absolute top-5 left-5 px-3 py-1.5 text-xs rounded shadow-sm z-10 ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+      <div className="market-quote-ticks flex-1 min-h-0 min-w-0 overflow-hidden relative flex flex-col gap-2 p-2 bg-[var(--surface-2)]">
+        <div className="shrink-0 font-semibold" style={{ color: 'var(--accent)' }}>{selectedQuote.symbol}</div>
+        <div className="shrink-0 px-2 py-1.5 text-xs rounded ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
           {tickHistory.length > 0
-            ? `${tickHistory[tickHistory.length - 1].bid.toFixed(2)} / ${tickHistory[tickHistory.length - 1].ask.toFixed(2)}`
+            ? `${tickHistory[tickHistory.length - 1].bid.toFixed(5)} / ${tickHistory[tickHistory.length - 1].ask.toFixed(5)}`
             : 'Waiting for ticks...'}
-        </div>
-        <div className="absolute top-5 left-72 font-bold tracking-wide text-sm z-10" style={{ color: 'var(--accent)' }}>
-          {selectedQuote.symbol}
         </div>
         <div
           ref={chartRef}
-          className="flex-1 relative mt-[50px] mb-[30px] ml-1 mr-[60px] rounded-lg shadow-inner ui-card"
+          className="flex-1 min-h-0 relative rounded ui-card"
           style={{
             border: '1px solid var(--border)',
             background: 'var(--surface)',
@@ -517,11 +535,17 @@ const MarketData = ({ compact = false }) => {
             backgroundSize: '20px 20px',
           }}
         >
-          {tickHistory.length > 1 && (
-            <svg className="w-full h-full absolute inset-0 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" style={{ overflow: 'hidden' }}>
-              <polyline fill="none" stroke={lineColor} strokeWidth="0.5" points={points} />
+          {tickHistory.length > 0 && (
+            <svg aria-label={`${selectedQuote.symbol} bid price chart`} role="img" className="w-full h-full absolute inset-0 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" style={{ overflow: 'hidden' }}>
+              {tickHistory.length === 1
+                ? <circle cx="50" cy="50" r="1.5" fill={lineColor} />
+                : <polyline fill="none" stroke={lineColor} strokeWidth="0.5" points={points} />}
             </svg>
           )}
+        </div>
+        <div className="shrink-0 flex justify-between gap-2" style={{ color: 'var(--text-3)' }}>
+          <span>{isConnected && !selectedQuote.isStale ? 'Live price changes' : 'Cached prices'}</span>
+          <span>{tickHistory.length} points</span>
         </div>
       </div>
     );
@@ -534,6 +558,15 @@ const MarketData = ({ compact = false }) => {
            labels, values and controls share the same visual weight. */
         .market-watch-type {
           --market-watch-font-size: var(--workspace-ui-small-font-size, 10px);
+        }
+        .dark .market-watch-type {
+          /* Lift and soften the green/red bases for small text on charcoal. */
+          --market-value-up: rgb(88, 174, 104);
+          --market-value-down: rgb(235, 112, 112);
+          --market-direction-up: var(--market-value-up);
+          --market-direction-down: var(--market-value-down);
+          --cc-market-glow-up: rgba(0, 128, 0, 0.12);
+          --cc-market-glow-down: rgba(255, 0, 0, 0.10);
         }
         .market-watch-type,
         .market-watch-type * {
@@ -567,7 +600,7 @@ const MarketData = ({ compact = false }) => {
       <div className="flex-1 overflow-hidden flex flex-col">
         {activeTab === 'Symbols' && renderSymbols()}
         {activeTab === 'Details' && (
-          <div className="flex-1 overflow-auto p-4 md:p-6 bg-[var(--surface-2)]">
+          <div className="flex-1 min-h-0 overflow-auto bg-[var(--surface)]">
             {renderDetails()}
           </div>
         )}

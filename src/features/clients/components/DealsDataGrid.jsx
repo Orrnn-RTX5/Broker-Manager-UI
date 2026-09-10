@@ -1,7 +1,7 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getBrokerDealsPage } from '../../../services/api';
@@ -53,13 +53,6 @@ const saveDealsSnapshot = (data) => {
   } catch {
     // Storage full or private mode
   }
-};
-
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter = 'All Symbols', entryFilter = 'All Entries', onRowsChange, onRowContext }) => {
@@ -193,8 +186,8 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
   };
 
   const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th onClick={() => handleSort(col)} style={{ textAlign: align }} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      {label}
     </th>
   );
 
@@ -205,7 +198,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="deals-grid ui-card flex flex-col w-full overflow-hidden">
+    <div className="deals-grid ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {isError && (
         <div
           className="px-4 py-2 text-xs break-all"
@@ -217,24 +210,13 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
       {isLoading && rows.length === 0 && showLoadingState ? (
         <GridLoadingState label="Loading deals…" />
       ) : (
-      <div className="w-full overflow-x-auto">
+      <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
         <table className="ui-grid min-w-max">
           <thead>
             <tr>
               {renderHeader('ticket', 'Ticket')}
               {renderHeader('orderTicket', 'Order Ticket')}
               {renderHeader('login', 'Login')}
-              {renderHeader('username', 'Username')}
-              {renderHeader('accountName', 'Account')}
-              {renderHeader('accountGroup', 'Group')}
-              {renderHeader('symbol', 'Symbol')}
-              {renderHeader('action', 'Action')}
-              {renderHeader('entry', 'Entry')}
-              {renderHeader('volume', 'Volume', 'right')}
-              {renderHeader('price', 'Price', 'right')}
-              {renderHeader('profit', 'Profit', 'right')}
-              {renderHeader('commission', 'Commission', 'right')}
-              {renderHeader('swap', 'Swap', 'right')}
               {renderHeader('username', 'Username')}
               {renderHeader('accountName', 'Account')}
               {renderHeader('accountGroup', 'Group')}
@@ -284,9 +266,9 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.orderTicket}</td>
                   <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.username}</td>
-                  <td style={{ fontWeight: 500 }}>{row.accountName}</td>
+                  <td>{row.accountName}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.accountGroup}</td>
-                  <td style={{ fontWeight: 500 }}>{row.symbol}</td>
+                  <td>{row.symbol}</td>
                   <td className="capitalize">
                     <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`} style={{ fontSize: '10px' }}>
                       {row.action}
@@ -310,7 +292,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
       )}
 
       <div
-        className="deals-grid-footer flex items-center justify-between px-4 py-2.5 shrink-0"
+        className="deals-grid-footer flex items-center justify-between px-3 py-1 shrink-0"
         style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: '10px' }}
       >
         <span className="flex items-center gap-2" style={{ fontSize: '10px' }}>
@@ -339,7 +321,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
           <span className="tabular px-1 pagination-page" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-primary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>
         </div>
       </div>
 

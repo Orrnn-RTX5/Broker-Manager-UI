@@ -11,6 +11,7 @@ import { DASHBOARD_PLACEHOLDER_MODE } from './dashboardState';
 import useDashboardMetrics, { useDashboardAccountLimits } from './useDashboardMetrics';
 import { OPERATIONAL_DASHBOARD_PLACEHOLDERS as preview } from './operationalDashboardAdapter';
 import RegionalActivityMap from './RegionalActivityMap';
+import { useDockingContext } from '../../components/docking/DockingContext';
 
 const integer = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
 const money = (value, compact = false, currency = 'USD') => new Intl.NumberFormat('en-US', {
@@ -29,8 +30,8 @@ const Sparkline = ({ points, tone = 'success' }) => {
   return <svg className={`cc-sparkline is-${tone}`} viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><path d={path} /></svg>;
 };
 
-const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', points, placeholder }) => (
-  <article className="cc-metric-card" data-placeholder={placeholder || undefined} title={placeholder ? 'This aggregate is supplied by the isolated UI adapter until its API is connected.' : undefined}>
+const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', points, placeholder, onClick }) => (
+  <article className="cc-metric-card" role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? `Show ${label.toLowerCase()}` : undefined} onClick={onClick} onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); } } : undefined} data-placeholder={placeholder || undefined} title={placeholder ? 'This aggregate is supplied by the isolated UI adapter until its API is connected.' : undefined}>
     <span className={`cc-metric-icon is-${tone}`}>{createElement(Icon, { size: 17, strokeWidth: 1.7 })}</span>
     <div className="cc-metric-main">
       <small>{label}</small>
@@ -56,6 +57,11 @@ const PanelTitle = ({ children, meta }) => (
 );
 
 export default function Dashboard() {
+  const { updatePanel } = useDockingContext();
+  const showAccounts = (accountType) => {
+    updatePanel('owner_console', { visible: false, maximized: false });
+    updatePanel('accounts', { visible: true, minimized: false, maximized: false, position: 'right', accountType, title: accountType === 'demo' ? 'Demo Accounts' : 'Real Accounts' });
+  };
   const [range, setRange] = useState('24H');
   const { data, isLoading } = useDashboardMetrics();
   const { data: limitData } = useDashboardAccountLimits();
@@ -77,8 +83,8 @@ export default function Dashboard() {
       {data?.errors?.length > 0 && <div className="cc-data-notice"><Activity size={12} />Some live aggregates are unavailable; cached values and clearly marked UI adapters remain visible.</div>}
 
       <section className="cc-metric-grid" aria-label="Brokerage key metrics">
-        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" points={[3,5,4,8,6,11,9,15]} />
-        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" points={[8,6,9,5,11,8,14,12]} tone="neutral" />
+        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" onClick={() => showAccounts('real')} value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" points={[3,5,4,8,6,11,9,15]} />
+        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" onClick={() => showAccounts('demo')} value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" points={[8,6,9,5,11,8,14,12]} tone="neutral" />
         <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? '—' : money(metrics.equity, true)} change="+3.5%" points={[2,5,4,7,6,9,8,13]} />
         <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? '—' : integer(metrics.openPositions)} change="−6.2%" points={[12,9,11,7,8,5,6,3]} tone="danger" />
         <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? '—' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} points={[4,7,5,11,8,14,10,16]} placeholder={metrics.deposits24h == null} />
@@ -96,15 +102,15 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="cc-chart-area">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" debounce={0}>
             <ComposedChart data={preview.activity} margin={{ top: 8, right: 10, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="var(--cc-grid)" vertical={false} />
               <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval={1} />
               <YAxis yAxisId="volume" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
               <YAxis yAxisId="equity" orientation="right" domain={['dataMin - 50000', 'dataMax + 50000']} axisLine={false} tickLine={false} tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
               <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }} />
-              <Bar yAxisId="volume" dataKey="volume" fill="var(--cc-bar)" barSize={8} radius={[1,1,0,0]} />
-              <Line yAxisId="equity" type="monotone" dataKey="equity" stroke="var(--success)" strokeWidth={1.8} dot={false} activeDot={{ r: 3, fill: 'var(--success)', strokeWidth: 0 }} />
+              <Bar yAxisId="volume" dataKey="volume" fill="var(--cc-bar)" barSize={8} radius={[1,1,0,0]} isAnimationActive={false} />
+              <Line yAxisId="equity" type="monotone" dataKey="equity" stroke="var(--success)" strokeWidth={1.8} dot={false} isAnimationActive={false} activeDot={{ r: 3, fill: 'var(--success)', strokeWidth: 0 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

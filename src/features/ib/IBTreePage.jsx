@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, GitBranch, Loader, RefreshCw, Search, User } from 'lucide-react';
+import { AlertTriangle, Loader, RefreshCw, Search, User } from 'lucide-react';
 import ibApi from '../../services/ibApi';
 import {
   normalizeIBAccount,
@@ -105,10 +105,9 @@ const IBTreePage = () => {
   }, [rootLogin]);
 
   return (
-    <div className="ib-tree-page p-6 w-full h-full flex flex-col gap-4 overflow-y-auto">
-      <div className="ib-tree-header flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <GitBranch size={18} style={{ color: 'var(--accent)' }} />
+    <div className="ib-tree-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden">
+      <div className="ib-tree-header">
+        <div className="ib-tree-heading min-w-0">
           <div>
             <h1 className="ib-tree-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>IB Tree</h1>
             <p className="ib-tree-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Recursive broker-scoped IB hierarchy.</p>
@@ -125,7 +124,7 @@ const IBTreePage = () => {
               onChange={(event) => setRootLogin(event.target.value)}
               onKeyDown={(event) => event.key === 'Enter' && loadTree()}
               className="ui-input ui-input-sm"
-              style={{ paddingLeft: 32, width: 190 }}
+              style={{ paddingLeft: 32 }}
             />
             <datalist id="ib-tree-roots">
               {rootOptions.map((account) => (
@@ -146,10 +145,10 @@ const IBTreePage = () => {
         </div>
       )}
 
-      <div className="ib-tree-content flex gap-4 flex-1 overflow-hidden">
-        <div className="ib-tree-canvas ui-card flex-1 p-3 overflow-y-auto">
+      <div className="ib-tree-content flex gap-2 flex-1 min-h-0 overflow-hidden">
+        <div className="ib-tree-canvas ui-card flex-1 min-w-0 p-3 overflow-auto">
           {!tree && !loadingTree && (
-            <div className="ib-tree-empty text-[10px] text-center py-12" style={{ color: 'var(--muted)' }}>Select a root IB login and load the tree.</div>
+            <div className="ib-tree-empty text-center" style={{ color: 'var(--muted)' }}>Select a root IB login and load the tree.</div>
           )}
           {loadingTree && (
             <div className="flex justify-center py-12"><Loader size={20} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>

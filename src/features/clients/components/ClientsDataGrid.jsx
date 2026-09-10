@@ -1,7 +1,7 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { User, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getClientsPage, normalizeClientRow, peekAccountDetailsManyPage } from '../../../services/api';
@@ -51,13 +51,6 @@ const STATUS_BADGE = {
   Inactive: 'ui-badge-neutral',
   Unregistered: 'ui-badge-warn',
   Pending: 'ui-badge-info',
-};
-
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
 };
 
 const ClientsDataGrid = ({
@@ -169,10 +162,14 @@ const ClientsDataGrid = ({
   const isVisible = (key) => !grid || !grid.hiddenColumns.has(key);
   const isChecked = (id) => grid?.selectedIds?.has(id) ?? false;
   const toggleRow = (id) => grid?.toggle(id);
+  // Never substitute an unselected row after filtering or paging.
+  const selectedClient = [...(grid?.selectedIds || [])].reverse()
+    .map(id => pageRows.find(row => row.id === id))
+    .find(Boolean);
 
   const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }}>
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th onClick={() => handleSort(col)} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} title={`Sort by ${label}`} style={{ textAlign: align }}>
+      {label}
     </th>
   );
 
@@ -262,10 +259,7 @@ const ClientsDataGrid = ({
                   )}
                   {isVisible('id') && (
                     <td style={{ color: 'var(--text-3)' }}>
-                      <span className="inline-flex items-center gap-2">
-                        <User size={13} style={{ color: 'var(--accent)' }} />
-                        <span className="tabular">{row.id}</span>
-                      </span>
+                      <span className="tabular">{row.id}</span>
                     </td>
                   )}
                   {isVisible('name') && <td style={{ fontWeight: 500 }}>{row.name}</td>}
@@ -318,9 +312,16 @@ const ClientsDataGrid = ({
             )}
           </span>
           {grid?.selectedIds?.size > 0 && (
-            <span className="ui-badge ui-badge-brand" style={{ fontSize: '10px' }}>
-              {grid.selectedIds.size} selected
-            </span>
+            <button
+              type="button"
+              className="ui-badge ui-badge-brand"
+              style={{ fontSize: '10px', cursor: selectedClient ? 'pointer' : 'default' }}
+              disabled={!selectedClient}
+              title={selectedClient ? `Open details for client ${selectedClient.id}` : 'Selected clients are not on this page'}
+              onClick={() => setDetailsClient(selectedClient)}
+            >
+              Selected
+            </button>
           )}
           {isFetching && pageRows.length > 0 && (
             <span className="ui-badge ui-badge-neutral" style={{ fontSize: '10px' }}>
