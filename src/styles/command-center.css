@@ -184,9 +184,9 @@
 .rtx5-command-shell .manager-menu-brand { min-width: 318px; padding: 0 10px !important; }
 .rtx5-command-shell .manager-menu-logo { width: 47px; height: 25px; object-fit: contain; filter: none; opacity: .95; }
 .dark .rtx5-command-shell .manager-menu-brand { width:80px; min-width:80px; flex:0 0 80px; justify-content:center; padding-inline:8px !important; }
-.manager-brand-stacked { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; width:56px; }
+.manager-brand-stacked { position:relative; display:flex; align-items:center; justify-content:center; width:56px; height:24px; }
 .rtx5-command-shell .manager-brand-symbol { display:block; width:36px; height:24px; object-fit:contain; }
-.rtx5-command-shell .manager-brand-caption { color:#f4f4f5; font-size:10px !important; font-weight:500 !important; line-height:12px; letter-spacing:.04em; }
+.rtx5-command-shell .manager-brand-caption { position:absolute; top:100%; left:0; width:100%; text-align:center; color:#f4f4f5; font-size:10px !important; font-weight:500 !important; line-height:12px; letter-spacing:.04em; }
 .dark .rtx5-command-shell .manager-menu-items { margin-left:4px !important; }
 .rtx5-command-shell .manager-menu-brand-name { color: var(--text-primary) !important; font-size: 17px !important; font-weight: 600 !important; letter-spacing: .01em; }
 .rtx5-command-shell .manager-menu-brand-subtitle { color: var(--text-secondary) !important; font-size: 9px !important; font-weight: 400 !important; text-transform: none !important; letter-spacing: 0 !important; }
@@ -296,10 +296,11 @@
 .cc-workspace-tab-scroll::-webkit-scrollbar { display:none; width:0; height:0; }
 .cc-workspace-tab-shell { position:relative; display:flex; flex:0 0 160px; width:160px; min-width:160px; border-right:1px solid var(--border); background:transparent; }
 .cc-workspace-tab-shell:hover { background:var(--bg-hover); }
-.cc-workspace-tab-shell.is-active { background:var(--bg-panel); }
+.cc-workspace-tab-shell.is-active { background:color-mix(in srgb, var(--accent) 12%, transparent); }
 .cc-workspace-tab-shell.is-active::before { content:""; position:absolute; inset:0 0 auto; z-index:1; height:2px; background:var(--accent); }
 .cc-workspace-tab { display:inline-flex; min-width:0; flex:1; align-items:center; padding:0 8px 0 12px; border:0; border-radius:0; background:transparent; color:var(--text-secondary); font-size:10px; cursor:pointer; }
 .cc-workspace-tab:hover,.cc-workspace-tab-shell.is-active .cc-workspace-tab { color:var(--text-primary); }
+.cc-workspace-tab-shell.is-active .cc-workspace-tab { color:var(--accent-text); }
 .cc-workspace-tab[aria-disabled="true"] { cursor: default; opacity: .62; }
 .cc-workspace-tab-close { display:grid; width:25px; flex:0 0 25px; place-items:center; border:0; background:transparent; color:var(--text-tertiary); cursor:pointer; }
 .cc-workspace-tab-close:hover { background:var(--bg-elevated); color:var(--text-primary); }

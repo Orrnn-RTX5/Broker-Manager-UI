@@ -1,10 +1,12 @@
 import { createElement, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Activity, ArrowRight, CheckCircle2, CircleDollarSign, ClipboardCheck,
   FileBarChart, Gavel, Handshake, ServerCog, Settings,
   ShieldCheck, UserPlus, UserRoundCheck, Users,
 } from 'lucide-react';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
+import NewAccountModal from '../../components/Popups/NewAccountModal';
 import {
   OWNER_CONSOLE_ALERTS,
   OWNER_CONSOLE_APPROVALS,
@@ -16,7 +18,7 @@ import {
 } from './ownerConsoleReviewState';
 
 const ACTIONS = [
-  { label: 'Add New Client', icon: UserPlus, path: '/clients' },
+  { label: 'Add New Client', icon: UserPlus, action: 'new-account' },
   { label: 'Manage IB Accounts', icon: Users, path: '/ib' },
   { label: 'Server Management', icon: ServerCog, path: '/dashboard' },
   { label: 'Risk Settings', icon: ShieldCheck, path: '/dealer/restrictions' },
@@ -72,6 +74,7 @@ const WorkflowPanel = ({ title, description, items, navigate, panelId, labelledB
 
 export default function OwnerConsole() {
   const [tab, setTab] = useState('Insights');
+  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [reviewed, setReviewed] = useState(readOwnerConsoleReviewState);
   const navigate = useWorkspaceNavigation();
   const alertCount = countUnreviewedOwnerWorkflows(OWNER_CONSOLE_ALERTS, reviewed.alerts);
@@ -111,13 +114,13 @@ export default function OwnerConsole() {
           <section className="cc-owner-section cc-owner-quick-actions">
             <div className="cc-section-title"><strong>Quick Actions</strong></div>
             <div className="cc-quick-grid">
-              {ACTIONS.map(({ label, icon: Icon, path }) => (
+              {ACTIONS.map(({ label, icon: Icon, path, action }) => (
                 <button
                   key={label}
                   type="button"
-                  onPointerEnter={() => navigate.preload?.(path)}
-                  onFocus={() => navigate.preload?.(path)}
-                  onClick={() => navigate(path)}
+                  onPointerEnter={() => path && navigate.preload?.(path)}
+                  onFocus={() => path && navigate.preload?.(path)}
+                  onClick={() => action === 'new-account' ? setIsNewAccountOpen(true) : navigate(path)}
                 >
                   {createElement(Icon, { size: 15 })}<span>{label}</span>
                 </button>
@@ -154,6 +157,10 @@ export default function OwnerConsole() {
           reviewedIds={reviewed.approvals}
           onReview={markReviewed}
         />
+      )}
+      {isNewAccountOpen && createPortal(
+        <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />,
+        document.body,
       )}
     </aside>
   );

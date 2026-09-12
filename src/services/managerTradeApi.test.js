@@ -72,3 +72,8 @@ test('getManagerOrderStatus encodes the durable command lookup route', async () 
   );
   assert.equal(calls[0].options.method, 'GET');
 });
+
+test('placeManagerOrder rejects a broker failure even with HTTP 200', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ success: false, message: 'Market is closed' }), { status: 200 });
+  await assert.rejects(() => placeManagerOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 }), /Market is closed/);
+});

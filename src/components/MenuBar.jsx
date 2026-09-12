@@ -19,6 +19,7 @@ import apiClient from '../services/apiClient';
 import { usePermissions } from '../hooks/usePermissions.js';
 import useThemeStore from '../store/themeStore.js';
 import useNotificationStore from '../store/notificationStore.js';
+import { useI18nStore, useT } from '../i18n/index.js';
 import { MANAGER_REFRESH_EVENT, refreshWorkspaceData } from '../utils/quickSettingsActions.js';
 
 const TOP_POPOVERS = {
@@ -32,6 +33,7 @@ const NOTIFICATION_IDS = ['connection', 'dealer-operations', 'executive-overview
 const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusChange }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const t = useT();
   const { manager, loading: isManagerLoading } = usePermissions();
   const managerLabel = manager.login || manager.displayName;
   const [isManualSyncing, setIsManualSyncing] = useState(false);
@@ -212,7 +214,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
       case 'Edit': return <EditMenu onClose={() => setActiveMenu(null)} />;
       case 'View': return <ViewMenu onClose={() => setActiveMenu(null)} onViewAction={onViewAction} />;
       case 'Tools': return <ToolsMenu onClose={() => setActiveMenu(null)} />;
-      case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} />;
+      case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} onViewAction={onViewAction} />;
       case 'Help': return <HelpMenu onOpenHelp={openHelp} />;
       default: return (
         <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[200px] z-50">
@@ -231,27 +233,27 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
     setActiveTopPopover((current) => current === popover ? null : popover);
   };
   const changeAppearance = () => {
-    const nextAppearance = isDarkMode ? 'Light' : 'Dark';
     toggleTheme();
     setActiveTopPopover(null);
-    addNotification(`${nextAppearance} appearance enabled`, 'success', 2500);
+    addNotification(isDarkMode ? t('bar.lightAppearance') : t('bar.darkAppearance'), 'success', 2500);
   };
   const refreshWorkspace = async () => {
     setActiveTopPopover(null);
     try {
       await refreshWorkspaceData(queryClient);
-      addNotification('Workspace data refreshed', 'success', 2500);
+      addNotification(t('bar.refreshWorkspace'), 'success', 2500);
     } catch (error) {
-      addNotification(`Workspace refresh failed: ${error.message}`, 'error');
+      addNotification(`${t('bar.refreshWorkspace')}: ${error.message}`, 'error');
     }
   };
   const resetWorkspace = async () => {
     setActiveTopPopover(null);
     try {
+      useI18nStore.getState().resetLanguage?.();
       await Promise.resolve(onViewAction?.('reset-layout'));
-      addNotification('Default workspace layout restored', 'success', 2500);
+      addNotification(t('bar.restoreDefault'), 'success', 2500);
     } catch (error) {
-      addNotification(`Unable to reset layout: ${error.message}`, 'error');
+      addNotification(`${t('bar.resetLayout')}: ${error.message}`, 'error');
     }
   };
   const toggleFullscreen = async () => {
@@ -259,9 +261,9 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
     try {
       const fullscreen = await onViewAction?.('fullscreen');
       setIsFullscreen(Boolean(fullscreen));
-      addNotification(fullscreen ? 'Fullscreen enabled' : 'Fullscreen exited', 'success', 2500);
+      addNotification(fullscreen ? t('bar.fullscreen') : t('bar.exitFullscreen'), 'success', 2500);
     } catch (error) {
-      addNotification(error.message || 'Unable to change fullscreen mode', 'error');
+      addNotification(error.message || t('bar.fullscreen'), 'error');
     }
   };
   const goToDashboard = () => {
@@ -301,8 +303,8 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
             setActiveMenu(null);
             navigate('/');
           }}
-          title="Go to dashboard"
-          aria-label="Go to dashboard"
+          title={t('bar.goToDashboard')}
+          aria-label={t('bar.goToDashboard')}
         >
           {isDarkMode ? (
             <span className="manager-brand-stacked">
@@ -339,7 +341,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
                     setActiveMenu(active ? null : item);
                   }}
                 >
-                  {item}
+                  {t(`menu.${item.toLowerCase()}`)}
                 </button>
                 {renderDropdown(item)}
               </div>
@@ -374,7 +376,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
               <WifiOff size={13} />
             )}
             <span className="text-[11px] font-medium tracking-wide">
-              {isConnected ? 'Connected' : 'Disconnected'}
+              {isConnected ? t('status.connected') : t('status.disconnected')}
             </span>
           </div>
 
@@ -384,14 +386,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
               style={{ boxShadow: 'var(--shadow-lg)' }}
             >
               <div className="font-semibold pb-2 mb-2" style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
-                Connection
+                {t('status.connection')}
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-                <div style={{ color: 'var(--text-3)' }}>Status</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.status')}</div>
                 <div style={{ color: 'var(--ok-text)', fontWeight: 500 }}>{visibleConnectionData.status}</div>
-                <div style={{ color: 'var(--text-3)' }}>Login</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.login')}</div>
                 <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.login}</div>
-                <div style={{ color: 'var(--text-3)' }}>Uptime</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.uptime')}</div>
                 <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.connectedTime}s</div>
               </div>
             </div>
@@ -401,8 +403,8 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           <button
             type="button"
             className={`cc-top-icon ${activeTopPopover === TOP_POPOVERS.notifications ? 'is-open' : ''}`}
-            title="Notifications"
-            aria-label="Notifications"
+            title={t('bar.notifications')}
+            aria-label={t('bar.notifications')}
             aria-haspopup="dialog"
             aria-expanded={activeTopPopover === TOP_POPOVERS.notifications}
             onClick={() => toggleTopPopover(TOP_POPOVERS.notifications)}
@@ -410,20 +412,20 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
             <Bell size={14} />{unreadNotificationCount > 0 && <b>{unreadNotificationCount}</b>}
           </button>
           {activeTopPopover === TOP_POPOVERS.notifications && (
-            <section className="cc-top-popover cc-notifications-popover" role="dialog" aria-label="Notifications">
-              <header><div><strong>Notifications</strong><small>{unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : 'All caught up'}</small></div><button type="button" onClick={markAllNotificationsRead} disabled={unreadNotificationCount === 0}><CheckCheck size={13} /> Mark read</button></header>
+            <section className="cc-top-popover cc-notifications-popover" role="dialog" aria-label={t('bar.notifications')}>
+              <header><div><strong>{t('bar.notifications')}</strong><small>{unreadNotificationCount > 0 ? t('bar.unread', { count: unreadNotificationCount }) : t('bar.allCaughtUp')}</small></div><button type="button" onClick={markAllNotificationsRead} disabled={unreadNotificationCount === 0}><CheckCheck size={13} /> {t('bar.markRead')}</button></header>
               <div className="cc-notification-list">
                 <button type="button" className={readNotificationIds.includes('connection') ? 'is-read' : ''} onClick={() => { markNotificationRead('connection'); refreshWorkspace(); }}>
                   <span className={`cc-notification-dot ${readNotificationIds.includes('connection') ? 'is-read' : isConnected ? 'is-ok' : 'is-danger'}`} />
-                  <span><strong>{isConnected ? 'Broker connection is online' : 'Broker connection needs attention'}</strong><small>{visiblePingMs == null ? 'Connection telemetry is unavailable.' : `Latest response: ${visiblePingMs} ms.`}</small></span>
+                  <span><strong>{isConnected ? t('bar.notifOnline') : t('bar.notifAttention')}</strong><small>{visiblePingMs == null ? t('bar.telemetryUnavailable') : t('bar.latestResponse', { ms: visiblePingMs })}</small></span>
                 </button>
                 <button type="button" className={readNotificationIds.includes('dealer-operations') ? 'is-read' : ''} onClick={() => { markNotificationRead('dealer-operations'); navigate('/dealer/queue'); setActiveTopPopover(null); }}>
                   <span className={`cc-notification-dot ${readNotificationIds.includes('dealer-operations') ? 'is-read' : 'is-warn'}`} />
-                  <span><strong>Review dealer operations</strong><small>Open the dealer queue and pending requests.</small></span>
+                  <span><strong>{t('bar.reviewDealer')}</strong><small>{t('bar.reviewDealerDesc')}</small></span>
                 </button>
                 <button type="button" className={readNotificationIds.includes('executive-overview') ? 'is-read' : ''} onClick={() => { markNotificationRead('executive-overview'); goToDashboard(); }}>
                   <span className={`cc-notification-dot ${readNotificationIds.includes('executive-overview') ? 'is-read' : 'is-info'}`} />
-                  <span><strong>Executive overview available</strong><small>Return to the live manager dashboard.</small></span>
+                  <span><strong>{t('bar.execOverview')}</strong><small>{t('bar.execOverviewDesc')}</small></span>
                 </button>
               </div>
             </section>
@@ -433,21 +435,21 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           <button
             type="button"
             className={`cc-top-icon ${activeTopPopover === TOP_POPOVERS.settings ? 'is-open' : ''}`}
-            title="Quick settings"
-            aria-label="Quick settings"
+            title={t('bar.quickSettings')}
+            aria-label={t('bar.quickSettings')}
             aria-haspopup="menu"
             aria-expanded={activeTopPopover === TOP_POPOVERS.settings}
             onClick={() => toggleTopPopover(TOP_POPOVERS.settings)}
           ><Settings size={14} /></button>
           {activeTopPopover === TOP_POPOVERS.settings && (
-            <section className="cc-top-popover cc-settings-popover" role="menu" aria-label="Quick settings">
-              <header><div><strong>Quick Settings</strong><small>Workspace preferences</small></div></header>
+            <section className="cc-top-popover cc-settings-popover" role="menu" aria-label={t('bar.quickSettings')}>
+              <header><div><strong>{t('bar.quickSettings')}</strong><small>{t('bar.workspacePrefs')}</small></div></header>
               <button type="button" role="menuitem" onClick={changeAppearance}>
-                {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}<span><strong>{isDarkMode ? 'Light appearance' : 'Dark appearance'}</strong><small>Switch the manager colour theme</small></span>
+                {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}<span><strong>{isDarkMode ? t('bar.lightAppearance') : t('bar.darkAppearance')}</strong><small>{t('bar.switchTheme')}</small></span>
               </button>
-              <button type="button" role="menuitem" onClick={refreshWorkspace} disabled={isManualSyncing} aria-busy={isManualSyncing}><RefreshCw size={15} className={isManualSyncing ? 'animate-spin' : ''} /><span><strong>{isManualSyncing ? 'Refreshing workspace' : 'Refresh workspace'}</strong><small>Reload visible manager data</small></span></button>
-              <button type="button" role="menuitem" onClick={resetWorkspace}><RotateCcw size={15} /><span><strong>Reset layout</strong><small>Restore the default panels and dashboard</small></span></button>
-              <button type="button" role="menuitem" onClick={toggleFullscreen}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}<span><strong>{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}</strong><small>{isFullscreen ? 'Return to the windowed workspace' : 'Use the available screen space'}</small></span></button>
+              <button type="button" role="menuitem" onClick={refreshWorkspace} disabled={isManualSyncing} aria-busy={isManualSyncing}><RefreshCw size={15} className={isManualSyncing ? 'animate-spin' : ''} /><span><strong>{isManualSyncing ? t('bar.refreshingWorkspace') : t('bar.refreshWorkspace')}</strong><small>{t('bar.reloadVisible')}</small></span></button>
+              <button type="button" role="menuitem" onClick={resetWorkspace}><RotateCcw size={15} /><span><strong>{t('bar.resetLayout')}</strong><small>{t('bar.restoreDefault')}</small></span></button>
+              <button type="button" role="menuitem" onClick={toggleFullscreen}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}<span><strong>{isFullscreen ? t('bar.exitFullscreen') : t('bar.fullscreen')}</strong><small>{isFullscreen ? t('bar.returnWindowed') : t('bar.useScreenSpace')}</small></span></button>
             </section>
           )}
         </div>
@@ -455,29 +457,29 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           <button
             type="button"
             className={`cc-admin-profile cc-admin-profile-compact ${activeTopPopover === TOP_POPOVERS.profile ? 'is-open' : ''}`}
-            title={isManagerLoading ? 'Loading signed-in manager' : `Signed in as ${managerLabel}`}
-            aria-label={`Signed-in manager: ${managerLabel}. Click to view account details.`}
+            title={isManagerLoading ? t('bar.loading') : `${t('bar.signedInManager')}: ${managerLabel}`}
+            aria-label={`${t('bar.signedInManager')}: ${managerLabel}`}
             aria-haspopup="menu"
             aria-expanded={activeTopPopover === TOP_POPOVERS.profile}
             onClick={() => toggleTopPopover(TOP_POPOVERS.profile)}
           >
             <span>{manager.initial}</span>
             <div>
-              <strong>{isManagerLoading && !manager.login ? 'Loading…' : managerLabel}</strong>
+              <strong>{isManagerLoading && !manager.login ? t('bar.loading') : managerLabel}</strong>
               <small>{manager.role}</small>
             </div>
           </button>
-          {activeTopPopover === TOP_POPOVERS.profile && <section className="cc-manager-profile-card is-open" role="menu" aria-label="Manager account menu">
-            <header><strong>Signed-in Manager</strong><small>Authenticated session</small></header>
+          {activeTopPopover === TOP_POPOVERS.profile && <section className="cc-manager-profile-card is-open" role="menu" aria-label={t('bar.signedInManager')}>
+            <header><strong>{t('bar.signedInManager')}</strong><small>{t('bar.authSession')}</small></header>
             <dl>
-              {manager.displayName !== manager.login && <div><dt>Name</dt><dd>{manager.displayName}</dd></div>}
-              <div><dt>Login</dt><dd>{manager.login || 'Unavailable'}</dd></div>
-              <div><dt>Role</dt><dd>{manager.role}</dd></div>
-              <div><dt>Broker</dt><dd>{manager.brokerId || 'Unavailable'}</dd></div>
-              <div><dt>Permissions</dt><dd>{manager.isAdmin ? 'Administrator' : manager.permissions.length}</dd></div>
+              {manager.displayName !== manager.login && <div><dt>{t('bar.name')}</dt><dd>{manager.displayName}</dd></div>}
+              <div><dt>{t('status.login')}</dt><dd>{manager.login || t('bar.unavailable')}</dd></div>
+              <div><dt>{t('bar.role')}</dt><dd>{manager.role}</dd></div>
+              <div><dt>{t('bar.broker')}</dt><dd>{manager.brokerId || t('bar.unavailable')}</dd></div>
+              <div><dt>{t('bar.permissions')}</dt><dd>{manager.isAdmin ? t('bar.administrator') : manager.permissions.length}</dd></div>
             </dl>
             <div className="cc-profile-actions">
-              <button type="button" role="menuitem" className="is-danger" onClick={signOut}><LogOut size={14} /> Sign out</button>
+              <button type="button" role="menuitem" className="is-danger" onClick={signOut}><LogOut size={14} /> {t('bar.signOut')}</button>
             </div>
           </section>}
         </div>

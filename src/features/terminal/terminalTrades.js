@@ -3,6 +3,57 @@ export const TRADE_COLUMNS = [
   'Open', 'Current', 'S/L', 'T/P', 'Storage', 'Profit', 'Comment',
 ];
 
+export const TERMINAL_POSITIONS_QUERY_KEY = Object.freeze(['terminal-positions']);
+export const TERMINAL_POSITIONS_PARAMS = Object.freeze({ sort_by: 'position', sort_dir: 'desc' });
+export const TERMINAL_STORAGE_KEY = 'rtx5:terminal-positions:v1';
+
+let memoryTerminalCache = null;
+
+export const readStoredTerminalPage = () => {
+  if (memoryTerminalCache) return memoryTerminalCache;
+  try {
+    if (typeof sessionStorage === 'undefined') return undefined;
+    const raw = sessionStorage.getItem(TERMINAL_STORAGE_KEY)
+      || (typeof localStorage !== 'undefined' ? localStorage.getItem(TERMINAL_STORAGE_KEY) : null);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      memoryTerminalCache = parsed;
+      return parsed;
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return undefined;
+};
+
+export const writeStoredTerminalPage = (page) => {
+  try {
+    if (!page || !Array.isArray(page.rows) || page.rows.length === 0) return;
+    memoryTerminalCache = page;
+    const payload = JSON.stringify({
+      rows: page.rows,
+      total: page.total ?? page.rows.length,
+      hasMore: Boolean(page.hasMore),
+      timestamp: Date.now(),
+    });
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TERMINAL_STORAGE_KEY, payload);
+    if (typeof localStorage !== 'undefined') localStorage.setItem(TERMINAL_STORAGE_KEY, payload);
+  } catch {
+    // Storage full or private mode
+  }
+};
+
+export const clearStoredTerminalPage = () => {
+  memoryTerminalCache = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(TERMINAL_STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(TERMINAL_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+};
+
 const value = (input) => input === undefined || input === null || input === '' ? '—' : input;
 const decimal = (input, digits) => {
   if (input === undefined || input === null || input === '' || !Number.isFinite(Number(input))) return '—';

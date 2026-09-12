@@ -5386,9 +5386,19 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-transaction-body input:focus { border-color: var(--accent) !important; box-shadow: none !important; }
 .account-transaction-body .account-transaction-submit { align-self: flex-end; min-width: 90px; min-height: 32px; margin-top: 4px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 500; box-shadow: none; cursor: pointer; }
 .account-transaction-body .account-transaction-submit:disabled { opacity: .45; cursor: not-allowed; }
-.account-trade-workspace { display: grid; grid-template-columns: minmax(240px, 0.85fr) minmax(380px, 1.25fr); gap: 12px; flex: 1; min-height: 0; padding: 4px; overflow: auto; color: var(--text); }
-.account-trade-workspace .account-trade-chart { width: auto; min-height: 320px; border-color: var(--border); box-shadow: none; }
-.account-trade-workspace .account-trade-order { min-width: 0; min-height: 0; overflow-y: auto; padding: 12px; border-color: var(--border); box-shadow: none; }
+.account-trade-workspace { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(360px, 1fr); gap: 0; flex: 1; min-height: 0; padding: 4px; overflow: auto; color: var(--text); }
+.account-trade-workspace .account-trade-chart { width: auto; min-height: 360px; border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.account-trade-workspace .account-trade-order { min-width: 0; min-height: 0; overflow-y: auto; padding: 8px 12px; border: 0; border-radius: 0; box-shadow: none; }
+.account-trade-chart-quotes { order: 1; }
+.account-trade-plot { order: 2; min-height: 280px; margin: 8px 0 0 8px; }
+.account-trade-form { gap: 6px; flex-shrink: 0; }
+.account-trade-field-row { grid-template-columns: 52px minmax(0, 1fr); }
+.account-trade-field-row > span:first-child { text-align: left; }
+.account-trade-form input { min-width: 0; }
+.account-trade-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border); }
+.account-trade-prices > div { display: flex; flex-direction: column; gap: 6px; }
+.account-trade-prices > div:nth-child(2) { align-items: flex-end; border-left: 1px solid var(--border); }
+.account-trade-spread { grid-column: 1 / -1; text-align: center; }
 .account-trade-workspace :is(input, select) { font-size: 11px !important; font-weight: 400 !important; color: var(--text); }
 .account-trade-workspace .font-extrabold, .account-trade-workspace .font-bold { font-weight: 500; }
 .account-trade-workspace .shadow-md { box-shadow: none; }

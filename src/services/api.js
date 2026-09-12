@@ -556,10 +556,51 @@ let cachedPositionsDatasetTime = 0;
 let pendingPositionsDatasetPromise = null;
 let positionsCacheGeneration = 0;
 const POSITIONS_CACHE_TTL_MS = 20_000;
+const POSITIONS_DATASET_CACHE_KEY = 'rtx5_positions_dataset_v2';
 const ACCOUNT_POSITIONS_CACHE_TTL_MS = 5_000;
 const ACCOUNT_POSITIONS_PRIORITY_WAIT_MS = 1_000;
 const ACCOUNT_POSITIONS_PAINT_GRACE_MS = 150;
 const ACCOUNT_POSITIONS_INITIAL_LIMIT = 30;
+
+const readStoredPositionsDataset = () => {
+  try {
+    const raw = typeof sessionStorage === 'undefined'
+      ? null
+      : (sessionStorage.getItem(POSITIONS_DATASET_CACHE_KEY) || localStorage.getItem(POSITIONS_DATASET_CACHE_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.records) && parsed.records.length > 0) return parsed.records;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {
+    // Ignore storage parse errors
+  }
+  return null;
+};
+
+const writeStoredPositionsDataset = (records) => {
+  if (!Array.isArray(records) || records.length === 0) return;
+  try {
+    const payload = JSON.stringify({ records, timestamp: Date.now() });
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(POSITIONS_DATASET_CACHE_KEY, payload);
+    if (typeof localStorage !== 'undefined') localStorage.setItem(POSITIONS_DATASET_CACHE_KEY, payload);
+  } catch {
+    // Storage full or private mode
+  }
+};
+
+export const peekStoredPositionsDataset = () => {
+  if (Array.isArray(cachedPositionsDataset) && cachedPositionsDataset.length > 0) return cachedPositionsDataset;
+  return readStoredPositionsDataset();
+};
+
+export const clearPositionsStorageCache = () => {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(POSITIONS_DATASET_CACHE_KEY);
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(POSITIONS_DATASET_CACHE_KEY);
+  } catch {
+    // Ignore storage error
+  }
+};
 
 const buildAccountPositionsEndpoint = (logins, { offset = 0 } = {}) => {
   const params = new URLSearchParams(arrayQuery('logins[]', logins));
@@ -568,12 +609,21 @@ const buildAccountPositionsEndpoint = (logins, { offset = 0 } = {}) => {
   return `/Positions?${params.toString()}`;
 };
 
-const getFreshPositionsDataset = () => (
-  Array.isArray(cachedPositionsDataset)
-  && Date.now() - cachedPositionsDatasetTime < POSITIONS_CACHE_TTL_MS
-    ? cachedPositionsDataset
-    : null
-);
+const getFreshPositionsDataset = () => {
+  if (
+    Array.isArray(cachedPositionsDataset)
+    && Date.now() - cachedPositionsDatasetTime < POSITIONS_CACHE_TTL_MS
+  ) {
+    return cachedPositionsDataset;
+  }
+  const stored = readStoredPositionsDataset();
+  if (stored) {
+    cachedPositionsDataset = stored;
+    cachedPositionsDatasetTime = Date.now();
+    return cachedPositionsDataset;
+  }
+  return null;
+};
 
 const selectAccountPositions = (records, login) => records
   .map(normalizePositionRow)
@@ -799,6 +849,7 @@ export const invalidateGlobalPositionsCache = () => {
   cachedPositionsDataset = null;
   cachedPositionsDatasetTime = 0;
   pendingPositionsDatasetPromise = null;
+  clearPositionsStorageCache();
 };
 
 export const invalidatePositionsCache = (login) => {
@@ -842,6 +893,7 @@ const fetchAllPositionsDataset = async (options = {}) => {
       if (positionsCacheGeneration === requestGeneration) {
         cachedPositionsDataset = records;
         cachedPositionsDatasetTime = Date.now();
+        writeStoredPositionsDataset(records);
       }
       return records;
     } catch (error) {
@@ -918,6 +970,7 @@ export const getPositionsPage = async (params = {}, options = {}) => {
   if (isCompleteUnfilteredSnapshot && positionsCacheGeneration === requestGeneration) {
     cachedPositionsDataset = collectedRows;
     cachedPositionsDatasetTime = Date.now();
+    writeStoredPositionsDataset(collectedRows);
   }
 
   // 4. In the background (non-blocking), warm the full dataset for instant dropdown filtering & search
@@ -1293,6 +1346,8 @@ export default {
   hasAccountPositionsContinuation,
   completeAccountPositions,
   invalidateGlobalPositionsCache,
+  peekStoredPositionsDataset,
+  clearPositionsStorageCache,
   getTradingAccountsAnalytics,
   getOpenOrders,
   getOrders,

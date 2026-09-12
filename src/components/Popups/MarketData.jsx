@@ -581,6 +581,8 @@ const MarketData = ({ compact = false }) => {
         }
         .market-watch-type .market-data-tab.is-active {
           font-weight: 600 !important;
+          background: color-mix(in srgb, var(--accent) 12%, transparent);
+          color: var(--accent-text);
         }
         @keyframes flashTextUp {
           0% { color: var(--market-value-up); text-shadow: 0 0 8px var(--cc-market-glow-up, rgba(0, 168, 255, 0.4)); }
@@ -616,12 +618,12 @@ const MarketData = ({ compact = false }) => {
               className={`
                 market-data-tab ${compact ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-xs rounded-t-md transition-colors relative mb-[-1px] border border-b-0
                 ${activeTab === tab
-                  ? 'is-active bg-[var(--surface)] text-[var(--accent)] z-10'
+                  ? 'is-active z-10'
                   : 'bg-transparent text-[var(--text-3)] border-transparent hover:text-[var(--text-2)] hover:bg-[var(--surface-hover)]'}
               `}
               style={{
-                borderColor: activeTab === tab ? 'var(--border)' : 'transparent',
-                borderBottom: activeTab === tab ? '2px solid var(--surface)' : 'none',
+                borderColor: activeTab === tab ? 'color-mix(in srgb, var(--accent) 46%, var(--border))' : 'transparent',
+                borderBottom: activeTab === tab ? '2px solid var(--accent)' : 'none',
               }}
             >
               {tab}

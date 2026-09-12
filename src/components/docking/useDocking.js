@@ -103,6 +103,10 @@ export function useDocking(initialPanels = {}) {
     });
   }, []);
 
+  const updatePanels = useCallback((updater) => {
+    setPanels(prev => (typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }));
+  }, []);
+
   const dockPanel = useCallback((id, position) => {
     setPanels(prev => {
       if (!prev[id]) return prev;
@@ -218,12 +222,14 @@ export function useDocking(initialPanels = {}) {
     });
   }, []);
 
+
   return {
     panels,
     draggingId,
     setDraggingId,
     registerPanel,
     updatePanel,
+    updatePanels,
     dockPanel,
     bringToFront,
     togglePanel,

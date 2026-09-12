@@ -22,7 +22,7 @@ const createClientOrderId = () => {
 };
 
 const throwTradeError = (result, response, fallback) => {
-  if (response.ok) return;
+  if (response.ok && result?.success !== false && result?.ok !== false && !result?.error) return;
   throw Object.assign(
     new Error(result?.message || result?.error || fallback),
     { status: response.status, code: result?.code }

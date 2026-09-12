@@ -20,8 +20,6 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { startPositionSync, stopPositionSync } from '../services/positionSync';
 import { resetWorkspaceLayout, toggleDocumentFullscreen } from '../utils/quickSettingsActions.js';
 import '../styles/command-center.css';
-
-// ─── Panel IDs ───────────────────────────────────────────────────────────────
 const PANEL_NAVIGATOR  = 'navigator';
 const PANEL_ACCOUNTS   = 'accounts';
 const PANEL_MARKET_DATA= 'market_data';
@@ -77,7 +75,7 @@ const INITIAL_PANELS = {
 // ─── Inner layout (needs docking context) ────────────────────────────────────
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
-  const { togglePanel, updatePanel, panels, resetLayout } = useDockingContext();
+  const { togglePanel, updatePanel, updatePanels, panels, resetLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
   const [connectionTelemetry, setConnectionTelemetry] = useState({
@@ -86,10 +84,10 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     trafficKb: 13.0,
   });
 
-  const isNavigatorOpen = panels[PANEL_NAVIGATOR]?.visible ?? false;
-  const isAccountsOpen  = panels[PANEL_ACCOUNTS]?.visible  ?? true;
-  const isMarketDataOpen = panels[PANEL_MARKET_DATA]?.visible ?? false;
-  const isOwnerConsoleOpen = panels[PANEL_OWNER]?.visible ?? true;
+  const isNavigatorOpen = Boolean(panels[PANEL_NAVIGATOR]?.visible);
+  const isAccountsOpen  = Boolean(panels[PANEL_ACCOUNTS]?.visible);
+  const isMarketDataOpen = Boolean(panels[PANEL_MARKET_DATA]?.visible);
+  const isOwnerConsoleOpen = Boolean(panels[PANEL_OWNER]?.visible);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -117,15 +115,31 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   }, [togglePanel]);
 
   const toggleAccountsPanel = useCallback(() => {
-    updatePanel(PANEL_ACCOUNTS, { accountType: 'all', title: 'Accounts' });
-    const isOpeningAccounts = !panels[PANEL_ACCOUNTS]?.visible;
-
-    if (isOpeningAccounts && panels[PANEL_OWNER]?.visible) {
-      updatePanel(PANEL_OWNER, { visible: false, maximized: false });
-    }
-
-    togglePanel(PANEL_ACCOUNTS);
-  }, [panels, togglePanel, updatePanel]);
+    updatePanels((prev) => {
+      const accounts = prev[PANEL_ACCOUNTS];
+      if (!accounts) return prev;
+      const nextVisible = !accounts.visible;
+      const next = {
+        ...prev,
+        [PANEL_ACCOUNTS]: {
+          ...accounts,
+          accountType: 'all',
+          title: 'Accounts',
+          visible: nextVisible,
+          userPinned: nextVisible,
+          maximized: nextVisible ? accounts.maximized : false,
+        },
+      };
+      if (nextVisible && prev[PANEL_OWNER]?.visible) {
+        next[PANEL_OWNER] = {
+          ...prev[PANEL_OWNER],
+          visible: false,
+          maximized: false,
+        };
+      }
+      return next;
+    });
+  }, [updatePanels]);
 
   const handleViewAction = useCallback((action) => {
     switch (action) {
@@ -236,6 +250,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     [PANEL_OWNER]: <OwnerConsole />,
     [PANEL_TERMINAL]: <TerminalDock isAuthenticated={isAuthenticated} />,
   };
+
 
   return (
     <div

@@ -11,7 +11,7 @@ test('Manager File menu Exit invokes the supplied logout callback', () => {
   const fileMenu = readComponent('menus/FileMenu.jsx');
   const menuBar = readComponent('MenuBar.jsx');
 
-  assert.match(fileMenu, /text="Exit"[\s\S]*?onClick=\{onExitClick\}/);
+  assert.match(fileMenu, /text=(?:"Exit"|\{t\('file\.exit'\)\})[\s\S]*?onClick=\{onExitClick\}/);
   assert.match(menuBar, /const handleExitClick = \(\) => \{[\s\S]*?setActiveMenu\(null\);[\s\S]*?onLogout\(\);[\s\S]*?\};/);
   assert.match(menuBar, /onExitClick=\{handleExitClick\}/);
 });

@@ -17,6 +17,8 @@ import {
 import useSymbolStore from '../../store/symbolStore';
 import { placeManagerOrder } from '../../services/managerTradeApi';
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
+import DepositDialog from './DepositDialog';
+import { COMMENT_PRESETS, normalizeCommentForDefault, detectCommentLanguage } from '../../utils/commentTranslation';
 
 const readTradeQuote = (symbol) => {
   const quote = useSymbolStore.getState().symbols[symbol];
@@ -77,6 +79,7 @@ const AccountTradeTab = ({
   showError,
   requireTradeMutationPermission,
   onTradePlaced,
+  onUpdateState,
 }) => {
   const [modalSymbol, setModalSymbol] = useState(
     selectedTicketRow?.symbol || positions[0]?.symbol || 'EURUSD'
@@ -85,9 +88,27 @@ const AccountTradeTab = ({
   const [tradeTP, setTradeTP] = useState('0.00000');
   const [tradeVolume, setTradeVolume] = useState('0.01');
   const [tradeComment, setTradeComment] = useState('');
-  const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
+  const [isAutoPipTrack, setIsAutoPipTrack] = useState(false);
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
+  const [tradeConfirmation, setTradeConfirmation] = useState(null);
+  const tradeConfirmationRef = useRef(null);
+  useEffect(() => () => tradeConfirmationRef.current?.(false), []);
+  const finishTradeConfirmation = (confirmed) => {
+    const resolve = tradeConfirmationRef.current;
+    tradeConfirmationRef.current = null;
+    setTradeConfirmation(null);
+    resolve?.(confirmed);
+  };
+  const stopsChanged = Boolean(selectedTicketRow) && (
+    Number(tradeSL) !== Number(selectedTicketRow?.priceSl || 0) ||
+    Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0)
+  );
+  const volumeChanged = Boolean(selectedTicketRow) && Number(tradeVolume) !== Number(selectedTicketRow.volume ?? selectedTicketRow.lots ?? 0);
+  const canUpdateTrade = Boolean(selectedTicketRow) && (stopsChanged || volumeChanged) && canManipulateTrades && !isUpdatingTrade && !isPlacingTrade;
+  useEffect(() => {
+    onUpdateState?.({ canUpdate: canUpdateTrade, busy: isUpdatingTrade || isPlacingTrade });
+  }, [canUpdateTrade, isUpdatingTrade, isPlacingTrade, onUpdateState]);
   const [tickHistory, setTickHistory] = useState(() => { const tick = readTradeQuote(modalSymbol); return tick ? [tick] : []; });
   const feedError = useSymbolStore((state) => state.feedError);
   const isConnected = useSymbolStore((state) => state.isConnected);
@@ -199,36 +220,75 @@ const AccountTradeTab = ({
     });
   };
 
-  // Commit SL / TP modifications
+  // Save only edited fields; preserve successful writes if a later request fails.
   const handleUpdateTrade = async () => {
-    if (!requireTradeMutationPermission()) return;
-    if (!selectedTicketRow) return;
-    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
-    if (!ticket) {
-      alert('No ticket selected.');
+    if (!selectedTicketRow || !canUpdateTrade || !requireTradeMutationPermission()) return;
+    const sl = Number(tradeSL), tp = Number(tradeTP), lots = Number(tradeVolume);
+    if (!tradeSL.trim() || !tradeTP.trim() || !Number.isFinite(sl) || !Number.isFinite(tp) || sl < 0 || tp < 0) {
+      showError('Update trade', new Error('Stop loss and take profit must be zero or positive prices.'));
       return;
     }
-
+    if (!Number.isFinite(lots) || lots <= 0 || lots > 1000) {
+      showError('Update trade', new Error('Volume must be greater than 0 and no more than 1,000 lots.'));
+      return;
+    }
+    const ticket = selectedTicketRow.position || selectedTicketRow.ticket;
+    if (!ticket) {
+      showError('Update trade', new Error('No ticket selected.'));
+      return;
+    }
+    const saved = { ...selectedTicketRow };
+    const changed = [];
+    const checkResult = (result) => {
+      if (result?.success === false || result?.ok === false || result?.error) {
+        throw new Error(result.error?.message || result.error || result.message || 'Trade update rejected.');
+      }
+    };
     setIsUpdatingTrade(true);
+    setIsAutoPipTrack(false);
     try {
-      const sl = parseFloat(tradeSL);
-      const tp = parseFloat(tradeTP);
-      const results = [];
-      if (adapter.editableFields.stoploss && !Number.isNaN(sl)) {
-        results.push(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
+      if (stopsChanged) {
+        if (adapter.modifyStops) {
+          checkResult(await adapter.modifyStops({ ticket, stoploss: sl, takeprofit: tp }));
+          saved.priceSl = sl;
+          saved.priceTp = tp;
+          changed.push('SL/TP');
+        } else {
+          if (sl !== Number(saved.priceSl || 0)) {
+            checkResult(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
+            saved.priceSl = sl;
+            changed.push('SL');
+          }
+          if (tp !== Number(saved.priceTp || 0)) {
+            checkResult(await adapter.modifyField({ ticket, field: 'takeprofit', value: tp }));
+            saved.priceTp = tp;
+            changed.push('TP');
+          }
+        }
       }
-      if (adapter.editableFields.takeprofit && !Number.isNaN(tp)) {
-        results.push(await adapter.modifyField({ ticket, field: 'takeprofit', value: tp }));
+      if (volumeChanged) {
+        checkResult(await adapter.modifyField({ ticket, field: 'volume', value: lots }));
+        saved.volume = lots;
+        saved.lots = lots;
+        changed.push('volume');
       }
-      showResult(`Modify ${adapter.label} #${ticket}`, results[results.length - 1] || { message: 'no changes' });
+      setSelectedTicketRow(saved);
+      showResult('Update trade', { message: `${changed.join(" and ")} updated successfully for position #${ticket}.` });
+      onTradePlaced?.();
     } catch (err) {
-      showError(`Modify ${adapter.label}`, err);
+      setSelectedTicketRow(saved);
+      setTradeSL(Number(saved.priceSl || 0).toFixed(digits));
+      setTradeTP(Number(saved.priceTp || 0).toFixed(digits));
+      setTradeVolume(String(saved.volume ?? saved.lots ?? '0.01'));
+      showError('Update trade', new Error(`${err?.message || "Update failed."} ${changed.length ? `${changed.join(" and ")} already saved. Remaining fields reset to their saved values.` : "Fields reset to their saved values."}`));
+      if (changed.length) onTradePlaced?.();
     } finally {
       setIsUpdatingTrade(false);
     }
   };
 
   const handlePlaceTrade = async (operation) => {
+    if (tradeConfirmationRef.current || isPlacingTrade || isUpdatingTrade || selectedTicketRow) return;
     if (!requireTradeMutationPermission()) return;
 
     const login = Number(loginId);
@@ -252,7 +312,11 @@ const AccountTradeTab = ({
       showError('Place manager order', new Error('Stop loss and take profit must be zero or positive prices.'));
       return;
     }
-    if (!window.confirm(`Place a ${operation.toUpperCase()} market order for ${lots} ${symbol} on account ${login}?`)) return;
+    const confirmed = await new Promise((resolve) => {
+      tradeConfirmationRef.current = resolve;
+      setTradeConfirmation({ operation, message: `Place a ${operation.toUpperCase()} market order for ${lots} lots of ${symbol} on account #${login}?` });
+    });
+    if (!confirmed) return;
 
     setIsPlacingTrade(true);
     try {
@@ -263,9 +327,9 @@ const AccountTradeTab = ({
         lots,
         stoploss,
         takeprofit,
-        comment: tradeComment.trim(),
+        comment: normalizeCommentForDefault(tradeComment.trim()),
       });
-      showResult(`Place ${operation.toUpperCase()} order`, result);
+      showResult(`Place ${operation.toUpperCase()} order`, { message: `${operation.toUpperCase()} ${lots} lots of ${symbol} submitted successfully for account #${login}. ${typeof result?.message === 'string' ? result.message : ''}` });
       setTradeComment('');
       onTradePlaced?.(result);
     } catch (err) {
@@ -275,70 +339,77 @@ const AccountTradeTab = ({
     }
   };
 
-  // Chart scaling calculations
-  const recentHistory = tickHistory.filter((tick) => tick.symbol === modalSymbol).slice(-80);
-  const latestTick = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
-  const currentAsk = latestTick ? latestTick.ask : 0;
-  const currentBid = latestTick ? latestTick.bid : 0;
-  const spread = Math.max(0.00002, (currentAsk - currentBid) || 0.00002);
-  const spreadPips = (currentAsk && currentBid)
-    ? formatPipDiff(currentAsk - currentBid, digits)
-    : '-';
+  // Reuse chart geometry while editing order fields.
+  const { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
+    askBadgeY, bidBadgeY, yAxisTicks, askPoints, bidPoints } = useMemo(() => {
+    // Chart scaling calculations
+    const recentHistory = tickHistory.filter((tick) => tick.symbol === modalSymbol).slice(-80);
+    const latestTick = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
+    const currentAsk = latestTick ? latestTick.ask : 0;
+    const currentBid = latestTick ? latestTick.bid : 0;
+    const spread = Math.max(0.00002, (currentAsk - currentBid) || 0.00002);
+    const spreadPips = (currentAsk && currentBid)
+      ? formatPipDiff(currentAsk - currentBid, digits)
+      : '-';
 
-  const asks = recentHistory.map((t) => t.ask);
-  const bids = recentHistory.map((t) => t.bid);
-  const minVal = recentHistory.length > 0 ? Math.min(...bids) : 0;
-  const maxVal = recentHistory.length > 0 ? Math.max(...asks) : 0;
+    const asks = recentHistory.map((t) => t.ask);
+    const bids = recentHistory.map((t) => t.bid);
+    const minVal = recentHistory.length > 0 ? Math.min(...bids) : 0;
+    const maxVal = recentHistory.length > 0 ? Math.max(...asks) : 0;
 
-  const rawRange = maxVal - minVal;
-  // Ensure lines have at least 20% margin from the top and bottom edges
-  const effectiveRange = Math.max(rawRange, spread * 3.5, pipSize * 15);
-  const padding = effectiveRange * 0.20;
-  const minP = minVal - padding;
-  const maxP = maxVal + padding;
-  const finalRange = Math.max(maxP - minP, 0.00001);
+    const rawRange = maxVal - minVal;
+    // Ensure lines have at least 20% margin from the top and bottom edges
+    const effectiveRange = Math.max(rawRange, spread * 3.5, pipSize * 15);
+    const padding = effectiveRange * 0.20;
+    const minP = minVal - padding;
+    const maxP = maxVal + padding;
+    const finalRange = Math.max(maxP - minP, 0.00001);
 
-  // SVG polyline coordinates
-  const getPoints = (isAsk) => {
-    if (recentHistory.length === 0) return '';
-    if (recentHistory.length === 1) {
-      const val = isAsk ? recentHistory[0].ask : recentHistory[0].bid;
-      const y = Math.max(4, Math.min(96, 100 - (((val - minP) / finalRange) * 100)));
-      return `0,${y.toFixed(1)} 100,${y.toFixed(1)}`;
-    }
-    return recentHistory
-      .map((t, i) => {
-        const x = (i / (recentHistory.length - 1)) * 100;
-        const val = isAsk ? t.ask : t.bid;
+    // SVG polyline coordinates
+    const getPoints = (isAsk) => {
+      if (recentHistory.length === 0) return '';
+      if (recentHistory.length === 1) {
+        const val = isAsk ? recentHistory[0].ask : recentHistory[0].bid;
         const y = Math.max(4, Math.min(96, 100 - (((val - minP) / finalRange) * 100)));
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
-  };
+        return `0,${y.toFixed(1)} 100,${y.toFixed(1)}`;
+      }
+      return recentHistory
+        .map((t, i) => {
+          const x = (i / (recentHistory.length - 1)) * 100;
+          const val = isAsk ? t.ask : t.bid;
+          const y = Math.max(4, Math.min(96, 100 - (((val - minP) / finalRange) * 100)));
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(' ');
+    };
 
-  // Current price line Y coordinates
-  const rawAskY = 100 - (((currentAsk - minP) / finalRange) * 100);
-  const rawBidY = 100 - (((currentBid - minP) / finalRange) * 100);
-  const askY = Math.max(6, Math.min(94, rawAskY));
-  const bidY = Math.max(6, Math.min(94, rawBidY));
+    // Current price line Y coordinates
+    const rawAskY = 100 - (((currentAsk - minP) / finalRange) * 100);
+    const rawBidY = 100 - (((currentBid - minP) / finalRange) * 100);
+    const askY = Math.max(6, Math.min(94, rawAskY));
+    const bidY = Math.max(6, Math.min(94, rawBidY));
 
-  // Badge collision prevention: ensure badges don't overlap on Y-axis
-  let askBadgeY = askY;
-  let bidBadgeY = bidY;
-  if (Math.abs(askY - bidY) < 9) {
-    askBadgeY = Math.max(5, askY - 4.5);
-    bidBadgeY = Math.min(95, bidY + 4.5);
-  }
+    // Badge collision prevention: ensure badges don't overlap on Y-axis
+    let askBadgeY = askY;
+    let bidBadgeY = bidY;
+    if (Math.abs(askY - bidY) < 9) {
+      askBadgeY = Math.max(5, askY - 4.5);
+      bidBadgeY = Math.min(95, bidY + 4.5);
+    }
 
-  // 5 distinct non-overlapping Y-axis price labels
-  const yAxisTicks = [0.85, 0.65, 0.50, 0.35, 0.15].map((pct) => {
-    const y = 100 - (pct * 100);
-    const val = minP + (finalRange * pct);
-    return { y, val: val.toFixed(digits) };
-  });
+    // 5 distinct non-overlapping Y-axis price labels
+    const yAxisTicks = [0.85, 0.65, 0.50, 0.35, 0.15].map((pct) => {
+      const y = 100 - (pct * 100);
+      const val = minP + (finalRange * pct);
+      return { y, val: val.toFixed(digits) };
+    });
+
+    return { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
+      askBadgeY, bidBadgeY, yAxisTicks, askPoints: getPoints(true), bidPoints: getPoints(false) };
+  }, [tickHistory, modalSymbol, digits, pipSize]);
 
   return (
-    <div className="account-trade-workspace">
+    <form id="account-trade-update-form" className="account-trade-workspace" onSubmit={(event) => { event.preventDefault(); handleUpdateTrade(); }}>
       {/* ========================================================================= */}
       {/* LEFT: Professional Tick Chart                                              */}
       {/* ========================================================================= */}
@@ -369,7 +440,7 @@ const AccountTradeTab = ({
         </div>
 
         {/* Chart Canvas & Y-Axis Container */}
-        <div className="flex-1 flex relative overflow-hidden">
+        <div className="account-trade-plot flex-1 flex relative overflow-hidden">
           {/* Main SVG Area */}
           <div className="flex-1 relative overflow-hidden bg-[var(--surface)]">
             {/* Background Grid Lines */}
@@ -422,7 +493,7 @@ const AccountTradeTab = ({
                   strokeWidth="1.5" vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  points={getPoints(true)}
+                  points={askPoints}
                 />
 
                 {/* Polyline Bid (Blue) */}
@@ -432,7 +503,7 @@ const AccountTradeTab = ({
                   strokeWidth="1.5" vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  points={getPoints(false)}
+                  points={bidPoints}
                 />
               </svg>
             ) : (
@@ -481,7 +552,7 @@ const AccountTradeTab = ({
         </div>
 
         {/* Bottom Legend Bar */}
-        <div className="px-2.5 py-1 bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between text-[10px] font-mono text-gray-400 z-10 shrink-0">
+        <div className="account-trade-chart-quotes px-2.5 py-1 bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between text-[10px] font-mono text-gray-400 z-10 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-1 bg-[var(--surface-2)] rounded-sm inline-block" />
             <span className="font-normal text-[10px]">Ask:</span>
@@ -566,9 +637,9 @@ const AccountTradeTab = ({
         </div>
 
         {/* Middle Form: Compact, Clean 2-Column Grid */}
-        <div className="flex-1 flex flex-col justify-between py-0 overflow-hidden min-h-0">
+        <div className="account-trade-form flex-1 flex flex-col py-0 min-h-0">
           {/* Symbol */}
-          <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
+          <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Symbol:</span>
             <div className="relative">
               <select
@@ -593,7 +664,7 @@ const AccountTradeTab = ({
           </div>
 
           {/* Type */}
-          <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
+          <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Type:</span>
             <div className="h-6.5 flex items-center px-2 bg-[var(--surface-2)] border border-[var(--border)] rounded text-gray-200 font-semibold text-[12px] truncate">
               {selectedTicketRow
@@ -603,7 +674,7 @@ const AccountTradeTab = ({
           </div>
 
           {/* Volume */}
-          <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
+          <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Volume:</span>
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-[var(--surface-2)] border border-blue-500/40 rounded overflow-hidden h-6.5">
@@ -618,6 +689,7 @@ const AccountTradeTab = ({
                 <input
                   type="text"
                   value={tradeVolume}
+                  aria-label="Volume"
                   onChange={(e) => setTradeVolume(e.target.value)}
                   className="w-14 h-full text-center font-mono font-bold text-blue-400 bg-transparent text-[12px] focus:outline-none"
                 />
@@ -652,7 +724,7 @@ const AccountTradeTab = ({
           </div>
 
           {/* At Price */}
-          <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
+          <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">At Price:</span>
             <div className="flex items-center gap-2.5">
               <div className="h-6.5 px-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded flex items-center font-mono font-bold text-[12px] text-white">
@@ -692,6 +764,7 @@ const AccountTradeTab = ({
                 <input
                   type="text"
                   value={tradeSL}
+                  aria-label="Stop loss"
                   onChange={(e) => {
                     setTradeSL(e.target.value);
                     setIsAutoPipTrack(false);
@@ -745,6 +818,7 @@ const AccountTradeTab = ({
                 <input
                   type="text"
                   value={tradeTP}
+                  aria-label="Take profit"
                   onChange={(e) => {
                     setTradeTP(e.target.value);
                     setIsAutoPipTrack(false);
@@ -780,19 +854,48 @@ const AccountTradeTab = ({
           </div>
 
           {/* Comment */}
-          <div className="grid grid-cols-[70px_1fr] items-center gap-2 mb-1">
+          <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Comment:</span>
-            <input
-              type="text"
-              value={tradeComment}
-              onChange={(e) => setTradeComment(e.target.value)}
-              placeholder="Order comment (optional)..."
-              className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 text-[12px] font-normal focus:border-blue-500 focus:outline-none placeholder-gray-500"
-            />
+            <div className="flex flex-col gap-1 w-full">
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={tradeComment}
+                  onChange={(e) => setTradeComment(e.target.value)}
+                  placeholder="Order comment (optional)..."
+                  className="flex-1 min-w-0 h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 text-[12px] font-normal focus:border-blue-500 focus:outline-none placeholder-gray-500"
+                />
+                <select
+                  aria-label="Comment presets"
+                  className="h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 text-gray-300 text-[11px] focus:outline-none cursor-pointer shrink-0"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) setTradeComment(e.target.value);
+                  }}
+                >
+                  <option value="">Presets...</option>
+                  {COMMENT_PRESETS.map((p) => (
+                    <option key={p.id} value={p.en}>
+                      {p.en} ({p.zh})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {tradeComment && detectCommentLanguage(tradeComment) === 'zh' && (
+                <span className="text-[10px] text-blue-400 font-mono">
+                  Default EN display: {normalizeCommentForDefault(tradeComment)}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Dual Quote Tiles (SELL / BUY) */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 my-1 select-none shrink-0">
+          <div className="account-trade-prices">
+            <div><span className="text-[10px] text-gray-400">BID</span><PricePipsDisplay price={currentBid} digits={digits} colorClass="text-blue-300" /></div>
+            <div><span className="text-[10px] text-gray-400">ASK</span><PricePipsDisplay price={currentAsk} digits={digits} colorClass="text-red-300" /></div>
+            <span className="account-trade-spread text-[10px] text-gray-400">Spread: {spreadPips} pips</span>
+          </div>
+          {/* Market execution actions */}
+          <div className="grid grid-cols-2 items-center gap-2 my-1 select-none shrink-0">
             {/* SELL Box */}
             <button
               type="button"
@@ -802,18 +905,10 @@ const AccountTradeTab = ({
               className="bg-blue-500/10 border border-blue-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-blue-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="text-[10px] font-extrabold text-blue-400 uppercase tracking-wider mb-0.5">
-                SELL / BID
+                <ArrowDown size={11} className="inline-block mr-1" /> Sell by Market
               </div>
-              <div className="flex items-center justify-center">
-                <PricePipsDisplay price={currentBid} digits={digits} colorClass="text-blue-300" />
-              </div>
-            </button>
 
-            {/* Spread pill */}
-            <div className="flex flex-col items-center px-1">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">SPREAD</span>
-              <span className="text-[12px] font-mono font-bold text-gray-200">{spreadPips}</span>
-            </div>
+            </button>
 
             {/* BUY Box */}
             <button
@@ -824,11 +919,9 @@ const AccountTradeTab = ({
               className="bg-red-500/10 border border-red-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-red-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="text-[10px] font-extrabold text-red-400 uppercase tracking-wider mb-0.5">
-                BUY / ASK
+                <ArrowUp size={11} className="inline-block mr-1" /> Buy by Market
               </div>
-              <div className="flex items-center justify-center">
-                <PricePipsDisplay price={currentAsk} digits={digits} colorClass="text-red-300" />
-              </div>
+
             </button>
           </div>
 
@@ -847,7 +940,7 @@ const AccountTradeTab = ({
               <button
                 type="button"
                 onClick={handleUpdateTrade}
-                disabled={isUpdatingTrade || !canManipulateTrades}
+                disabled={!canUpdateTrade}
                 title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
                 className="flex-1 h-8 rounded bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-[12px] flex items-center justify-center gap-1.5 shadow-md transition-colors disabled:opacity-50"
               >
@@ -908,7 +1001,17 @@ const AccountTradeTab = ({
           )}
         </div>
       </div>
-    </div>
+      {tradeConfirmation && (
+        <DepositDialog
+          status="confirm"
+          title="Confirm trade"
+          message={tradeConfirmation.message}
+          confirmLabel={`Confirm ${tradeConfirmation.operation.toUpperCase()}`}
+          onConfirm={() => finishTradeConfirmation(true)}
+          onDismiss={() => finishTradeConfirmation(false)}
+        />
+      )}
+    </form>
   );
 };
 

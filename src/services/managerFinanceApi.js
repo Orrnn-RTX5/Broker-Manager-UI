@@ -40,8 +40,12 @@ export const submitManagerTransaction = async (type, payload = {}) => {
     result = { message: text };
   }
 
-  if (!response.ok) {
-    throw new Error(result?.message || result?.error || `Manager ${type} transaction failed`);
+  if (!response.ok || result?.success === false || result?.ok === false || result?.error) {
+    const detail = result?.message || result?.error || result?.detail;
+    const message = typeof detail === 'string' ? detail
+      : Array.isArray(detail) ? detail.map((item) => item?.msg).filter(Boolean).join('; ')
+      : detail?.message;
+    throw new Error(message || `Manager ${type} transaction failed`);
   }
   return result;
 };

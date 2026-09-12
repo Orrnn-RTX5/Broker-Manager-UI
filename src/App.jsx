@@ -6,6 +6,7 @@ import SymbolManagementPage from './features/symbols/SymbolManagementPage';
 import { AdminLogin, ManagerLogin } from './features/auth/BrokerAuthScreens';
 import DesktopWindowControls from './components/DesktopWindowControls';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import UiTranslator from './i18n/UiTranslator.jsx';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
 import { clearBrokerInfo } from './services/brokerAuth';
@@ -13,6 +14,7 @@ import { invalidatePositionsCache, invalidateSymbolManagementData, preloadSymbol
 import { preloadAllWorkspaceRoutes, preloadFrequentWorkspaceRoutes, preloadWorkspaceRoute, workspaceRouteLoaders } from './utils/workspaceRouteModules';
 import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQueries.js';
 import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
+import { clearStoredTerminalPage } from './features/terminal/terminalTrades.js';
 
 import Dashboard from './features/dashboard/Dashboard';
 import OnlineUsersDashboard from './features/analytics/OnlineUsersDashboard';
@@ -262,6 +264,9 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
+    // Immediately prefetch essential workspace data (accounts + terminal trades)
+    prefetchInitialWorkspaceData(queryClient);
+
     // Prioritize the active route's data query first. Defer background route warming
     // and auxiliary prefetches so they never compete for network connections or CPU
     // during the critical initial page load and render.
@@ -271,7 +276,6 @@ function App() {
         preloadFrequentWorkspaceRoutes();
         preloadAllWorkspaceRoutes();
         prefetchInitialAnalyticsData(queryClient);
-        prefetchInitialWorkspaceData(queryClient);
       };
 
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -327,6 +331,7 @@ function App() {
   const handleLogout = () => {
     invalidatePositionsCache();
     invalidateSymbolManagementData();
+    clearStoredTerminalPage();
     authService.clearSession();
     queryClient.clear();
     clearBrokerInfo();
@@ -341,6 +346,7 @@ function App() {
     // in a transition, which can be postponed repeatedly by quote-store work.
     <Router unstable_useTransitions={false}>
       <GlobalErrorBoundary>
+        <UiTranslator />
         <DesktopWindowControls variant={isAuthenticated ? 'workspace' : 'auth'} />
         <SessionExpiryRedirect isAuthenticated={isAuthenticated} />
         {!isAuthenticated ? (

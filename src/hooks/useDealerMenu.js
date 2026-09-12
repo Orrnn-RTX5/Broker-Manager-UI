@@ -22,6 +22,7 @@ import {
   orderApprove,
   dealRollback,
 } from '../services/tradeApi';
+import { normalizeCommentForDefault } from '../utils/commentTranslation';
 
 export const useDealerMenu = (onRefresh) => {
   const [dialog, setDialog] = useState(null);
@@ -103,7 +104,7 @@ export const useDealerMenu = (onRefresh) => {
           ],
           onSubmit: (values) => exec(() => positionCommentChange({
             ticket,
-            comment: values.comment,
+            comment: values.comment !== undefined ? normalizeCommentForDefault(values.comment) : values.comment,
             magic: values.magic || undefined,
           })),
         }),

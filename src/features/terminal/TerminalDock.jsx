@@ -1,32 +1,44 @@
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotContext';
 import { useQueryClient } from '@tanstack/react-query';
 import usePagedData from '../../hooks/usePagedData';
 import { getPositionsPage, invalidateGlobalPositionsCache } from '../../services/api';
 import { subscribeToPositionSync } from '../../services/positionSync';
-import { TRADE_COLUMNS, tradeCells } from './terminalTrades.js';
+import {
+  TRADE_COLUMNS,
+  tradeCells,
+  TERMINAL_POSITIONS_QUERY_KEY,
+  TERMINAL_POSITIONS_PARAMS,
+  readStoredTerminalPage,
+  writeStoredTerminalPage,
+} from './terminalTrades.js';
 
-const QUERY_KEY = ['terminal-positions'];
-const PARAMS = { sort_by: 'position', sort_dir: 'desc' };
 const fetchTrades = (params, options) => {
-  invalidateGlobalPositionsCache();
   return getPositionsPage(params, options);
 };
 
 export default function TerminalDock({ isAuthenticated = false }) {
   const titleSlot = useContext(DockTitleSlotContext);
   const queryClient = useQueryClient();
-  const { rows, page, offset, hasMore, isLoading, isFetching, isError, refetch, nextPage, prevPage } = usePagedData({
-    queryKey: QUERY_KEY,
+  const cachedInitial = useMemo(() => readStoredTerminalPage(), []);
+  const { rows, page, offset, hasMore, total, isLoading, isFetching, isError, refetch, nextPage, prevPage } = usePagedData({
+    queryKey: TERMINAL_POSITIONS_QUERY_KEY,
     queryFn: fetchTrades,
-    params: PARAMS,
+    params: TERMINAL_POSITIONS_PARAMS,
     pageSize: 30,
     enabled: isAuthenticated,
     refetchOnMount: 'always',
     refetchOnReconnect: true,
-    placeholderData: () => undefined,
+    initialData: cachedInitial,
+    placeholderData: (previousData) => previousData || cachedInitial,
   });
+
+  useEffect(() => {
+    if (page === 0 && rows.length > 0) {
+      writeStoredTerminalPage({ rows, total, hasMore });
+    }
+  }, [rows, total, hasMore, page]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -37,18 +49,29 @@ export default function TerminalDock({ isAuthenticated = false }) {
       if (event?.reason === 'connected' || timer) return;
       timer = setTimeout(() => {
         timer = undefined;
-        queryClient.invalidateQueries({ queryKey: QUERY_KEY }, { cancelRefetch: false });
-      }, 1000);
+        queryClient.invalidateQueries({ queryKey: TERMINAL_POSITIONS_QUERY_KEY }, { cancelRefetch: false });
+      }, 200);
     });
     return () => { unsubscribe(); clearTimeout(timer); };
   }, [isAuthenticated, queryClient]);
 
+  const handleManualRefresh = () => {
+    invalidateGlobalPositionsCache();
+    refetch();
+  };
+
   const controls = (
       <div className="cc-terminal-tabs cc-terminal-title-controls" role="group" aria-label="Trade controls">
         <span className="cc-trade-status" role="status">
-          {!isAuthenticated ? 'Sign in to view trades' : isError ? 'Trade refresh failed — retry' : isFetching ? 'Synchronizing trades…' : 'Open trades · auto-refresh'}
+          {!isAuthenticated
+            ? 'Sign in to view trades'
+            : isError
+              ? 'Trade refresh failed — retry'
+              : (isFetching && rows.length === 0)
+                ? 'Synchronizing trades…'
+                : 'Open trades · auto-refresh'}
         </span>
-        <button type="button" onClick={() => refetch()} disabled={!isAuthenticated || isFetching}>Refresh</button>
+        <button type="button" onClick={handleManualRefresh} disabled={!isAuthenticated || isFetching}>Refresh</button>
         <button type="button" aria-label="Previous trades" onClick={prevPage} disabled={!isAuthenticated || page === 0 || isFetching}>Previous</button>
         <span className="cc-trade-page">{rows.length ? `${offset + 1}–${offset + rows.length}` : `Page ${page + 1}`}</span>
         <button type="button" aria-label="Next trades" onClick={nextPage} disabled={!isAuthenticated || !hasMore || isFetching}>Next</button>

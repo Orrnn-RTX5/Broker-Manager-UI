@@ -1,6 +1,7 @@
 import { Activity, CircleCheck, Wifi, WifiOff } from 'lucide-react';
 import DesktopAppDownloadButton from '../DesktopAppDownloadButton';
 import DesktopUpdateButton from '../DesktopUpdateButton';
+import { useT } from '../../i18n/index.js';
 
 export default function StatusBar({
   isAuthenticated = false,
@@ -8,6 +9,7 @@ export default function StatusBar({
   pingMs = null,
   trafficKb = 13.0,
 }) {
+  const t = useT();
   const visibleConnectionData = isAuthenticated ? connectionData : null;
   const visiblePingMs = isAuthenticated ? pingMs : null;
   const isConnected = visibleConnectionData?.status === 'Connected';
@@ -17,14 +19,14 @@ export default function StatusBar({
   const safeTrafficKb = Number.isFinite(Number(trafficKb)) ? Number(trafficKb).toFixed(1) : '0.0';
 
   return (
-    <footer className="cc-status-bar" aria-label="Application status">
+    <footer className="cc-status-bar" aria-label={t('status.connection')}>
       <div className="cc-status-group">
         <span className="cc-status-version">RTX5 Manager v2.6.0</span>
-        <span><i className="cc-status-dot is-live" />Production</span>
-        <span><CircleCheck size={11} />Ready</span>
+        <span><i className="cc-status-dot is-live" />{t('status.production')}</span>
+        <span><CircleCheck size={11} />{t('status.ready')}</span>
       </div>
 
-      <div className="cc-status-group cc-status-right" aria-label="Live connection status">
+      <div className="cc-status-group cc-status-right" aria-label={t('status.connection')}>
         <DesktopAppDownloadButton variant="menu" />
         <DesktopUpdateButton />
         <span className="cc-status-divider" aria-hidden="true" />
@@ -45,20 +47,20 @@ export default function StatusBar({
             }}
           >
             {isConnected ? <Wifi size={12} aria-hidden="true" /> : <WifiOff size={12} aria-hidden="true" />}
-            <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <span>{isConnected ? t('status.connected') : t('status.disconnected')}</span>
           </div>
 
           {isConnected && (
             <div className="cc-status-connection-popover" role="tooltip">
               <div className="font-semibold pb-2 mb-2" style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
-                Connection
+                {t('status.connection')}
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-                <div style={{ color: 'var(--text-3)' }}>Status</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.status')}</div>
                 <div style={{ color: 'var(--ok-text)', fontWeight: 500 }}>{visibleConnectionData.status}</div>
-                <div style={{ color: 'var(--text-3)' }}>Login</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.login')}</div>
                 <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.login || '—'}</div>
-                <div style={{ color: 'var(--text-3)' }}>Uptime</div>
+                <div style={{ color: 'var(--text-3)' }}>{t('status.uptime')}</div>
                 <div className="font-mono tabular" style={{ color: 'var(--text)' }}>{visibleConnectionData.connectedTime ?? '—'}s</div>
               </div>
             </div>

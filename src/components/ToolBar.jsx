@@ -14,6 +14,7 @@ import AccountDetailsModal from './Popups/AccountDetailsModal';
 import KeyboardShortcutsModal from './Popups/KeyboardShortcutsModal';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
+import { useI18nStore } from '../i18n/index.js';
 
 const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
@@ -274,6 +275,7 @@ const ToolBar = ({
 
   const handleResetWorkspace = useCallback(() => {
     resetLayout?.();
+    useI18nStore.getState().resetLanguage?.();
     if (location.pathname !== '/dashboard' && location.pathname !== '/') {
       navigate('/dashboard');
     }

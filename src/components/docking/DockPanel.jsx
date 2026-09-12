@@ -26,6 +26,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   const pos     = panel?.position;
   const isFloat = pos === DOCK_POSITIONS.FLOAT;
   const isMaximized = Boolean(panel?.maximized);
+  const showReorderButtons = id !== 'market_data' && id !== 'navigator';
   const panelIcons = { users: Users, navigator: FolderTree, market: BarChart3, owner: BriefcaseBusiness, terminal: TerminalSquare };
   const PanelIcon = panelIcons[panel?.icon] || null;
 
@@ -208,7 +209,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
         <span className={styles.titleText}>{panel.title}</span>
         {id === 'terminal' && <div ref={setTitleSlot} className="cc-terminal-title-slot" onMouseDown={event => event.stopPropagation()} />}
         <div className={styles.titleActions}>
-          {canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+          {showReorderButtons && canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
             <button
               className={styles.titleBtn}
               title="Move Up"
@@ -217,7 +218,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
               <ChevronUp size={14} />
             </button>
           )}
-          {canMoveDown && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+          {showReorderButtons && canMoveDown && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
             <button
               className={styles.titleBtn}
               title="Move Down"

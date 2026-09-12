@@ -89,7 +89,6 @@ const TradeContextMenuSeparator = () => <div className="h-[1px] bg-[var(--border
 
 const LANGUAGE_OPTIONS = [
   'English (en)',
-  'Arabic (ar)',
   'Chinese (zh)',
   'French (fr)',
   'German (de)',
@@ -279,6 +278,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [detailsError, setError] = useState(null);
   const [formData, setFormData] = useState({});
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState(null);
+  const [tradeUpdateState, setTradeUpdateState] = useState({ canUpdate: false, busy: false });
   const [passwords, setPasswords] = useState({ master: '', investor: '', api: '', phone: '', otp: '' });
   const [checkingPassword, setCheckingPassword] = useState(null);
   const [changingPassword, setChangingPassword] = useState(null);
@@ -541,23 +542,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setActiveTab('Trade');
   };
 
-  // Pretty-prints an API response into the alert body. Always logs the
-  // raw response + the originating call name to the console so devs can
-  // inspect headers/stack via devtools even if they dismiss the alert.
-
-  const showResult = (label, result) => {
-    console.log(`[${label}] response:`, redactSensitive(result));
-    const status = result?.retcode || result?.status || 'OK';
-    const message = result?.message || JSON.stringify(result);
-    alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
-  };
-
-  const showError = (label, err) => {
-    console.error(`[${label}] error:`, err);
-    const status = err?.code || err?.status || 'ERROR';
-    const message = err?.message || String(err);
-    alert(`${label} failed\n\nstatus: ${status}\nmessage: ${message}`);
-  };
+  const showResult = (label, result) => setUpdateFeedback({
+    status: 'success', title: result?.title || 'Trade successful', message: result?.message || `${label} completed successfully.`,
+  });
+  const showError = (label, error) => setUpdateFeedback({
+    status: 'error', title: 'Trade unsuccessful', message: `${label}: ${error?.message || "The request could not be completed."}`,
+  });
 
   const togglePassword = (field) => {
     setShowPasswords(prev => ({ ...prev, [field]: !prev[field] }));
@@ -718,8 +708,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const rowData = account && typeof account === 'object' ? account : {};
   const fieldSources = [...getAccountDetailSources(accountData), rowData];
-  const getFieldValue = (field, fallback = '') =>
-    pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
+  const getFieldValue = (field, fallback = '') => {
+    // A saved empty string is intentional; do not revive an older row value.
+    if (accountData?.[field] !== undefined && accountData[field] !== null) return accountData[field];
+    return pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
+  };
 
   const getValue = (field, fallback = '') => {
     if (formData[field] !== undefined) return formData[field];
@@ -731,23 +724,34 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handleUpdate = async () => {
+    if (updateLoading) return;
     if (!canManageAccounts) {
-      alert('Your role does not have permission to update accounts.');
+      setFormData({});
+      setUpdateFeedback({ status: 'error', title: 'Update unsuccessful', message: 'Your role does not have permission to update accounts.' });
       return;
     }
     const allowedUpdates = pickAllowedFields(formData, USER_UPDATE_ALLOWED_FIELDS);
+    if (Object.keys(allowedUpdates).length !== Object.keys(formData).length) {
+      setFormData({});
+      setUpdateFeedback({ status: 'error', title: 'Update unsuccessful', message: 'One or more fields cannot be updated. The fields have been reset to their saved values.' });
+      return;
+    }
     if (Object.keys(allowedUpdates).length === 0) return;
     try {
       setUpdateLoading(true);
+      setUpdateFeedback({ status: 'pending', title: 'Updating account', message: `Saving changes to account #${loginId}.` });
 
       await updateManagerAccount(loginId, allowedUpdates);
 
       setAccountData(prev => ({ ...prev, ...allowedUpdates }));
       setFormData({});
-      if (onAccountUpdated) onAccountUpdated(loginId, allowedUpdates);
+      setUpdateFeedback({ status: 'success', title: 'Update successful', message: `${activeTab === 'Personal' ? 'Personal details' : 'Account details'} for account #${loginId} updated successfully.` });
+      // A parent refresh failure does not change the saved update's result.
+      void Promise.resolve().then(() => onAccountUpdated?.(loginId, allowedUpdates)).catch(() => {});
     } catch (err) {
       console.error(err);
-      alert("Error updating: " + err.message);
+      setFormData({});
+      setUpdateFeedback({ status: 'error', title: 'Update unsuccessful', message: `Could not update account #${loginId}: ${err?.message || 'Please try again.'} The fields have been reset to their last saved values.` });
     } finally {
       setUpdateLoading(false);
     }
@@ -811,8 +815,16 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   const handleTransaction = async () => {
+    if (depositConfirmationRef.current || isDepositing) return;
+    const reportFailure = (message) => {
+      setDepositAmount('');
+      setDepositComment('');
+      setDepositError(`${message} The amount and comment have been reset.`);
+    };
+    setDepositError(null);
+    setDepositSuccess(null);
     if (!canManageFinances) {
-      setDepositError('Your role does not have permission to manage account funds.');
+      reportFailure('Your role does not have permission to manage account funds.');
       return;
     }
     // Client-side validation is defence-in-depth only — the backend remains the
@@ -831,20 +843,20 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
     const amountVal = validateMoney(depositAmount);
     if (amountVal === null) {
-      setDepositError("Amount must be a positive number with up to 2 decimals and cannot exceed 1,000,000.");
+      reportFailure("Amount must be a positive number with up to 2 decimals and cannot exceed 1,000,000.");
       return;
     }
 
     const parsedLogin = Number(loginId);
     if (!Number.isSafeInteger(parsedLogin) || parsedLogin <= 0) {
-      setDepositError('This account has an invalid login ID. Please reopen the account and try again.');
+      reportFailure('This account has an invalid login ID. Please reopen the account and try again.');
       return;
     }
 
     if (depositConfirmationRef.current || isDepositing) return;
     const confirmed = await new Promise((resolve) => {
       depositConfirmationRef.current = resolve;
-      setDepositConfirmation(`Deposit ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} into account #${parsedLogin}?`);
+      setDepositConfirmation(`Deposit ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyValue} into account #${parsedLogin}?`);
     });
     if (!confirmed) return;
 
@@ -866,21 +878,24 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      setDepositSuccess(responseMessage || 'Deposit submitted successfully.');
+      const successMessage = `Deposited ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyValue} into account #${parsedLogin} successfully.`;
+      setDepositSuccess(typeof responseMessage === 'string' && responseMessage ? `${successMessage} ${responseMessage}` : successMessage);
       setDepositAmount('');
       setDepositComment('');
-      onAccountUpdated?.(loginId);
+      // Refresh failures must never turn a completed deposit into a failed deposit.
+      void Promise.resolve().then(() => onAccountUpdated?.(loginId)).catch(() => {});
 
       // Do not wait for the next grid/websocket interval after the backend has
       // accepted the transaction: refresh the displayed balance immediately.
       void loadAccountDetails(loginId)
         .then((payload) => setAccountData(payload))
         .catch(() => {
-          // The transaction already succeeded. The live metrics stream will
-          // reconcile if an account-details refresh is temporarily unavailable.
+          setDepositSuccess((message) => message
+            ? `${message} The balance could not be refreshed. Reopen the account to check it; do not repeat the deposit.`
+            : message);
         });
     } catch (err) {
-      setDepositError(err.message);
+      reportFailure(`Deposit for account #${parsedLogin}: ${err?.message || 'The result could not be confirmed. Check account history before trying again.'}`);
     } finally {
       setIsDepositing(false);
     }
@@ -1443,6 +1458,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 requestTradeClose={requestTradeClose}
                 showResult={showResult}
                 showError={showError}
+                onUpdateState={setTradeUpdateState}
                 requireTradeMutationPermission={requireTradeMutationPermission}
                 onTradePlaced={() => {
                   invalidatePositionsCache(loginId);
@@ -1538,7 +1554,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     </h2>
                   </div>
 
-                  <div className="account-transaction-body">
+                  <form className="account-transaction-body" noValidate onSubmit={(event) => { event.preventDefault(); handleTransaction(); }}>
                     <div className="account-transaction-balance">
                       <span className=" ">Current balance</span>
                       <span className="font-semibold tabular  ">{balanceVal}</span>
@@ -1559,6 +1575,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       <input
                         type="number"
                         id="transaction-amount" value={depositAmount}
+                        disabled={isDepositing || !canManageFinances}
                         onChange={(e) => {
                           setDepositAmount(e.target.value);
                           setDepositError(null);
@@ -1572,9 +1589,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[12px] font-medium  ">Comment</label>
+                      <label htmlFor="transaction-comment" className="text-[12px] font-medium  ">Comment</label>
                       <input
                         type="text"
+                        id="transaction-comment"
+                        disabled={isDepositing || !canManageFinances}
                         value={depositComment}
                         onChange={(e) => {
                           setDepositComment(e.target.value);
@@ -1586,14 +1605,15 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     </div>
 
                     <button
-                      onClick={handleTransaction}
-                      disabled={isDepositing || !depositAmount || !canManageFinances}
+                      type="submit"
+                      disabled={isDepositing || !canManageFinances}
                       title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
                       className="account-transaction-submit"
                     >
                       {isDepositing ? 'Depositing...' : 'Deposit'}
                     </button>
-                  </div>
+                    {!canManageFinances && <p role="status">Your role does not have permission to manage account funds.</p>}
+                  </form>
                 </div>
               </div>
             ) : (
@@ -1609,8 +1629,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           {activeTab !== 'Overview' && (
           <div className="account-details-footer flex items-center justify-end flex-shrink-0">
             <div className="flex gap-2">
-              <button type="button" onClick={handleUpdate} disabled={updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={!canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
-                {updateLoading ? 'Wait...' : 'Update'}
+              <button type={activeTab === 'Trade' ? 'submit' : 'button'} form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined} onClick={activeTab === 'Trade' ? undefined : handleUpdate} disabled={activeTab === 'Trade' ? !tradeUpdateState.canUpdate : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={activeTab === 'Trade' ? 'Select an existing position and change its volume, SL or TP to update' : !canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
+                {(activeTab === 'Trade' ? tradeUpdateState.busy : updateLoading) ? 'Wait...' : 'Update'}
               </button>
               <button type="button" onClick={onClose} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
                 Close
@@ -1656,6 +1676,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         </div>
       )}
     </div>
+    {updateFeedback && (
+      <DepositDialog
+        {...updateFeedback}
+        dismissLabel={updateFeedback.status === 'error' ? 'Back to details' : 'Continue'}
+        onDismiss={() => setUpdateFeedback(null)}
+      />
+    )}
     {(depositConfirmation || isDepositing || depositSuccess || depositError) && (
       <DepositDialog
         status={depositConfirmation ? 'confirm' : isDepositing ? 'pending' : depositError ? 'error' : 'success'}

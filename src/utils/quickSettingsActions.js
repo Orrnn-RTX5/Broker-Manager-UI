@@ -19,6 +19,13 @@ export function resetWorkspaceLayout(resetLayout, navigate) {
   }
 
   resetLayout();
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('manager:reset-layout'));
+    }
+  } catch {
+    // ignore
+  }
   navigate?.('/dashboard');
 }
 

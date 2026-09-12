@@ -63,3 +63,23 @@ test('submitManagerTransaction rejects unknown transaction types before a reques
   await assert.rejects(() => submitManagerTransaction('rebate', {}), /Unsupported manager transaction type/);
   assert.equal(calls.length, 0);
 });
+
+for (const failure of [{ success: false, message: 'Deposit rejected' }, { ok: false, error: 'Account is locked' }, { error: 'Deposits are disabled for this account' }]) {
+  test(`submitManagerTransaction rejects HTTP 200 with ${JSON.stringify(failure)}`, async () => {
+    globalThis.fetch = async () => new Response(JSON.stringify(failure), { status: 200 });
+    await assert.rejects(() => submitManagerTransaction('deposit', { login: 200001, amount: 10 }),
+      { message: failure.message || failure.error });
+  });
+}
+
+test('submitManagerTransaction preserves server validation details', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: [{ msg: 'Amount exceeds the permitted limit' }] }), { status: 422 });
+  await assert.rejects(() => submitManagerTransaction('deposit', { login: 200001, amount: 10 }),
+    { message: 'Amount exceeds the permitted limit' });
+});
+
+test('submitManagerTransaction handles an unstructured server error', async () => {
+  globalThis.fetch = async () => new Response('Deposit service unavailable', { status: 503 });
+  await assert.rejects(() => submitManagerTransaction('deposit', { login: 200001, amount: 10 }),
+    { message: 'Deposit service unavailable' });
+});

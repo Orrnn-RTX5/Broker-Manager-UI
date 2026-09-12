@@ -13,6 +13,7 @@ import {
 export default {
   entity: 'position',
   label: 'Position',
+  modifyStops: positionModifyStops,
 
   // Inline-editable cells (double-click a cell in the Trade tab table).
   editableFields: {
