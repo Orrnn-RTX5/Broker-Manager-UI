@@ -57,7 +57,7 @@ jobs:
           BROKER_IDS: "achiever-financials"
           COMPONENT: manager
           IMAGE_REF: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          BROKER_SSH_PRIVATE_KEY: ${{ secrets.BROKER_SSH_PRIVATE_KEY }}
+          BROKER_SSH_PRIVATE_KEY: ${{ secrets.BROKER_SSH_PRIVATE_KEY_ACHIEVER || secrets.BROKER_SSH_PRIVATE_KEY }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
           GHCR_TOKEN: ${{ github.token }}
           LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
