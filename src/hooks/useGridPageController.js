@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { useState, useRef, useCallback } from 'react';
 import useGridController from './useGridController';
 import { rowsToCSV, rowsToTSV, rowsToJSON, copyToClipboard, downloadBlob, stampedFilename } from '../utils/gridUtils';
@@ -49,20 +50,20 @@ export default function useGridPageController({
 
   const handleCopyAs = useCallback((format) => {
     const rows = targetRows();
-    if (rows.length === 0) { alert('No rows to copy.'); return; }
+    if (rows.length === 0) { showResult.info('No rows to copy.'); return; }
     const cols = grid.visibleColumns;
     const text =
       format === 'json' ? rowsToJSON(rows, cols) :
       format === 'tsv'  ? rowsToTSV(rows, cols)  :
                           rowsToCSV(rows, cols);
     copyToClipboard(text)
-      .then(() => alert(`Copied ${rows.length} row(s) as ${format.toUpperCase()}.`))
-      .catch(err => alert(`Copy failed: ${err.message}`));
+      .then(() => showResult.success(`Copied ${rows.length} row(s) as ${format.toUpperCase()}.`))
+      .catch(err => showResult.error(`Copy failed: ${err.message}`));
   }, [grid.visibleColumns, targetRows]);
 
   const handleExport = useCallback(() => {
     const rows = targetRows();
-    if (rows.length === 0) { alert('No rows to export.'); return; }
+    if (rows.length === 0) { showResult.info('No rows to export.'); return; }
     const csv = rowsToCSV(rows, grid.visibleColumns);
     downloadBlob(csv, stampedFilename(exportName, 'csv'));
   }, [grid.visibleColumns, targetRows, exportName]);

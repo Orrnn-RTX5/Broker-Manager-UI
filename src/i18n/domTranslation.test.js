@@ -137,6 +137,51 @@ test('applyText translates word components in emails and identifiers while prese
   const sellNode = { data: 'SELL' };
   applyText(sellNode, zhDict, 'zh');
   assert.equal(sellNode.data, '卖出');
+
+  // Real account email address translation
+  const realEmailNode = { data: 'real@real.com' };
+  applyText(realEmailNode, zhDict, 'zh');
+  assert.equal(realEmailNode.data, '真实@真实.商业');
+
+  const realEmailPartialNode = { data: 'real@real.商业' };
+  applyText(realEmailPartialNode, zhDict, 'zh');
+  assert.equal(realEmailPartialNode.data, '真实@真实.商业');
+
+  // Dynamic count + noun template
+  const onlineUsersNode = { data: '5 online users' };
+  applyText(onlineUsersNode, zhDict, 'zh');
+  assert.equal(onlineUsersNode.data, '5 在线用户');
+
+  const onlineUsersUpperNode = { data: '5 ONLINE USERS' };
+  applyText(onlineUsersUpperNode, zhDict, 'zh');
+  assert.equal(onlineUsersUpperNode.data, '5 在线用户');
+
+  const activeSessionsCountNode = { data: '12 Active Sessions' };
+  applyText(activeSessionsCountNode, zhDict, 'zh');
+  assert.equal(activeSessionsCountNode.data, '12 活跃会话');
+
+  // Column header Build
+  const buildNode = { data: 'Build' };
+  applyText(buildNode, zhDict, 'zh');
+  assert.equal(buildNode.data, '版本');
+
+  const buildUpperNode = { data: 'BUILD' };
+  applyText(buildUpperNode, zhDict, 'zh');
+  assert.equal(buildUpperNode.data, '版本');
+
+  // Grid idle / loading states
+  const idleOnlineNode = { data: 'Online users not loaded' };
+  applyText(idleOnlineNode, zhDict, 'zh');
+  assert.equal(idleOnlineNode.data, '在线用户未加载');
+
+  // Tooltip sort by attribute
+  const sortAttr = { 'title': 'Sort by Build' };
+  const fakeTh = {
+    getAttribute: (attr) => sortAttr[attr],
+    setAttribute: (attr, val) => { sortAttr[attr] = val; },
+  };
+  applyAttributes(fakeTh, zhDict, 'zh');
+  assert.equal(sortAttr['title'], '按版本排序');
 });
 
 test('applyText translates comments to Chinese in zh mode and shows English by default in en mode', () => {

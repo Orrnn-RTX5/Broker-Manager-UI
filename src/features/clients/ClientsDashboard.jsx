@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useRef } from 'react';
 import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
@@ -72,20 +73,20 @@ const ClientsDashboard = () => {
 
   const handleCopyAs = (format) => {
     const rows = targetRows();
-    if (rows.length === 0) { alert('No rows to copy.'); return; }
+    if (rows.length === 0) { showResult.info('No rows to copy.'); return; }
     const cols = grid.visibleColumns;
     const text =
       format === 'json' ? rowsToJSON(rows, cols) :
       format === 'tsv'  ? rowsToTSV(rows, cols)  :
                           rowsToCSV(rows, cols);
     copyToClipboard(text)
-      .then(() => alert(`Copied ${rows.length} row(s) as ${format.toUpperCase()}.`))
-      .catch(err => alert(`Copy failed: ${err.message}`));
+      .then(() => showResult.success(`Copied ${rows.length} row(s) as ${format.toUpperCase()}.`))
+      .catch(err => showResult.error(`Copy failed: ${err.message}`));
   };
 
   const handleExport = () => {
     const rows = targetRows();
-    if (rows.length === 0) { alert('No rows to export.'); return; }
+    if (rows.length === 0) { showResult.info('No rows to export.'); return; }
     const csv = rowsToCSV(rows, grid.visibleColumns);
     downloadBlob(csv, stampedFilename('clients', 'csv'));
   };

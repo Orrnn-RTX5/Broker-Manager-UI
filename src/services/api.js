@@ -1,3 +1,4 @@
+import { loadSymbolManagement } from './symbolManagementLoader.js';
 import apiClient from './apiClient';
 import ibApi from './ibApi';
 import authService from './authService';
@@ -1155,6 +1156,7 @@ const writeStoredSymbolManagementData = (data) => {
 };
 
 export const peekSymbolManagementData = () => {
+  if (symbolManagementRequest && symbolManagementProgress?.symbols?.length) return symbolManagementProgress;
   if (symbolManagementCache?.symbols?.length) return symbolManagementCache;
   symbolManagementCache = readStoredSymbolManagementData();
   return symbolManagementCache || symbolManagementProgress;
@@ -1162,6 +1164,7 @@ export const peekSymbolManagementData = () => {
 
 export const invalidateSymbolManagementData = () => {
   symbolManagementCache = null;
+  symbolManagementProgress = null;
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(SYMBOL_MANAGEMENT_CACHE_KEY);
@@ -1182,72 +1185,22 @@ const notifySymbolManagementProgress = (data) => {
   });
 };
 
-const symbolName = (entry) => String(
-  typeof entry === 'string' ? entry : entry?.symbol || entry?.Symbol || entry?.name || ''
-).trim();
-
 const fetchSymbolManagementData = async () => {
-  // Start both independent root requests together. Previously categories did not
-  // start until the name request finished, producing an avoidable request waterfall.
-  const namesRequest = apiClient.get('/SymbolsList');
-  const categoriesRequest = apiClient.get('/SymbolCategoryList').catch(() => []);
-
-  const mt5Request = namesRequest.then((names) => {
-    if (!Array.isArray(names) || names.length === 0) return [];
-
-    // The lightweight name list is useful immediately while full parameters and
-    // category metadata continue loading in the background.
-    notifySymbolManagementProgress({
-      symbols: names
-        .map((entry) => ({
-          ...(typeof entry === 'object' && entry !== null ? entry : {}),
-          symbol: symbolName(entry),
-          __managementPartial: true,
-        }))
-        .filter((entry) => entry.symbol),
-      categories: peekSymbolManagementData()?.categories || [],
-      partial: true,
-    });
-
-    return symbolsParams(names)
-      .catch(() => []);
+  // Bound stalled requests while completed rows remain available for review.
+  const signal = AbortSignal.timeout(15_000);
+  const data = await loadSymbolManagement({
+    getNames: () => apiClient.get('/SymbolsList', { signal }),
+    getCategories: () => apiClient.get('/SymbolCategoryList', { signal }),
+    getParams: async batch => {
+      const response = await apiClient.get('/SymbolsParams?' + arrayQuery('symbols[]', batch), { signal });
+      return Array.isArray(response) ? response : getRecords(response, 'symbols');
+    },
+    getCategorySymbols: category => apiClient.get('/SymbolsByCategory?' + query({ category }), { signal }),
+    onProgress: notifySymbolManagementProgress,
+    cachedSymbols: peekSymbolManagementData()?.symbols || [],
   });
-
-  const metadataRequest = categoriesRequest.then(async (categories) => {
-    if (!Array.isArray(categories) || categories.length === 0) return [];
-    return Promise.all(categories.map((category) => (
-      apiClient.get(`/SymbolsByCategory?${query({ category: category.name })}`)
-        .then((symbols) => ({ category: category.name, symbols }))
-        .catch(() => null)
-    )));
-  });
-
-  const [mt5Data, categories] = await Promise.all([mt5Request, categoriesRequest]);
-  const coreSymbols = Array.isArray(mt5Data) ? mt5Data : [];
-
-  if (coreSymbols.length > 0) {
-    notifySymbolManagementProgress({
-      symbols: coreSymbols.map((symbol) => ({ ...symbol, __managementPartial: true })),
-      categories,
-      partial: true,
-    });
-  }
-
-  const metadataResults = await metadataRequest;
-  const metadataBySymbol = {};
-  metadataResults.forEach((result) => {
-    if (!result || !Array.isArray(result.symbols)) return;
-    result.symbols.forEach((symbol) => {
-      metadataBySymbol[symbol.symbol] = { ...symbol, category: result.category };
-    });
-  });
-
-  const symbols = coreSymbols.map((symbol) => ({
-    ...symbol,
-    ...(metadataBySymbol[symbol.symbol] || {}),
-  }));
-  const data = { symbols, categories: Array.isArray(categories) ? categories : [] };
-  writeStoredSymbolManagementData(data);
+  // Incomplete responses must not become a fresh, complete cache entry.
+  if (!data.error && data.symbols.every(row => !row.__managementPartial)) writeStoredSymbolManagementData(data);
   return data;
 };
 

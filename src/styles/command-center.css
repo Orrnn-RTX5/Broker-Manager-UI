@@ -72,6 +72,8 @@
   --cc-map-land-bottom: #bacbd9;
   --cc-map-water: rgba(219, 234, 247, .62);
   --cc-map-coast: #7892a7;
+  --cc-map-marker: #2d805b;
+  --cc-map-light-glow: rgba(45, 128, 91, .3);
   --cc-map-caption: rgba(255, 255, 255, .9);
   --cc-map-caption-border: rgba(120, 146, 167, .5);
   --cc-market-glow-up: rgba(37, 99, 235, .32);
@@ -147,10 +149,12 @@
   --cc-avatar-border: #575757;
   --cc-avatar-text: #a9b1d6;
   --cc-popover-shadow: 0 12px 30px rgba(0, 0, 0, .38);
-  --cc-map-land-top: #505050;
-  --cc-map-land-bottom: #303030;
+  --cc-map-land-top: #404744;
+  --cc-map-land-bottom: #303633;
   --cc-map-water: rgba(37, 37, 37, .4);
-  --cc-map-coast: #808080;
+  --cc-map-coast: #7a8981;
+  --cc-map-marker: #e6f3ed;
+  --cc-map-light-glow: rgba(184, 219, 203, .45);
   --cc-map-caption: rgba(37, 37, 37, .92);
   --cc-map-caption-border: #3b3b3b;
   --cc-market-glow-up: rgba(143, 189, 157, .25);
@@ -376,16 +380,20 @@
 .cc-data-panel td:first-child { color: var(--text-primary); }
 .cc-data-panel tbody tr:hover { background: var(--bg-hover); }
 .cc-panel-link { display: flex; height: 29px; width: 100%; align-items: center; gap: 4px; padding: 0 8px; border: 0; background: transparent; color: var(--info-text); font-size: 9px; cursor: pointer; }
-.cc-map-visual { position:relative; height:92px; overflow:hidden; border-bottom:1px solid var(--border-2); background:var(--cc-map-water); }
-.cc-map-visual svg { display:block; width:100%; height:100%; }
-.cc-map-grid line { stroke:var(--border-2); stroke-width:.7; stroke-dasharray:2 5; opacity:.7; }
-.cc-map-land path { opacity:.92; }
-.cc-map-coastline path { fill:none; stroke:var(--cc-map-coast); stroke-width:1.1; stroke-linejoin:round; opacity:.8; }
-.cc-map-markers .pulse { fill:var(--ok-soft); stroke:var(--ok-border); stroke-width:1; }
-.cc-map-markers .core { fill:var(--success); stroke:var(--bg-panel); stroke-width:.8; }
-.cc-map-markers .is-low { opacity:.58; }.cc-map-markers .is-medium { opacity:.8; }
-.cc-map-caption { position:absolute; right:7px; bottom:5px; display:inline-flex; align-items:center; gap:4px; padding:2px 5px; border:1px solid var(--cc-map-caption-border); border-radius:3px; background:var(--cc-map-caption); color:var(--text-tertiary); font-size:7px; letter-spacing:.02em; }
-.cc-map-caption i { width:5px; height:5px; border-radius:50%; background:var(--success); box-shadow:0 0 0 2px var(--ok-soft); }
+/* Natural Earth geography with quiet, atlas-style country boundaries. */
+.cc-map-visual { position:relative; height:clamp(150px, 13vw, 210px); overflow:hidden; border-bottom:1px solid var(--border-2); background:var(--cc-map-water); padding:6px 10px 25px; }
+.cc-map-visual svg { display:block; width:100%; height:100%; overflow:visible; }
+.cc-map-grid { fill:none; stroke:var(--cc-map-coast); stroke-width:.45; opacity:.13; }
+.cc-map-land { stroke:var(--cc-map-coast); stroke-width:.65; stroke-linejoin:round; }
+.cc-map-borders { fill:none; stroke:var(--cc-map-coast); stroke-width:.4; stroke-linejoin:round; opacity:.55; }
+.cc-map-markers .core { fill:var(--cc-map-marker); stroke:none; }
+.cc-map-starlight { filter:drop-shadow(0 0 1.8px var(--cc-map-light-glow)); animation:cc-map-twinkle 5s ease-in-out infinite; }
+@keyframes cc-map-twinkle { 0%, 100% { opacity:.82; } 45% { opacity:1; } 70% { opacity:.9; } }
+@media (prefers-reduced-motion:reduce) { .cc-map-starlight { animation:none; } }
+.cc-map-caption { position:absolute; right:12px; bottom:9px; left:12px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--text-tertiary); font-size:8px; line-height:1; }
+.cc-map-caption > span:first-child { font-size:7px; letter-spacing:.13em; }
+.cc-map-caption > span:last-child { display:inline-flex; align-items:center; gap:5px; }
+.cc-map-caption i { width:3px; height:3px; border-radius:50%; background:var(--cc-map-marker); box-shadow:0 0 2px var(--cc-map-light-glow); }
 .cc-region-columns,.cc-region-list > div { display:grid; grid-template-columns:minmax(0,1fr) 42px 35px; align-items:center; }
 .cc-region-columns { height:18px; padding:0 9px; border-bottom:1px solid var(--border-2); color:var(--text-tertiary); font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
 .cc-region-columns b,.cc-region-columns em { font-weight:500; font-style:normal; text-align:right; }

@@ -25,7 +25,10 @@ const data = [
 const CustomTooltip = ({ active, payload, label, isDarkMode }) => {
   if (active && payload && payload.length) {
     return (
-      <div className={`${isDarkMode ? 'bg-[#2a2d3e] text-white border-gray-600' : 'bg-white text-gray-800 border-gray-300 shadow-md'} text-[11px] px-3 py-2 flex flex-col gap-1 border rounded`}>
+      <div
+        className={`${isDarkMode ? 'bg-[#2a2d3e] text-white border-gray-600' : 'shadow-md'} text-[11px] px-3 py-2 flex flex-col gap-1 border rounded`}
+        style={isDarkMode ? undefined : { backgroundColor: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--border)' }}
+      >
         <span className="font-bold mb-1">{label}</span>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-[#3b82f6]"></div>
@@ -78,27 +81,27 @@ const PositionsBySentimentChart = () => {
           <>
             <div
               className="absolute top-0 bottom-0 pointer-events-none z-10"
-              style={{ left: `${mousePos.x}px`, width: '1px', backgroundColor: isDarkMode ? '#60a5fa' : '#3b82f6', opacity: 0.5 }}
+              style={{ left: `${mousePos.x}px`, width: '1px', backgroundColor: isDarkMode ? '#60a5fa' : 'var(--accent)', opacity: 0.5 }}
             />
             <div
               className="absolute left-0 right-0 pointer-events-none z-10"
-              style={{ top: `${mousePos.y}px`, height: '1px', backgroundColor: isDarkMode ? '#60a5fa' : '#3b82f6', opacity: 0.5 }}
+              style={{ top: `${mousePos.y}px`, height: '1px', backgroundColor: isDarkMode ? '#60a5fa' : 'var(--accent)', opacity: 0.5 }}
             />
           </>
         )}
 
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke={isDarkMode ? "#374151" : "#e5e7eb"} opacity={isDarkMode ? 0.5 : 1} />
-            <XAxis dataKey="symbol" axisLine={true} stroke={isDarkMode ? "#4b5563" : "#d1d5db"} tickLine={true} tick={{ fontSize: 9, fill: isDarkMode ? '#9ca3af' : '#6b7280' }} interval={0} angle={0} />
-            <YAxis axisLine={true} stroke={isDarkMode ? "#4b5563" : "#d1d5db"} tickLine={true} tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : '#6b7280' }} domain={[0, 100]} ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} />
+            <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke={isDarkMode ? "#374151" : "var(--border-2)"} opacity={isDarkMode ? 0.5 : 1} />
+            <XAxis dataKey="symbol" axisLine={true} stroke={isDarkMode ? "#4b5563" : "var(--border)"} tickLine={true} tick={{ fontSize: 9, fill: isDarkMode ? '#9ca3af' : 'var(--muted)' }} interval={0} angle={0} />
+            <YAxis axisLine={true} stroke={isDarkMode ? "#4b5563" : "var(--border)"} tickLine={true} tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : 'var(--muted)' }} domain={[0, 100]} ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} />
 
             <Tooltip
               content={<CustomTooltip isDarkMode={isDarkMode} />}
               cursor={false} /* Disable default recharts gray overlay */
               isAnimationActive={false}
             />
-            <Legend verticalAlign="bottom" height={36} iconType="rect" iconSize={12} wrapperStyle={{ fontSize: '11px', color: isDarkMode ? '#d1d5db' : '#4b5563', paddingTop: '10px' }} />
+            <Legend verticalAlign="bottom" height={36} iconType="rect" iconSize={12} wrapperStyle={{ fontSize: '11px', color: isDarkMode ? '#d1d5db' : 'var(--text-2)', paddingTop: '10px' }} />
 
             <Bar dataKey="buy" stackId="a" fill="#3b82f6" name="Buy" isAnimationActive={false} barSize={25} />
             <Bar dataKey="sell" stackId="a" fill="#eab308" name="Sell" isAnimationActive={false} />

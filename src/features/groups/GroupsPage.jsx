@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { formatPageLabel } from '../../utils/pageLabel.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -68,30 +69,30 @@ const GroupsPage = () => {
 
   const handleDelete = async (e, groupName) => {
     e.stopPropagation();
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     if (window.confirm(`Are you sure you want to delete group '${groupName}'?`)) {
       try {
         const params = new URLSearchParams({ group: String(groupName) });
         const res = await fetchManagerApi(`/GroupDelete?${params.toString()}`);
         if (!res.ok) throw new Error('Delete failed');
-        alert(`Group '${groupName}' deleted successfully!`);
+        showResult.success(`Group '${groupName}' deleted successfully!`);
         queryClient.invalidateQueries({ queryKey: ['groups'] });
       } catch (err) {
-        alert('Error deleting group: ' + err.message);
+        showResult.error('Error deleting group: ' + err.message);
       }
     }
   };
 
   const handleEdit = (e, group) => {
     e.stopPropagation();
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setDuplicateGroup(null);
     setEditGroup(group);
     setIsModalOpen(true);
   };
 
   const handleNewGroup = () => {
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setEditGroup(null);
     setIsModalOpen(true);
   };
@@ -120,7 +121,7 @@ const GroupsPage = () => {
 
   const handleEditSelected = useCallback(() => {
     if (selectedGroups.length !== 1) return;
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setDuplicateGroup(null);
     setEditGroup(selectedGroups[0]);
     setIsModalOpen(true);
@@ -128,7 +129,7 @@ const GroupsPage = () => {
 
   const handleDuplicateSelected = useCallback(() => {
     if (selectedGroups.length !== 1) return;
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setEditGroup(null);
     setDuplicateGroup(null);
     setDuplicateGroup(selectedGroups[0]);
@@ -181,16 +182,16 @@ const GroupsPage = () => {
         clearSelectedGroups();
         event.detail.handled = true;
       } else if (action === 'copy' && selectedGroups.length > 0 && !hasEditableFocus) {
-        copySelectedGroups().catch(() => alert('Unable to copy the selected groups.'));
+        copySelectedGroups().catch(() => showResult.error('Unable to copy the selected groups.'));
         event.detail.handled = true;
       } else if (action === 'copy-csv' && selectedGroups.length > 0) {
-        copySelectedGroups('csv').catch(() => alert('Unable to copy the selected groups.'));
+        copySelectedGroups('csv').catch(() => showResult.error('Unable to copy the selected groups.'));
         event.detail.handled = true;
       } else if (action === 'copy-excel' && selectedGroups.length > 0) {
-        copySelectedGroups('tsv').catch(() => alert('Unable to copy the selected groups.'));
+        copySelectedGroups('tsv').catch(() => showResult.error('Unable to copy the selected groups.'));
         event.detail.handled = true;
       } else if (action === 'copy-json' && selectedGroups.length > 0) {
-        copySelectedGroups('json').catch(() => alert('Unable to copy the selected groups.'));
+        copySelectedGroups('json').catch(() => showResult.error('Unable to copy the selected groups.'));
         event.detail.handled = true;
       } else if (action === 'edit-selected') {
         handleEditSelected();
@@ -219,7 +220,7 @@ const GroupsPage = () => {
         selectVisibleGroups();
       } else if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedGroups.length > 0) {
         event.preventDefault();
-        copySelectedGroups().catch(() => alert('Unable to copy the selected groups.'));
+        copySelectedGroups().catch(() => showResult.error('Unable to copy the selected groups.'));
       } else if (event.key === 'Escape' && selectedGroups.length > 0) {
         event.preventDefault();
         clearSelectedGroups();
@@ -403,7 +404,7 @@ const GroupsPage = () => {
           duplicateData={duplicateGroup}
           onClose={() => { setIsModalOpen(false); setEditGroup(null); setDuplicateGroup(null); }}
           onSuccess={() => {
-            alert(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
+            showResult.success(editGroup ? 'Group Updated Successfully!' : 'Group Created Successfully!');
             queryClient.invalidateQueries({ queryKey: ['groups'] });
           }}
         />

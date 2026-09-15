@@ -24,7 +24,7 @@ const activeCountries = [
 const getCountryColor = (countryName, isDarkMode) => {
   if (countryName === "India") return "#3b82f6"; // Bright primary blue
   if (activeCountries.includes(countryName)) return "#60a5fa"; // Lighter blue
-  return isDarkMode ? "#374151" : "#d1d5db"; // Slate-700 for Dark Mode, Gray-300 for Light Mode
+  return isDarkMode ? "#374151" : "var(--border)"; // Shared light-theme border for inactive countries
 };
 
 const TradingAccountsByCountryMap = () => {
@@ -52,7 +52,7 @@ const TradingAccountsByCountryMap = () => {
                       key={geo.rsmKey}
                       geography={geo}
                       fill={getCountryColor(countryName, isDarkMode)}
-                      stroke={isDarkMode ? "#1e1e1e" : "#ffffff"}
+                      stroke={isDarkMode ? "#1e1e1e" : "var(--surface)"}
                       strokeWidth={0.5}
                       style={{
                         default: { outline: "none" },

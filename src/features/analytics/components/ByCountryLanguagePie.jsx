@@ -51,7 +51,7 @@ const ByCountryLanguagePie = () => {
                 outerRadius={85}
                 paddingAngle={0}
                 dataKey="value"
-                stroke={isDarkMode ? "#1e1e1e" : "#ffffff"}
+                stroke={isDarkMode ? "#1e1e1e" : "var(--surface)"}
                 strokeWidth={1}
                 isAnimationActive={false}
                 label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
@@ -62,7 +62,7 @@ const ByCountryLanguagePie = () => {
                   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
                   return (
-                    <text x={x} y={y} fill={isDarkMode ? "#d1d5db" : "#4b5563"} textAnchor="start" dominantBaseline="central" fontSize={11}>
+                    <text x={x} y={y} fill={isDarkMode ? "#d1d5db" : "var(--text-2)"} textAnchor="start" dominantBaseline="central" fontSize={11}>
                       {data[index].name}: {value}%
                     </text>
                   );
@@ -73,8 +73,8 @@ const ByCountryLanguagePie = () => {
                 ))}
               </Pie>
               <Tooltip
-                itemStyle={{ fontSize: '11px', color: isDarkMode ? '#f3f4f6' : '#1f2937' }}
-                contentStyle={{ borderRadius: '4px', padding: '4px 8px', backgroundColor: isDarkMode ? '#374151' : '#ffffff', border: isDarkMode ? '1px solid #4b5563' : '1px solid #e5e7eb' }}
+                itemStyle={{ fontSize: '11px', color: isDarkMode ? '#f3f4f6' : 'var(--text)' }}
+                contentStyle={{ borderRadius: '4px', padding: '4px 8px', backgroundColor: isDarkMode ? '#374151' : 'var(--surface)', border: isDarkMode ? '1px solid #4b5563' : '1px solid var(--border-2)' }}
               />
             </PieChart>
           </ResponsiveContainer>

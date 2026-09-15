@@ -1,3 +1,6 @@
+import ruSupplement from './ruSupplement.js';
+import ruMessages from './ruMessages.js';
+import ruCountries from './ruCountries.js';
 export default {
   "A-Book": "A-Book",
   "Account assignment": "Назначение счёта",
@@ -521,4 +524,7 @@ export default {
   "Withdrawal": "Снятие",
   "Withdrawal review": "Проверка вывода средств",
   "Workspace": "Рабочая область",
+  ...ruSupplement,
+  ...ruMessages,
+  ...ruCountries,
 };

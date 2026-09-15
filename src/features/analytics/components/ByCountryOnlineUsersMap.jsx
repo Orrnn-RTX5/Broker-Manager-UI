@@ -15,7 +15,7 @@ const activeCountries = ["India", "Russia"];
 const getCountryColor = (countryName, isDarkMode) => {
   if (countryName === "India") return "#3b82f6"; // Primary blue
   if (countryName === "Russia") return "#60a5fa"; // Lighter blue
-  return isDarkMode ? "#374151" : "#e5e7eb"; // Very light gray for inactive
+  return isDarkMode ? "#374151" : "var(--border-2)"; // Shared light-theme border for inactive countries
 };
 
 const ByCountryOnlineUsersMap = () => {
@@ -43,7 +43,7 @@ const ByCountryOnlineUsersMap = () => {
                       key={geo.rsmKey}
                       geography={geo}
                       fill={getCountryColor(countryName, isDarkMode)}
-                      stroke={isDarkMode ? "#1e1e1e" : "#ffffff"}
+                      stroke={isDarkMode ? "#1e1e1e" : "var(--surface)"}
                       strokeWidth={0.5}
                       style={{
                         default: { outline: "none" },

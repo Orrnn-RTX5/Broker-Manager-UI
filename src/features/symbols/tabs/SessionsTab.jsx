@@ -1,3 +1,4 @@
+import { showResult } from '../../../store/resultDialogStore.js';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Loader2, X } from 'lucide-react';
 import {
@@ -152,7 +153,7 @@ const SessionsTab = () => {
     try {
       await symbolSessionSet({ symbol: selectedSymbol, sessions: baseSessions });
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      showResult.error('Save failed: ' + e.message);
     } finally {
       setSavingBase(false);
     }
@@ -165,7 +166,7 @@ const SessionsTab = () => {
       await sessionOverrideDelete(id);
       setOverrides(prev => prev.filter(o => o.id !== id));
     } catch (e) {
-      alert('Delete failed: ' + e.message);
+      showResult.error('Delete failed: ' + e.message);
     } finally {
       setDeletingId(null);
     }

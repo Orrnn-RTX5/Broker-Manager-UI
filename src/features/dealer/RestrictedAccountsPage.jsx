@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState } from 'react';
 import { User, AlertTriangle, Edit3, Trash2 } from 'lucide-react';
 import useDataSource from '../../hooks/useDataSource';
@@ -20,14 +21,14 @@ const RestrictedAccountsPage = () => {
   });
 
   const handleClear = async (login) => {
-    if (!canEditRestrictions) { alert('Your role does not have permission to clear account restrictions.'); return; }
+    if (!canEditRestrictions) { showResult.error('Your role does not have permission to clear account restrictions.'); return; }
     if (!window.confirm(`Clear all restrictions for login ${login}?`)) return;
     try {
       await accountRestrictClear(login);
-      alert(`Restrictions cleared for ${login}`);
+      showResult.success(`Restrictions cleared for ${login}`);
       refetch();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     }
   };
 

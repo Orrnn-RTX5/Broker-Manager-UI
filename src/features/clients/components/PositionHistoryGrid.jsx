@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useI18nStore } from '../../../i18n/index.js';
 import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, Loader, History } from 'lucide-react';
 
 const fmt = (n, d = 2) => {
@@ -6,9 +7,9 @@ const fmt = (n, d = 2) => {
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 };
 
-const formatDate = (ts) => {
+const formatDate = (ts, language) => {
   if (!ts) return '—';
-  return new Date(ts * 1000).toLocaleString(undefined, {
+  return new Date(ts * 1000).toLocaleString(language === 'en' ? 'en-US' : language, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 };
@@ -32,6 +33,7 @@ const HeaderCell = ({ col, label, align = 'left', sortCol, sortDir, onSort }) =>
 );
 
 const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
+  const language = useI18nStore((state) => state.language);
   const [sortCol, setSortCol] = useState('openTime');
   const [sortDir, setSortDir] = useState('desc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -155,8 +157,8 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
                   <td className="tabular" style={{ textAlign: 'right' }}>{row.volume}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.openPrice, 5)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.closePrice, 5)}</td>
-                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.openTime)}</td>
-                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.closeTime)}</td>
+                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.openTime, language)}</td>
+                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.closeTime, language)}</td>
                   <td className="tabular font-mono text-xs opacity-70" style={{ textAlign: 'right' }}>{fmt(row.sl)}</td>
                   <td className="tabular font-mono text-xs opacity-70" style={{ textAlign: 'right' }}>{fmt(row.tp)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right', color: profitTone, fontWeight: 600 }}>

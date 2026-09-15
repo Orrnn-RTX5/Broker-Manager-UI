@@ -64,7 +64,7 @@ export const applyAttributes = (element, dictionary, language) => {
   }
   for (const attr of TRANSLATED_ATTRIBUTES) {
     const current = element.getAttribute(attr);
-    if (current === null) {
+    if (current === null || current === undefined) {
       delete store[attr];
       continue;
     }

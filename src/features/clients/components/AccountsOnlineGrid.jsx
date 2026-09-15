@@ -1,4 +1,5 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
+import { useI18nStore } from '../../../i18n/index.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -41,9 +42,9 @@ const saveAccountsOnlineSnapshot = (data) => {
   }
 };
 
-const formatDateTime = (ts) => {
+const formatDateTime = (ts, language) => {
   if (!ts) return '-';
-  return new Date(ts * 1000).toLocaleString('en-US', {
+  return new Date(ts * 1000).toLocaleString(language === 'en' ? 'en-US' : language, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
   });
 };
@@ -67,6 +68,7 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 };
 
 const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
+  const language = useI18nStore((state) => state.language);
   const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
@@ -251,7 +253,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                       <span className="tabular" style={{ color: 'var(--text)' }}>{row.login}</span>
                     </div>
                   </td>
-                  <td className="tabular" style={{ color: 'var(--text-2)', textAlign: 'center' }}>{formatDateTime(row.connectedAt)}</td>
+                  <td className="tabular" style={{ color: 'var(--text-2)', textAlign: 'center' }}>{formatDateTime(row.connectedAt, language)}</td>
                   <td className="tabular" style={{ textAlign: 'center' }}>
                     <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--text-3)' }}>
                       <Clock size={12} />

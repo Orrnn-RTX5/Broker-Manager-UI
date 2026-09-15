@@ -1,4 +1,6 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useEffect, useState } from 'react';
+import { useI18nStore } from '../../i18n/index.js';
 import { Search, AlertTriangle, User, CheckCircle2, XCircle } from 'lucide-react';
 import { getDealerQueue, orderApprove, orderReject } from '../../services/tradeApi';
 import useDataSource from '../../hooks/useDataSource';
@@ -9,10 +11,10 @@ import GridLoadingState from '../../components/GridLoadingState';
 const DEALER_QUEUE_REFRESH_MS = 4000;
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-const fmtTime = (unix) => {
+const fmtTime = (unix, language) => {
   if (!unix) return '—';
   const d = new Date(unix * 1000);
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleString(language === 'en' ? 'en-US' : language, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
 const PromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
@@ -44,6 +46,7 @@ const PromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
 };
 
 const DealerQueuePage = () => {
+  const language = useI18nStore((state) => state.language);
   const { data: rawData, isLoading, error, reload: refetch } = useDataSource(
     getDealerQueue,
     [],
@@ -77,7 +80,7 @@ const DealerQueuePage = () => {
   });
 
   const handleApprove = (row) => {
-    if (!canDeal) { alert('Your role does not have permission to act on the dealer queue.'); return; }
+    if (!canDeal) { showResult.error('Your role does not have permission to act on the dealer queue.'); return; }
     setActionDialog({
       title: `Approve Order #${row.orderTicket}`,
       fields: [{ key: 'comment', label: 'Comment (optional)', type: 'text' }],
@@ -85,10 +88,10 @@ const DealerQueuePage = () => {
         setActionLoading(true);
         try {
           const result = await orderApprove({ ticket: row.orderTicket, comment: v.comment || undefined });
-          alert(JSON.stringify(result, null, 2));
+          showResult(result);
           refetch();
         } catch (err) {
-          alert(`Error: ${err.message}`);
+          showResult.error(`Error: ${err.message}`);
         } finally {
           setActionLoading(false);
           setActionDialog(null);
@@ -98,7 +101,7 @@ const DealerQueuePage = () => {
   };
 
   const handleReject = (row) => {
-    if (!canDeal) { alert('Your role does not have permission to act on the dealer queue.'); return; }
+    if (!canDeal) { showResult.error('Your role does not have permission to act on the dealer queue.'); return; }
     setActionDialog({
       title: `Reject Order #${row.orderTicket}`,
       fields: [{ key: 'comment', label: 'Reason', type: 'text', placeholder: 'e.g. invalid size' }],
@@ -106,10 +109,10 @@ const DealerQueuePage = () => {
         setActionLoading(true);
         try {
           const result = await orderReject({ ticket: row.orderTicket, comment: v.comment || undefined });
-          alert(JSON.stringify(result, null, 2));
+          showResult(result);
           refetch();
         } catch (err) {
-          alert(`Error: ${err.message}`);
+          showResult.error(`Error: ${err.message}`);
         } finally {
           setActionLoading(false);
           setActionDialog(null);
@@ -188,7 +191,7 @@ const DealerQueuePage = () => {
                       <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.volume)}</td>
                       <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.requestedPrice)}</td>
                       <td style={{ color: 'var(--text-2)' }}>{row.reason}</td>
-                      <td style={{ color: 'var(--text-3)' }}>{fmtTime(row.queuedAt)}</td>
+                      <td style={{ color: 'var(--text-3)' }}>{fmtTime(row.queuedAt, language)}</td>
                       <td className="truncate max-w-[120px]" style={{ color: 'var(--text-3)' }}>{row.comment || '—'}</td>
                       <td style={{ textAlign: 'center' }}>
                         <div className="inline-flex gap-1">

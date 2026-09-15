@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
@@ -66,13 +67,13 @@ const GroupDetailsPage = () => {
   const handleMoveRequest = () => {
     const targetGroup = toGroupInput.trim();
     if (!targetGroup || !groupName) return;
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setPendingMoveTarget(targetGroup);
   };
 
   const handleMoveAccounts = async () => {
     if (!pendingMoveTarget || !groupName) return;
-    if (!canManageGroups) { alert('Your role does not have permission to manage groups.'); return; }
+    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
     setIsMoving(true);
     try {
       const params = new URLSearchParams({
@@ -84,13 +85,13 @@ const GroupDetailsPage = () => {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await res.json();
-      alert(`Successfully moved accounts from ${groupName} to ${pendingMoveTarget}`);
+      showResult.success(`Successfully moved accounts from ${groupName} to ${pendingMoveTarget}`);
       setShowMoveInput(false);
       setToGroupInput('');
       setPendingMoveTarget(null);
       setStatsRefreshTick(value => value + 1);
     } catch (err) {
-      alert('Error moving accounts: ' + err.message);
+      showResult.error('Error moving accounts: ' + err.message);
     } finally {
       setIsMoving(false);
     }

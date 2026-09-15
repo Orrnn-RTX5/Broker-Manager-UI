@@ -40,10 +40,10 @@ const PositionsByReasonPie = () => {
               outerRadius={90}
               paddingAngle={1}
               dataKey="value"
-              stroke={isDarkMode ? "#1e1e1e" : "#ffffff"}
+              stroke={isDarkMode ? "#1e1e1e" : "var(--surface)"}
               strokeWidth={2}
               isAnimationActive={false}
-              labelLine={{ stroke: isDarkMode ? '#6b7280' : '#d1d5db', strokeWidth: 1 }}
+              labelLine={{ stroke: isDarkMode ? '#6b7280' : 'var(--border)', strokeWidth: 1 }}
               label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
                 if (data[index].name !== 'Mobile') return null; // Only show main label
                 const RADIAN = Math.PI / 180;
@@ -52,7 +52,7 @@ const PositionsByReasonPie = () => {
                 const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
                 return (
-                  <text x={x} y={y} fill={isDarkMode ? "#d1d5db" : "#4b5563"} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
+                  <text x={x} y={y} fill={isDarkMode ? "#d1d5db" : "var(--text-2)"} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
                     {data[index].name}: {value}%
                   </text>
                 );
@@ -63,8 +63,8 @@ const PositionsByReasonPie = () => {
               ))}
             </Pie>
             <Tooltip
-              itemStyle={{ fontSize: '11px', color: isDarkMode ? '#f3f4f6' : '#1f2937' }}
-              contentStyle={{ borderRadius: '4px', padding: '4px 8px', backgroundColor: isDarkMode ? '#374151' : '#ffffff', border: isDarkMode ? '1px solid #4b5563' : '1px solid #e5e7eb' }}
+              itemStyle={{ fontSize: '11px', color: isDarkMode ? '#f3f4f6' : 'var(--text)' }}
+              contentStyle={{ borderRadius: '4px', padding: '4px 8px', backgroundColor: isDarkMode ? '#374151' : 'var(--surface)', border: isDarkMode ? '1px solid #4b5563' : '1px solid var(--border-2)' }}
             />
           </PieChart>
         </ResponsiveContainer>

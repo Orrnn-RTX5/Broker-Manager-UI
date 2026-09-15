@@ -6,12 +6,11 @@ export default function UiTranslator() {
   const language = useI18nStore((state) => state.language);
 
   useEffect(() => {
-    let queued = false;
+    let timer = null;
     const schedule = () => {
-      if (isApplyingTranslation() || queued) return;
-      queued = true;
-      window.setTimeout(() => {
-        queued = false;
+      if (isApplyingTranslation() || timer !== null) return;
+      timer = window.setTimeout(() => {
+        timer = null;
         runPass(language);
       }, 50);
     };
@@ -25,9 +24,11 @@ export default function UiTranslator() {
       attributeFilter: TRANSLATED_ATTRIBUTES,
       characterData: true,
     });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [language]);
 
   return null;
 }
-

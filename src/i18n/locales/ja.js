@@ -1,3 +1,4 @@
+import jaChrome from './jaChrome.js';
 export default {
   'menu.file': 'ファイル',
   'menu.edit': '編集',
@@ -138,4 +139,5 @@ export default {
   'bar.loading': 'Loading…',
   'bar.unavailable': 'Unavailable',
   'bar.goToDashboard': 'Go to dashboard',
+  ...jaChrome,
 };

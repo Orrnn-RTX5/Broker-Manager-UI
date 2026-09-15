@@ -1,0 +1,1 @@
+const fs=require('node:fs');const p='tmp/audit-german.cjs';let s=fs.readFileSync(p,'utf8').replace("results.push({route,missing});", "results.push({route,missing});fs.writeFileSync('tmp/german-route-audit.json',JSON.stringify(results,null,2));");fs.writeFileSync(p,s);

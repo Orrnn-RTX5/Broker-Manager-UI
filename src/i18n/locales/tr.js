@@ -1,3 +1,4 @@
+import trChrome from './trChrome.js';
 export default {
   'menu.file': 'Dosya',
   'menu.edit': 'Düzenle',
@@ -138,4 +139,5 @@ export default {
   'bar.loading': 'Loading…',
   'bar.unavailable': 'Unavailable',
   'bar.goToDashboard': 'Go to dashboard',
+  ...trChrome,
 };

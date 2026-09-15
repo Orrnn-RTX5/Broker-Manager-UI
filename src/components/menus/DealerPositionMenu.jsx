@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect } from 'react';
 import {
   ArrowLeftRight, DollarSign, BarChart3, MessageSquare,
@@ -112,11 +113,11 @@ const DealerPositionMenu = ({ x, y, position: pos, onClose, onRefresh }) => {
     setLoading(true);
     try {
       const result = await fn();
-      alert(JSON.stringify(result, null, 2));
+      showResult(result);
       onRefresh?.();
       onClose();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -148,7 +149,7 @@ const DealerPositionMenu = ({ x, y, position: pos, onClose, onRefresh }) => {
       ],
       onSubmit: (v) => {
         if (Number(v.new_lots) >= Number(pos?.volume)) {
-          alert('Only volume decrease is currently supported.');
+          showResult.info('Only volume decrease is currently supported.');
           return;
         }
         exec(() => positionVolumeChange(ticket, v.new_lots));

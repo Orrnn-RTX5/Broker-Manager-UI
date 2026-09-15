@@ -40,4 +40,9 @@ export default {
   "金丝雀": "canary",
   "铁锈金丝雀": "Rust Canary",
   "铁锈金丝雀测试": "Rust Canary Test",
+  "在线用户": "Online Users",
+  "版本": "Build",
+  "真实": "Real",
+  "模拟": "Demo",
+  "活跃会话": "Active Sessions",
 };

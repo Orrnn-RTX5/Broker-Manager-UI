@@ -1,3 +1,5 @@
+import chrome from './hiChrome.js';
+
 export default {
   'menu.file': 'फ़ाइल',
   'menu.edit': 'संपादित करें',
@@ -138,4 +140,5 @@ export default {
   'bar.loading': 'Loading…',
   'bar.unavailable': 'Unavailable',
   'bar.goToDashboard': 'Go to dashboard',
+  ...chrome,
 };

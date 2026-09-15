@@ -15,7 +15,10 @@ const data = [
 const CustomTooltip = ({ active, payload, label, isDarkMode }) => {
   if (active && payload && payload.length) {
     return (
-      <div className={`${isDarkMode ? 'bg-[#2a2d3e] text-white border-gray-600' : 'bg-white text-gray-800 border-[#3b82f6] shadow-md'} text-[11px] px-2 py-1 flex items-center gap-2 border rounded`}>
+      <div
+        className={`${isDarkMode ? 'bg-[#2a2d3e] text-white border-gray-600' : 'shadow-md'} text-[11px] px-2 py-1 flex items-center gap-2 border rounded`}
+        style={isDarkMode ? undefined : { backgroundColor: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--accent)' }}
+      >
         <span>Build: {label}</span>
         <span className="text-gray-400 font-semibold text-[10px]">Count</span>
         <span className="font-semibold">{payload[0].value}</span>
@@ -73,9 +76,9 @@ const OnlineUsersByBuildChart = () => {
 
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#374151" : "#e5e7eb"} />
-            <XAxis dataKey="build" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: isDarkMode ? "#9ca3af" : "#6b7280" }} />
-            <YAxis axisLine={false} tickLine={{ stroke: isDarkMode ? "#6b7280" : "#e5e7eb" }} tick={{ fontSize: 11, fill: isDarkMode ? "#9ca3af" : "#6b7280" }} domain={[0, 9]} ticks={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#374151" : "var(--border-2)"} />
+            <XAxis dataKey="build" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: isDarkMode ? "#9ca3af" : "var(--muted)" }} />
+            <YAxis axisLine={false} tickLine={{ stroke: isDarkMode ? "#6b7280" : "var(--border-2)" }} tick={{ fontSize: 11, fill: isDarkMode ? "#9ca3af" : "var(--muted)" }} domain={[0, 9]} ticks={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]} />
 
             <RechartsTooltip
               content={<CustomTooltip isDarkMode={isDarkMode} />}

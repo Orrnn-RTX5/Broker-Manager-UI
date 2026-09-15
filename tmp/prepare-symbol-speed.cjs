@@ -1,0 +1,30 @@
+const fs=require('node:fs');
+let s=fs.readFileSync('tmp/verify-light-theme.cjs','utf8').split('    await page.waitForTimeout(1500);')[0];
+s=s.replace("    await page.goto('http://localhost:5180/dashboard');", `    await page.route('**/SymbolsList*',r=>r.fulfill({json:['A.BASE','B.DERIVED']}));
+    await page.route('**/SymbolCategoryList*',r=>r.fulfill({json:[{name:'Fast'},{name:'Slow'}]}));
+    let releaseSlow;
+    const slow=new Promise(resolve=>{releaseSlow=resolve});
+    await page.route('**/SymbolsByCategory*',async r=>{if(r.request().url().includes('Slow'))await slow;await r.fulfill({json:r.request().url().includes('Slow')?[]:[{symbol:'A.BASE',enabled:true},{symbol:'B.DERIVED',symbolType:'derived',enabled:false}]});});
+    await page.route('**/SymbolsParams*',async r=>{await slow;await r.fulfill({json:[{symbol:'A.BASE',digits:5},{symbol:'B.DERIVED',digits:5}]});});
+    await page.goto('http://localhost:5180/symbol-management');`);
+s=s.replace("    await page.locator('.cc-metric-card').first().waitFor();",'');
+s+=`
+    await page.locator('.symbols-table tbody tr').filter({hasText:'A.BASE'}).waitFor();
+    const base=page.locator('.symbols-table tbody tr').filter({hasText:'A.BASE'});
+    const derived=page.locator('.symbols-table tbody tr').filter({hasText:'B.DERIVED'});
+    await base.locator('td').nth(1).getByText('base',{exact:true}).waitFor();
+    assert.equal((await derived.locator('td').nth(1).innerText()).trim(),'derived');
+    assert.equal((await base.locator('td').nth(7).innerText()).trim(),'Enabled');
+    assert.equal(await base.getByTitle('Edit',{exact:true}).isDisabled(),true);
+    console.log('PASS: Type and Status visible while parameter requests are still pending.');
+    await page.screenshot({path:'artifacts/symbol-management-progress.png'});
+    releaseSlow();
+    await page.waitForFunction(()=>[...document.querySelectorAll('.symbols-table button[title="Edit"]')].every(b=>!b.disabled));
+    const cached=await page.evaluate(async()=>{const api=await import('/src/services/api.js');const start=performance.now();const data=api.peekSymbolManagementData();return {ms:performance.now()-start,types:data.symbols.map(s=>s.symbolType)};});
+    assert.deepEqual(cached.types,['base','derived']);
+    console.log('PASS: Completed types available synchronously from cache:',cached.ms,'ms');
+    assert.deepEqual(errors,[]);
+  } finally {await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1});
+`;
+fs.writeFileSync('tmp/verify-symbol-management-speed.cjs',s);

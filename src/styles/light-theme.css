@@ -1,0 +1,262 @@
+/* Light mode only. Keep shared and dark theme geometry and tokens intact.
+   Root tokens also cover dialogs rendered through portals outside the shell. */
+html:not(.dark) {
+  color-scheme: light;
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --surface-2: #f8f8f8;
+  --surface-3: #e8e8e8;
+  --border: #d4d4d4;
+  --border-2: #e5e5e5;
+  --border-3: #bdbdbd;
+  --text: #1f1f1f;
+  --text-2: #424242;
+  --text-3: #616161;
+  --muted: #767676;
+  --accent: #0078d4;
+  --accent-hover: #006fca;
+  --accent-press: #005a9e;
+  --accent-soft: #e5f1fb;
+  --accent-soft-2: #f3f8fc;
+  --accent-border: #9ccbff;
+  --accent-text: #005a9e;
+  --accent-contrast: #ffffff;
+  --ok: #107c10;
+  --ok-soft: #e7f5e7;
+  --ok-text: #0b5e0b;
+  --ok-border: #a9d3a9;
+  --danger: #c42b1c;
+  --danger-soft: #fde7e9;
+  --danger-text: #a4262c;
+  --danger-border: #efa8ae;
+  --warn: #8a6100;
+  --warn-soft: #fff4ce;
+  --warn-text: #6b4b00;
+  --warn-border: #e5c365;
+  --info: #0078d4;
+  --info-soft: #e5f1fb;
+  --info-text: #005a9e;
+  --info-border: #9ccbff;
+  --ring: 0 0 0 3px rgba(0, 120, 212, .24);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, .10);
+  --shadow-xl: 0 12px 28px rgba(0, 0, 0, .12);
+  --shadow-2xl: 0 20px 44px rgba(0, 0, 0, .16);
+}
+
+html:not(.dark) .rtx5-command-shell {
+  --bg-app: #f3f3f3;
+  --bg-panel: #ffffff;
+  --bg-elevated: #f8f8f8;
+  --bg-hover: #e8e8e8;
+  --border: #d4d4d4;
+  --border-2: #e5e5e5;
+  --border-3: #bdbdbd;
+  --text-primary: #1f1f1f;
+  --text-secondary: #424242;
+  --text-tertiary: #616161;
+  --success: #107c10;
+  --danger: #c42b1c;
+  --warning: #8a6100;
+  --info: #0078d4;
+  --accent: #0078d4;
+  --accent-hover: #006fca;
+  --accent-press: #005a9e;
+  --accent-soft: #e5f1fb;
+  --accent-soft-2: #f3f8fc;
+  --accent-border: #9ccbff;
+  --accent-text: #005a9e;
+  --accent-contrast: #ffffff;
+  --ok-soft: #e7f5e7;
+  --ok-text: #0b5e0b;
+  --ok-border: #a9d3a9;
+  --danger-text: #a4262c;
+  --danger-border: #efa8ae;
+  --warn-soft: #fff4ce;
+  --warn-text: #6b4b00;
+  --warn-border: #e5c365;
+  --info-soft: #e5f1fb;
+  --info-text: #005a9e;
+  --info-border: #9ccbff;
+  --cc-chrome: #f3f3f3;
+  --cc-toolbar: #f7f7f7;
+  --cc-titlebar: #f3f3f3;
+  --cc-grid: #e5e5e5;
+  --cc-bar: #9e9e9e;
+  --cc-tooltip: #ffffff;
+  --cc-scrollbar-thumb: #c1c1c1;
+  --cc-avatar-bg: #e5f1fb;
+  --cc-avatar-border: #9ccbff;
+  --cc-avatar-text: #005a9e;
+  --cc-map-land-top: #e6e6e6;
+  --cc-map-land-bottom: #d6d6d6;
+  --cc-map-water: rgba(248, 248, 248, .72);
+  --cc-map-coast: #a3a3a3;
+  --cc-map-marker: #107c10;
+  --cc-map-light-glow: rgba(16, 124, 16, .24);
+  --cc-map-caption: rgba(255, 255, 255, .94);
+  --cc-map-caption-border: rgba(163, 163, 163, .58);
+  --cc-market-glow-up: transparent;
+  --cc-market-glow-down: transparent;
+  --market-value-up: #107c10;
+  --market-value-down: #c42b1c;
+  --market-direction-up: #107c10;
+  --market-direction-down: #c42b1c;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, .05);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, .07);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, .10);
+  --shadow-xl: 0 12px 28px rgba(0, 0, 0, .12);
+  --shadow-2xl: 0 20px 44px rgba(0, 0, 0, .16);
+  --cc-popover-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+
+/* Keep older Tailwind-based panels on the same neutral light palette. */
+html:not(.dark) #root .bg-gray-50 { background-color: #f8f8f8; }
+html:not(.dark) #root .bg-gray-100 { background-color: #f3f3f3; }
+html:not(.dark) #root .bg-gray-200 { background-color: #e8e8e8; }
+html:not(.dark) #root .border-gray-100,
+html:not(.dark) #root .border-gray-200 { border-color: #e5e5e5; }
+html:not(.dark) #root .border-gray-300 { border-color: #d4d4d4; }
+html:not(.dark) #root .text-gray-900,
+html:not(.dark) #root .text-gray-800 { color: #1f1f1f; }
+html:not(.dark) #root .text-gray-700 { color: #424242; }
+html:not(.dark) #root .text-gray-600 { color: #616161; }
+html:not(.dark) #root :is(.text-gray-500, .text-gray-400) { color: #767676; }
+html:not(.dark) #root :is(.text-gray-300, .text-gray-200) { color: #616161; }
+html:not(.dark) #root .text-blue-500 { color: #0078d4; }
+html:not(.dark) #root .text-blue-600,
+html:not(.dark) #root .text-blue-700 { color: #005a9e; }
+html:not(.dark) #root .border-blue-500,
+html:not(.dark) #root .border-blue-600 { border-color: #0078d4; }
+html:not(.dark) #root .hover\:bg-gray-100:hover { background-color: #e8e8e8; }
+html:not(.dark) #root .hover\:bg-blue-50:hover { background-color: #e5f1fb; }
+html:not(.dark) #root :is(button, [role="button"]):is(.bg-blue-500, .bg-blue-600, .bg-blue-700) {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+html:not(.dark) #root :is(button, [role="button"]):is(.bg-blue-500, .bg-blue-600, .bg-blue-700):hover {
+  background-color: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+html:not(.dark) #root :is(button, [role="button"]):is(.bg-blue-500, .bg-blue-600, .bg-blue-700):active {
+  background-color: var(--accent-press) !important;
+  border-color: var(--accent-press) !important;
+}
+
+/* The sign-in shell has its own local token set, so bring it into the same theme. */
+html:not(.dark) .manager-auth-shell {
+  --surface: #ffffff;
+  --surface-2: #f8f8f8;
+  --surface-3: #e8e8e8;
+  --border: #d4d4d4;
+  --border-2: #e5e5e5;
+  --border-3: #bdbdbd;
+  --text: #1f1f1f;
+  --text-2: #424242;
+  --text-3: #616161;
+  --muted: #767676;
+  --accent-soft: #e5f1fb;
+  --accent-text: #005a9e;
+  background: #f3f3f3;
+}
+html:not(.dark) .manager-auth-main {
+  background: linear-gradient(180deg, #f8f8f8 0%, #f3f3f3 100%);
+}
+html:not(.dark) .manager-auth-card {
+  background: #ffffff;
+  border-color: #d4d4d4;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .10), 0 2px 6px rgba(0, 0, 0, .04);
+}
+html:not(.dark) .manager-auth-header h1 { color: #1f1f1f; }
+html:not(.dark) .manager-auth-header p { color: #616161; }
+html:not(.dark) .manager-title-rule { background: #d4d4d4; }
+html:not(.dark) .manager-title-rule span { background: #0078d4; }
+
+/* Give the dense workspace breathing room without changing dock dimensions. */
+html:not(.dark) #root .symbol-browser-page {
+  padding-top: 36px;
+}
+
+/* Legacy dialogs apply a dark !important color to every button. Solid blue
+   actions need white labels, including their icons and disabled states. */
+html:not(.dark) :is(.ui-btn-primary, button.bg-blue-500, button.bg-blue-600, button.bg-blue-700),
+html:not(.dark) :is(.ui-btn-primary, button.bg-blue-500, button.bg-blue-600, button.bg-blue-700) :is(span, svg) {
+  color: #ffffff !important;
+}
+
+html:not(.dark) .rtx5-command-shell .manager-menu-brand {
+  width: 80px;
+  min-width: 80px;
+  flex: 0 0 80px;
+  justify-content: center;
+  padding-inline: 8px !important;
+}
+html:not(.dark) .rtx5-command-shell .manager-menu-bar { padding-inline: 8px; }
+html:not(.dark) .rtx5-command-shell .manager-menu-items { margin-left: 4px !important; }
+html:not(.dark) .rtx5-command-shell .manager-menu-item { min-height: 26px; }
+html:not(.dark) .rtx5-command-shell .manager-brand-symbol {
+  filter: invert(1) grayscale(1) contrast(3);
+  mix-blend-mode: multiply;
+}
+html:not(.dark) .rtx5-command-shell .manager-brand-caption { color: var(--text-primary); }
+html:not(.dark) .cc-dashboard { gap: 14px; padding: 18px; }
+html:not(.dark) .cc-dashboard-header { row-gap: 5px; padding-bottom: 2px; }
+html:not(.dark) #root .cc-dashboard-header h1 { font-size: 20px !important; letter-spacing: -.025em; }
+html:not(.dark) #root .cc-dashboard-header p { font-size: 11px !important; line-height: 1.6; }
+html:not(.dark) .cc-dashboard-controls button { height: 32px; box-shadow: var(--shadow-xs); }
+html:not(.dark) .cc-metric-grid { gap: 12px; }
+html:not(.dark) .cc-metric-card {
+  min-height: 96px;
+  padding: 13px 12px;
+  grid-template-columns: 32px minmax(0, 1fr) 42px;
+  gap: 8px;
+  box-shadow: var(--shadow-xs);
+}
+html:not(.dark) .cc-metric-main small { font-size: 9px; line-height: 1.4; letter-spacing: .025em; }
+html:not(.dark) .cc-metric-main strong { margin-top: 5px; font-size: 20px; line-height: 1.2; letter-spacing: -.025em; }
+html:not(.dark) .cc-metric-main > span { margin-top: 7px; }
+html:not(.dark) .cc-sparkline { width: 42px; }
+html:not(.dark) .cc-metric-card[data-placeholder="true"]::after { top: 5px; right: 8px; opacity: 1; }
+html:not(.dark) .cc-panel { box-shadow: var(--shadow-xs); }
+html:not(.dark) .cc-panel-title { min-height: 40px; padding-inline: 12px; border-bottom-color: var(--border-2); }
+html:not(.dark) .cc-chart-toolbar { min-height: 58px; padding: 8px 12px; flex-wrap: wrap; border-bottom-color: var(--border-2); }
+html:not(.dark) .cc-chart-toolbar .cc-panel-title { min-height: 24px; padding: 0; flex-wrap: wrap; }
+html:not(.dark) .cc-chart-legend { margin-top: 5px; }
+html:not(.dark) .cc-chart-area { height: 210px; padding: 8px 10px; }
+html:not(.dark) .cc-chart-actions button.is-active { background: var(--accent-soft); font-weight: 600; }
+html:not(.dark) .cc-lower-grid { gap: 12px; }
+html:not(.dark) .cc-data-panel :is(th, td) { height: 32px; padding-inline: 10px; border-bottom-color: var(--border-2); }
+html:not(.dark) .cc-data-panel th { color: var(--text-secondary); background: var(--bg-elevated); }
+html:not(.dark) :is(.cc-data-panel, .cc-terminal-table) tbody tr:nth-child(even) { background: #fafafa; }
+html:not(.dark) :is(.cc-data-panel, .cc-terminal-table) tbody tr:hover { background: var(--accent-soft); }
+html:not(.dark) .cc-workspace-tab-shell.is-active { background: var(--bg-panel); }
+html:not(.dark) .cc-workspace-tab-shell.is-active .cc-workspace-tab { font-weight: 600; }
+html:not(.dark) .cc-navigator-scroll { padding: 8px 5px; }
+html:not(.dark) .cc-tree-node > div:first-child { min-height: 26px; border-radius: 4px; }
+html:not(.dark) .cc-tree-node.is-active > div:first-child { color: var(--accent-text); }
+html:not(.dark) .cc-owner-quick-actions { padding: 12px; }
+html:not(.dark) .cc-owner-quick-actions .cc-section-title { margin-bottom: 10px; }
+html:not(.dark) .cc-owner-quick-actions .cc-quick-grid { gap: 8px; }
+html:not(.dark) .cc-owner-quick-actions .cc-quick-grid button { min-height: 48px; padding: 8px; border-radius: 6px; background: var(--bg-panel); }
+html:not(.dark) .cc-owner-quick-actions .cc-quick-grid button:hover { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-text); }
+html:not(.dark) .cc-owner-tabs button.is-active { color: var(--accent-text); background: var(--accent-soft-2); }
+html:not(.dark) .cc-terminal-table :is(th, td) { height: 24px; border-right-color: var(--border-2); }
+html:not(.dark) .rtx5-command-shell :is(button, [role="button"], [role="tab"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@container (max-width: 850px) {
+  html:not(.dark) .cc-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html:not(.dark) .cc-lower-grid { grid-template-columns: 1fr; }
+  html:not(.dark) .cc-approvals { grid-column: auto; }
+}
+@container (max-width: 450px) {
+  html:not(.dark) .cc-dashboard { padding: 12px; gap: 12px; }
+  html:not(.dark) .cc-dashboard-header { grid-template-columns: minmax(0, 1fr); }
+  html:not(.dark) .cc-dashboard-header .cc-dashboard-controls { grid-column: 1; grid-row: 3; justify-content: flex-start; margin-top: 6px; }
+  html:not(.dark) .cc-metric-grid { grid-template-columns: 1fr; }
+}

@@ -1,3 +1,4 @@
+import { showResult } from '../../../store/resultDialogStore.js';
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Loader2, ChevronRight, ChevronDown, FolderOpen, Folder, X } from 'lucide-react';
 import { symbolCategoryList, symbolCategoryCreate, symbolCategoryUpdate, symbolCategoryDelete } from '../../../services/api';
@@ -197,7 +198,7 @@ const CategoriesTab = () => {
       await symbolCategoryDelete(cat.name);
       load();
     } catch (e) {
-      alert('Delete failed: ' + e.message);
+      showResult.error('Delete failed: ' + e.message);
     } finally {
       setDeleting(null);
     }

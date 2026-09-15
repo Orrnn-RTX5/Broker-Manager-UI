@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays, ChevronDown } from 'lucide-react';
+import { useI18nStore } from '../../i18n/index.js';
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 
@@ -44,6 +43,9 @@ const PRESETS = [
 
 /* one month grid */
 function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDayHover }) {
+  const language = useI18nStore((state) => state.language);
+  const monthLabel = new Intl.DateTimeFormat(language, { month: 'long' }).format(new Date(year, month, 1));
+  const days = Array.from({ length: 7 }, (_, day) => new Intl.DateTimeFormat(language, { weekday: 'short' }).format(new Date(2026, 0, 4 + day)));
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells = [];
@@ -56,9 +58,9 @@ function MonthGrid({ year, month, startDate, endDate, hovered, onDayClick, onDay
 
   return (
     <div className="select-none w-[196px] shrink-0">
-      <div className="text-center text-xs py-1 font-medium" style={{ color: 'var(--text)' }}>{MONTHS[month]} {year}</div>
+      <div className="text-center text-xs py-1 font-medium" style={{ color: 'var(--text)' }}>{monthLabel} {year}</div>
       <div className="grid grid-cols-7 mb-0.5">
-        {DAYS.map(d => (
+        {days.map(d => (
           <div key={d} className="text-center text-[10px] py-1 font-medium" style={{ color: 'var(--muted)' }}>{d}</div>
         ))}
       </div>

@@ -1,0 +1,16 @@
+.result-dialog { box-sizing:border-box; width:min(440px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; margin:auto; padding:28px; border:1px solid var(--border); border-radius:14px; background:var(--surface); color:var(--text); box-shadow:0 24px 72px #0004; font-family:var(--sans); text-align:center; }
+.result-dialog::backdrop { background:rgba(15,23,42,.42); }
+.result-dialog-icon { display:grid; place-items:center; width:56px; height:56px; margin:0 auto 18px; border:1px solid var(--info-border); border-radius:50%; background:var(--info-soft); color:var(--info-text); }
+.result-dialog.is-success .result-dialog-icon { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok-text); }
+.result-dialog.is-error .result-dialog-icon { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger-text); }
+.result-dialog h2 { margin:0 0 12px; font-size:18px; font-weight:600; line-height:1.4; }
+.result-dialog p { margin:0; color:var(--text-2); font-size:12px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+.result-dialog-code { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:18px; padding:10px 12px; border:1px solid var(--border-2); border-radius:6px; background:var(--surface-2); color:var(--text-2); font-size:11px; text-align:left; }
+.result-dialog-code code { overflow-wrap:anywhere; font-family:var(--mono); }
+.result-dialog button { font:inherit; cursor:pointer; }
+.result-dialog-close { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:28px; height:28px; padding:0; border:0; border-radius:5px; color:var(--text-3); background:transparent; }
+.result-dialog-close:hover { background:var(--surface-3); color:var(--text); }
+.result-dialog footer { display:flex; justify-content:center; margin-top:24px; }
+.result-dialog-done { min-width:104px; min-height:36px; padding:8px 24px; border:1px solid var(--accent); border-radius:6px; background:var(--accent); color:#fff; }
+.result-dialog-done:hover { background:var(--accent-hover); }
+.result-dialog button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }

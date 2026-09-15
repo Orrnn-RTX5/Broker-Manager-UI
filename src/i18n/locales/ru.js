@@ -1,3 +1,4 @@
+import ruChrome from './ruChrome.js';
 export default {
   'menu.file': 'Файл',
   'menu.edit': 'Редактировать',
@@ -138,4 +139,5 @@ export default {
   'bar.loading': 'Loading…',
   'bar.unavailable': 'Unavailable',
   'bar.goToDashboard': 'Go to dashboard',
+  ...ruChrome,
 };

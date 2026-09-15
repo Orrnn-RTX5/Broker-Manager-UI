@@ -1,4 +1,9 @@
+import { translateJapaneseDynamic } from './japaneseDynamic.js';
+import { translateRussianDynamic } from './russianDynamic.js';
+import { translateSpanishDynamic } from './spanishDynamic.js';
+import { translateTurkishDynamic } from './turkishDynamic.js';
 import { UI_DICTIONARIES } from './uiDictionary/index.js';
+import { translateHindiDynamic } from './hindiDynamic.js';
 
 const lowerMapCache = new WeakMap();
 
@@ -15,7 +20,7 @@ export const getLowerMap = (dictionary) => {
 };
 
 export const lookupTranslation = (dictionary, value) => {
-  if (!dictionary) return null;
+  if (!dictionary || typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
 
@@ -41,6 +46,31 @@ export const lookupTranslation = (dictionary, value) => {
   }
 
   // 3. Trailing colon: e.g. "Page buy:", "Account login:", "Bid:"
+  if (dictionary === UI_DICTIONARIES.hi) {
+    const dynamic = translateHindiDynamic(trimmed, (label) => dictionary[label] || lowerMap.get(label.toLowerCase()) || label);
+    if (dynamic) return dynamic;
+  }
+
+  if (dictionary === UI_DICTIONARIES.ja) {
+    const dynamic = translateJapaneseDynamic(trimmed, (label) => dictionary[label] || lowerMap.get(label.toLowerCase()) || label);
+    if (dynamic) return dynamic;
+  }
+
+  if (dictionary === UI_DICTIONARIES.ru) {
+    const dynamic = translateRussianDynamic(trimmed, (label) => dictionary[label] || lowerMap.get(label.toLowerCase()) || label);
+    if (dynamic) return dynamic;
+  }
+
+  if (dictionary === UI_DICTIONARIES.es) {
+    const dynamic = translateSpanishDynamic(trimmed, (label) => dictionary[label] || lowerMap.get(label.toLowerCase()) || label);
+    if (dynamic) return dynamic;
+  }
+
+  if (dictionary === UI_DICTIONARIES.tr) {
+    const dynamic = translateTurkishDynamic(trimmed, (label) => dictionary[label] || lowerMap.get(label.toLowerCase()) || label);
+    if (dynamic) return dynamic;
+  }
+
   if (trimmed.endsWith(':')) {
     const base = trimmed.slice(0, -1).trim();
     const baseHit = dictionary[base] || lowerMap.get(base.toLowerCase());
@@ -91,6 +121,33 @@ export const lookupTranslation = (dictionary, value) => {
   }
 
   // 8. Dynamic pagination templates:
+  if (dictionary === UI_DICTIONARIES.de || dictionary === UI_DICTIONARIES.hi) {
+    const isHindi = dictionary === UI_DICTIONARIES.hi;
+    const hindiPage = isHindi && trimmed.match(/^Page\s+(\d+)\s+of\s+(\d+)$/i);
+    if (hindiPage) return `कुल ${hindiPage[2]} में से पृष्ठ ${hindiPage[1]}`;
+    const hindiShowing = isHindi && trimmed.match(/^Showing\s+([\d,–-]+)\s+of\s+([\d,]+|many)(?:\s+([a-z ]+))?$/i);
+    if (hindiShowing) {
+      const total = hindiShowing[2] === 'many' ? 'कई' : hindiShowing[2];
+      const noun = hindiShowing[3] ? (lowerMap.get(hindiShowing[3].toLowerCase()) || hindiShowing[3]) : 'रिकॉर्ड';
+      return `${total} में से ${hindiShowing[1]} ${noun} दिखाए जा रहे हैं`;
+    }
+    const labeledValue = trimmed.match(/^([^:]+):\s*([+-]?\d.*)$/);
+    if (labeledValue) {
+      const label = dictionary[labeledValue[1]] || lowerMap.get(labeledValue[1].toLowerCase());
+      if (label) return `${label}: ${labeledValue[2]}`;
+    }
+    const panelAction = trimmed.match(/^(Resize|Maximize|Restore|Select) (.+?)( panel)?$/);
+    if (panelAction) {
+      const label = dictionary[panelAction[2]] || lowerMap.get(panelAction[2].toLowerCase()) || panelAction[2];
+      if (isHindi) {
+        const action = { Resize: 'का आकार बदलें', Maximize: 'अधिकतम करें', Restore: 'पुनर्स्थापित करें', Select: 'चुनें' }[panelAction[1]];
+        return `${label} ${action}`;
+      }
+      const action = { Resize: 'Größe ändern', Maximize: 'maximieren', Restore: 'wiederherstellen', Select: 'auswählen' }[panelAction[1]];
+      return panelAction[1] === 'Resize' ? `${label}: ${action}` : `${label} ${action}`;
+    }
+  }
+
   // "Page X" -> e.g. "Page 1"
   const pageMatch = trimmed.match(/^Page\s+(\d+)$/i);
   if (pageMatch) {
@@ -179,6 +236,29 @@ export const lookupTranslation = (dictionary, value) => {
     return `${testWord} ${testMatch[1]}`;
   }
 
+  // 12.5. Dynamic count + noun phrases: e.g. "5 online users", "5 ONLINE USERS", "10 accounts", "3 sessions"
+  const countNounMatch = trimmed.match(/^(\d+)\s+([a-zA-Z\s]+)$/);
+  if (countNounMatch) {
+    const num = countNounMatch[1];
+    const noun = countNounMatch[2].trim();
+    const nounHit = dictionary[noun] || lowerMap.get(noun.toLowerCase());
+    if (nounHit && nounHit !== noun) {
+      return `${num} ${nounHit}`;
+    }
+  }
+
+  // 12.6. "Sort by X" table header tooltips: e.g. "Sort by Login", "Sort by Build"
+  const sortByMatch = trimmed.match(/^Sort\s+by\s+(.+)$/i);
+  if (sortByMatch) {
+    const colName = sortByMatch[1].trim();
+    const colHit = dictionary[colName] || lowerMap.get(colName.toLowerCase()) || colName;
+    if (isZh) {
+      return `按${colHit}排序`;
+    }
+    const sortWord = dictionary['Sort by'] || 'Sort by';
+    return `${sortWord} ${colHit}`;
+  }
+
   // 13. Dynamic multi-word compound phrases (e.g. "Latency Bench TEST", "Rust Canary", "Bench TEST", "Canary Test")
   if (trimmed.includes(' ') && !trimmed.includes('. ') && !trimmed.includes(', ')) {
     const words = trimmed.split(/\s+/);
@@ -186,7 +266,7 @@ export const lookupTranslation = (dictionary, value) => {
       let allFound = true;
       const translatedWords = [];
       for (const w of words) {
-        if (/^[\d.,%#$+\-]+$/.test(w)) {
+        if (/^[\d.,%#$+-]+$/.test(w)) {
           translatedWords.push(w);
           continue;
         }
@@ -216,6 +296,8 @@ export const lookupTranslation = (dictionary, value) => {
 
   // 14. Email addresses or symbol-delimited identifiers (e.g. "TEST@TEST.COM", "test@test.com", "rust-canary-20260910@example.test")
   // Translates the word parts while preserving symbols (@, ., -, _) and numbers untouched.
+  // These locales preserve email addresses and technical identifiers.
+  if (dictionary === UI_DICTIONARIES.de || dictionary === UI_DICTIONARIES.hi || dictionary === UI_DICTIONARIES.ja || dictionary === UI_DICTIONARIES.ru || dictionary === UI_DICTIONARIES.es || dictionary === UI_DICTIONARIES.tr) return null;
   if (trimmed.includes('@') || (/[a-zA-Z]/.test(trimmed) && /[-_]/.test(trimmed) && !trimmed.includes(' '))) {
     const tokens = trimmed.split(/([@.\-_]+|\d+)/);
     let changed = false;
@@ -269,6 +351,54 @@ export const lookupTranslation = (dictionary, value) => {
         if (isZh) { changed = true; return '测试'; }
         return token;
       }
+      if (tokenLower === 'real') {
+        const realHit = dictionary['Real'] || lowerMap.get('real');
+        if (realHit) { changed = true; return realHit; }
+        if (isZh) { changed = true; return '真实'; }
+        return token;
+      }
+      if (tokenLower === 'demo') {
+        const demoHit = dictionary['Demo'] || lowerMap.get('demo');
+        if (demoHit) { changed = true; return demoHit; }
+        if (isZh) { changed = true; return '模拟'; }
+        return token;
+      }
+      if (tokenLower === 'admin') {
+        const adminHit = dictionary['Admin'] || lowerMap.get('admin');
+        if (adminHit) { changed = true; return adminHit; }
+        if (isZh) { changed = true; return '管理员'; }
+        return token;
+      }
+      if (tokenLower === 'user') {
+        const userHit = dictionary['User'] || lowerMap.get('user');
+        if (userHit) { changed = true; return userHit; }
+        if (isZh) { changed = true; return '用户'; }
+        return token;
+      }
+      if (tokenLower === 'manager') {
+        const mgrHit = dictionary['Manager'] || lowerMap.get('manager');
+        if (mgrHit) { changed = true; return mgrHit; }
+        if (isZh) { changed = true; return '经理'; }
+        return token;
+      }
+      if (tokenLower === 'client') {
+        const clientHit = dictionary['Client'] || lowerMap.get('client');
+        if (clientHit) { changed = true; return clientHit; }
+        if (isZh) { changed = true; return '客户'; }
+        return token;
+      }
+      if (tokenLower === 'account') {
+        const accHit = dictionary['Account'] || lowerMap.get('account');
+        if (accHit) { changed = true; return accHit; }
+        if (isZh) { changed = true; return '账户'; }
+        return token;
+      }
+      if (tokenLower === 'build') {
+        const buildHit = dictionary['Build'] || lowerMap.get('build');
+        if (buildHit) { changed = true; return buildHit; }
+        if (isZh) { changed = true; return '版本'; }
+        return token;
+      }
       const hit = dictionary[token] || lowerMap.get(tokenLower);
       if (hit && hit !== token) {
         changed = true;
@@ -284,6 +414,3 @@ export const lookupTranslation = (dictionary, value) => {
 
   return null;
 };
-
-
-

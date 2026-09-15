@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
@@ -60,11 +61,11 @@ const DesktopUpdateButton = () => {
     try {
       const result = normalizeUpdateResult(await updater.checkForUpdates());
       setUpdateState(result);
-      window.alert(result.message);
+      showResult(result.message, { type: result.status === 'error' ? 'error' : 'info' });
     } catch (error) {
       const message = getUpdateErrorMessage(error);
       setUpdateState({ status: 'error', message });
-      window.alert(message);
+      showResult.error(message);
     }
   };
 

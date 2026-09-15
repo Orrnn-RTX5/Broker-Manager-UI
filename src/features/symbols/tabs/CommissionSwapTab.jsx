@@ -1,3 +1,4 @@
+import { showResult } from '../../../store/resultDialogStore.js';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Loader2, X } from 'lucide-react';
 import {
@@ -82,7 +83,7 @@ const CommissionSection = ({ symbol }) => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this commission schedule?')) return;
     setDeletingId(id);
-    try { await commissionScheduleDelete(id); load(); } catch (e) { alert(e.message); } finally { setDeletingId(null); }
+    try { await commissionScheduleDelete(id); load(); } catch (e) { showResult.error(e.message); } finally { setDeletingId(null); }
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -188,7 +189,7 @@ const DynamicLeverageSection = ({ symbol }) => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this leverage tier?')) return;
     setDeletingId(id);
-    try { await dynamicLeverageDelete(id); load(); } catch (e) { alert(e.message); } finally { setDeletingId(null); }
+    try { await dynamicLeverageDelete(id); load(); } catch (e) { showResult.error(e.message); } finally { setDeletingId(null); }
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -276,7 +277,7 @@ const SwapFreeSection = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this swap-free config?')) return;
     setDeletingId(id);
-    try { await swapFreeGroupDelete(id); load(); } catch (e) { alert(e.message); } finally { setDeletingId(null); }
+    try { await swapFreeGroupDelete(id); load(); } catch (e) { showResult.error(e.message); } finally { setDeletingId(null); }
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));

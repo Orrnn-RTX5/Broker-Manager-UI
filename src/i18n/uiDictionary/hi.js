@@ -1,3 +1,7 @@
+import supplement from './hiSupplement.js';
+import messages from './hiMessages.js';
+import countries from './hiCountries.js';
+
 export default {
   "A-Book": "ए-बुक",
   "Account assignment": "खाता आवंटन",
@@ -521,4 +525,7 @@ export default {
   "Withdrawal": "निकासी",
   "Withdrawal review": "निकासी समीक्षा",
   "Workspace": "कार्यक्षेत्र",
+  ...supplement,
+  ...messages,
+  ...countries,
 };

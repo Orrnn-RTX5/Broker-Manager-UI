@@ -69,7 +69,7 @@ const interpolate = (value, params) => (params
 export const useT = () => {
   const language = useI18nStore((state) => state.language);
   return (key, params) => {
-    const value = LOCALES[language]?.[key] ?? LOCALES[DEFAULT_LANGUAGE][key] ?? key;
+    const value = LOCALES[language]?.[key] ?? LOCALES.en[key] ?? key;
     return interpolate(value, params);
   };
 };

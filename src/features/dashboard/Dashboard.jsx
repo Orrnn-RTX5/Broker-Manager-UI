@@ -11,6 +11,7 @@ import { DASHBOARD_PLACEHOLDER_MODE } from './dashboardState';
 import useDashboardMetrics, { useDashboardAccountLimits } from './useDashboardMetrics';
 import { OPERATIONAL_DASHBOARD_PLACEHOLDERS as preview } from './operationalDashboardAdapter';
 import RegionalActivityMap from './RegionalActivityMap';
+import AllSymbolsDialog from './AllSymbolsDialog';
 import { useDockingContext } from '../../components/docking/DockingContext';
 
 const integer = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
@@ -57,6 +58,7 @@ const PanelTitle = ({ children, meta }) => (
 );
 
 export default function Dashboard() {
+  const [showAllSymbols, setShowAllSymbols] = useState(false);
   const { updatePanel } = useDockingContext();
   const showAccounts = (accountType) => {
     updatePanel('owner_console', { visible: false, maximized: false });
@@ -120,7 +122,7 @@ export default function Dashboard() {
         <article className="cc-panel cc-data-panel">
           <PanelTitle meta="UI adapter">Top Traded Symbols</PanelTitle>
           <table><thead><tr><th>Symbol</th><th>Volume (Lots)</th><th>Trades</th><th>Contribution</th></tr></thead><tbody>{preview.symbols.map((row) => <tr key={row[0]}>{row.map((cell, i) => <td key={cell} className={i ? 'tabular' : ''}>{cell}</td>)}</tr>)}</tbody></table>
-          <button type="button" className="cc-panel-link">View All Symbols <ChevronRight size={12} /></button>
+          <button type="button" className="cc-panel-link" onClick={() => setShowAllSymbols(true)}>View All Symbols <ChevronRight size={12} /></button>
         </article>
 
         <article className="cc-panel cc-region-panel">
@@ -135,6 +137,7 @@ export default function Dashboard() {
           <table><thead><tr><th>Type</th><th>Details</th><th>Time</th><th>Status</th></tr></thead><tbody>{preview.approvals.map((row) => <tr key={`${row[0]}-${row[2]}`}>{row.map((cell, i) => <td key={cell} className={i === 3 ? `is-status is-${cell.toLowerCase()}` : ''}>{cell}</td>)}</tr>)}</tbody></table>
         </article>
       </section>
+      {showAllSymbols && <AllSymbolsDialog onClose={() => setShowAllSymbols(false)} />}
     </main>
   );
 }

@@ -1,3 +1,4 @@
+import { showResult } from '../../../store/resultDialogStore.js';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
@@ -265,6 +266,7 @@ const SymbolsTab = ({ actionsHost }) => {
   const [symbols, setSymbols] = useState(() => initialData?.symbols || []);
   const [categories, setCategories] = useState(() => initialData?.categories || []);
   const [loading, setLoading] = useState(() => !initialData?.symbols?.length);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -292,6 +294,7 @@ const SymbolsTab = ({ actionsHost }) => {
   }, [search, filterCategory, filterType, filterEnabled]);
 
   const load = useCallback(async ({ force = false, blocking = !hasSymbolsRef.current } = {}) => {
+    setLoadError('');
     if (blocking) setLoading(true);
     try {
       const data = await symbolManagementList({
@@ -310,6 +313,7 @@ const SymbolsTab = ({ actionsHost }) => {
       });
 
       if (!mountedRef.current) return;
+      setLoadError(data?.error || '');
       if (Array.isArray(data?.symbols) && (data.symbols.length > 0 || !hasSymbolsRef.current)) {
         hasSymbolsRef.current = data.symbols.length > 0;
         setSymbols(data.symbols);
@@ -317,8 +321,12 @@ const SymbolsTab = ({ actionsHost }) => {
       if (Array.isArray(data?.categories)) {
         setCategories(data.categories);
       }
-    } catch {
+    } catch (error) {
       // Keep any cached or progressive rows visible when a background refresh fails.
+      if (mountedRef.current) {
+        setLoadError(error.message || 'Could not load symbol details. Please retry.');
+        setSymbols(previous => previous.map(row => ({ ...row, __managementLoading: false })));
+      }
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -340,7 +348,7 @@ const SymbolsTab = ({ actionsHost }) => {
       }
       setSymbols(prev => prev.map(s => s.symbol === sym.symbol ? { ...s, enabled: !s.enabled } : s));
     } catch (e) {
-      alert('Error: ' + e.message);
+      showResult.error('Error: ' + e.message);
     } finally {
       setTogglingSymbol(null);
     }
@@ -352,7 +360,7 @@ const SymbolsTab = ({ actionsHost }) => {
       if (filterCategory && s.category !== filterCategory) return false;
       if (filterType === 'base' && s.symbolType !== 'base') return false;
       if (filterType === 'derived' && s.symbolType !== 'derived') return false;
-      if (s.__managementPartial && filterEnabled) return false;
+      if (typeof s.enabled !== 'boolean' && filterEnabled) return false;
       if (filterEnabled === 'enabled' && !s.enabled) return false;
       if (filterEnabled === 'disabled' && s.enabled) return false;
       return true;
@@ -394,6 +402,9 @@ const SymbolsTab = ({ actionsHost }) => {
         </>, actionsHost)}
 
       {/* Table */}
+      {loadError && <div role="alert" className="flex items-center justify-between gap-3 p-2 text-xs" style={{ color: 'var(--danger-text)', background: 'var(--danger-soft)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)' }}>
+        <span>{loadError}</span><button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => load({ force: true, blocking: false })}>Retry</button>
+      </div>}
       <div ref={tableRef} className="symbols-table ui-card flex-1 min-h-0 overflow-auto"
         onScroll={event => {
           const scrollTop = event.currentTarget.scrollTop;
@@ -405,17 +416,28 @@ const SymbolsTab = ({ actionsHost }) => {
           </div>
         ) : (
           <table className="ui-grid w-full" aria-rowcount={filtered.length + 1}>
+            <colgroup>
+              <col className="symbols-column-symbol" />
+              <col className="symbols-column-type" />
+              <col className="symbols-column-category" />
+              <col className="symbols-column-digits" />
+              <col className="symbols-column-contract" />
+              <col className="symbols-column-spread" />
+              <col className="symbols-column-calc-mode" />
+              <col className="symbols-column-status" />
+              <col className="symbols-column-actions" />
+            </colgroup>
             <thead>
               <tr>
-                <th>Symbol</th>
-                <th>Type</th>
-                <th>Category</th>
-                <th>Digits</th>
-                <th>Contract Size</th>
-                <th>Spread</th>
-                <th>Calc Mode</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                <th scope="col">Symbol</th>
+                <th scope="col">Type</th>
+                <th scope="col">Category</th>
+                <th scope="col">Digits</th>
+                <th scope="col">Contract Size</th>
+                <th scope="col">Spread</th>
+                <th scope="col">Calc Mode</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -432,7 +454,7 @@ const SymbolsTab = ({ actionsHost }) => {
                   </td>
                   <td>
                     <span className={`ui-badge text-[10px] ${s.__managementPartial && !s.symbolType ? '' : s.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
-                      {s.__managementPartial && !s.symbolType ? 'Loading…' : s.symbolType || 'base'}
+                      {s.symbolType || (s.__managementPartial ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : 'base')}
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.category || '—'}</td>
@@ -445,14 +467,14 @@ const SymbolsTab = ({ actionsHost }) => {
                   <td style={{ color: 'var(--text-2)' }}>{s.calcMode || '—'}</td>
                   <td>
                     <span className={`ui-badge text-[10px] ${typeof s.enabled !== 'boolean' ? '' : s.enabled ? 'ui-badge-success' : 'ui-badge-danger'}`}>
-                      {typeof s.enabled !== 'boolean' ? 'Loading…' : s.enabled ? 'Enabled' : 'Disabled'}
+                      {typeof s.enabled !== 'boolean' ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : s.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div className="flex items-center justify-end gap-1">
+                  <td>
+                    <div className="flex items-center justify-center gap-1">
                       <button
                         onClick={() => handleToggle(s)}
-                        disabled={s.__managementPartial || togglingSymbol === s.symbol}
+                        disabled={s.__managementPartial || typeof s.enabled !== 'boolean' || togglingSymbol === s.symbol}
                         className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm"
                         title={s.enabled ? 'Disable' : 'Enable'}
                       >

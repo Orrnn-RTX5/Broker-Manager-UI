@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect } from 'react';
 import {
   DollarSign, CheckCircle2, XCircle, Undo2
@@ -104,11 +105,11 @@ const DealerOrderMenu = ({ x, y, order, onClose, onRefresh, isDeal = false }) =>
     setLoading(true);
     try {
       const result = await fn();
-      alert(JSON.stringify(result, null, 2));
+      showResult(result);
       onRefresh?.();
       onClose();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }

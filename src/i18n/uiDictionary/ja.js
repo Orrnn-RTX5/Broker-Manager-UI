@@ -1,3 +1,6 @@
+import jaSupplement from './jaSupplement.js';
+import jaMessages from './jaMessages.js';
+import jaCountries from './jaCountries.js';
 export default {
   "A-Book": "A-Book",
   "Account assignment": "口座割り当て",
@@ -521,4 +524,7 @@ export default {
   "Withdrawal": "出金",
   "Withdrawal review": "出金確認",
   "Workspace": "ワークスペース",
+  ...jaSupplement,
+  ...jaMessages,
+  ...jaCountries,
 };

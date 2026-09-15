@@ -1,0 +1,1 @@
+const fs=require('node:fs');let s=fs.readFileSync('tmp/audit-german.cjs','utf8').replaceAll('german','hindi').replaceAll('GERMAN_AUDIT_PASSWORD','HINDI_AUDIT_PASSWORD').replaceAll("'de'","'hi'").replaceAll('/de.js','/hi.js');fs.writeFileSync('tmp/audit-hindi.cjs',s);

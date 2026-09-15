@@ -1,3 +1,7 @@
+import supplement from './deSupplement.js';
+import messages from './deMessages.js';
+import countries from './deCountries.js';
+
 export default {
   "A-Book": "A-Book",
   "Account assignment": "Kontozuweisung",
@@ -521,4 +525,7 @@ export default {
   "Withdrawal": "Auszahlung",
   "Withdrawal review": "Auszahlungsprüfung",
   "Workspace": "Arbeitsbereich",
+  ...supplement,
+  ...messages,
+  ...countries,
 };

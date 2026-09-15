@@ -19,7 +19,8 @@ import apiClient from '../services/apiClient';
 import { usePermissions } from '../hooks/usePermissions.js';
 import useThemeStore from '../store/themeStore.js';
 import useNotificationStore from '../store/notificationStore.js';
-import { useI18nStore, useT } from '../i18n/index.js';
+import { DEFAULT_LANGUAGE, useI18nStore, useT } from '../i18n/index.js';
+import { LOCALES } from '../i18n/locales/index.js';
 import { MANAGER_REFRESH_EVENT, refreshWorkspaceData } from '../utils/quickSettingsActions.js';
 
 const TOP_POPOVERS = {
@@ -251,9 +252,9 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
     try {
       useI18nStore.getState().resetLanguage?.();
       await Promise.resolve(onViewAction?.('reset-layout'));
-      addNotification(t('bar.restoreDefault'), 'success', 2500);
+      addNotification(LOCALES[DEFAULT_LANGUAGE]['bar.restoreDefault'], 'success', 2500);
     } catch (error) {
-      addNotification(`${t('bar.resetLayout')}: ${error.message}`, 'error');
+      addNotification(`${LOCALES[DEFAULT_LANGUAGE]['bar.resetLayout']}: ${error.message}`, 'error');
     }
   };
   const toggleFullscreen = async () => {
@@ -306,18 +307,10 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           title={t('bar.goToDashboard')}
           aria-label={t('bar.goToDashboard')}
         >
-          {isDarkMode ? (
             <span className="manager-brand-stacked">
               <img className="manager-brand-symbol" src="/manager-symbol-dark.png" alt="" />
               <span className="manager-brand-caption">Manager</span>
             </span>
-          ) : <>
-          <img className="manager-menu-logo" src="/rtx5-logo.png" alt="RTX5" />
-          <div className="ml-2 leading-tight">
-            <div className="manager-menu-brand-name text-[12px] font-bold" style={{ color: 'var(--text)' }}>RTX5 Manager</div>
-            <div className="manager-menu-brand-subtitle text-[9px] font-semibold" style={{ color: 'var(--text-3)' }}>Brokerage Operations &amp; Owner Console</div>
-          </div>
-          </>}
         </button>
 
         {/* Menu Items */}

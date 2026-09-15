@@ -1412,6 +1412,13 @@ h4 {
   white-space: nowrap;
 }
 
+/* German headings need room for longer words in narrow dashboard cards. */
+html[lang="de"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="de"] .data-state-card-title h3 { white-space: normal; overflow-wrap: anywhere; }
+html[lang="hi"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="hi"] .data-state-card-title h3 { white-space: normal; line-height: 1.6; }
+html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "अडैप्टर"; letter-spacing: normal; }
+
 .data-state-card-status {
   display: inline-flex;
   flex: 0 0 auto;
@@ -2977,7 +2984,29 @@ h4 {
 /* Fixed row geometry keeps virtual scrolling stable as new parameters arrive. */
 #root .symbol-management-page .symbols-table .ui-grid {
   table-layout: fixed;
-  min-width: 1050px;
+  min-width: 1100px;
+}
+
+/* Spreadsheet-style columns: fixed shared tracks and vertical grid lines keep
+   every value directly beneath its centered heading while the table scrolls. */
+#root .symbol-management-page .symbols-table .symbols-column-symbol { width: 12%; }
+#root .symbol-management-page .symbols-table .symbols-column-type { width: 10%; }
+#root .symbol-management-page .symbols-table .symbols-column-category { width: 12%; }
+#root .symbol-management-page .symbols-table .symbols-column-digits { width: 8%; }
+#root .symbol-management-page .symbols-table .symbols-column-contract { width: 13%; }
+#root .symbol-management-page .symbols-table .symbols-column-spread { width: 8%; }
+#root .symbol-management-page .symbols-table .symbols-column-calc-mode { width: 14%; }
+#root .symbol-management-page .symbols-table .symbols-column-status { width: 10%; }
+#root .symbol-management-page .symbols-table .symbols-column-actions { width: 13%; }
+
+#root .symbol-management-page .symbols-table .ui-grid :is(th, td) {
+  text-align: center;
+  vertical-align: middle;
+  border-right: 1px solid var(--border-2);
+}
+
+#root .symbol-management-page .symbols-table .ui-grid :is(th, td):last-child {
+  border-right: 0;
 }
 
 #root .symbol-management-page .symbols-table .ui-grid tbody td {
@@ -5562,3 +5591,18 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .deals-grid {
   animation: workspace-soft-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+html[lang="ja"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="ja"] .data-state-card-title h3 { white-space: normal; line-height: 1.6; }
+html[lang="ja"] .cc-metric-card[data-placeholder="true"]::after { content: "アダプター"; letter-spacing: normal; }
+html[lang="ru"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="ru"] .data-state-card-title h3 { white-space: normal; overflow-wrap: anywhere; }
+html[lang="ru"] .cc-metric-card[data-placeholder="true"]::after { content: "АДАПТЕР"; letter-spacing: normal; }
+html[lang="es"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="es"] .data-state-card-title h3 { white-space: normal; overflow-wrap: anywhere; }
+html[lang="es"] .cc-metric-card[data-placeholder="true"]::after { content: "ADAPTADOR"; letter-spacing: normal; }
+html[lang="es"] .cc-metric-card[data-placeholder="true"] { padding-top: 15px; }
+html[lang="tr"] .data-state-card-header { flex-wrap: wrap; }
+html[lang="tr"] .data-state-card-title h3 { white-space: normal; overflow-wrap: anywhere; }
+html[lang="tr"] .cc-metric-card[data-placeholder="true"]::after { content: "BAĞDAŞTIRICI"; letter-spacing: normal; }
+html[lang="tr"] .cc-metric-card[data-placeholder="true"] { padding-top: 15px; }

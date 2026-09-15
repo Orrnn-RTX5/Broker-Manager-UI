@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef } from 'react';
 import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
@@ -441,13 +442,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const requireTradeMutationPermission = () => {
     if (canManipulateTrades) return true;
-    alert(TRADE_MUTATION_DENIED_MESSAGE);
+    showResult.error(TRADE_MUTATION_DENIED_MESSAGE);
     return false;
   };
 
   const requireTradeClosePermission = () => {
     if (canCloseTrades) return true;
-    alert(TRADE_CLOSE_DENIED_MESSAGE);
+    showResult.error(TRADE_CLOSE_DENIED_MESSAGE);
     return false;
   };
 
@@ -456,7 +457,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const requestTradeClose = (trade) => {
     if (!requireTradeClosePermission()) return;
     if (entity === 'deal') {
-      alert('Deals are historical records and cannot be deleted from this view.');
+      showResult.info('Deals are historical records and cannot be deleted from this view.');
       return;
     }
     setPendingTradeClose(trade);
@@ -474,15 +475,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         result = await closeManagerPosition(ticket);
       }
       console.log(`[${label}] response:`, redactSensitive(result));
-      const status = result?.retcode || result?.status || 'OK';
       const message = result?.message || JSON.stringify(result);
-      alert(`${label}\n\nstatus: ${status}\nmessage: ${message}`);
+      showResult({ ...result, message: `${label}\n\n${message}` });
       invalidatePositionsCache(loginId);
       setPositions(prev => prev.filter(p => p.position !== ticket));
     } catch (err) {
       console.error(`[${label}] error:`, err);
       const status = err?.code || err?.status || 'ERROR';
-      alert(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
+      showResult.error(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
     } finally {
       setIsDeleting(false);
       setPendingTradeClose(null);
@@ -542,7 +542,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setActiveTab('Trade');
   };
 
-  const showResult = (label, result) => setUpdateFeedback({
+  const showUpdateResult = (label, result) => setUpdateFeedback({
     status: 'success', title: result?.title || 'Trade successful', message: result?.message || `${label} completed successfully.`,
   });
   const showError = (label, error) => setUpdateFeedback({
@@ -759,11 +759,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const handlePasswordCheck = async (type, password) => {
     if (!canManagePasswords) {
-      alert('Your role does not have permission to verify account passwords.');
+      showResult.error('Your role does not have permission to verify account passwords.');
       return;
     }
     if (!password) {
-      alert("Please enter a password to check.");
+      showResult.info("Please enter a password to check.");
       return;
     }
     setCheckingPassword(type);
@@ -777,9 +777,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         body: JSON.stringify({ login: loginId, type, password })
       });
       const text = await res.text();
-      alert(`Password Check Result:\n${text}`);
+      showResult(text, { title: 'Password check result', type: res.ok ? undefined : 'error' });
     } catch (err) {
-      alert(`Error checking password: ${err.message}`);
+      showResult.error(`Error checking password: ${err.message}`);
     } finally {
       setCheckingPassword(null);
     }
@@ -788,11 +788,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const handlePasswordChange = async (type, password) => {
     if (!canManagePasswords) {
-      alert('Your role does not have permission to change account passwords.');
+      showResult.error('Your role does not have permission to change account passwords.');
       return;
     }
     if (!password) {
-      alert("Please enter a new password to change.");
+      showResult.info("Please enter a new password to change.");
       return;
     }
     setChangingPassword(type);
@@ -806,9 +806,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         body: JSON.stringify({ login: loginId, type, password })
       });
       const text = await res.text();
-      alert(`Password Change Result:\n${text}`);
+      showResult(text, { title: 'Password change result', type: res.ok ? undefined : 'error' });
     } catch (err) {
-      alert(`Error changing password: ${err.message}`);
+      showResult.error(`Error changing password: ${err.message}`);
     } finally {
       setChangingPassword(null);
     }
@@ -1456,7 +1456,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 canCloseTrades={canCloseTrades}
                 handleModifySLTP={handleModifySLTP}
                 requestTradeClose={requestTradeClose}
-                showResult={showResult}
+                showResult={showUpdateResult}
                 showError={showError}
                 onUpdateState={setTradeUpdateState}
                 requireTradeMutationPermission={requireTradeMutationPermission}

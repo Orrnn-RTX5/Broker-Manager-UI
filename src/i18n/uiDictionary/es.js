@@ -1,3 +1,6 @@
+import esSupplement from './esSupplement.js';
+import esMessages from './esMessages.js';
+import esCountries from './esCountries.js';
 export default {
   "A-Book": "A-Book",
   "Account assignment": "Asignación de cuenta",
@@ -521,4 +524,7 @@ export default {
   "Withdrawal": "Retiro",
   "Withdrawal review": "Revisión de retiros",
   "Workspace": "Espacio de trabajo",
+  ...esSupplement,
+  ...esMessages,
+  ...esCountries,
 };

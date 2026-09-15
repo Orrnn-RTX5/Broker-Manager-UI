@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { createElement, useState } from 'react';
 import {
   ArrowLeftRight,
@@ -36,7 +37,7 @@ export const useDealerMenu = (onRefresh) => {
       onRefresh?.();
       setDialog(null);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }

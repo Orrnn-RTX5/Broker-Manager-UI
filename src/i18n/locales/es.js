@@ -1,3 +1,4 @@
+import esChrome from './esChrome.js';
 export default {
   'menu.file': 'Archivo',
   'menu.edit': 'Editar',
@@ -138,4 +139,5 @@ export default {
   'bar.loading': 'Loading…',
   'bar.unavailable': 'Unavailable',
   'bar.goToDashboard': 'Go to dashboard',
+  ...esChrome,
 };

@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { AlertCircle, Download, FileSpreadsheet, FileText, X } from 'lucide-react';
 import { exportCurrentView, getCurrentViewExportData } from '../utils/currentViewExport';
 
@@ -18,7 +19,7 @@ const ExportCurrentViewDialog = ({ isOpen, onClose }) => {
       exportCurrentView(format, data);
       onClose();
     } catch (error) {
-      window.alert(error.message || 'Could not export the current page data.');
+      showResult.error(error.message || 'Could not export the current page data.');
     }
   };
 

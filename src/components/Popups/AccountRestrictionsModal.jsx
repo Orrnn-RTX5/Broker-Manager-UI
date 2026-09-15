@@ -1,3 +1,4 @@
+import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useCallback } from 'react';
 import { X, Shield, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
@@ -121,7 +122,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   useEffect(() => { fetchRestrictions(); }, [fetchRestrictions]);
 
   const handleSave = async () => {
-    if (!canEditRestrictions) { alert('Your role does not have permission to set account restrictions.'); return; }
+    if (!canEditRestrictions) { showResult.error('Your role does not have permission to set account restrictions.'); return; }
     setSaving(true);
     setError(null);
     try {
@@ -130,7 +131,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
         : BASIC_RESTRICTION_FIELDS;
       await accountRestrictSet({ login, ...pickFields(form, allowedFields) });
       setHasRestriction(true);
-      alert(`Restrictions updated for login ${login}`);
+      showResult.success(`Restrictions updated for login ${login}`);
       fetchRestrictions();
     } catch (err) {
       setError(err.message);
@@ -140,7 +141,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   };
 
   const handleClear = async () => {
-    if (!canEditRestrictions) { alert('Your role does not have permission to clear account restrictions.'); return; }
+    if (!canEditRestrictions) { showResult.error('Your role does not have permission to clear account restrictions.'); return; }
     if (!window.confirm(`Clear all restrictions for login ${login}?`)) return;
     setSaving(true);
     try {
@@ -151,7 +152,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
         max_lot: 0, max_total_lot: 0, spread_markup: 0, custom_leverage: 0,
         a_book_override: false, b_book_override: false, execution_delay_ms: 0, comment: '',
       });
-      alert(`Restrictions cleared for login ${login}`);
+      showResult.success(`Restrictions cleared for login ${login}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -160,42 +161,42 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   };
 
   const handleSpreadSet = async () => {
-    if (!canManipulateRestrictionTrades) { alert('Your role does not have permission to change spread overrides.'); return; }
-    if (!hasRestriction) { alert('Save a restriction first before setting spread overrides.'); return; }
+    if (!canManipulateRestrictionTrades) { showResult.error('Your role does not have permission to change spread overrides.'); return; }
+    if (!hasRestriction) { showResult.info('Save a restriction first before setting spread overrides.'); return; }
     setSaving(true);
     try {
       await accountSpreadSet({ login, symbol: spreadSymbol, markup: spreadMarkup });
-      alert(`Spread markup set: ${spreadSymbol} = ${spreadMarkup}`);
+      showResult.success(`Spread markup set: ${spreadSymbol} = ${spreadMarkup}`);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleExecSet = async () => {
-    if (!canManipulateRestrictionTrades) { alert('Your role does not have permission to change execution settings.'); return; }
-    if (!hasRestriction) { alert('Save a restriction first before setting execution mode.'); return; }
+    if (!canManipulateRestrictionTrades) { showResult.error('Your role does not have permission to change execution settings.'); return; }
+    if (!hasRestriction) { showResult.info('Save a restriction first before setting execution mode.'); return; }
     setSaving(true);
     try {
       await accountExecutionSet({ login, mode: execMode, delay_ms: execDelay });
-      alert(`Execution set: ${execMode}, delay ${execDelay}ms`);
+      showResult.success(`Execution set: ${execMode}, delay ${execDelay}ms`);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleBookSet = async () => {
-    if (!canManipulateRestrictionTrades) { alert('Your role does not have permission to change book assignment.'); return; }
-    if (!hasRestriction) { alert('Save a restriction first before setting book.'); return; }
+    if (!canManipulateRestrictionTrades) { showResult.error('Your role does not have permission to change book assignment.'); return; }
+    if (!hasRestriction) { showResult.info('Save a restriction first before setting book.'); return; }
     setSaving(true);
     try {
       await accountBookSet({ login, book });
-      alert(`Book set to: ${book}`);
+      showResult.success(`Book set to: ${book}`);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showResult.error(`Error: ${err.message}`);
     } finally {
       setSaving(false);
     }

@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Loader, WifiOff, Search } from 'lucide-react';
@@ -200,20 +201,20 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         const data = await res.json();
         setSummaryAccount({ login, data });
       } catch (err) {
-        alert("Error fetching summary: " + err.message);
+        showResult.error("Error fetching summary: " + err.message);
       }
     } else if (action === 'details') {
       void preloadAccountPositions(login);
       setSelectedAccountDetails(acc);
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
-        alert('Your role does not have permission to change account restrictions or trade overrides.');
+        showResult.error('Your role does not have permission to change account restrictions or trade overrides.');
         return;
       }
       setRestrictLogin(login);
     } else if (action === 'block') {
       if (!canManageAccounts) {
-        alert('Your role does not have permission to block accounts.');
+        showResult.error('Your role does not have permission to block accounts.');
         return;
       }
       try {
@@ -226,13 +227,13 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await res.json();
         setBlockedUsers(prev => ({ ...prev, [login]: true }));
-        alert(`User ${login} blocked successfully.`);
+        showResult.success(`User ${login} blocked successfully.`);
       } catch (err) {
-        alert("Error blocking user: " + err.message);
+        showResult.error("Error blocking user: " + err.message);
       }
     } else if (action === 'unblock') {
       if (!canManageAccounts) {
-        alert('Your role does not have permission to unblock accounts.');
+        showResult.error('Your role does not have permission to unblock accounts.');
         return;
       }
       try {
@@ -245,23 +246,23 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await res.json();
         setBlockedUsers(prev => ({ ...prev, [login]: false }));
-        alert(`User ${login} unblocked successfully.`);
+        showResult.success(`User ${login} unblocked successfully.`);
       } catch (err) {
-        alert("Error unblocking user: " + err.message);
+        showResult.error("Error unblocking user: " + err.message);
       }
     } else if (action === 'delete') {
       if (!canManageAccounts) {
-        alert('Your role does not have permission to delete accounts.');
+        showResult.error('Your role does not have permission to delete accounts.');
         return;
       }
       if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
       try {
         await deleteManagerAccount(login);
 
-        alert(`Account ${login} deleted successfully.`);
+        showResult.success(`Account ${login} deleted successfully.`);
         handleRefresh();
       } catch (err) {
-        alert("Error deleting account: " + err.message);
+        showResult.error("Error deleting account: " + err.message);
       }
     }
   };

@@ -1,3 +1,4 @@
+import { showResult } from '../store/resultDialogStore.js';
 import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { isDesktopBackendTarget } from '../config/backendTarget.js';
@@ -34,7 +35,7 @@ const DesktopAppDownloadButton = ({ variant = 'menu' }) => {
     } catch (err) {
       const message = err?.message || copy.error;
       setError(message);
-      if (variant === 'menu') window.alert(copy.error);
+      if (variant === 'menu') showResult.error(copy.error);
     } finally {
       setLoading(false);
     }

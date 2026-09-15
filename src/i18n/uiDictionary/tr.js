@@ -1,3 +1,6 @@
+import trSupplement from './trSupplement.js';
+import trMessages from './trMessages.js';
+import trCountries from './trCountries.js';
 export default {
   "A-Book": "A-Book",
   "Account assignment": "Hesap ataması",
@@ -521,4 +524,7 @@ export default {
   "Withdrawal": "Çekme",
   "Withdrawal review": "Para çekme incelemesi",
   "Workspace": "Çalışma Alanı",
+  ...trSupplement,
+  ...trMessages,
+  ...trCountries,
 };
