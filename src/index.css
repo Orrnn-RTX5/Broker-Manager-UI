@@ -2796,46 +2796,80 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 /* Compact Trading Accounts analytics: preserve room for the working workspace. */
-.trading-analytics-page { width:100%; height:100%; min-width:0; padding:12px; overflow:auto; background:var(--bg); container-type:inline-size; }
-.trading-analytics-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-#root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size:12px !important; font-weight:600 !important; line-height:1.4; color:var(--text); }
-#root .trading-analytics-page p { margin:3px 0 0; color:var(--text-3); font-size:10px; line-height:1.4; }
-.trading-analytics-heading > button { flex-shrink:0; }
-.trading-analytics-toolbar { display:flex; align-items:center; gap:8px; min-width:0; padding-bottom:12px; }
-.trading-analytics-toolbar > * { flex-shrink:0; }
-.trading-analytics-reports { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; background:var(--surface); }
-.trading-analytics-reports > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface-2); }
-.trading-analytics-reports > header > span { font-size:10px; color:var(--text-3); }
-.trading-analytics-report { display:flex; align-items:center; gap:10px; min-height:58px; padding:10px 12px; border-bottom:1px solid var(--border-2); }
-.trading-analytics-report-icon { display:grid; place-items:center; width:30px; height:30px; flex-shrink:0; border-radius:4px; background:var(--accent-soft); color:var(--accent-text); }
-.trading-analytics-report-value { margin-left:auto; color:var(--text-3); font-size:14px; }
-.trading-analytics-reports > footer { padding:10px 12px; color:var(--text-3); font-size:10px; line-height:1.5; }
+.trading-analytics-page { display:flex; width:100%; height:100%; min-width:0; min-height:0; flex-direction:column; padding:13px 10px 10px; overflow:auto; background:var(--bg); container-type:inline-size; }
+.trading-analytics-heading { display:flex; min-height:32px; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.trading-analytics-title { display:flex; align-items:center; flex-shrink:0; }
+#root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size:11px !important; font-weight:600 !important; line-height:1.4; color:var(--text); }
+#root .trading-analytics-page h1 { font-size:12px !important; white-space:nowrap; }
+#root .trading-analytics-page p { margin:2px 0 0; color:var(--text-3); font-size:9px; line-height:1.4; }
+.trading-analytics-toolbar { display:flex; align-items:center; gap:6px; min-width:0; flex-wrap:nowrap; justify-content:flex-end; }
+.trading-analytics-toolbar .trading-analytics-filter { min-width:88px; flex-shrink:1; }
+.trading-analytics-toolbar .trading-analytics-date-range { flex-shrink:0; }
+.trading-analytics-toolbar > button { min-height:28px; height:28px; flex-shrink:0; white-space:nowrap; }
+.trading-analytics-error { display:flex; min-height:30px; align-items:center; gap:7px; margin-bottom:8px; padding:5px 9px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:var(--danger-soft); color:var(--danger-text); font-size:9px; }
+.trading-analytics-error button { margin-left:auto; border:0; background:transparent; color:inherit; font-size:9px; font-weight:600; cursor:pointer; }
+.trading-analytics-content { display:grid; min-height:520px; flex:1; grid-template-rows:minmax(230px,.9fr) minmax(250px,1.1fr); gap:8px; }
+.trading-analytics-card { display:flex; min-width:0; min-height:0; flex-direction:column; overflow:hidden; border:1px solid var(--border); border-radius:2px; background:var(--surface); }
+.trading-analytics-card > header { display:flex; min-height:31px; flex:0 0 31px; align-items:center; justify-content:space-between; gap:10px; padding:6px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+.trading-analytics-card > header > span { color:var(--text-3); font-size:9px; white-space:nowrap; }
+.trading-analytics-chart { min-height:0; flex:1; padding:4px 7px 4px 0; }
+.trading-analytics-lower-grid { display:grid; min-height:0; grid-template-columns:1fr 1fr; gap:8px; }
+.trading-analytics-map { display:flex; min-height:0; flex:1; flex-direction:column; }
+.trading-analytics-map-canvas { min-height:0; flex:1; overflow:hidden; }
+.trading-analytics-map-canvas svg { display:block; width:100%; height:100%; }
+.trading-analytics-country-summary { display:grid; flex:0 0 auto; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; padding:5px 9px 7px; border-top:1px solid var(--border-2); }
+.trading-analytics-country-summary span { display:grid; min-width:0; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:5px; overflow:hidden; color:var(--text-2); font-size:9px; white-space:nowrap; }
+.trading-analytics-country-summary span i { width:6px; height:6px; border-radius:50%; background:var(--accent); }
+.trading-analytics-country-summary span b { color:var(--text); font-weight:600; }
+.trading-analytics-group { display:flex; min-height:0; flex:1; align-items:center; padding:2px 8px; }
+.trading-analytics-group-layout { display:flex; width:100%; height:100%; align-items:center; justify-content:center; gap:16px; padding:4px 10px; }
+.trading-analytics-group-chart { display:flex; flex-shrink:0; align-items:center; justify-content:center; }
+.trading-analytics-group-breakdown { display:flex; flex-direction:column; flex:1; min-width:0; gap:3px; max-height:195px; overflow-y:auto; padding-right:4px; }
+.trading-analytics-group-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 8px; border-radius:4px; transition:background-color 0.15s ease; cursor:pointer; }
+.trading-analytics-group-row:hover, .trading-analytics-group-row.is-active { background:var(--surface-2); }
+.trading-analytics-group-row-info { display:flex; align-items:center; gap:6px; min-width:0; }
+.trading-analytics-group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.trading-analytics-group-name { font-size:10px; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.trading-analytics-group-row-stats { display:flex; align-items:center; gap:8px; flex-shrink:0; font-size:10px; }
+.trading-analytics-group-count { font-weight:600; color:var(--text); }
+.trading-analytics-group-pct { color:var(--text-3); min-width:42px; text-align:right; }
+.trading-analytics-pie-wrap { position:relative; width:100%; height:100%; min-height:220px; overflow:visible; }
+.trading-analytics-pie-total { position:absolute; inset:50% auto auto 50%; display:flex; width:72px; height:72px; align-items:center; justify-content:center; flex-direction:column; transform:translate(-50%,-50%); pointer-events:none; }
+.trading-analytics-pie-total strong { color:var(--text); font-size:12px; font-weight:600; }
+.trading-analytics-pie-total span { color:var(--text-3); font-size:8px; }
+.trading-analytics-pie-label path { fill:none; stroke:var(--text-3); stroke-width:1; }
+.trading-analytics-pie-label text { fill:var(--text-2); font-size:9px; font-weight:500; }
+.trading-analytics-empty { display:grid; width:100%; height:100%; min-height:110px; place-items:center; padding:16px; color:var(--text-3); font-size:9px; text-align:center; }
 
 /* A user can keep the right workspace panel open. Reflow this report view
    into the remaining center space instead of allowing its filters to clip. */
+@container (max-width: 900px) {
+  .trading-analytics-toolbar { flex-wrap:wrap; align-items:stretch; }
+  .trading-analytics-content { min-height:760px; grid-template-rows:minmax(230px,.75fr) minmax(520px,1.25fr); }
+  .trading-analytics-lower-grid { grid-template-columns:1fr; grid-template-rows:repeat(2,minmax(250px,1fr)); }
+}
+
 @container (max-width: 700px) {
-  .trading-analytics-toolbar { flex-wrap:wrap; align-items:stretch; gap:6px; }
   .trading-analytics-toolbar > * { flex:1 1 150px; min-width:0; }
   .trading-analytics-date-range > div,
   .trading-analytics-date-range > div > div:first-child { width:100%; min-width:0 !important; }
   .trading-analytics-date-range > div > .ui-card {
     min-width:0 !important;
-    max-width:calc(100cqi - 24px);
+    max-width:calc(100cqi - 20px);
     overflow-x:auto;
   }
+  .trading-analytics-pie-wrap { min-height:230px; }
 }
 
 @container (max-width: 420px) {
-  .trading-analytics-page { padding:8px; }
-  .trading-analytics-heading { flex-wrap:wrap; align-items:flex-start; gap:8px; margin-bottom:8px; }
-  .trading-analytics-heading > button { width:100%; justify-content:center; }
-  .trading-analytics-toolbar { display:grid; grid-template-columns:minmax(0, 1fr); padding-bottom:8px; }
+  .trading-analytics-page { padding:10px 8px 8px; }
+  .trading-analytics-heading { flex-wrap:wrap; gap:7px; }
+  .trading-analytics-toolbar { display:grid; grid-template-columns:minmax(0,1fr); width:100%; }
   .trading-analytics-toolbar > * { width:100% !important; }
-  .trading-analytics-reports > header,
-  .trading-analytics-report,
-  .trading-analytics-reports > footer { padding-inline:8px; }
-  .trading-analytics-report { min-width:0; gap:7px; }
-  .trading-analytics-report > div { min-width:0; }
+  .trading-analytics-content { min-height:850px; grid-template-rows:240px 600px; }
+  .trading-analytics-lower-grid { grid-template-rows:280px 310px; }
+  .trading-analytics-pie-wrap { min-height:290px; }
+  .trading-analytics-country-summary { grid-template-columns:1fr; }
 }
 
 /* Symbol Browser: enforce the 12px/10px scale inside every category card. */

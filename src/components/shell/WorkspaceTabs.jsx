@@ -16,6 +16,7 @@ const DEFAULT_WORKSPACE_TABS = [
 ];
 
 const QUICK_NAVIGATION = [
+  { labelKey: 'tabs.dailyReport', path: '/reports/daily', icon: FileClock },
   { labelKey: 'tabs.tradingAnalytics', path: '/analytics/trading-accounts', icon: TrendingUp },
   { labelKey: 'tabs.onlineUsers', path: '/analytics/online-users', icon: Users },
   { labelKey: 'tabs.openPositions', path: '/analytics/open-positions', icon: Activity },

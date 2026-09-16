@@ -82,6 +82,7 @@
     "d3-scale": "^4.0.2",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "framer-motion": "^13.3.0",
     "lucide-react": "^0.577.0",
     "prop-types": "^15.8.1",
     "react": "^19.2.4",

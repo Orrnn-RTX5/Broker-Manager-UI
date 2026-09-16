@@ -2,6 +2,10 @@ import { createLogger, defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import process from 'node:process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const ignoredWsProxyErrorCodes = new Set(['ECONNABORTED', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT'])
 const viteLogger = createLogger()
@@ -49,6 +53,11 @@ export default defineConfig(({ mode, command }) => {
       react(),
       tailwindcss(),
     ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
+    },
     // Strip all console.* and debugger statements from production bundles
     // (manager-ui-F08): verbose request/response and per-account financial
     // diagnostics must not reach the browser console in production. Dev server

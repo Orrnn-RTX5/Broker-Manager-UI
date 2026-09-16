@@ -4,6 +4,7 @@
  * runtime, so the route renders immediately when the user opens it later.
  */
 export const workspaceRouteLoaders = Object.freeze({
+  dailyReportPage: () => import('../features/reports/DailyReportPage'),
   tradingAccountsDashboard: () => import('../features/analytics/TradingAccountsDashboard'),
   onlineUsersDashboard: () => import('../features/analytics/OnlineUsersDashboard'),
   advertisingCampaignsDashboard: () => import('../features/analytics/AdvertisingCampaignsDashboard'),
@@ -25,6 +26,7 @@ export const workspaceRouteLoaders = Object.freeze({
 });
 
 const routeLoaderEntries = [
+  ['/reports/daily', 'dailyReportPage'],
   ['/analytics/trading-accounts', 'tradingAccountsDashboard'],
   ['/analytics/online-users', 'onlineUsersDashboard'],
   ['/analytics/advertising-campaigns', 'advertisingCampaignsDashboard'],
@@ -76,4 +78,3 @@ export const preloadAllWorkspaceRoutes = () => Promise.allSettled(
     }
   })
 );
-

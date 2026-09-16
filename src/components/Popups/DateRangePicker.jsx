@@ -167,7 +167,7 @@ const DateRangePicker = ({ onChange }) => {
 
   const label = startDate
     ? `${fmt(startDate)} — ${endDate ? fmt(endDate) : '...'}`
-    : '1970.01.01 — 2026.03.16';
+    : `1970.01.01 — ${fmt(today())}`;
 
   return (
     <div className="relative" ref={ref}>

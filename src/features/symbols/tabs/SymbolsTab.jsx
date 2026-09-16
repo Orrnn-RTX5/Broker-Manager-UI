@@ -1,7 +1,7 @@
 import { showResult } from '../../../store/resultDialogStore.js';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, ChevronDown, X } from 'lucide-react';
+import { Search, Plus, Copy, ToggleLeft, ToggleRight, Edit2, Loader2, RefreshCw, ChevronDown, X } from 'lucide-react';
 import {
   symbolManagementList, peekSymbolManagementData,
   symbolAdd, symbolUpdate, symbolEnable, symbolDisable, symbolClone,
@@ -266,6 +266,7 @@ const SymbolsTab = ({ actionsHost }) => {
   const [symbols, setSymbols] = useState(() => initialData?.symbols || []);
   const [categories, setCategories] = useState(() => initialData?.categories || []);
   const [loading, setLoading] = useState(() => !initialData?.symbols?.length);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -282,7 +283,8 @@ const SymbolsTab = ({ actionsHost }) => {
   useEffect(() => {
     const element = tableRef.current;
     const observer = new ResizeObserver(() => {
-      setViewport(current => ({ ...current, height: element.clientHeight }));
+      const height = element.clientHeight;
+      setViewport(current => current.height === height ? current : { ...current, height });
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -295,6 +297,7 @@ const SymbolsTab = ({ actionsHost }) => {
 
   const load = useCallback(async ({ force = false, blocking = !hasSymbolsRef.current } = {}) => {
     setLoadError('');
+    setRefreshing(true);
     if (blocking) setLoading(true);
     try {
       const data = await symbolManagementList({
@@ -314,7 +317,7 @@ const SymbolsTab = ({ actionsHost }) => {
 
       if (!mountedRef.current) return;
       setLoadError(data?.error || '');
-      if (Array.isArray(data?.symbols) && (data.symbols.length > 0 || !hasSymbolsRef.current)) {
+      if (Array.isArray(data?.symbols)) {
         hasSymbolsRef.current = data.symbols.length > 0;
         setSymbols(data.symbols);
       }
@@ -328,7 +331,10 @@ const SymbolsTab = ({ actionsHost }) => {
         setSymbols(previous => previous.map(row => ({ ...row, __managementLoading: false })));
       }
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -355,8 +361,10 @@ const SymbolsTab = ({ actionsHost }) => {
   };
 
   const filtered = useMemo(() => {
+    if (!search && !filterCategory && !filterType && !filterEnabled) return symbols;
+    const searchTerm = search.toLowerCase();
     return symbols.filter(s => {
-      if (search && !(s.symbol || '').toLowerCase().includes(search.toLowerCase())) return false;
+      if (searchTerm && !(s.symbol || '').toLowerCase().includes(searchTerm)) return false;
       if (filterCategory && s.category !== filterCategory) return false;
       if (filterType === 'base' && s.symbolType !== 'base') return false;
       if (filterType === 'derived' && s.symbolType !== 'derived') return false;
@@ -402,6 +410,15 @@ const SymbolsTab = ({ actionsHost }) => {
         </>, actionsHost)}
 
       {/* Table */}
+      <div className="flex items-center justify-between gap-2 shrink-0 text-xs" style={{ color: 'var(--text-3)' }}>
+        <span role="status" aria-live="polite">
+          {filtered.length === symbols.length ? `${symbols.length} symbols` : `${filtered.length} of ${symbols.length} symbols`}
+          {refreshing ? ' · Updating catalogue…' : ''}
+        </span>
+        <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => load({ force: true, blocking: false })} disabled={refreshing}>
+          <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
       {loadError && <div role="alert" className="flex items-center justify-between gap-3 p-2 text-xs" style={{ color: 'var(--danger-text)', background: 'var(--danger-soft)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)' }}>
         <span>{loadError}</span><button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => load({ force: true, blocking: false })}>Retry</button>
       </div>}
@@ -454,7 +471,7 @@ const SymbolsTab = ({ actionsHost }) => {
                   </td>
                   <td>
                     <span className={`ui-badge text-[10px] ${s.__managementPartial && !s.symbolType ? '' : s.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
-                      {s.symbolType || (s.__managementPartial ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : 'base')}
+                      {s.__managementFeedOnly ? 'Feed only' : s.symbolType || (s.__managementPartial ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : 'base')}
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.category || '—'}</td>

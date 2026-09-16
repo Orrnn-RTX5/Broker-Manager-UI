@@ -497,6 +497,217 @@
   border-radius: 2px;
 }
 
+.cc-server-context-menu {
+  position: fixed;
+  z-index: 100000;
+  display: flex;
+  width: 248px;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--border, #3b3b3b);
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-elevated, var(--surface, #292929));
+  box-shadow: var(--cc-popover-shadow, var(--shadow-lg, 0 12px 30px rgba(0, 0, 0, .38)));
+  color: var(--text-secondary, var(--text-2, #b5b5bd));
+  font-size: 11px;
+  line-height: 1.35;
+  user-select: none;
+  animation: cc-server-context-menu-open 120ms ease-out;
+}
+.cc-server-context-menu-item {
+  display: grid;
+  min-height: 32px;
+  width: 100%;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.cc-server-context-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.cc-server-context-menu-item:focus-visible {
+  border-color: var(--accent, #007ecf);
+  background: var(--accent-soft, #2f2f2f);
+  color: var(--accent-text, #80c6f4);
+  outline: 0;
+}
+.cc-server-context-menu-item svg { color: var(--accent-text); }
+.cc-server-context-menu-item[data-tone="connect"] svg { color: var(--success); }
+.cc-server-context-menu-item[data-tone="danger"] svg { color: var(--danger); }
+.cc-server-context-menu-item:disabled {
+  opacity: .46;
+  cursor: default;
+}
+.cc-server-context-menu-item:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+.cc-server-context-menu-item:disabled svg { color: var(--text-tertiary); }
+.cc-server-context-menu-item kbd {
+  min-width: 36px;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-bottom-color: var(--border-3);
+  border-radius: 3px;
+  background: var(--bg-panel);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+}
+.cc-server-context-menu-separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--border);
+}
+
+.cc-server-context-menu.is-analytics-menu {
+  width: 272px;
+  padding: 4px;
+  border-radius: 4px;
+  background: #1e1e20;
+  border: 1px solid #3f4146;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: #d6d8db;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item {
+  min-height: 25px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 11.5px;
+  color: #d6d8db;
+  transition: background 60ms ease, color 60ms ease;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:focus {
+  outline: none;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:focus:not(:focus-visible) {
+  border-color: transparent;
+  background: transparent;
+  color: #d6d8db;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:hover,
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:focus-visible {
+  background: #1a60b5;
+  border-color: #2777db;
+  color: #ffffff;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:hover svg,
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:focus-visible svg {
+  color: #ffffff !important;
+}
+.cc-server-context-menu.is-analytics-menu .cc-server-context-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: #383a3f;
+}
+.cc-server-context-menu-row {
+  position: relative;
+  width: 100%;
+}
+.cc-server-context-menu-item .cc-menu-empty-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+}
+.cc-server-context-menu-item[data-tone="add"] svg {
+  color: #22c55e;
+}
+.cc-server-context-menu-item[data-tone="folder"] svg {
+  color: #f59e0b;
+}
+.cc-server-context-menu-item[data-tone="rename"] svg {
+  color: #38bdf8;
+}
+.cc-server-context-menu-item kbd.cc-menu-shortcut-plain {
+  min-width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #9ea0a6;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: inherit;
+  text-align: right;
+  margin-left: auto;
+}
+.cc-server-context-menu-item:hover kbd.cc-menu-shortcut-plain,
+.cc-server-context-menu-item:focus-visible kbd.cc-menu-shortcut-plain {
+  color: #ffffff;
+}
+.cc-server-context-menu-item .cc-menu-arrow {
+  font-size: 8px;
+  color: #d6d8db;
+  margin-left: auto;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 2px;
+}
+.cc-server-context-menu-item:hover .cc-menu-arrow,
+.cc-server-context-menu-item:focus-visible .cc-menu-arrow {
+  color: #ffffff;
+}
+.cc-context-submenu {
+  position: absolute;
+  top: -4px;
+  left: calc(100% - 2px);
+  z-index: 100002;
+  display: flex;
+  min-width: 185px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid #3f4146;
+  border-radius: 4px;
+  background: #1e1e20;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: #d6d8db;
+  font-size: 11px;
+  user-select: none;
+  animation: cc-server-context-menu-open 100ms ease-out;
+}
+.cc-context-submenu.flip-left {
+  left: auto;
+  right: calc(100% - 2px);
+}
+.cc-context-submenu .cc-server-context-menu-item {
+  display: block;
+  min-height: 25px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 11.5px;
+  color: #d6d8db;
+}
+.cc-context-submenu .cc-server-context-menu-item:hover,
+.cc-context-submenu .cc-server-context-menu-item:focus-visible {
+  background: #1a60b5;
+  border-color: #2777db;
+  color: #ffffff;
+}
+
+@keyframes cc-server-context-menu-open {
+  from { opacity: 0; transform: translateY(-2px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-server-context-menu { animation: none; }
+}
+
 @container (max-width: 700px) {
   .cc-metric-grid { grid-template-columns:repeat(2,minmax(150px,1fr)); }
   .cc-lower-grid { grid-template-columns:repeat(2,minmax(220px,1fr)); }

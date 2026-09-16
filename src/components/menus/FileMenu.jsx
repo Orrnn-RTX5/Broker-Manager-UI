@@ -1,4 +1,4 @@
-import { Link2, Unplug, Play, Square, Plus, LogOut, FolderOpen, Printer, Download } from 'lucide-react';
+import { Link2, Unplug, Play, Square, Plus, LogOut, FolderOpen, Printer, Download, Sparkles, FileSearch, Settings2 } from 'lucide-react';
 import { MenuItem, MenuDivider } from './MenuItem';
 import { useT } from '../../i18n/index.js';
 
@@ -28,7 +28,7 @@ const FileMenu = ({
         onClick={onDisconnectClick}
         disabled={!isAuthenticated}
       />
-      <MenuItem icon={Play} text={t('file.startDealing')} iconColor="text-blue-500" disabled={!isAuthenticated} />
+      <MenuItem icon={Play} text={t('file.startDealing')} iconColor="text-blue-500" disabled />
       <MenuItem icon={Square} text={t('file.stopDealing')} iconColor="text-gray-400" disabled />
       <MenuDivider />
       <MenuItem 
@@ -39,11 +39,16 @@ const FileMenu = ({
         onClick={onNewAccountClick}
         disabled={!isAuthenticated}
       />
+      <MenuItem icon={Sparkles} text={t('file.newAiAssistant')} shortcut="Alt+/" iconColor="text-blue-500" disabled />
+      <MenuDivider />
       <MenuItem icon={Download} text={t('file.export')} iconColor="text-sky-500" onClick={onExportClick} disabled={!isAuthenticated} />
       <MenuDivider />
-      <MenuItem icon={FolderOpen} text={t('file.openDataFolder')} shortcut="Ctrl+Shift+D" iconColor="text-yellow-500" />
+      <MenuItem icon={FolderOpen} text={t('file.openDataFolder')} shortcut="Ctrl+Shift+D" iconColor="text-yellow-500" disabled />
       <MenuDivider />
       <MenuItem icon={Printer} text={t('file.print')} shortcut="Ctrl+P" iconColor="text-blue-600" onClick={onPrintClick} />
+      {/* Web printing provides preview and page/printer settings in one dialog. */}
+      <MenuItem icon={FileSearch} text={t('file.printPreview')} iconColor="text-blue-600" onClick={onPrintClick} disabled={!onPrintClick} />
+      <MenuItem icon={Settings2} text={t('file.printSetup')} iconColor="text-blue-600" onClick={onPrintClick} disabled={!onPrintClick} />
       <MenuDivider />
       <MenuItem icon={LogOut} text={t('file.exit')} iconColor="text-red-500" onClick={onExitClick} />
     </div>

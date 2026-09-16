@@ -1,5 +1,12 @@
-import { getOnlineUsersPage, getOpenedOrders, getPositionsPage } from '../../services/api';
+import {
+  getOnlineUsersPage,
+  getOpenedOrders,
+  getPositionsPage,
+  getTradingAccountsPage,
+  peekAccountDetailsManyPage,
+} from '../../services/api.js';
 import { preloadWorkspaceRoute } from '../../utils/workspaceRouteModules.js';
+import { loadCompleteReportAccounts } from '../reports/dailyReportData.js';
 import {
   ANALYTICS_PATHS,
   ANALYTICS_VIEWS,
@@ -11,6 +18,24 @@ import {
   getActiveAnalyticsTimingId,
   markAnalyticsTiming,
 } from '../../utils/analyticsPerformance.js';
+
+import {
+  ANALYTICS_TRADING_ACCOUNTS_STORAGE_PREFIX,
+  ANALYTICS_TRADING_ACCOUNTS_STORAGE_DEFAULT,
+  DEFAULT_PREWARMED_ACCOUNTS,
+  saveTradingAccountsAnalyticsCache,
+  loadTradingAccountsAnalyticsCache,
+  getTradingAccountsAnalyticsCacheTimestamp,
+} from '../../utils/tradingAccountsCache.js';
+
+export {
+  ANALYTICS_TRADING_ACCOUNTS_STORAGE_PREFIX,
+  ANALYTICS_TRADING_ACCOUNTS_STORAGE_DEFAULT,
+  DEFAULT_PREWARMED_ACCOUNTS,
+  saveTradingAccountsAnalyticsCache,
+  loadTradingAccountsAnalyticsCache,
+  getTradingAccountsAnalyticsCacheTimestamp,
+};
 
 const trackedRequestOptions = (view, timingId, options = {}) => ({
   ...options,
@@ -32,6 +57,29 @@ const runTrackedRequest = async (view, request) => {
     throw error;
   }
 };
+
+export const fetchTradingAccountsAnalytics = async (options = {}) => {
+  const { signal, scope = 'anonymous' } = options;
+  const accounts = await loadCompleteReportAccounts(
+    (params, requestOptions) => getTradingAccountsPage(params, { ...requestOptions, bypassCache: true }),
+    { signal },
+  );
+  if (Array.isArray(accounts) && accounts.length > 0) {
+    saveTradingAccountsAnalyticsCache(scope, accounts);
+  }
+  return accounts;
+};
+
+export const getTradingAccountsAnalyticsQueryOptions = (scope = 'anonymous') => ({
+  queryKey: ['analytics', 'trading-accounts', scope],
+  queryFn: ({ signal }) => fetchTradingAccountsAnalytics({ signal, scope }),
+  initialData: () => loadTradingAccountsAnalyticsCache(scope),
+  initialDataUpdatedAt: () => getTradingAccountsAnalyticsCacheTimestamp(scope),
+  staleTime: 60_000,
+  gcTime: 300_000,
+  retry: false,
+  refetchOnWindowFocus: true,
+});
 
 export const fetchOnlineUsersAnalyticsPage = (params, options = {}) => (
   runTrackedRequest(

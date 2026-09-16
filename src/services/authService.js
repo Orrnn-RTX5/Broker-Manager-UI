@@ -6,6 +6,7 @@
 import { buildManagerApiUrl } from '../config/endpoints.js';
 import { MANAGER_API } from '../config/managerApiContract.js';
 import { desktopFetch } from './desktopHttp.js';
+import { getRuntimeConfigValue, isDesktopBackendTarget } from '../config/backendTarget.js';
 
 const TOKENS = {
   AUTH: 'authToken',
@@ -168,6 +169,21 @@ export const getSessionStatus = ({ baseline } = {}) => {
     return invalidStatus('local_storage_token_changed', snapshot);
   }
   if (snapshot.isExpired) return invalidStatus('token_expired', snapshot);
+
+  // Web deployments pin the broker through environment configuration. A
+  // session saved before a broker switch must not reopen the previous broker.
+  // Desktop intentionally allows selecting different brokers at login.
+  if (!isDesktopBackendTarget()) {
+    const configuredBrokerId = getRuntimeConfigValue([
+      'FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID',
+    ]).trim().toLowerCase();
+    const sessionBrokerId = String(
+      getSessionAuth()?.broker_id || getStorageItem('localStorage', TOKENS.BROKER_ID) || ''
+    ).trim().toLowerCase();
+    if (configuredBrokerId && sessionBrokerId && configuredBrokerId !== sessionBrokerId) {
+      return invalidStatus('broker_configuration_changed', snapshot);
+    }
+  }
 
   return {
     authenticated: true,

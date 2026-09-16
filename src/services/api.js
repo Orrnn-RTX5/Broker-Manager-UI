@@ -1,9 +1,11 @@
 import { loadSymbolManagement } from './symbolManagementLoader.js';
+import { fetchAvailableSymbolNames } from './symbolCatalogue.js';
+import { buildPermissionSessionFingerprint } from '../utils/sessionFingerprint.js';
 import apiClient from './apiClient';
 import ibApi from './ibApi';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
-import { buildBrokerApiUrl } from '../config/endpoints';
+import { API_HOST, buildBrokerApiUrl, updateDynamicEndpoints } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 import { buildPagedEndpoint, extractRows, normalizePagedResult, normalizePagedStreamResult, normalizePagedTextResult } from '../utils/pagination';
 import { chunkSymbolNames } from '../utils/symbolParams';
@@ -157,6 +159,7 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   idNumber: p.idNumber || p.IDNumber || p.IdNumber || p.id_number || '',
   leadCampaign: p.leadCampaign || p.LeadCampaign || p.lead_campaign || '',
   leadSource: p.leadSource || p.LeadSource || p.lead_source || '',
+  registration: p.Registration ?? p.registration ?? p.Registered ?? p.registered ?? null,
   mqid: p.mqid || p.MQID || p.MetaQuotesID || p.metaQuotesId || '',
   state: p.state || p.State || p.province || p.Province || p.region || p.Region || '',
   city: p.city || p.City || '',
@@ -500,6 +503,12 @@ export const getClients = async () => {
 };
 
 export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
+  // Full reports need fresh, consistently sorted pages, independent of the
+  // account grid's first-page cache (which may use another page size/session).
+  if (options.bypassCache) {
+    const { bypassCache: _bypassCache, ...requestOptions } = options;
+    return getPaged('/AccountDetailsMany', params, (row) => row, ['accounts'], requestOptions);
+  }
   if (!isDefaultAccountDetailsPage(params)) {
     return getPaged('/AccountDetailsMany', params, (row) => row, ['accounts'], options);
   }
@@ -1109,7 +1118,8 @@ export const symbolsParams = async (symbols) => {
   return results.flatMap((rows) => (Array.isArray(rows) ? rows : getRecords(rows, 'symbols')));
 };
 
-const SYMBOL_MANAGEMENT_CACHE_KEY = 'rtx5_symbol_management_v1';
+// v2 includes the available feed catalogue as well as configured instruments.
+const SYMBOL_MANAGEMENT_CACHE_KEY = 'rtx5_symbol_management_v2';
 const SYMBOL_MANAGEMENT_CACHE_FRESH_MS = 60_000;
 const SYMBOL_MANAGEMENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -1117,6 +1127,17 @@ let symbolManagementCache = null;
 let symbolManagementRequest = null;
 let symbolManagementProgress = null;
 const symbolManagementProgressListeners = new Set();
+let symbolManagementScope = '';
+let symbolManagementGeneration = 0;
+const getSymbolManagementScope = () => {
+  updateDynamicEndpoints();
+  const claims = authService.getSessionClaims();
+  return buildPermissionSessionFingerprint({
+    token: authService.getAuthToken(),
+    login: claims.login,
+    brokerId: `${claims.brokerId || ''}|${API_HOST}`,
+  });
+};
 
 const readStoredSymbolManagementData = () => {
   try {
@@ -1127,7 +1148,7 @@ const readStoredSymbolManagementData = () => {
     const parsed = JSON.parse(raw);
     if (
       !Array.isArray(parsed?.symbols)
-      || parsed.symbols.length === 0
+      || parsed.scope !== symbolManagementScope
       || Date.now() - Number(parsed.savedAt || 0) > SYMBOL_MANAGEMENT_CACHE_MAX_AGE_MS
     ) {
       return null;
@@ -1139,11 +1160,12 @@ const readStoredSymbolManagementData = () => {
 };
 
 const writeStoredSymbolManagementData = (data) => {
-  if (!Array.isArray(data?.symbols) || data.symbols.length === 0) return;
+  if (!Array.isArray(data?.symbols)) return;
   const cached = {
     symbols: data.symbols,
     categories: Array.isArray(data.categories) ? data.categories : [],
     savedAt: Date.now(),
+    scope: symbolManagementScope,
   };
   symbolManagementCache = cached;
   try {
@@ -1156,13 +1178,25 @@ const writeStoredSymbolManagementData = (data) => {
 };
 
 export const peekSymbolManagementData = () => {
+  const scope = getSymbolManagementScope();
+  if (symbolManagementScope !== scope) {
+    symbolManagementGeneration += 1;
+    symbolManagementScope = scope;
+    symbolManagementCache = null;
+    symbolManagementProgress = null;
+    symbolManagementRequest = null;
+    symbolManagementProgressListeners.clear();
+  }
   if (symbolManagementRequest && symbolManagementProgress?.symbols?.length) return symbolManagementProgress;
-  if (symbolManagementCache?.symbols?.length) return symbolManagementCache;
+  if (symbolManagementCache) return symbolManagementCache;
   symbolManagementCache = readStoredSymbolManagementData();
   return symbolManagementCache || symbolManagementProgress;
 };
 
 export const invalidateSymbolManagementData = () => {
+  symbolManagementGeneration += 1;
+  symbolManagementRequest = null;
+  symbolManagementProgressListeners.clear();
   symbolManagementCache = null;
   symbolManagementProgress = null;
   try {
@@ -1186,25 +1220,35 @@ const notifySymbolManagementProgress = (data) => {
 };
 
 const fetchSymbolManagementData = async () => {
+  const generation = symbolManagementGeneration;
+  const scope = symbolManagementScope;
+  const isCurrent = () => generation === symbolManagementGeneration && scope === getSymbolManagementScope();
   // Bound stalled requests while completed rows remain available for review.
   const signal = AbortSignal.timeout(15_000);
   const data = await loadSymbolManagement({
     getNames: () => apiClient.get('/SymbolsList', { signal }),
+    getAvailableNames: () => fetchAvailableSymbolNames({ signal }),
     getCategories: () => apiClient.get('/SymbolCategoryList', { signal }),
     getParams: async batch => {
       const response = await apiClient.get('/SymbolsParams?' + arrayQuery('symbols[]', batch), { signal });
       return Array.isArray(response) ? response : getRecords(response, 'symbols');
     },
     getCategorySymbols: category => apiClient.get('/SymbolsByCategory?' + query({ category }), { signal }),
-    onProgress: notifySymbolManagementProgress,
+    onProgress: data => {
+      if (isCurrent()) notifySymbolManagementProgress(data);
+    },
     cachedSymbols: peekSymbolManagementData()?.symbols || [],
   });
-  // Incomplete responses must not become a fresh, complete cache entry.
-  if (!data.error && data.symbols.every(row => !row.__managementPartial)) writeStoredSymbolManagementData(data);
+  if (!isCurrent()) throw new Error('Symbol load was superseded. Please refresh.');
+  // Feed-only records are valid catalogue entries with unavailable settings.
+  // Failures remain stale, so the next visit retries rather than caching errors.
+  if (!data.error) writeStoredSymbolManagementData(data);
+  else symbolManagementCache = { ...data, savedAt: 0, scope: symbolManagementScope };
   return data;
 };
 
 export const symbolManagementList = ({ force = false, onProgress } = {}) => {
+  const cached = peekSymbolManagementData();
   if (typeof onProgress === 'function') {
     symbolManagementProgressListeners.add(onProgress);
     if (symbolManagementRequest && symbolManagementProgress) {
@@ -1212,10 +1256,9 @@ export const symbolManagementList = ({ force = false, onProgress } = {}) => {
     }
   }
 
-  const cached = peekSymbolManagementData();
   if (
     !force
-    && cached?.symbols?.length
+    && Array.isArray(cached?.symbols)
     && Date.now() - Number(cached.savedAt || 0) < SYMBOL_MANAGEMENT_CACHE_FRESH_MS
   ) {
     onProgress?.({ ...cached, partial: false });
@@ -1224,11 +1267,14 @@ export const symbolManagementList = ({ force = false, onProgress } = {}) => {
   }
 
   if (!symbolManagementRequest) {
-    symbolManagementRequest = fetchSymbolManagementData().finally(() => {
-      symbolManagementRequest = null;
-      symbolManagementProgress = null;
-      symbolManagementProgressListeners.clear();
+    const request = fetchSymbolManagementData().finally(() => {
+      if (symbolManagementRequest === request) {
+        symbolManagementRequest = null;
+        symbolManagementProgress = null;
+        symbolManagementProgressListeners.clear();
+      }
     });
+    symbolManagementRequest = request;
   }
 
   return symbolManagementRequest;
