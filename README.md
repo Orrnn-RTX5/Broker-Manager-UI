@@ -100,7 +100,7 @@ npm run build:desktop
 Mode files:
 
 ```text
-.env.web       -> VITE_BACKEND_TARGET=web
+.env           -> web builds (local file, git-ignored; CI writes it from MANAGER_UI_ENV)
 .env.electron  -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
 .env.desktop   -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
 ```
