@@ -73,6 +73,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The image is built from .env (this secret) only; .dockerignore keeps
+      # the checked-in .env.web/.env.desktop/.env.electron out of the build.
+      - name: Create .env
+        env:
+          MANAGER_UI_ENV: ${{ secrets.MANAGER_UI_ENV }}
+        run: printf '%s\n' "$MANAGER_UI_ENV" > .env
+
       - name: Build and push image
         id: build
         uses: docker/build-push-action@v6
