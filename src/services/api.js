@@ -1141,7 +1141,6 @@ let symbolManagementProgress = null;
 let symbolManagementGeneration = 0;
 const symbolManagementProgressListeners = new Set();
 let symbolManagementScope = '';
-let symbolManagementGeneration = 0;
 const getSymbolManagementScope = () => {
   updateDynamicEndpoints();
   const claims = authService.getSessionClaims();
@@ -1252,7 +1251,9 @@ const fetchSymbolManagementData = async () => {
     },
     cachedSymbols: peekSymbolManagementData()?.symbols || [],
   });
-  if (!isCurrent()) throw new Error('Symbol load was superseded. Please refresh.');
+  // A superseded load settles quietly: it must not replace the fresh request's
+  // cache, progress or listeners.
+  if (!isCurrent()) return data;
   // Feed-only records are valid catalogue entries with unavailable settings.
   // Failures and incomplete (partial) responses remain stale, so the next
   // visit retries rather than caching them as a fresh, complete entry.

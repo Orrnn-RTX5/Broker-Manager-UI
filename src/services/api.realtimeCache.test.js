@@ -125,5 +125,5 @@ test('invalidated symbol progress/results cannot replace fresh configuration or 
   loads[1].resolve({ symbols: [{ symbol: 'NEW' }], categories: [] });
   await fresh;
   assert.equal(api.peekSymbolManagementData().symbols[0].symbol, 'NEW');
-  assert.equal(JSON.parse(storage.get('rtx5_symbol_management_v1')).symbols[0].symbol, 'NEW');
+  assert.equal(JSON.parse(storage.get('rtx5_symbol_management_v2')).symbols[0].symbol, 'NEW');
 });
