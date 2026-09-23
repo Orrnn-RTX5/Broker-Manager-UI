@@ -27,6 +27,7 @@ import TradingAccountsPage from './features/clients/TradingAccountsPage';
 import PositionsPage from './features/clients/PositionsPage';
 import DealsPage from './features/clients/DealsPage';
 import OnlineUsersPage from './features/clients/OnlineUsersPage';
+import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
 
 // Pre-warm the active route module immediately on hard refresh before render
 if (typeof window !== 'undefined' && window.location?.pathname) {
@@ -35,7 +36,7 @@ if (typeof window !== 'undefined' && window.location?.pathname) {
 
 // Keep primary navigation pages in the bundle for instant (<1s) zero-delay renders.
 // Auxiliary or deep views are loaded on-demand.
-const TradingAccountsDashboard = lazy(workspaceRouteLoaders.tradingAccountsDashboard);
+const DailyReportPage = lazy(workspaceRouteLoaders.dailyReportPage);
 const AdvertisingCampaignsDashboard = lazy(workspaceRouteLoaders.advertisingCampaignsDashboard);
 const ByCountryDashboard = lazy(workspaceRouteLoaders.byCountryDashboard);
 const GroupDetailsPage = lazy(workspaceRouteLoaders.groupDetailsPage);
@@ -53,6 +54,7 @@ const PUBLIC_AUTH_PATHS = new Set(['/manager-login', '/admin-login']);
 const ROUTE_LOADING_LABELS = Object.freeze({
   '/': 'Dashboard',
   '/dashboard': 'Dashboard',
+  '/reports/daily': 'Daily Report',
   '/admin-dashboard': 'Dashboard',
   '/analytics/trading-accounts': 'Trading Accounts Analytics',
   '/analytics/online-users': 'Online Users',
@@ -266,13 +268,13 @@ function App() {
 
     // Immediately prefetch essential workspace data (accounts + terminal trades)
     prefetchInitialWorkspaceData(queryClient);
+    preloadSymbolManagementData();
 
     // Prioritize the active route's data query first. Defer background route warming
     // and auxiliary prefetches so they never compete for network connections or CPU
     // during the critical initial page load and render.
     const warmTimeoutId = setTimeout(() => {
       const runWarming = () => {
-        preloadSymbolManagementData();
         preloadFrequentWorkspaceRoutes();
         preloadAllWorkspaceRoutes();
         prefetchInitialAnalyticsData(queryClient);
@@ -362,6 +364,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/reports/daily" element={<RequirePermission permission="view_accounts"><DailyReportPage /></RequirePermission>} />
                 <Route path="/admin-dashboard" element={<Dashboard />} />
                 <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
                 <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />

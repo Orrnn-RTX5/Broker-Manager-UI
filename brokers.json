@@ -65,6 +65,41 @@
         "DISCOVERY_BASE_URL": "https://fxtrustbrokerbackend.orrnn.com",
         "USE_MOCK_DISCOVERY": "false"
       }
+    },
+    {
+      "id": "nexa",
+      "broker_id": "Nexa",
+      "name": "Nexa",
+      "host": "nexa.orrnn.com",
+      "user": "root",
+      "port": 40111,
+      "channel": "canary",
+      "enabled": true,
+      "domain": "nexa.orrnn.com",
+      "https": true,
+      "backend_url": "https://nexa.orrnn.com",
+      "server_ip": "100.119.182.26",
+      "server_port": 443,
+      "backend_host": "nexa.orrnn.com",
+      "backend_port": 443,
+      "app_port": "127.0.0.1:8082",
+      "env": {
+        "BROKER_ID": "Nexa",
+        "VITE_BROKER_ID": "Nexa",
+        "BACKEND_TARGET": "web",
+        "API_HOST": "https://nexa.orrnn.com",
+        "API_HOST_EXT": "https://nexa.orrnn.com",
+        "WS_HOST": "wss://nexa.orrnn.com",
+        "FEED_WS_URL": "wss://nexa.orrnn.com/ws/feed",
+        "FEED_STATUS_URL": "https://nexa.orrnn.com/ws/feed/status",
+        "FEED_BROKER_ID": "Nexa",
+        "FEED_AUTH_REQUIRED": "true",
+        "FEED_SEND_TOKEN": "true",
+        "DEFAULT_MT5_SERVER": "100.119.182.26",
+        "DISCOVERY_BASE_URL": "https://superbackend.orrnn.com",
+        "FEED_BROKER_TOKEN": "cf9acb41f14cd89b0828f1de25c4a4b269fb7b0c9f3f414df22fd2f75f875ecd",
+        "USE_MOCK_DISCOVERY": "false"
+      }
     }
   ]
 }

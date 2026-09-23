@@ -459,7 +459,15 @@ const MarketData = ({ compact = false }) => {
     return (
       <div className="market-quote-details w-full p-2 bg-[var(--surface)]">
         <div className="font-semibold text-lg pb-3 mb-3 border-b flex justify-between items-center" style={{ color: 'var(--accent)', borderColor: 'var(--border)' }}>
-          <span>{selectedQuote.symbol}</span>
+          <button
+            type="button"
+            onClick={() => handleOpenTicks(selectedQuote)}
+            aria-label={`View ticks for ${selectedQuote.symbol}`}
+            title={`View ticks for ${selectedQuote.symbol}`}
+            className="cursor-pointer text-left hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 rounded-sm"
+          >
+            {selectedQuote.symbol}
+          </button>
           <span className="text-xs px-2 py-1 bg-[var(--surface-2)] rounded font-mono font-normal tracking-wide text-[var(--text-2)]">
             {isConnected && !selectedQuote.isStale ? 'Live' : 'Cached'}
           </span>

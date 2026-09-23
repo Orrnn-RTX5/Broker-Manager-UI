@@ -48,10 +48,28 @@ export const TEST_BROKER_DEFAULT_ENTRY = {
   default_mt5_server: TEST_BROKER_DEFAULT_MT5_SERVER,
 };
 
+export const NEXA_BROKER_DEFAULT_ENTRY = {
+  broker_id: 'Nexa',
+  name: 'Nexa',
+  broker_name: 'Nexa',
+  status: 'active',
+  server: 'nexa.orrnn.com:443',
+  backend_url: 'https://nexa.orrnn.com',
+  server_url: 'https://nexa.orrnn.com',
+  market_api_url: 'https://nexa.orrnn.com',
+  server_ip: '100.119.182.26',
+  server_port: 443,
+  ws_url: 'wss://nexa.orrnn.com/ws/feed',
+  feed_ws_url: 'wss://nexa.orrnn.com/ws/feed',
+  feed_status_url: 'https://nexa.orrnn.com/ws/feed/status',
+  default_mt5_server: '100.119.182.26',
+};
+
 // ---------------------------------------------------------------------------
 // Mock broker list — mirrors what the real /api/v2/broker/servers returns.
 // ---------------------------------------------------------------------------
 export const MOCK_BROKER_LIST = [
+  NEXA_BROKER_DEFAULT_ENTRY,
   TEST_BROKER_DEFAULT_ENTRY,
   {
     broker_id: 'testorrnn',
@@ -135,10 +153,15 @@ export const fetchBrokerList = async () => {
 
   const runtimeBrokerId = String(getRuntimeBrokerId() || '').trim().toLowerCase();
   const wantsTestBroker = runtimeBrokerId === 'test' || runtimeBrokerId === 'test-broker';
+  const wantsNexaBroker = runtimeBrokerId === 'nexa' || runtimeBrokerId === 'nexa-broker';
   const usable = normalized.filter((broker) => !isOpaqueLocalTestBroker(broker));
   const hasTestBroker = usable.some((broker) => isTestBrokerInfo(broker));
   if (!hasTestBroker && (wantsTestBroker || normalized.length === 0 || normalized.some((broker) => isTestBrokerInfo(broker)))) {
     usable.push(normalizeBrokerInfo(TEST_BROKER_DEFAULT_ENTRY));
+  }
+  const hasNexaBroker = usable.some((broker) => String(broker?.broker_id || '').trim().toLowerCase() === 'nexa');
+  if (!hasNexaBroker && (wantsNexaBroker || normalized.length === 0)) {
+    usable.unshift(normalizeBrokerInfo(NEXA_BROKER_DEFAULT_ENTRY));
   }
 
   return usable;
