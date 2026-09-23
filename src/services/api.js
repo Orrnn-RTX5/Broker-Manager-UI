@@ -10,6 +10,7 @@ import { chunkSymbolNames } from '../utils/symbolParams';
 import { createKeyedRequestCache } from './keyedRequestCache';
 import { MANAGER_API } from '../config/managerApiContract.js';
 import { requestReportsSummary } from './reportsSummary.js';
+import { advanceRealtimeCacheRevision } from './realtimeCacheRevision.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
@@ -165,6 +166,15 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   comment: p.comment || p.Comment || '',
 });
 
+// Canonical lots are already decimal lots. Only explicitly named MT integer
+// fields use the 1/10000 lot scale; quantity magnitude is not a unit.
+const normalizeLots = (p) => {
+  if (p.lots != null) return Number(p.lots);
+  if (p.volumeExt != null) return Number(p.volumeExt) / 10000;
+  if (p.Volume != null) return Number(p.Volume) / 10000;
+  return Number(p.volume ?? 0);
+};
+
 export const normalizePositionRow = (p = {}) => {
   let type = 'unknown';
   if (typeof p.action === 'string') type = p.action.toLowerCase();
@@ -177,8 +187,7 @@ export const normalizePositionRow = (p = {}) => {
   else if (type.includes('sell') || type.includes('deal_sell')) type = 'sell';
   else if (type === 'unknown') type = 'buy';
 
-  let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : (p.volume !== undefined ? p.volume : 0)));
-  if (volume >= 100) volume = volume / 10000;
+  const volume = normalizeLots(p);
 
   const reasonRaw = p.reason ?? p.Reason ?? p.reason_type ?? p.comment ?? p.Comment ?? '';
   let reason = 'Client';
@@ -199,6 +208,8 @@ export const normalizePositionRow = (p = {}) => {
 
   return {
     position: p.positionTicket || p.Position || p.ticket || p.Ticket || p.position || 0,
+    state_version: p.state_version ?? p.stateVersion,
+    price_time_msc: p.price_time_msc,
     login: String(p.login || p.Login || ''),
     name: p.accountName || p.AccountName || p.name || p.Name || '',
     email: p.username || p.Username || p.email || p.Email || '',
@@ -226,8 +237,7 @@ export const normalizeOrderRow = (p = {}) => {
   else if (p.type === 0 || p.cmd === 0) type = 'buy';
   else if (p.type === 1 || p.cmd === 1) type = 'sell';
 
-  let volume = p.volume !== undefined ? p.volume : (p.lots !== undefined ? p.lots : 0);
-  if (volume >= 100) volume = volume / 10000;
+  const volume = normalizeLots(p);
 
   return {
     ticket: p.ticket || p.position || 0,
@@ -285,6 +295,7 @@ const ACCOUNT_DETAILS_CACHE_TTL_MS = 30_000;
 let accountDetailsFirstPage = null;
 let accountDetailsFirstPageAt = 0;
 let accountDetailsFirstPagePromise = null;
+let accountDetailsCacheGeneration = 0;
 
 const isDefaultAccountDetailsPage = (params = {}) => {
   const offset = Number(params.offset || 0);
@@ -306,7 +317,7 @@ const readStoredAccountDetailsPage = () => {
 };
 
 const writeStoredAccountDetailsPage = (page) => {
-  if (!page?.rows?.length) return;
+  if (!Array.isArray(page?.rows)) return;
   try {
     sessionStorage.setItem(ACCOUNT_DETAILS_CACHE_KEY, JSON.stringify({
       rows: page.rows,
@@ -512,24 +523,25 @@ export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
   }
   if (accountDetailsFirstPagePromise) return accountDetailsFirstPagePromise;
 
-  accountDetailsFirstPagePromise = getPaged(
+  const generation = accountDetailsCacheGeneration;
+  const request = getPaged(
     '/AccountDetailsMany',
     { ...params, limit: params.limit || 30, offset: 0 },
     (row) => row,
     ['accounts'],
     options,
   ).then((page) => {
-    if (page?.rows?.length) {
+    if (generation === accountDetailsCacheGeneration && Array.isArray(page?.rows)) {
       accountDetailsFirstPage = page;
       accountDetailsFirstPageAt = Date.now();
       writeStoredAccountDetailsPage(page);
     }
     return page;
   }).finally(() => {
-    accountDetailsFirstPagePromise = null;
+    if (accountDetailsFirstPagePromise === request) accountDetailsFirstPagePromise = null;
   });
-
-  return accountDetailsFirstPagePromise;
+  accountDetailsFirstPagePromise = request;
+  return request;
 };
 
 export const getClientsPage = async (params = {}, options = {}) => {
@@ -1116,6 +1128,7 @@ const SYMBOL_MANAGEMENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let symbolManagementCache = null;
 let symbolManagementRequest = null;
 let symbolManagementProgress = null;
+let symbolManagementGeneration = 0;
 const symbolManagementProgressListeners = new Set();
 
 const readStoredSymbolManagementData = () => {
@@ -1163,8 +1176,11 @@ export const peekSymbolManagementData = () => {
 };
 
 export const invalidateSymbolManagementData = () => {
+  symbolManagementGeneration += 1;
+  symbolManagementRequest = null;
   symbolManagementCache = null;
   symbolManagementProgress = null;
+  symbolManagementProgressListeners.clear();
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(SYMBOL_MANAGEMENT_CACHE_KEY);
@@ -1185,7 +1201,7 @@ const notifySymbolManagementProgress = (data) => {
   });
 };
 
-const fetchSymbolManagementData = async () => {
+const fetchSymbolManagementData = async (generation) => {
   // Bound stalled requests while completed rows remain available for review.
   const signal = AbortSignal.timeout(15_000);
   const data = await loadSymbolManagement({
@@ -1196,11 +1212,13 @@ const fetchSymbolManagementData = async () => {
       return Array.isArray(response) ? response : getRecords(response, 'symbols');
     },
     getCategorySymbols: category => apiClient.get('/SymbolsByCategory?' + query({ category }), { signal }),
-    onProgress: notifySymbolManagementProgress,
+    onProgress: (progress) => {
+      if (generation === symbolManagementGeneration) notifySymbolManagementProgress(progress);
+    },
     cachedSymbols: peekSymbolManagementData()?.symbols || [],
   });
   // Incomplete responses must not become a fresh, complete cache entry.
-  if (!data.error && data.symbols.every(row => !row.__managementPartial)) writeStoredSymbolManagementData(data);
+  if (generation === symbolManagementGeneration && !data.error && data.symbols.every(row => !row.__managementPartial)) writeStoredSymbolManagementData(data);
   return data;
 };
 
@@ -1224,17 +1242,40 @@ export const symbolManagementList = ({ force = false, onProgress } = {}) => {
   }
 
   if (!symbolManagementRequest) {
-    symbolManagementRequest = fetchSymbolManagementData().finally(() => {
-      symbolManagementRequest = null;
-      symbolManagementProgress = null;
-      symbolManagementProgressListeners.clear();
+    const request = fetchSymbolManagementData(symbolManagementGeneration).finally(() => {
+      if (symbolManagementRequest === request) {
+        symbolManagementRequest = null;
+        symbolManagementProgress = null;
+        symbolManagementProgressListeners.clear();
+      }
     });
+    symbolManagementRequest = request;
   }
 
   return symbolManagementRequest;
 };
 
 export const preloadSymbolManagementData = () => symbolManagementList().catch(() => undefined);
+
+// Query-cache invalidation alone cannot bypass these module/storage caches.
+// Detach old in-flight work before any caller starts its authoritative reload.
+export const invalidateRealtimeCaches = (entity = '') => {
+  advanceRealtimeCacheRevision();
+  accountDetailsCacheGeneration += 1;
+  accountDetailsFirstPage = null;
+  accountDetailsFirstPageAt = 0;
+  accountDetailsFirstPagePromise = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(ACCOUNT_DETAILS_CACHE_KEY);
+      sessionStorage.removeItem('rtx5_sidebar_accounts_cache_v2');
+    }
+  } catch { /* Storage is optional; in-memory generations still invalidate. */ }
+  invalidatePositionsCache();
+  if (!entity || ['resync', 'instruments', 'symbols', 'groups', 'group_symbol_settings', 'brokers'].includes(entity)) {
+    invalidateSymbolManagementData();
+  }
+};
 export const symbolList = async (options) => (await symbolManagementList(options)).symbols;
 
 const symbolMutation = (request) => request.then((result) => {
@@ -1299,6 +1340,7 @@ export default {
   hasAccountPositionsContinuation,
   completeAccountPositions,
   invalidateGlobalPositionsCache,
+  invalidateRealtimeCaches,
   peekStoredPositionsDataset,
   clearPositionsStorageCache,
   getTradingAccountsAnalytics,

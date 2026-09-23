@@ -17,7 +17,9 @@ import { useDockingContext } from '../components/docking/DockingContext';
 import GlobalLoader from '../components/GlobalLoader';
 import ToastContainer from '../components/ToastContainer';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
-import { startPositionSync, stopPositionSync } from '../services/positionSync';
+import { startPositionSync, stopPositionSync, subscribeToPositionSync, requiresPositionReconciliation } from '../services/positionSync';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateRealtimeCaches } from '../services/api';
 import { resetWorkspaceLayout, toggleDocumentFullscreen } from '../utils/quickSettingsActions.js';
 import '../styles/command-center.css';
 const PANEL_NAVIGATOR  = 'navigator';
@@ -74,6 +76,7 @@ const INITIAL_PANELS = {
 
 // ─── Inner layout (needs docking context) ────────────────────────────────────
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
+  const queryClient = useQueryClient();
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
   const { togglePanel, updatePanel, updatePanels, panels, resetLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
@@ -95,8 +98,10 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
 
   // ── Symbol Store Initialization ──────────────────────────────────────────
   useEffect(() => {
+    if (!isAuthenticated) return undefined;
     useSymbolStore.getState().initWebSocket();
-  }, []);
+    return () => useSymbolStore.getState().disconnectWebSocket();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -105,8 +110,34 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     }
 
     startPositionSync();
-    return () => stopPositionSync();
-  }, [isAuthenticated]);
+    let refreshTimer;
+    let refreshing = false;
+    let dirty = false;
+    let stopped = false;
+    const refresh = async () => {
+      refreshTimer = undefined;
+      if (stopped) return;
+      if (refreshing) { dirty = true; return; }
+      refreshing = true;
+      dirty = false;
+      try {
+        invalidateRealtimeCaches();
+        window.dispatchEvent(new Event('manager:refresh-data'));
+        // Cancel a pre-mutation request instead of reusing its stale snapshot.
+        await queryClient.invalidateQueries({ refetchType: 'active' });
+      } finally {
+        refreshing = false;
+        if (dirty && !stopped && !refreshTimer) refreshTimer = setTimeout(refresh, 50);
+      }
+    };
+    const unsubscribe = subscribeToPositionSync((event) => {
+      if (!requiresPositionReconciliation(event?.payload) && event?.reason !== 'connected') return;
+      if (refreshing) { dirty = true; return; }
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(refresh, 50);
+    });
+    return () => { stopped = true; clearTimeout(refreshTimer); unsubscribe(); stopPositionSync(); };
+  }, [isAuthenticated, queryClient]);
 
   const toggleFullscreen = useCallback(() => toggleDocumentFullscreen(document), []);
 

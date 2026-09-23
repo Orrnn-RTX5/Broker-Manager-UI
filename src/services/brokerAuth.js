@@ -441,21 +441,21 @@ export const resolveBrokerSelection = (
 
 export const getBrokerDisplayServerName = (broker = {}) => {
   const normalized = normalizeBrokerInfo(broker);
-  return (
-    broker.server_name ||
-    broker.display_server_name ||
-    broker.default_mt5_server ||
-    broker.mt5_server ||
-    normalized.server_ip ||
-    resolveBrokerDefaultMt5Server(normalized, normalized.backend_url) ||
-    broker.server_url ||
-    broker.broker_name ||
-    broker.name ||
-    broker.display_name ||
-    broker.broker_id ||
-    broker.id ||
-    getBrokerSelectionId(broker)
-  );
+  // Opaque discovery handles belong in the login payload, not the server label.
+  return [
+    broker.server_name,
+    broker.display_server_name,
+    broker.default_mt5_server,
+    broker.mt5_server,
+    normalized.server_ip,
+    resolveBrokerDefaultMt5Server(normalized, normalized.backend_url),
+    broker.server_url,
+    broker.broker_name,
+    broker.name,
+    broker.display_name,
+    broker.broker_id,
+    broker.id,
+  ].find((value) => value && !isOpaqueBrokerServerHandle(value)) || '';
 };
 
 export const discoverBrokerById = (brokerList, brokerId) => {

@@ -64,6 +64,14 @@ export const getBackendTarget = () => normalizeTarget(
 
 export const isDesktopBackendTarget = () => getBackendTarget() === 'desktop';
 
+// Discovery intentionally hides backend addresses. Local development supplies
+// the selected broker's addresses without activating the legacy TEST profile.
+const isConfiguredLocalBroker = (brokerInfo = {}) => (
+  getRuntimeConfigValue(['LOCAL_BACKEND', 'VITE_LOCAL_BACKEND']) === 'true'
+  && String(brokerInfo.broker_id || '').toLowerCase() ===
+    getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID']).toLowerCase()
+);
+
 const getNestedValue = (source, path) => {
   if (!source || !path) return '';
 
@@ -189,6 +197,7 @@ export const hasTestBrokerMarker = (value = '') => {
 };
 
 export const isTestBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
+  if (isConfiguredLocalBroker(brokerInfo)) return false;
   const markerFields = [
     'id',
     'broker_id',
@@ -603,7 +612,16 @@ export const resolveBrokerDefaultMt5Server = (brokerInfo = {}, backendUrl = '') 
 );
 
 export const normalizeBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
-  const source = brokerInfo || {};
+  const source = isConfiguredLocalBroker(brokerInfo) ? {
+    ...brokerInfo,
+    backend_url: getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
+    desktop_backend_url: getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
+    ext_api_url: getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT']),
+    ws_url: getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']),
+    feed_ws_url: getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']),
+    feed_status_url: getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL']),
+    default_mt5_server: getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']),
+  } : brokerInfo || {};
   const isTest = isTestBrokerInfo(source, fallbackUrl);
   const isGta = isGtaBrokerInfo(source, fallbackUrl);
 

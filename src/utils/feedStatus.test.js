@@ -13,14 +13,13 @@ test('feed status copy returns null when no feed error exists', () => {
   assert.equal(getFeedStatusCopy(null), null);
 });
 
-test('feed status copy labels missing auth config as disabled', () => {
+test('feed status copy reports connection failures as unavailable', () => {
   const copy = getFeedStatusCopy(
-    'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN for this manager UI deployment.'
+    'Market feed unavailable: websocket connection could not be started.'
   );
 
-  assert.equal(copy.title, 'Market feed disabled');
-  assert.match(copy.message, /FEED_BROKER_TOKEN/);
-  assert.match(copy.message, /VITE_FEED_BROKER_TOKEN/);
+  assert.equal(copy.title, 'Market feed unavailable');
+  assert.match(copy.message, /websocket connection could not be started/);
 });
 
 test('feed status copy redacts token-bearing websocket details', () => {
@@ -33,20 +32,20 @@ test('feed status copy redacts token-bearing websocket details', () => {
   assert.match(copy.message, /\[REDACTED_WS_URL\]/);
 });
 
-test('feed availability treats missing auth config as disabled and non-live', () => {
+test('feed availability treats a feed error as unavailable and non-live', () => {
   const availability = getFeedAvailability({
-    feedError: 'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN.',
+    feedError: 'Market feed unavailable: websocket connection failed.',
     isConnected: true,
   });
 
-  assert.equal(availability.state, 'disabled');
+  assert.equal(availability.state, 'unavailable');
   assert.equal(availability.isLive, false);
-  assert.equal(availability.copy.title, 'Market feed disabled');
+  assert.equal(availability.copy.title, 'Market feed unavailable');
 });
 
-test('symbol feed status does not label cached rows live when feed is disabled', () => {
+test('symbol feed status does not label cached rows live when the feed errors', () => {
   const status = getSymbolFeedStatus({
-    feedError: 'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN.',
+    feedError: 'Market feed unavailable: websocket connection failed.',
     isConnected: true,
     symbol: { symbol: 'EURUSD', bid: '1.00000', ask: '1.00010' },
   });

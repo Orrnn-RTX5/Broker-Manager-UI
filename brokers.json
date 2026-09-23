@@ -61,11 +61,8 @@
         "FEED_WS_URL": "wss://fxtrustbrokerbackend.orrnn.com/ws/feed",
         "FEED_STATUS_URL": "https://fxtrustbrokerbackend.orrnn.com/ws/feed/status",
         "FEED_BROKER_ID": "TEST",
-        "FEED_AUTH_REQUIRED": "true",
-        "FEED_SEND_TOKEN": "true",
         "DEFAULT_MT5_SERVER": "100.120.168.28",
         "DISCOVERY_BASE_URL": "https://fxtrustbrokerbackend.orrnn.com",
-        "FEED_BROKER_TOKEN": "28c218b287d00e95268072007935d6b9bc7922a0f6e7f226736b20701b2dc9e8",
         "USE_MOCK_DISCOVERY": "false"
       }
     }

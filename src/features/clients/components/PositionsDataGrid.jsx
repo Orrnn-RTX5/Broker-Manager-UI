@@ -3,10 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
+import { useLivePositions } from '../../../hooks/useLiveTrading';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GridLoadingState from '../../../components/GridLoadingState';
-import { getPositionUpdateLogin, subscribeToPositionSync } from '../../../services/positionSync';
+import { getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../../services/positionSync';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQueries.js';
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
@@ -88,7 +89,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   }, [isDefaultParams, queryClient]);
 
   const {
-    rows,
+    rows: snapshotRows,
     total,
     hasMore,
     page,
@@ -141,6 +142,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     },
   });
 
+  const rows = useLivePositions(snapshotRows);
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);
   useEffect(() => {
@@ -176,9 +178,10 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   }, [rows]);
 
   useEffect(() => subscribeToPositionSync((event) => {
+    if (event.type === 'position' && !requiresPositionReconciliation(event.payload)) return;
     // Reconnect notifications carry no position change. Refetching on every
     // unstable websocket reconnect can stampede the slow PositionsAll route.
-    if (event?.type === 'snapshot' && event?.reason === 'connected') return;
+    // Reconnect may follow a delivery gap: always reload the authoritative page.
 
     // Every frame invalidates the global grid snapshot. Account-scoped frames
     // invalidate only their own modal cache; symbol-only P/L frames must not
@@ -305,12 +308,12 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                     </span>
                   </td>
                   <td className="tabular" style={{ textAlign: 'center' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceOpen)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceCurrent, 1)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{row.priceOpen}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{row.priceCurrent}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{row.priceSl}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{row.priceTp}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'center', color: swapTone }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone }}>{fmt(row.profit)}</td>
+                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone }}>{row.profit == null ? '—' : fmt(row.profit)}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.comment}</td>
                 </tr>
               );

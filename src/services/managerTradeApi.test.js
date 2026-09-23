@@ -77,3 +77,69 @@ test('placeManagerOrder rejects a broker failure even with HTTP 200', async () =
   globalThis.fetch = async () => new Response(JSON.stringify({ success: false, message: 'Market is closed' }), { status: 200 });
   await assert.rejects(() => placeManagerOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 }), /Market is closed/);
 });
+
+test('an ambiguous placement reconciles the original id without resubmitting', async () => {
+  const order = { login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 };
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    if (options.method === 'POST') throw new TypeError('network interrupted');
+    return new Response(JSON.stringify({ status: 'filled', data: { ticket: 42 } }), { status: 200 });
+  };
+  assert.deepEqual(await placeManagerOrder(order), { ticket: 42 });
+  assert.equal(calls.filter(({ options }) => options.method === 'POST').length, 1);
+  const id = JSON.parse(calls[0].options.body).client_order_id;
+  assert.ok(calls[1].url.endsWith(encodeURIComponent(id)));
+});
+
+test('unresolved placement retains its id on errors and subsequent clicks only check status', async () => {
+  const order = { login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 };
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return options.method === 'POST'
+      ? new Response(JSON.stringify({ code: 'ORDER_STATUS_UNKNOWN' }), { status: 503 })
+      : new Response(JSON.stringify({ status: 'accepted' }), { status: 200 });
+  };
+  let originalId;
+  await assert.rejects(() => placeManagerOrder(order), (error) => {
+    originalId = error.client_order_id;
+    assert.equal(error.account_login, 200001);
+    assert.equal(error.statusUnknown, true);
+    assert.match(error.message, new RegExp(originalId));
+    assert.equal(typeof error.checkStatus, 'function');
+    return true;
+  });
+  await assert.rejects(() => placeManagerOrder(order), (error) => error.client_order_id === originalId);
+  assert.equal(calls.filter(({ options }) => options.method === 'POST').length, 1);
+  assert.equal(calls.filter(({ options }) => options.method === 'GET').length, 2);
+});
+
+test('202 acceptance is not displayed as a fill and recovers through status', async () => {
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return options.method === 'POST'
+      ? new Response(JSON.stringify({ status: 'accepted' }), { status: 202 })
+      : new Response(JSON.stringify({ status: 'filled', data: { ticket: 99 } }), { status: 200 });
+  };
+  assert.deepEqual(await placeManagerOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 }), { ticket: 99 });
+  assert.equal(calls.length, 2);
+});
+
+test('disabled browser storage still prevents resubmission while status is unavailable', async () => {
+  globalThis.window.sessionStorage = {
+    getItem: (key) => key === 'auth' ? JSON.stringify({ token: 'manager-test-token' }) : null,
+    setItem: () => { throw new Error('storage disabled'); },
+    removeItem: () => {},
+  };
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    throw new TypeError('offline');
+  };
+  const payload = { login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 };
+  let firstId;
+  await assert.rejects(() => placeManagerOrder(payload), (error) => {
+    firstId = error.client_order_id;
+    return Boolean(firstId);
+  });
+  await assert.rejects(() => placeManagerOrder(payload), (error) => error.client_order_id === firstId);
+  assert.equal(calls.filter(({ options }) => options.method === 'POST').length, 1);
+});

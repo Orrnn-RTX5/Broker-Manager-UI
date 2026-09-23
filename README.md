@@ -70,7 +70,18 @@ Supported desktop fields include `desktop_backend_url`, `desktop_api_url`, `loca
 
 `domain` is treated as the UI host only. It is not used as a backend API URL.
 
-### Env Modes
+### Direct market data through the manager session
+
+For a broker whose LP feed publishes ticks through the manager backend, set
+`VITE_MARKET_DATA_SOURCE=manager`. The UI requests a single-use `/OnTick` ticket
+from `/api/v1/manager/ws-ticket` using the logged-in manager session, then opens
+`/manager/OnTick` (or `/OnTick` when the manager prefix is disabled). Each reconnect
+requests a new ticket. No bridge feed token is required. Symbol metadata comes
+from the manager APIs in this mode, rather than the separate bridge status API.
+
+The default `bridge` mode continues to use the configured `/ws/feed` connection.
+
+### Build modes
 
 Normal web build:
 

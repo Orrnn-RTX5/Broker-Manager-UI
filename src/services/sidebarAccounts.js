@@ -3,6 +3,7 @@ import { getAccountDetailsManyPage } from './api';
 import { normalizePagedStreamResult } from '../utils/pagination';
 import { normalizeAccount, normalizeSidebarAccountPage } from '../utils/sidebarAccountRows.js';
 import { collectAccountPages } from '../utils/collectAccountPages.js';
+import { getRealtimeCacheRevision } from './realtimeCacheRevision.js';
 
 export { normalizeAccount, normalizeSidebarAccountPage } from '../utils/sidebarAccountRows.js';
 
@@ -145,10 +146,11 @@ export const fetchSidebarAccountDetails = async (login, { signal } = {}) => {
 };
 
 export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
+  const revision = getRealtimeCacheRevision();
   const result = await collectAccountPages((offset) => fetchSidebarAccounts({
     search, offset, limit: 500, signal,
   }), { signal });
-  if (!String(search).trim()) saveCachedAccounts(result);
+  if (!String(search).trim() && revision === getRealtimeCacheRevision()) saveCachedAccounts(result);
   return result;
 };
 

@@ -1,21 +1,22 @@
+// Deploy-time override for Trivanta Markets. Takes precedence over the VITE_*
+// values baked into the bundle, so it must match .env.web.
 window.__RTX_RUNTIME_CONFIG__ = {
   BACKEND_TARGET: 'web',
-  API_HOST: 'https://fxtrustbrokerbackend.orrnn.com',
-  API_HOST_EXT: 'https://fxtrustbrokerbackend.orrnn.com',
-  WS_HOST: 'wss://fxtrustbrokerbackend.orrnn.com',
+  API_HOST: 'https://trivanta.orrnn.com',
+  API_HOST_EXT: 'https://trivanta.orrnn.com',
+  REPORTS_API_HOST: 'https://trivanta.orrnn.com',
+  WS_HOST: 'wss://trivanta.orrnn.com',
+  MANAGER_WS_HOST: 'wss://trivanta.orrnn.com',
   WS_FEED_PATH: '/ws/feed',
-  FEED_WS_URL: 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed',
-  FEED_STATUS_URL: 'https://fxtrustbrokerbackend.orrnn.com/ws/feed/status',
-  FEED_BROKER_ID: 'TEST',
-  BROKER_ID: 'TEST',
-  VITE_BROKER_ID: 'TEST',
-  FEED_BROKER_TOKEN: '28c218b287d00e95268072007935d6b9bc7922a0f6e7f226736b20701b2dc9e8',
-  DEFAULT_MT5_SERVER: 'fxtrustbrokerbackend.orrnn.com:443',
-  DISCOVERY_BASE_URL: 'https://fxtrustsuperbackned.orrnn.com',
+  FEED_WS_URL: 'wss://trivanta.orrnn.com/ws/feed',
+  FEED_STATUS_URL: 'https://trivanta.orrnn.com/ws/feed/status',
+  FEED_BROKER_ID: 'trivanta-markets',
+  BROKER_ID: 'trivanta-markets',
+  VITE_BROKER_ID: 'trivanta-markets',
+  DEFAULT_MT5_SERVER: 'trivanta.orrnn.com',
+  DISCOVERY_BASE_URL: 'https://superadmin-prod.orrnn.com',
   USE_MOCK_DISCOVERY: 'false',
-  MANAGER_USE_DEV_PROXY: 'true',
-  VITE_MANAGER_USE_DEV_PROXY: 'true',
-  FEED_USE_DEV_PROXY: 'true',
-  VITE_FEED_USE_DEV_PROXY: 'true'
+  MARKET_DATA_SOURCE: 'manager',
+  REPORTS_SUMMARY_ENABLED: 'false'
 };
 window.RUNTIME_CONFIG = window.__RTX_RUNTIME_CONFIG__;

@@ -10,16 +10,8 @@ export const getFeedStatusCopy = (feedError) => {
   const message = redactUrl(String(feedError || '').trim());
   if (!message) return null;
 
-  const lower = message.toLowerCase();
-  const isAuthConfigError =
-    lower.includes('market feed disabled') ||
-    lower.includes('feed_broker_token') ||
-    lower.includes('vite_feed_broker_token') ||
-    lower.includes('feed auth') ||
-    lower.includes('auth config');
-
   return {
-    title: isAuthConfigError ? 'Market feed disabled' : 'Market feed unavailable',
+    title: 'Market feed unavailable',
     message,
   };
 };
@@ -28,7 +20,7 @@ export const getFeedAvailability = ({ feedError = '', isConnected = false } = {}
   const copy = getFeedStatusCopy(feedError);
   if (copy) {
     return {
-      state: copy.title === 'Market feed disabled' ? 'disabled' : 'unavailable',
+      state: 'unavailable',
       isLive: false,
       copy,
     };
@@ -62,7 +54,7 @@ export const getSymbolFeedStatus = ({
       state: FEED_DATA_STATE.CACHED,
       label: 'Cached',
       isLive: false,
-      tone: availability.state === 'disabled' ? 'warning' : 'muted',
+      tone: 'muted',
       title: availability.copy
         ? `${availability.copy.title}: cached symbol data is not live.`
         : 'Cached symbol data is not live yet.',
