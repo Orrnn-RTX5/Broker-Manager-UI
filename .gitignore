@@ -25,3 +25,6 @@ release
 *.sln
 *.sw?
 .env
+
+# Scratch output (screenshots, throwaway scripts) - never commit
+/tmp/
