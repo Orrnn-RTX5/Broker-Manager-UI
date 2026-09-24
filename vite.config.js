@@ -25,6 +25,22 @@ viteLogger.error = (message, options) => {
 // https://vite.dev/config/
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const localRuntimeConfig = Object.fromEntries(Object.entries(env)
+    .filter(([key]) => key.startsWith('VITE_'))
+    .map(([key, value]) => [key.slice(5), value]))
+  const localRuntimeSource = `window.__RTX_RUNTIME_CONFIG__=${JSON.stringify(localRuntimeConfig)};window.RUNTIME_CONFIG=window.__RTX_RUNTIME_CONFIG__;`
+  const localRuntimePlugin = env.VITE_LOCAL_BACKEND === 'true' ? {
+    name: 'local-backend-runtime',
+    configureServer(server) {
+      server.middlewares.use('/runtime-config.js', (_request, response) => {
+        response.setHeader('Content-Type', 'application/javascript')
+        response.end(localRuntimeSource)
+      })
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'runtime-config.js', source: localRuntimeSource })
+    },
+  } : null
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
   const discoveryHost = env.VITE_DISCOVERY_BASE_URL || 'https://superbackend.orrnn.com'
@@ -50,6 +66,7 @@ export default defineConfig(({ mode, command }) => {
     base: isDesktopMode ? './' : '/',
     customLogger: viteLogger,
     plugins: [
+      localRuntimePlugin,
       react(),
       tailwindcss(),
     ],
@@ -103,7 +120,7 @@ export default defineConfig(({ mode, command }) => {
           secure: proxySecure,
         },
         '^/reports/v\\d+(?:/|$)': {
-          target: apiHost,
+          target: env.VITE_REPORTS_API_HOST || apiHost,
           changeOrigin: true,
           secure: proxySecure,
         },
@@ -111,7 +128,16 @@ export default defineConfig(({ mode, command }) => {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          ws: true,
+          // Manager session sockets validate the browser Origin. Preserve it;
+          // the optional bridge origin stripping does not apply to this route.
           rewrite: rewriteLegacyManagerPath,
+        },
+        '^/OnTick(?:\\?|$)': {
+          target: apiHost,
+          changeOrigin: true,
+          secure: proxySecure,
+          ws: true,
         },
         '^/Manager(?:/|$)': {
           target: apiHost,

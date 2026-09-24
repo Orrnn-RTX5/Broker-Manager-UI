@@ -4,7 +4,8 @@ import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotCont
 import { useQueryClient } from '@tanstack/react-query';
 import usePagedData from '../../hooks/usePagedData';
 import { getPositionsPage, invalidateGlobalPositionsCache } from '../../services/api';
-import { subscribeToPositionSync } from '../../services/positionSync';
+import { subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
+import { useLivePositions } from '../../hooks/useLiveTrading';
 import {
   TRADE_COLUMNS,
   tradeCells,
@@ -113,11 +114,13 @@ function TerminalDock({ isAuthenticated = false }) {
     placeholderData: (previousData) => previousData || cachedInitial,
   });
 
+  const liveRows = useLivePositions(snapshotRows, undefined, page === 0, data?.liveRevision || 0);
+  const rows = useMemo(() => [...liveRows].sort((a, b) => Number(b.position) - Number(a.position)).slice(0, 30), [liveRows]);
   useEffect(() => {
-    if (page === 0 && rows.length > 0) {
+    if (page === 0 && !isLoading) {
       writeStoredTerminalPage({ rows, total, hasMore });
     }
-  }, [rows, total, hasMore, page]);
+  }, [rows, total, hasMore, page, isLoading]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -125,7 +128,8 @@ function TerminalDock({ isAuthenticated = false }) {
     // The shared sync service also emits a fallback poll every 30 seconds.
     let timer;
     const unsubscribe = subscribeToPositionSync((event) => {
-      if (event?.reason === 'connected' || timer) return;
+      if (event.type === 'position' && !requiresPositionReconciliation(event.payload)) return;
+      if (timer) return;
       timer = setTimeout(() => {
         timer = undefined;
         queryClient.invalidateQueries({ queryKey: TERMINAL_POSITIONS_QUERY_KEY }, { cancelRefetch: false });

@@ -81,7 +81,7 @@ Treat these as hypotheses to verify with logs and code, not as permission to gue
 Trace one connection end to end using a correlation ID:
 
 1. WebSocket HTTP upgrade at the public gateway.
-2. Origin validation and authentication decision.
+2. Origin validation (the feed itself requires no credentials).
 3. Resolution of query parameter `broker_id`.
 4. Canonical broker ID selected internally.
 5. Processing of `{"type":"subscribe","symbols":["*"]}`.
@@ -134,12 +134,11 @@ The TEST broker discovery response must return the actual public browser-compati
 {
   "broker_id": "TEST",
   "feed_wss_url": "wss://fxtrustsuperbackned.orrnn.com/central-market-data/ws/feed?broker_id=TEST",
-  "feed_status_https_url": "<working TEST feed status URL>",
-  "feed_auth_required": false
+  "feed_status_https_url": "<working TEST feed status URL>"
 }
 ```
 
-If authentication is actually required, set `feed_auth_required: true` and document the exact secure mechanism. Do not put a long-lived secret in a `VITE_*` variable or require it to be bundled into browser JavaScript. Prefer a short-lived, broker-scoped credential issued after manager authentication, or a secure same-origin session/cookie contract.
+The `/ws/feed` endpoint is open: it must accept browser connections with no credentials. Do not reintroduce a shared feed secret, and never require a long-lived secret in a `VITE_*` variable or bundled into browser JavaScript. `broker_id` is a plain routing/logging label, not a credential.
 
 Remove or correct any stale discovery field that causes the frontend to choose `wss://fxtrustbrokerbackend.orrnn.com/ws/feed` when that is not the authoritative TEST feed.
 
@@ -165,7 +164,7 @@ Remove or correct any stale discovery field that causes the frontend to choose `
 
 - If wildcard subscriptions are unsupported, return a clear error and provide the exact required request format.
 - Keep the connection alive with documented ping/pong or heartbeat behavior.
-- Use meaningful WebSocket close codes and a JSON error frame for auth, broker, and subscription failures.
+- Use meaningful WebSocket close codes and a JSON error frame for broker and subscription failures.
 
 ### 5. Provide deterministic initial and live data
 
@@ -225,7 +224,6 @@ Provide one authoritative HTTPS status endpoint for the same central TEST feed. 
 {
   "status": "healthy",
   "broker_id": "TEST",
-  "feed_auth_required": false,
   "upstream_connected": true,
   "last_upstream_tick_at": "<ISO-8601 timestamp>",
   "last_broadcast_tick_at": "<ISO-8601 timestamp>",
@@ -327,14 +325,11 @@ Provide a copy-paste-ready, secret-free frontend configuration:
 VITE_FEED_WS_URL=<final public WebSocket URL>
 VITE_FEED_STATUS_URL=<final authoritative HTTPS status URL>
 VITE_FEED_BROKER_ID=<exact canonical broker ID>
-VITE_FEED_AUTH_REQUIRED=<true-or-false>
-VITE_FEED_SEND_TOKEN=<true-or-false>
 ```
 
 Also provide:
 
-- required query parameters;
-- authentication method and token source, if applicable;
+- required query parameters (`broker_id` label only; the feed takes no credentials);
 - exact subscription message;
 - acknowledgement frame;
 - tick frame/schema;

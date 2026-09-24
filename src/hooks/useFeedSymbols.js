@@ -1,30 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  buildFeedWsUrl,
-  FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE,
-  getFeedWsDisabledMessage,
-  resolveFeedAuthRequired,
-} from '../config/endpoints';
+import { getFeedWsDisabledMessage } from '../config/endpoints';
+import { prepareMarketFeed } from '../services/marketFeed';
 import { fetchSymbolMetadataFallback, getSymbolName } from '../services/symbolMetadata';
 import { extractFeedTicks } from '../utils/feedMessages';
-
-const hasFeedQueryToken = (wsUrl = '') => {
-  const raw = String(wsUrl || '');
-  if (!raw) return false;
-
-  try {
-    const url = new URL(raw, 'http://rtx.local');
-    return Boolean(String(url.searchParams.get('token') || '').trim());
-  } catch {
-    const query = raw.split('?')[1]?.split('#')[0];
-    if (!query) return false;
-    try {
-      return Boolean(String(new URLSearchParams(query).get('token') || '').trim());
-    } catch {
-      return false;
-    }
-  }
-};
 
 export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbols } = {}) => {
   const [initialSymbolList] = useState(() => Array.isArray(initialSymbols) ? initialSymbols : []);
@@ -66,7 +44,8 @@ export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbol
     };
 
     const start = async () => {
-      const fallback = await mergeFallbackSymbols().catch(() => null);
+      await mergeFallbackSymbols().catch(() => null);
+      if (cancelled) return;
       if (symbolSet.size > 0) {
         const nextSymbols = Array.from(symbolSet).sort();
         setSymbols(nextSymbols);
@@ -75,29 +54,26 @@ export const useFeedSymbols = ({ initialSymbols = [], timeoutMs = 3000, onSymbol
         onSymbolsRef.current?.(nextSymbols);
       }
 
-      let wsUrl;
+      let connection;
       try {
-        wsUrl = buildFeedWsUrl();
-      } catch (err) {
-        finish(getFeedWsDisabledMessage(err));
+        connection = await prepareMarketFeed();
+      } catch {
+        finish(getFeedWsDisabledMessage());
         return;
       }
 
-      if (resolveFeedAuthRequired({ feed_auth_required: fallback?.feedAuthRequired }) && !hasFeedQueryToken(wsUrl)) {
-        finish(FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE);
-        return;
-      }
+      if (cancelled) return;
 
       setError('');
       try {
-        ws = new WebSocket(wsUrl);
+        ws = new WebSocket(connection.url);
       } catch {
         finish('Market feed unavailable: websocket connection could not be started.');
         return;
       }
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
+        if (connection.subscribe) ws.send(JSON.stringify({ type: 'subscribe', symbols: ['*'] }));
       };
 
       ws.onmessage = (event) => {

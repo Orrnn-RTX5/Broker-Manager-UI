@@ -35,7 +35,7 @@ const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 5_000;
+const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 50;
 
 
 const pendingAccountDetailsRequests = new Map();
@@ -61,9 +61,9 @@ const requestAccountDetails = async (loginId) => {
   return payload;
 };
 
-const loadAccountDetails = (loginId) => {
+const loadAccountDetails = (loginId, { force = false } = {}) => {
   const key = String(loginId);
-  if (pendingAccountDetailsRequests.has(key)) return pendingAccountDetailsRequests.get(key);
+  if (!force && pendingAccountDetailsRequests.has(key)) return pendingAccountDetailsRequests.get(key);
 
   const request = requestAccountDetails(loginId).finally(() => {
     if (pendingAccountDetailsRequests.get(key) === request) pendingAccountDetailsRequests.delete(key);
@@ -304,7 +304,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     resolve?.(confirmed);
   };
 
-  const [positions, setPositions] = useState(() => initialPositions || []);
+  const [snapshotPositions, setPositions] = useState(() => initialPositions || []);
+  const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
+  const positions = useLivePositions(snapshotPositions, loginId, true, positionsSnapshotRevision);
+  const liveMetrics = useLiveAccountMetrics(loginId);
   const [positionsLoading, setPositionsLoading] = useState(() => initialPositions === undefined);
   const [positionsError, setPositionsError] = useState('');
   const [historyRows, setHistoryRows] = useState([]);
@@ -314,7 +317,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [positionSyncRevision, setPositionSyncRevision] = useState(0);
   const lastPositionsRequestAtRef = useRef(0);
   const pendingPositionsRefreshTimerRef = useRef(null);
-  const [selectedTicketRow, setSelectedTicketRow] = useState(null);
+  const [selectedTicketSnapshot, setSelectedTicketRow] = useState(null);
+  const selectedTicketRow = useLivePositions(selectedTicketSnapshot ? [selectedTicketSnapshot] : [], loginId)[0] || null;
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
   const tradeConfirmationRef = useRef(null);
@@ -565,6 +569,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     };
 
     const unsubscribe = subscribeToPositionSync((event) => {
+      if (event.type === 'position' && !requiresPositionReconciliation(event.payload)) return;
       // The modal already performs its initial account-scoped fetch. A websocket
       // reconnect can happen repeatedly on an unavailable feed, so treating every
       // `connected` snapshot as data invalidation creates a request loop.
@@ -650,32 +655,36 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
     let active = true;
 
+    let detailsRequest = 0;
     const fetchDetails = async ({ silent = false } = {}) => {
+      const requestId = ++detailsRequest;
       if (!silent) setLoading(true);
       if (!silent) setError(null);
 
       try {
-        const details = await loadAccountDetails(loginId);
-        if (active) {
+        const details = await loadAccountDetails(loginId, { force: true });
+        if (active && requestId === detailsRequest) {
           setAccountData(details);
           setError(null);
         }
       } catch (err) {
-        if (active && !silent) setError(err.message);
+        if (active && requestId === detailsRequest && !silent) setError(err.message);
       } finally {
-        if (active && !silent) setLoading(false);
+        if (active && requestId === detailsRequest) setLoading(false);
       }
     };
 
     fetchDetails();
 
-    // The broker currently rejects account-metrics websocket ticket scopes.
-    // Refresh quietly instead of retrying the retired legacy websocket URL.
-    const detailsRefresh = setInterval(() => fetchDetails({ silent: true }), 15_000);
+    // Metrics arrive on the ticket-authenticated stream; this is recovery only.
+    const detailsRefresh = setInterval(() => fetchDetails({ silent: true }), 30_000);
+    const refreshDetails = () => fetchDetails({ silent: true });
+    window.addEventListener('manager:refresh-data', refreshDetails);
 
     return () => {
       active = false;
       clearInterval(detailsRefresh);
+      window.removeEventListener('manager:refresh-data', refreshDetails);
     };
   }, [loginId]);
 
@@ -685,12 +694,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let active = true;
 
     const fetchPositions = async () => {
+      const startedRevision = liveTradingState.snapshot();
       lastPositionsRequestAtRef.current = Date.now();
       setPositionsLoading(true);
       setPositionsError('');
       try {
         let mine = await getAccountPositions(loginId);
         if (!active) return;
+        setPositionsSnapshotRevision(startedRevision);
         setPositions(mine);
 
         if (hasAccountPositionsContinuation(loginId)) {
@@ -779,6 +790,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const rowData = account && typeof account === 'object' ? account : {};
   const fieldSources = [...getAccountDetailSources(accountData), rowData];
   const getFieldValue = (field, fallback = '') => {
+    const metricField = { Balance: 'balance', Credit: 'credit', Equity: 'equity', Margin: 'used_margin', MarginFree: 'free_margin', FreeMargin: 'free_margin', MarginLevel: 'margin_level', Profit: 'floating_pnl' }[field];
+    if (metricField && liveMetrics?.[metricField] != null) return liveMetrics[metricField];
     // A saved empty string is intentional; do not revive an older row value.
     if (accountData?.[field] !== undefined && accountData[field] !== null) return accountData[field];
     return pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
@@ -1257,10 +1270,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                               {Number(pos.priceTp || 0).toFixed(5)}
                             </div>
 
-                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{Number(pos.priceCurrent).toFixed(5)}</div>
+                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{pos.priceCurrent == null ? '—' : pos.priceCurrent}</div>
                             <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-3)]">{Number(pos.swap || 0).toFixed(2)}</div>
                             <div className={`p-2 px-3 text-right border-r border-[var(--border)] font-bold font-mono ${isPos ? 'text-[var(--ok-text)]' : isNeg ? 'text-[var(--danger-text)]' : 'text-[var(--text-3)]'}`}>
-                              {Number(pos.profit || 0).toFixed(2)}
+                              {pos.profit == null ? '—' : Number(pos.profit).toFixed(2)}
                             </div>
                             <div className="p-2 flex items-center justify-center">
                               <button

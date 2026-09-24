@@ -288,32 +288,6 @@ const FEED_BROKER_ID_KEYS = [
   'env.VITE_BROKER_ID',
 ];
 
-const FEED_TOKEN_KEYS = [
-  'feed_token',
-  'feedToken',
-  'feed_broker_token',
-  'feedBrokerToken',
-  'broker_feed_token',
-  'brokerFeedToken',
-  'upstream_ws_token',
-  'upstreamWsToken',
-  'ws_feed_token',
-  'wsFeedToken',
-  'env.FEED_BROKER_TOKEN',
-  'env.VITE_FEED_BROKER_TOKEN',
-  'env.BROKER_FEED_TOKEN',
-  'env.VITE_BROKER_FEED_TOKEN',
-  'env.WS_FEED_TOKEN',
-  'env.VITE_WS_FEED_TOKEN',
-];
-
-const FEED_AUTH_REQUIRED_KEYS = [
-  'feed_auth_required',
-  'feedAuthRequired',
-  'env.FEED_AUTH_REQUIRED',
-  'env.VITE_FEED_AUTH_REQUIRED',
-];
-
 const FEED_STATUS_URL_KEYS = [
   'web_feed_status_https_url',
   'webFeedStatusHttpsUrl',
@@ -327,9 +301,10 @@ const FEED_STATUS_URL_KEYS = [
   'env.VITE_FEED_STATUS_URL',
 ];
 
-export const FEED_WS_AUTH_NOT_CONFIGURED = 'FEED_WS_AUTH_NOT_CONFIGURED';
-export const FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE =
-  'Market feed disabled: configure FEED_BROKER_TOKEN or VITE_FEED_BROKER_TOKEN for this manager UI deployment.';
+export const resolveFeedBrokerId = (brokerInfo = {}) => firstValue(
+  firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS),
+  getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
+);
 
 export class FeedWsAuthConfigError extends Error {
   constructor(message = FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE) {
@@ -375,37 +350,16 @@ export const appendFeedAuthToWsUrl = (wsUrl, auth = {}) => {
 
   try {
     const url = new URL(wsUrl);
-    if (brokerID && !url.searchParams.has('broker_id')) {
-      url.searchParams.set('broker_id', brokerID);
-    }
-    if (token && !url.searchParams.has('token')) {
-      url.searchParams.set('token', token);
+    url.searchParams.delete('token');
+    if (id && !url.searchParams.has('broker_id')) {
+      url.searchParams.set('broker_id', id);
     }
     return url.toString();
   } catch {
-    const params = new URLSearchParams();
-    if (brokerID) params.set('broker_id', brokerID);
-    if (token) params.set('token', token);
-    const glue = String(wsUrl || '').includes('?') ? '&' : '?';
-    return `${wsUrl}${glue}${params.toString()}`;
-  }
-};
-
-const getExistingFeedQueryToken = (wsUrl = '') => {
-  const raw = String(wsUrl || '');
-  if (!raw) return '';
-
-  try {
-    const url = new URL(raw, 'http://rtx.local');
-    return String(url.searchParams.get('token') || '').trim();
-  } catch {
-    const query = raw.split('?')[1]?.split('#')[0];
-    if (!query) return '';
-    try {
-      return String(new URLSearchParams(query).get('token') || '').trim();
-    } catch {
-      return '';
-    }
+    const raw = String(wsUrl || '');
+    if (!id || /[?&]broker_id=/.test(raw)) return wsUrl;
+    const glue = raw.includes('?') ? '&' : '?';
+    return `${wsUrl}${glue}broker_id=${encodeURIComponent(id)}`;
   }
 };
 
@@ -476,10 +430,8 @@ export const buildFeedStatusUrl = () => {
   return toLocalDevFeedProxyUrl(normalizeFeedStatusUrl(wsUrl));
 };
 
-export const getFeedWsDisabledMessage = (error) => (
-  error?.code === FEED_WS_AUTH_NOT_CONFIGURED
-    ? error.message
-    : 'Market feed unavailable: websocket connection could not be started.'
+export const getFeedWsDisabledMessage = () => (
+  'Market feed unavailable: websocket connection could not be started.'
 );
 
 export const buildFeedWsUrl = () => {
@@ -508,7 +460,24 @@ export const buildFeedWsUrl = () => {
   }
 };
 
-const getBaseWsHost = () => trimTrailingSlash(WS_HOST || buildWsHost(API_HOST));
+const getBaseWsHost = () => trimTrailingSlash(
+  getRuntimeConfigValue(['MANAGER_WS_HOST', 'VITE_MANAGER_WS_HOST']) || WS_HOST || buildWsHost(API_HOST)
+);
+
+export const isManagerMarketFeed = () => getRuntimeConfigValue(
+  ['MARKET_DATA_SOURCE', 'VITE_MARKET_DATA_SOURCE'], 'bridge'
+).toLowerCase() === 'manager';
+
+export const buildManagerMarketWsUrl = (ticket) => {
+  if (!ticket) throw new Error('A one-time websocket ticket is required.');
+  updateDynamicEndpoints();
+  const path = buildManagerApiPath('/OnTick', shouldUseManagerProxyPrefix(API_HOST, readBrokerInfo() || {}));
+  const url = new URL(toLocalDevFeedProxyUrl(`${getBaseWsHost()}${path}`, shouldUseManagerDevProxy()));
+  if (url.protocol === 'http:') url.protocol = 'ws:';
+  if (url.protocol === 'https:') url.protocol = 'wss:';
+  url.searchParams.set('ticket', String(ticket));
+  return url.toString();
+};
 
 export const getPositionUpdatesWsPath = () => {
   const configuredPath = getRuntimeConfigValue(

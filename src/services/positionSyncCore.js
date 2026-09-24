@@ -1,6 +1,30 @@
 export const POSITION_SYNC_POLL_MS = 30_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
+// Manager's dual NATS feed deduplicates v1/v2 by event ID. Either envelope
+// may win, so consume their identical domain data with one canonical type.
+export const normalizePositionSyncPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || payload.schema_version !== 2) return payload;
+  const entity = String(payload.entity || '').toLowerCase();
+  const action = String(payload.action || '').toLowerCase();
+  if (!['position', 'state', 'account', 'order', 'deal'].includes(entity) || !/^[a-z_]+$/.test(action)) return payload;
+  const inheritIdentity = (row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    return { ...row, account_login: row.account_login ?? payload.account_login, broker_id: row.broker_id ?? payload.broker_id };
+  };
+  return { ...payload, type: `${entity}_${action}`,
+    data: Array.isArray(payload.data) ? payload.data.map(inheritIdentity) : inheritIdentity(payload.data) };
+};
+
+export const requiresPositionReconciliation = (payload) => {
+  const event = normalizePositionSyncPayload(payload);
+  if (!event || typeof event !== 'object') return false;
+  if (event.type === 'state_changed') return true;
+  if (['position_opened', 'position_closed', 'position_increased', 'position_decreased', 'position_reversed', 'position_modified'].includes(event.type)) return true;
+  const rows = Array.isArray(event.data) ? event.data : [event.data];
+  return event.type === 'position_update' && rows.some(row => row?.update_kind === 'snapshot' || row?.status === 'closed');
+};
+
 export const getWsTicket = (payload) => {
   if (!payload || typeof payload !== 'object') return '';
   const source = payload.data || payload.answer || payload.result || payload;
@@ -45,6 +69,7 @@ export const getPositionSnapshotRows = (payload) => {
 };
 
 export const isPositionMutation = (payload) => {
+  payload = normalizePositionSyncPayload(payload);
   if (!payload || typeof payload !== 'object') return false;
   if (getPositionSnapshotRows(payload)) return true;
   const source = payload.data || payload.position || payload.update || payload;

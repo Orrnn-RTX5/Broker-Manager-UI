@@ -1,4 +1,4 @@
-import { buildFeedStatusUrl } from '../config/endpoints';
+import { buildFeedStatusUrl, isManagerMarketFeed } from '../config/endpoints';
 import { symbolList, symbolsList } from './api';
 import { desktopFetch } from './desktopHttp.js';
 
@@ -58,19 +58,20 @@ export const fetchFeedStatus = async () => {
 };
 
 export const fetchSymbolMetadataFallback = async () => {
-  try {
-    const status = await fetchFeedStatus();
-    const statusSymbols = normalizeStatusSymbols(status);
-    if (statusSymbols.length > 0) {
-      return {
-        source: 'feed-status',
-        symbols: statusSymbols,
-        feedAuthRequired: Boolean(status.feed_auth_required || status.feedAuthRequired),
-        feedStatus: status,
-      };
+  if (!isManagerMarketFeed()) {
+    try {
+      const status = await fetchFeedStatus();
+      const statusSymbols = normalizeStatusSymbols(status);
+      if (statusSymbols.length > 0) {
+        return {
+          source: 'feed-status',
+          symbols: statusSymbols,
+          feedStatus: status,
+        };
+      }
+    } catch {
+      // Fall through to authenticated manager symbol APIs.
     }
-  } catch {
-    // Fall through to authenticated manager symbol APIs.
   }
 
   try {
@@ -79,7 +80,6 @@ export const fetchSymbolMetadataFallback = async () => {
       return {
         source: 'symbol-list',
         symbols: rows,
-        feedAuthRequired: false,
         feedStatus: null,
       };
     }
@@ -93,7 +93,6 @@ export const fetchSymbolMetadataFallback = async () => {
       return {
         source: 'symbols-list',
         symbols: names,
-        feedAuthRequired: false,
         feedStatus: null,
       };
     }
@@ -104,7 +103,6 @@ export const fetchSymbolMetadataFallback = async () => {
   return {
     source: 'none',
     symbols: [],
-    feedAuthRequired: false,
     feedStatus: null,
   };
 };

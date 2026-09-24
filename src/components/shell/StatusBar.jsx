@@ -2,6 +2,7 @@ import { Activity, CircleCheck, Wifi, WifiOff } from 'lucide-react';
 import DesktopAppDownloadButton from '../DesktopAppDownloadButton';
 import DesktopUpdateButton from '../DesktopUpdateButton';
 import { useT } from '../../i18n/index.js';
+import { getRuntimeConfigValue } from '../../config/backendTarget.js';
 
 export default function StatusBar({
   isAuthenticated = false,
@@ -22,7 +23,7 @@ export default function StatusBar({
     <footer className="cc-status-bar" aria-label={t('status.connection')}>
       <div className="cc-status-group">
         <span className="cc-status-version">RTX5 Manager v2.6.0</span>
-        <span><i className="cc-status-dot is-live" />{t('status.production')}</span>
+        <span><i className="cc-status-dot is-live" />{getRuntimeConfigValue(['LOCAL_BACKEND', 'VITE_LOCAL_BACKEND']) === 'true' ? 'Local' : t('status.production')}</span>
         <span><CircleCheck size={11} />{t('status.ready')}</span>
       </div>
 

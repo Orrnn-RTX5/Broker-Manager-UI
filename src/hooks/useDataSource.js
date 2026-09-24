@@ -27,6 +27,8 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
   const intervalRef = useRef(null);
   const fetchFnRef = useRef(fetchFn);
   const fallbackDataRef = useRef(fallbackData);
+  const inFlightRef = useRef(false);
+  const pendingRef = useRef(false);
 
   useEffect(() => {
     fetchFnRef.current = fetchFn;
@@ -34,13 +36,16 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
   }, [fetchFn, fallbackData]);
 
   const load = useCallback(async () => {
+    if (inFlightRef.current) { pendingRef.current = true; return; }
+    inFlightRef.current = true;
     setIsLoading(true);
     setError(null);
 
     // Race the fetch against a timeout
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), FETCH_TIMEOUT_MS)
-    );
+    let timeout;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Request timed out')), FETCH_TIMEOUT_MS);
+    });
 
     try {
       const result = await Promise.race([fetchFnRef.current(), timeoutPromise]);
@@ -52,7 +57,10 @@ const useDataSource = (fetchFn, fallbackData, options = {}) => {
       setIsFallback(true);
       setError(err.message);
     } finally {
+      clearTimeout(timeout);
+      inFlightRef.current = false;
       setIsLoading(false);
+      if (pendingRef.current) { pendingRef.current = false; void load(); }
     }
   }, []);
 

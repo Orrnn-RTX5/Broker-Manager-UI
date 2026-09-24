@@ -17,7 +17,7 @@ export const readStoredTerminalPage = () => {
       || (typeof localStorage !== 'undefined' ? localStorage.getItem(TERMINAL_STORAGE_KEY) : null);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+    if (parsed && Array.isArray(parsed.rows)) {
       memoryTerminalCache = parsed;
       return parsed;
     }
@@ -29,7 +29,7 @@ export const readStoredTerminalPage = () => {
 
 export const writeStoredTerminalPage = (page) => {
   try {
-    if (!page || !Array.isArray(page.rows) || page.rows.length === 0) return;
+    if (!page || !Array.isArray(page.rows)) return;
     memoryTerminalCache = page;
     const payload = JSON.stringify({
       rows: page.rows,

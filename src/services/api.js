@@ -179,8 +179,7 @@ export const normalizeOrderRow = (p = {}) => {
   else if (p.type === 0 || p.cmd === 0) type = 'buy';
   else if (p.type === 1 || p.cmd === 1) type = 'sell';
 
-  let volume = p.volume !== undefined ? p.volume : (p.lots !== undefined ? p.lots : 0);
-  if (volume >= 100) volume = volume / 10000;
+  const volume = normalizeLots(p);
 
   return {
     ticket: p.ticket || p.position || 0,
@@ -238,6 +237,7 @@ const ACCOUNT_DETAILS_CACHE_TTL_MS = 30_000;
 let accountDetailsFirstPage = null;
 let accountDetailsFirstPageAt = 0;
 let accountDetailsFirstPagePromise = null;
+let accountDetailsCacheGeneration = 0;
 
 const isDefaultAccountDetailsPage = (params = {}) => {
   const offset = Number(params.offset || 0);
@@ -259,7 +259,7 @@ const readStoredAccountDetailsPage = () => {
 };
 
 const writeStoredAccountDetailsPage = (page) => {
-  if (!page?.rows?.length) return;
+  if (!Array.isArray(page?.rows)) return;
   try {
     sessionStorage.setItem(ACCOUNT_DETAILS_CACHE_KEY, JSON.stringify({
       rows: page.rows,
@@ -466,24 +466,25 @@ export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
   }
   if (accountDetailsFirstPagePromise) return accountDetailsFirstPagePromise;
 
-  accountDetailsFirstPagePromise = getPaged(
+  const generation = accountDetailsCacheGeneration;
+  const request = getPaged(
     '/AccountDetailsMany',
     { ...params, limit: params.limit || 30, offset: 0 },
     (row) => row,
     ['accounts'],
     options,
   ).then((page) => {
-    if (page?.rows?.length) {
+    if (generation === accountDetailsCacheGeneration && Array.isArray(page?.rows)) {
       accountDetailsFirstPage = page;
       accountDetailsFirstPageAt = Date.now();
       writeStoredAccountDetailsPage(page);
     }
     return page;
   }).finally(() => {
-    accountDetailsFirstPagePromise = null;
+    if (accountDetailsFirstPagePromise === request) accountDetailsFirstPagePromise = null;
   });
-
-  return accountDetailsFirstPagePromise;
+  accountDetailsFirstPagePromise = request;
+  return request;
 };
 
 export const getClientsPage = async (params = {}, options = {}) => {
@@ -1187,9 +1188,9 @@ const SYMBOL_MANAGEMENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let symbolManagementCache = null;
 let symbolManagementRequest = null;
 let symbolManagementProgress = null;
+let symbolManagementGeneration = 0;
 const symbolManagementProgressListeners = new Set();
 let symbolManagementScope = '';
-let symbolManagementGeneration = 0;
 const getSymbolManagementScope = () => {
   updateDynamicEndpoints();
   const claims = authService.getSessionClaims();
@@ -1257,9 +1258,9 @@ export const peekSymbolManagementData = () => {
 export const invalidateSymbolManagementData = () => {
   symbolManagementGeneration += 1;
   symbolManagementRequest = null;
-  symbolManagementProgressListeners.clear();
   symbolManagementCache = null;
   symbolManagementProgress = null;
+  symbolManagementProgressListeners.clear();
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(SYMBOL_MANAGEMENT_CACHE_KEY);
@@ -1300,10 +1301,13 @@ const fetchSymbolManagementData = async () => {
     },
     cachedSymbols: peekSymbolManagementData()?.symbols || [],
   });
-  if (!isCurrent()) throw new Error('Symbol load was superseded. Please refresh.');
+  // A superseded load settles quietly: it must not replace the fresh request's
+  // cache, progress or listeners.
+  if (!isCurrent()) return data;
   // Feed-only records are valid catalogue entries with unavailable settings.
-  // Failures remain stale, so the next visit retries rather than caching errors.
-  if (!data.error) writeStoredSymbolManagementData(data);
+  // Failures and incomplete (partial) responses remain stale, so the next
+  // visit retries rather than caching them as a fresh, complete entry.
+  if (!data.error && data.symbols.every(row => !row.__managementPartial)) writeStoredSymbolManagementData(data);
   else symbolManagementCache = { ...data, savedAt: 0, scope: symbolManagementScope };
   return data;
 };
@@ -1342,6 +1346,26 @@ export const symbolManagementList = ({ force = false, onProgress } = {}) => {
 };
 
 export const preloadSymbolManagementData = () => symbolManagementList().catch(() => undefined);
+
+// Query-cache invalidation alone cannot bypass these module/storage caches.
+// Detach old in-flight work before any caller starts its authoritative reload.
+export const invalidateRealtimeCaches = (entity = '') => {
+  advanceRealtimeCacheRevision();
+  accountDetailsCacheGeneration += 1;
+  accountDetailsFirstPage = null;
+  accountDetailsFirstPageAt = 0;
+  accountDetailsFirstPagePromise = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(ACCOUNT_DETAILS_CACHE_KEY);
+      sessionStorage.removeItem('rtx5_sidebar_accounts_cache_v2');
+    }
+  } catch { /* Storage is optional; in-memory generations still invalidate. */ }
+  invalidatePositionsCache();
+  if (!entity || ['resync', 'instruments', 'symbols', 'groups', 'group_symbol_settings', 'brokers'].includes(entity)) {
+    invalidateSymbolManagementData();
+  }
+};
 export const symbolList = async (options) => (await symbolManagementList(options)).symbols;
 
 const symbolMutation = (request) => request.then((result) => {
@@ -1406,6 +1430,7 @@ export default {
   hasAccountPositionsContinuation,
   completeAccountPositions,
   invalidateGlobalPositionsCache,
+  invalidateRealtimeCaches,
   peekStoredPositionsDataset,
   clearPositionsStorageCache,
   getTradingAccountsAnalytics,

@@ -70,7 +70,18 @@ Supported desktop fields include `desktop_backend_url`, `desktop_api_url`, `loca
 
 `domain` is treated as the UI host only. It is not used as a backend API URL.
 
-### Env Modes
+### Direct market data through the manager session
+
+For a broker whose LP feed publishes ticks through the manager backend, set
+`VITE_MARKET_DATA_SOURCE=manager`. The UI requests a single-use `/OnTick` ticket
+from `/api/v1/manager/ws-ticket` using the logged-in manager session, then opens
+`/manager/OnTick` (or `/OnTick` when the manager prefix is disabled). Each reconnect
+requests a new ticket. No bridge feed token is required. Symbol metadata comes
+from the manager APIs in this mode, rather than the separate bridge status API.
+
+The default `bridge` mode continues to use the configured `/ws/feed` connection.
+
+### Build modes
 
 The manager app's `dev`, `build`, and Electron scripts all load `.env.terminal` (`vite --mode terminal`). Keep the active broker in that one file. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. If the new feed requires a token, set `VITE_FEED_BROKER_TOKEN`, `VITE_FEED_AUTH_REQUIRED=true`, and `VITE_FEED_SEND_TOKEN=true` in the same file.
 

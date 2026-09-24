@@ -8,6 +8,7 @@ import {
   getPositionSnapshotRows,
   getPositionUpdateLogin,
   isPositionMutation,
+  requiresPositionReconciliation,
 } from './positionSyncCore';
 
 export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, getPositionSnapshotRows, getPositionUpdateLogin, isPositionMutation };
@@ -38,6 +39,7 @@ positionSync.subscribe((event) => {
   });
 });
 
+positionSync.subscribe((event) => { if (event.payload) liveTradingState.ingest(event.payload); });
 export const startPositionSync = () => positionSync.start();
 export const stopPositionSync = () => {
   sessionGeneration += 1;

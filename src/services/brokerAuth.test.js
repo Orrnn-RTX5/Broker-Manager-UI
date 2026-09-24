@@ -14,6 +14,25 @@ import {
 } from './brokerAuth.js';
 import { normalizeBrokerInfo } from '../config/backendTarget.js';
 
+test('local fxtrust discovery preserves its real identity and loopback endpoints', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    LOCAL_BACKEND: 'true', BROKER_ID: 'fxtrust', BACKEND_TARGET: 'desktop',
+    API_HOST: 'http://127.0.0.1:8091', API_HOST_EXT: 'http://127.0.0.1:8091',
+    FEED_WS_URL: 'ws://127.0.0.1:8094/ws/feed',
+    DEFAULT_MT5_SERVER: '127.0.0.1:8091',
+  };
+  globalThis.fetch = async () => ({ ok: true, text: async () => JSON.stringify([
+    { broker_id: 'fxtrust', broker_name: 'FX Trust Local', server: 'broker-server-3' },
+  ]) });
+  const brokers = await fetchBrokerList();
+  assert.equal(brokers.length, 1);
+  assert.equal(brokers[0].broker_id, 'fxtrust');
+  assert.equal(brokers[0].name, 'FX Trust Local');
+  assert.equal(brokers[0].backend_url, 'http://127.0.0.1:8091');
+  assert.equal(brokers[0].feed_ws_url, 'ws://127.0.0.1:8094/ws/feed');
+  assert.equal(getBrokerSelectionId(brokers[0]), 'broker-server-3');
+});
+
 const createStorage = () => {
   const store = new Map();
   return {
@@ -41,6 +60,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete globalThis.__RTX_RUNTIME_CONFIG__;
   delete globalThis.fetch;
   delete globalThis.sessionStorage;
   delete globalThis.localStorage;
@@ -149,6 +169,18 @@ test('getBrokerDisplayServerName prefers the real GTA server address over the op
 
   assert.equal(getBrokerDisplayServerName(broker), '103.91.186.142');
   assert.equal(getBrokerSelectionId(broker), 'broker-server-2');
+});
+
+test('server display hides opaque handles without changing the login selection', () => {
+  const broker = {
+    broker_id: 'trivanta-markets',
+    broker_name: 'Trivanta Markets',
+    server: 'broker-server-3',
+    default_mt5_server: 'broker-server-3',
+    backend_url: 'https://trivanta.orrnn.com',
+  };
+  assert.equal(getBrokerDisplayServerName(broker), 'trivanta.orrnn.com');
+  assert.equal(getBrokerSelectionId(broker), 'broker-server-3');
 });
 
 test('resolveDefaultBrokerSelectionId prefers broker matching the current manager hostname', () => {

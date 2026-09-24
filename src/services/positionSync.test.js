@@ -76,6 +76,7 @@ test('position sync obtains a fresh ticket after every reconnect', async () => {
 });
 
 test('position event parsing accepts documented lifecycle actions and rejects control frames', () => {
+  assert.equal(isPositionMutation({ type: 'state_changed', data: { account_login: 1001, entity: 'accounts' } }), true);
   assert.equal(getWsTicket({ answer: { ticket: 'abc' } }), 'abc');
   assert.equal(isPositionMutation({ action: 'reversed' }), true);
   assert.equal(isPositionMutation({ type: 'heartbeat' }), false);
@@ -224,4 +225,38 @@ test('position event login extraction handles nested broker envelopes', () => {
   assert.equal(getPositionUpdateLogin({ data: { data: { account_login: '200008' } } }), '200008');
   assert.equal(getPositionUpdateLogin({ payload: { position: { accountLogin: 200003 } } }), 200003);
   assert.equal(getPositionUpdateLogin({ type: 'heartbeat' }), undefined);
+});
+
+test('a v2-first close reaches the store and reconciliation even when its v1 twin is deduplicated', async () => {
+  const state = new LiveTradingState();
+  const socket = new FakeSocket('ws://broker.test');
+  const received = [];
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: 'one-use' }), createSocket: () => socket, buildUrl: () => socket.url,
+    setIntervalFn: () => 1, clearIntervalFn: () => {},
+  });
+  client.subscribe(event => { received.push(event); if (event.payload) state.ingest(event.payload); });
+  client.start(); await Promise.resolve();
+  const row = { login: '1001', position: 42, state_version: '1', volume: 1 };
+  socket.onmessage({ data: JSON.stringify({ schema_version: 2, event_id: 'closed-event', broker_id: 'broker-a',
+    entity: 'position', action: 'closed', account_login: 1001,
+    data: { ticket: 42, state_version: 2, status: 'closed', side: 'buy' } }) });
+  assert.equal(received.length, 1);
+  assert.equal(received[0].payload.type, 'position_closed');
+  assert.equal(requiresPositionReconciliation(received[0].payload), true);
+  assert.deepEqual(state.overlayRows([row]), []);
+  // Delayed database page and price packets cannot bring the ticket back.
+  socket.onmessage({ data: JSON.stringify({ type: 'position_update', data: [{ account_login: 1001, ticket: 42,
+    update_kind: 'pnl', state_version: '1', profit: 10 }] }) });
+  assert.deepEqual(state.overlayRows([row]), []);
+  client.stop();
+});
+
+test('lifecycle-only reconciliation accepts both contracts and does not poll for every tick', () => {
+  const tick = { type: 'position_update', data: [{ account_login: 1001, ticket: 42, update_kind: 'pnl', profit: 2 }] };
+  assert.equal(requiresPositionReconciliation(tick), false);
+  assert.equal(requiresPositionReconciliation({ type: 'position_closed', data: { ticket: 42 } }), true);
+  assert.equal(requiresPositionReconciliation({ schema_version: 2, entity: 'position', action: 'closed', data: { ticket: 42 } }), true);
+  assert.equal(requiresPositionReconciliation({ schema_version: 2, entity: 'state', action: 'changed', data: { entity: 'accounts' } }), true);
+  assert.equal(isPositionMutation({ schema_version: 2, entity: 'state', action: 'changed', data: { entity: 'accounts' } }), true);
 });

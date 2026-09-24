@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_PAGE_LIMIT } from '../utils/pagination';
 import { getPagedRows } from '../utils/pagedQueryState.js';
+import { useLiveAccountRows } from './useLiveTrading.js';
+import { liveTradingState } from '../services/liveTradingState.js';
 
 const useDebouncedValue = (value, delayMs) => {
   const [debounced, setDebounced] = useState(value);
@@ -53,7 +55,11 @@ export default function usePagedData({
 
   const query = useQuery({
     queryKey: [...queryKey, pagedParams],
-    queryFn: ({ signal }) => queryFn(pagedParams, keepRunningOnUnmount ? {} : { signal }),
+    queryFn: async ({ signal }) => {
+      const liveRevision = liveTradingState.snapshot();
+      const data = await queryFn(pagedParams, keepRunningOnUnmount ? {} : { signal });
+      return { ...data, liveRevision };
+    },
     enabled,
     staleTime,
     refetchInterval,
@@ -66,7 +72,7 @@ export default function usePagedData({
     meta,
   });
 
-  const rows = getPagedRows(query.data, enabled);
+  const rows = useLiveAccountRows(getPagedRows(query.data, enabled));
   const total = enabled ? query.data?.total ?? null : null;
   const hasMore = enabled ? Boolean(query.data?.hasMore) : false;
 

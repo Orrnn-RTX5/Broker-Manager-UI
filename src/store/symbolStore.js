@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
-  buildFeedWsUrl,
   getFeedWsDisabledMessage,
+  isManagerMarketFeed,
 } from '../config/endpoints';
+import { getRuntimeConfigValue } from '../config/backendTarget';
+import { prepareMarketFeed } from '../services/marketFeed';
 import {
   fetchSymbolMetadataFallback,
+  fetchFeedStatus,
   getSymbolName,
   SYMBOL_METADATA_FALLBACK_REASON,
 } from '../services/symbolMetadata';
@@ -140,6 +143,7 @@ const buildFallbackSymbols = (rows = [], staleReason = '', currentSymbols = {}) 
 
 let symbolFallbackPromise = null;
 let reconnectTimer = null;
+let feedGeneration = 0;
 let pendingFeedTicks = new Map();
 let pendingFeedSocket = null;
 let tickBatchTimer = null;
@@ -238,6 +242,29 @@ const useSymbolStore = create(
       isConnected: false,
       isConnecting: false,
       feedError: '',
+      feedSymbolNames: null,
+
+      refreshFeedInventory: async (socket) => {
+        if (!isManagerMarketFeed()) return;
+        try {
+          const status = await fetchFeedStatus();
+          const brokerId = getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID']);
+          // Only a successful inventory for this broker may prune saved quotes.
+          if (get().ws !== socket || !brokerId || status.broker_id !== brokerId
+            || !Array.isArray(status.available_symbols) || status.available_symbols.length === 0) return;
+          const names = status.available_symbols.filter((name) => typeof name === 'string' && name.trim());
+          if (names.length === 0) return;
+          const available = new Set(names);
+          set((state) => {
+            const symbols = Object.fromEntries(Object.entries(state.symbols).filter(([name, quote]) => (
+              available.has(name) || hasCurrentSessionLiveTick(quote)
+            )));
+            return { symbols, symbolMetadata: buildSymbolMetadata(symbols), feedSymbolNames: names };
+          });
+        } catch {
+          // An unavailable inventory must not erase quotes or interrupt streaming.
+        }
+      },
 
       upsertSymbols: (dataArray) => {
         set((state) => {
@@ -335,7 +362,11 @@ const useSymbolStore = create(
                 : {};
             }
 
-            const nextSymbols = buildFallbackSymbols(result.symbols, reason, state.symbols);
+            const available = state.feedSymbolNames ? new Set(state.feedSymbolNames) : null;
+            const rows = available
+              ? result.symbols.filter((row) => available.has(getSymbolName(row)))
+              : result.symbols;
+            const nextSymbols = buildFallbackSymbols(rows, reason, state.symbols);
             return {
               symbols: nextSymbols,
               symbolMetadata: buildSymbolMetadata(nextSymbols),
@@ -351,8 +382,17 @@ const useSymbolStore = create(
         return symbolFallbackPromise;
       },
 
+      disconnectWebSocket: () => {
+        feedGeneration += 1;
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        const socket = get().ws;
+        set((state) => ({ ...markCachedSymbolData(state, REHYDRATED_SYMBOL_REASON), ws: null, isConnected: false, isConnecting: false, feedSymbolNames: null }));
+        socket?.close();
+      },
+
       initWebSocket: () => {
-        if (reconnectTimer) return;
+        if (reconnectTimer || get().isConnecting) return;
         const currentSocket = get().ws;
         if (isActiveFeedSocket(currentSocket)) return;
 
@@ -360,7 +400,9 @@ const useSymbolStore = create(
           set({ ws: null, isConnected: false, isConnecting: false });
         }
 
-        const connect = () => {
+        const generation = feedGeneration;
+        const connect = async () => {
+          if (generation !== feedGeneration) return;
           const existingSocket = get().ws;
           if (isActiveFeedSocket(existingSocket)) return;
 
@@ -370,11 +412,13 @@ const useSymbolStore = create(
 
           set({ isConnecting: true });
 
-          let wsUrl;
+          let connection;
           try {
-            wsUrl = buildFeedWsUrl();
-          } catch (err) {
-            const message = getFeedWsDisabledMessage(err);
+            connection = await prepareMarketFeed();
+            if (generation !== feedGeneration) return;
+          } catch {
+            if (generation !== feedGeneration) return;
+            const message = getFeedWsDisabledMessage();
             set((state) => ({
               ...markCachedSymbolData(state, message),
               isConnected: false,
@@ -383,6 +427,12 @@ const useSymbolStore = create(
               feedError: message,
             }));
             get().loadSymbolFallback(message, { setFeedError: true });
+            if (!reconnectTimer) {
+              reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                connect();
+              }, WS_RECONNECT_DELAY_MS);
+            }
             return;
           }
 
@@ -407,7 +457,7 @@ const useSymbolStore = create(
           };
 
           try {
-            ws = new WebSocket(wsUrl);
+            ws = new WebSocket(connection.url);
           } catch {
             const message = 'Market feed unavailable: websocket connection could not be started.';
             set((state) => ({
@@ -465,7 +515,8 @@ const useSymbolStore = create(
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
             set({ isConnected: true, isConnecting: false, feedError: '' });
-            ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
+            get().refreshFeedInventory(ws);
+            if (connection.subscribe) ws.send(JSON.stringify({ type: 'subscribe', symbols: ["*"] }));
             scheduleMetadataFallback();
           };
 
