@@ -11,7 +11,7 @@ import {
   requiresPositionReconciliation,
 } from './positionSyncCore';
 
-export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, getPositionSnapshotRows, getPositionUpdateLogin, isPositionMutation };
+export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, getPositionSnapshotRows, getPositionUpdateLogin, isPositionMutation, requiresPositionReconciliation };
 
 const positionSync = new PositionSyncClient({
   requestTicket: () => apiClient.post('/api/v1/manager/ws-ticket', { path: getPositionUpdatesWsPath() }),

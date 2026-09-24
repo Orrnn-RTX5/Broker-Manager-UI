@@ -102,7 +102,7 @@ function TerminalDock({ isAuthenticated = false }) {
     document.addEventListener('pointerdown', clearSelectionOutsideTerminal, true);
     return () => document.removeEventListener('pointerdown', clearSelectionOutsideTerminal, true);
   }, [selectedTradeKey]);
-  const { rows, page, offset, hasMore, total, isLoading, isFetching, isError, refetch, nextPage, prevPage } = usePagedData({
+  const { rows: snapshotRows, data, page, offset, hasMore, total, isLoading, isFetching, isError, refetch, nextPage, prevPage } = usePagedData({
     queryKey: TERMINAL_POSITIONS_QUERY_KEY,
     queryFn: fetchTrades,
     params: TERMINAL_POSITIONS_PARAMS,
