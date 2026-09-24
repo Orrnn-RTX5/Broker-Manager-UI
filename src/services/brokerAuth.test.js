@@ -44,6 +44,7 @@ afterEach(() => {
   delete globalThis.fetch;
   delete globalThis.sessionStorage;
   delete globalThis.localStorage;
+  delete globalThis.__RTX_RUNTIME_CONFIG__;
 });
 
 test('fetchBrokerList uses the v2 public broker discovery contract and preserves opaque server handles', async () => {
@@ -76,11 +77,44 @@ test('fetchBrokerList uses the v2 public broker discovery contract and preserves
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, 'https://superbackend.orrnn.com/api/v2/broker/servers');
-  assert.equal(fetchCalls[0].options.credentials, 'omit');
+  assert.equal(fetchCalls[0].options.credentials, 'same-origin');
   assert.equal(brokers.length, 1);
   assert.equal(brokers[0].broker_id, 'testorrnn');
   assert.equal(brokers[0].server, 'broker-server-42');
   assert.equal(getBrokerSelectionId(brokers[0]), 'broker-server-42');
+});
+
+test('an empty discovery response does not silently select a different broker', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = { BROKER_ID: 'orrnn' };
+  const brokers = await fetchBrokerList();
+  assert.deepEqual(brokers, []);
+  const selection = resolveBrokerSelection(brokers, { runtimeBrokerId: 'orrnn' });
+  assert.equal(selection.brokerId, '');
+  assert.equal(selection.source, 'runtime-broker-missing');
+});
+
+test('Orrnn discovery keeps its server handle while the env supplies public endpoints', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    BROKER_ID: 'orrnn',
+    API_HOST: 'https://service.orrnn.com',
+    WS_HOST: 'wss://service.orrnn.com',
+  };
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify([{
+      broker_id: 'Orrnn',
+      broker_name: 'ORRNN',
+      server: '51.195.188.172:443',
+      server_url: 'https://51.195.188.172:443',
+      feed_ws_url: 'ws://51.195.188.172/ws/feed',
+    }]),
+  });
+
+  const brokers = await fetchBrokerList();
+  const selection = resolveBrokerSelection(brokers, { runtimeBrokerId: 'orrnn' });
+  assert.equal(selection.brokerId, '51.195.188.172:443');
+  assert.equal(selection.broker.backend_url, 'https://service.orrnn.com');
 });
 
 test("broker discovery uses Vite's same-origin proxy when enabled", () => {
@@ -424,6 +458,7 @@ test('loginManager sends the selected opaque server handle to the broker backend
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, 'https://testbrokerbackend.orrnn.com/api/v1/manager/auth/login');
+  assert.equal(fetchCalls[0].options.credentials, 'same-origin');
   assert.deepEqual(JSON.parse(fetchCalls[0].options.body), {
     user: '1001',
     password: 'secret',

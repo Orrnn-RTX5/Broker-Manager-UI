@@ -77,7 +77,7 @@ const RestrictedAccountsPage = () => {
               {filtered.length > 0 && (
                 filtered.map((row, idx) => {
                   const Flag = ({ val }) => (
-                    <span className={`ui-badge text-[10px] px-1 py-0 ${val ? 'ui-badge-danger' : 'ui-badge-neutral'}`}>
+                    <span className={`ui-status ${val ? 'ui-status-danger' : 'ui-status-neutral'}`}>
                       {val ? 'YES' : 'no'}
                     </span>
                   );

@@ -59,7 +59,7 @@ const DealsPage = () => {
       <div className="deals-header flex items-center justify-between gap-2">
         <div className="deals-heading min-w-0">
           <div className="flex flex-col">
-            <h1 className="font-semibold deals-title" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '15px' }}>Dealing</h1>
+            <h1 className="font-semibold deals-title" style={{ color: 'var(--text)', fontSize: '11px', lineHeight: '15px' }}>Dealing</h1>
             <p className="deals-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '13px', marginTop: '4px' }}>Right-click for actions · Double-click a row to update</p>
           </div>
         </div>

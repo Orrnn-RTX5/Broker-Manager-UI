@@ -219,7 +219,7 @@ export default {
   'Open Owner Console': 'मालिक कंसोल खोलें',
   'Opened Orders': 'खुले ऑर्डर',
   'Operational footprint': 'क्षेत्रीय उपस्थिति',
-  'GLOBAL COVERAGE': 'वैश्विक उपस्थिति',
+  'Global coverage': 'वैश्विक उपस्थिति',
   'Regional presence': 'क्षेत्रीय उपस्थिति',
   'Order': 'ऑर्डर',
   'Order comment (optional)...': 'ऑर्डर टिप्पणी (वैकल्पिक)...',

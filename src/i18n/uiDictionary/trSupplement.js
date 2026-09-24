@@ -80,7 +80,7 @@ export default {
   'Online Users by Build': 'Sürüme göre çevrimiçi kullanıcılar', 'Online Users by Country': 'Ülkeye göre çevrimiçi kullanıcılar',
   'Online Users by Group': 'Gruba göre çevrimiçi kullanıcılar', 'Online Users by Type': 'Türe göre çevrimiçi kullanıcılar',
   'Open Owner Console': 'Sahip konsolunu aç', 'Opened Orders': 'Açık emirler', 'Operational footprint': 'Faaliyet alanı',
-  'GLOBAL COVERAGE': 'KÜRESEL KAPSAM', 'Regional presence': 'Bölgesel varlık', 'Order': 'Emir',
+  'Global coverage': 'Küresel kapsam', 'Regional presence': 'Bölgesel varlık', 'Order': 'Emir',
   'Order comment (optional)...': 'Emir açıklaması (isteğe bağlı)...', 'Order Parameters': 'Emir parametreleri',
   'Order State': 'Emir durumu', 'Orders by Sentiment': 'Yöne göre emirler', 'Orders by Symbol': 'Enstrümana göre emirler',
   'Override': 'Özel ayar', 'Override rate': 'Özel oran', 'Owner console views': 'Sahip konsolu görünümleri',

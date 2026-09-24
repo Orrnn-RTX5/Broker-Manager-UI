@@ -159,7 +159,7 @@ const IBClientLinker = ({ ibLogin, onClose, onSuccess }) => {
                       </span>
                     </td>
                     <td className="tabular">{client.ib_login}</td>
-                    <td><span className="ui-badge ui-badge-neutral text-[9px]">{client.link_source || '-'}</span></td>
+                    <td><span className="ui-status ui-status-neutral">{client.link_source || '-'}</span></td>
                     <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(client.linked_at)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={() => handleUnlink(client)} disabled={saving} title="Unlink client">

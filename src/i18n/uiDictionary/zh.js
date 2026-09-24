@@ -17,7 +17,6 @@ export default {
   "Account Details": "账户详情",
   "Account Equity (USD)": "账户净值 (USD)",
   "Account financial snapshot": "账户财务快照",
-  "Account Groups": "账户组",
   "Account information": "账户信息",
   "Account Limit Status": "账户限额状态",
   "Account limits": "账户限额",

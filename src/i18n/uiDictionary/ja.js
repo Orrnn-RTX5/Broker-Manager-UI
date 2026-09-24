@@ -9,7 +9,7 @@ export default {
   "Account detail sections": "口座詳細セクション",
   "Account Details": "口座詳細",
   "Account financial snapshot": "口座財務スナップショット",
-  "Account Groups": "口座グループ",
+  "Groups": "グループ",
   "Account information": "口座情報",
   "Account Limit Status": "口座上限状態",
   "Account limits": "口座上限",

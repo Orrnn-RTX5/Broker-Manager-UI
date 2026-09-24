@@ -1,7 +1,6 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useI18nStore } from '../../../i18n/index.js';
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   User, Shield, Laptop, Smartphone, Monitor, Clock,
   ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw
@@ -9,44 +8,22 @@ import {
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getAccountsOnlinePage } from '../../../services/api';
+import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../../services/onlineUsersSnapshot.js';
 import GridLoadingState from '../../../components/GridLoadingState';
 
-const ACCOUNTS_ONLINE_SNAPSHOT_KEY = 'rtx5_accounts_online_snapshot_v1';
-
-const getInitialAccountsOnlineSnapshot = () => {
-  try {
-    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(ACCOUNTS_ONLINE_SNAPSHOT_KEY) : null;
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-      return parsed;
-    }
-  } catch {
-    // Ignore storage parse errors
-  }
-  return undefined;
-};
-
-const saveAccountsOnlineSnapshot = (data) => {
-  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
-  try {
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem(ACCOUNTS_ONLINE_SNAPSHOT_KEY, JSON.stringify({
-        rows: data.rows.slice(0, 30),
-        total: data.total ?? data.rows.length,
-        hasMore: Boolean(data.hasMore),
-      }));
-    }
-  } catch {
-    // Storage full or private mode
-  }
-};
-
+// toLocaleString builds a new formatter per call; reuse one per language.
+const dateTimeFormatters = new Map();
 const formatDateTime = (ts, language) => {
   if (!ts) return '-';
-  return new Date(ts * 1000).toLocaleString(language === 'en' ? 'en-US' : language, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
+  const locale = language === 'en' ? 'en-US' : language;
+  let formatter = dateTimeFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    dateTimeFormatters.set(locale, formatter);
+  }
+  return formatter.format(new Date(ts * 1000));
 };
 
 const formatAge = (seconds) => {
@@ -69,21 +46,11 @@ const SortIcon = ({ col, sortCol, sortDir }) => {
 
 const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const language = useI18nStore((state) => state.language);
-  const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('accounts-online');
   const pageSize = 30;
-
-  const isDefaultParams = !search && sortCol === 'login' && sortDir === 'asc';
-
-  const initialData = useMemo(() => {
-    if (!isDefaultParams) return undefined;
-    const cached = queryClient.getQueryData(['accounts-online', 'page', { search: '', sort_by: 'login', sort_dir: 'asc', limit: 30, offset: 0 }]);
-    if (cached?.rows?.length > 0) return cached;
-    return getInitialAccountsOnlineSnapshot();
-  }, [isDefaultParams, queryClient]);
 
   const params = useMemo(() => ({
     search,
@@ -112,15 +79,13 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: 30_000,
-    initialData,
-    placeholderData: (previousData) => previousData || initialData || getInitialAccountsOnlineSnapshot(),
+    // Every page and search renders from the shared online-users snapshot on
+    // the first frame; a stale snapshot refreshes in the background on mount.
+    initialDataForParams: peekOnlineUsersPage,
+    initialDataUpdatedAt: peekOnlineUsersUpdatedAt,
+    refetchOnMount: true,
+    placeholderData: (previousData) => previousData,
   });
-
-  useEffect(() => {
-    if (rows && rows.length > 0 && isDefaultParams && offset === 0) {
-      saveAccountsOnlineSnapshot({ rows, total, hasMore });
-    }
-  }, [rows, total, hasMore, isDefaultParams, offset]);
 
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);
@@ -262,12 +227,12 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     {row.isAdmin ? (
-                      <span className="ui-badge ui-badge-accent">
+                      <span className="ui-status ui-status-info">
                         <Shield size={10} className="mr-1" />
                         ADMIN
                       </span>
                     ) : (
-                      <span className="ui-badge ui-badge-soft">USER</span>
+                      <span className="ui-status ui-status-neutral">USER</span>
                     )}
                   </td>
                   <td style={{ textAlign: 'center' }}>

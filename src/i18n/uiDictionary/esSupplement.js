@@ -77,7 +77,7 @@ export default {
   'Online Users by Build': 'Usuarios conectados por versión', 'Online Users by Country': 'Usuarios conectados por país',
   'Online Users by Group': 'Usuarios conectados por grupo', 'Online Users by Type': 'Usuarios conectados por tipo',
   'Open Owner Console': 'Abrir consola del propietario', 'Opened Orders': 'Órdenes abiertas', 'Operational footprint': 'Presencia operativa',
-  'GLOBAL COVERAGE': 'COBERTURA GLOBAL', 'Regional presence': 'Presencia regional', 'Order': 'Orden',
+  'Global coverage': 'Cobertura global', 'Regional presence': 'Presencia regional', 'Order': 'Orden',
   'Order comment (optional)...': 'Comentario de la orden (opcional)...', 'Order Parameters': 'Parámetros de la orden',
   'Order State': 'Estado de la orden', 'Orders by Sentiment': 'Órdenes por dirección', 'Orders by Symbol': 'Órdenes por instrumento',
   'Override': 'Configuración individual', 'Override rate': 'Tarifa individual', 'Owner console views': 'Vistas de la consola del propietario',

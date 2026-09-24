@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import {
   Activity, ArrowUpDown, BarChart2, ChevronDown, ClipboardList, Copy,
   Expand, Folder, FolderOpen, Gavel, Handshake, History, Info, LayoutGrid,
-  Keyboard, MoreHorizontal, Plus, Printer, RefreshCw, RotateCcw, Search, Settings2,
+  Keyboard, Plus, Printer, RefreshCw, RotateCcw, Search, Settings2,
   PanelRightOpen, Shield, TrendingUp, User, Users, X,
 } from 'lucide-react';
 
@@ -46,7 +46,6 @@ function ActionMenu({
   id,
   label,
   title,
-  icon: TriggerIcon = MoreHorizontal,
   actions,
   pathname,
   onPrefetch,
@@ -81,7 +80,6 @@ function ActionMenu({
           onOpenChange(isOpen ? null : id);
         }}
       >
-        {createElement(TriggerIcon, { size: 16, strokeWidth: 1.9 })}
         {hasLabel && <span>{label}</span>}
         <ChevronDown size={14} className={`manager-toolbar-chevron ${isOpen ? 'is-open' : ''}`} />
       </button>
@@ -117,7 +115,6 @@ function ActionMenu({
 }
 
 const PrimaryLink = ({ action, pathname, onPrefetch }) => {
-  const Icon = action.icon;
   const active = typeof action.active === 'boolean'
     ? action.active
     : matchesRoute(pathname, action);
@@ -138,7 +135,6 @@ const PrimaryLink = ({ action, pathname, onPrefetch }) => {
       aria-label={action.label}
       aria-pressed={typeof action.active === 'boolean' ? active : undefined}
     >
-      <Icon size={16} strokeWidth={1.8} />
       <span>{action.label}</span>
     </button>
   );
@@ -213,6 +209,8 @@ function AccountLookup({ value, onChange, onOpen, isOpen, onOpenChange }) {
       <button
         type="button"
         className={`manager-account-lookup-trigger ${isOpen ? 'is-open' : ''}`}
+        title="Find account"
+        aria-label="Find account"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         onClick={(event) => {
@@ -377,15 +375,15 @@ const ToolBar = ({
     <>
       <nav className="manager-toolbar workspace-ui" aria-label="Primary workspace navigation">
         <div className="manager-toolbar-left">
-          <ActionMenu id="workspace" label="Workspace" icon={LayoutGrid} actions={workspaceActions} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="workspace" label="Workspace" actions={workspaceActions} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
           <span className="manager-toolbar-divider" />
           <div className="manager-primary-navigation">
             {primaryActions.map((action) => (
               <PrimaryLink key={action.id} action={action} pathname={location.pathname} onPrefetch={navigate.preload} />
             ))}
           </div>
-          <ActionMenu id="operations" label="Operations" icon={Gavel} actions={operations} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
-          <ActionMenu id="management" label="Management" title="Management" icon={Settings2} actions={management} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} showLabel={false} />
+          <ActionMenu id="operations" label="Operations" actions={operations} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="management" label="Management" title="Management" actions={management} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
         </div>
 
         <div className="manager-toolbar-right">

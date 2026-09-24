@@ -49,8 +49,8 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
       <td className={`${compact ? 'px-2 py-1.5 text-center font-medium' : 'px-3 py-2 font-medium'} market-quote-symbol`} style={{ borderRight: '1px solid var(--border)' }}>
         <div className={compact ? 'flex items-center justify-center gap-1 whitespace-nowrap' : 'flex items-center gap-1.5'}>
           {isUp
-            ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={2.5} />
-            : <ArrowDownRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={2.5} />}
+            ? <ArrowUpRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={1.75} />
+            : <ArrowDownRight size={compact ? 11 : 14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={1.75} />}
           <span>{quote.symbol}</span>
           {!compact && quote.isStale && (
             <span className="ml-1 text-[9px] uppercase font-bold" style={{ color: 'var(--muted)' }}>
@@ -59,18 +59,18 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
           )}
         </div>
       </td>
-      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
+      <td className={`${compact ? 'px-1 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} title={String(quote.bid)} style={{ borderRight: '1px solid var(--border)', color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
         <span key={`${quote.symbol}-bid-${quote.bid}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.bid}
         </span>
       </td>
-      <td className={`${compact ? 'px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
+      <td className={`${compact ? 'px-1 py-1.5 text-center font-mono tabular-nums whitespace-nowrap' : 'px-3 py-2 text-right font-mono tabular-nums'} market-quote-price`} title={String(quote.ask)} style={{ borderRight: compact ? '1px solid var(--border)' : undefined, color: isUp ? 'var(--market-value-up)' : 'var(--market-value-down)' }}>
         <span key={`${quote.symbol}-ask-${quote.ask}`} className={isUp ? 'flash-up' : 'flash-down'}>
           {quote.ask}
         </span>
       </td>
       {compact && (
-        <td className="market-quote-price px-1.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
+        <td className="market-quote-price market-quote-spread px-1 py-1.5 text-center font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--text)' }}>
           {formatSpread(quote.bid, quote.ask)}
         </td>
       )}
@@ -330,10 +330,10 @@ const MarketData = ({ compact = false }) => {
             className="select-none sticky top-0 z-10 text-xs"
             style={{ background: 'var(--surface-2)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}
           >
-            <th className={compact ? 'px-2 py-1.5 font-medium w-[38%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3'} style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
-            <th className={compact ? 'px-1.5 py-1.5 font-medium w-[22%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
-            <th className={compact ? 'px-1.5 py-1.5 font-medium w-[22%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Ask</th>
-            {compact && <th className="px-1.5 py-1.5 font-medium w-[18%] text-center whitespace-nowrap">Spread</th>}
+            <th className={compact ? 'px-2 py-1.5 font-medium w-[28%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3'} style={{ borderRight: '1px solid var(--border)' }}>Symbol</th>
+            <th className={compact ? 'px-1 py-1.5 font-medium w-[27%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Bid</th>
+            <th className={compact ? 'px-1 py-1.5 font-medium w-[27%] text-center whitespace-nowrap' : 'px-3 py-2 font-medium w-1/3 text-right'} style={{ borderRight: '1px solid var(--border)' }}>Ask</th>
+            {compact && <th className="px-1 py-1.5 font-medium w-[18%] text-center whitespace-nowrap">Spread</th>}
           </tr>
           {!compact && <tr>
             <th colSpan={3} className="px-3 py-2">
@@ -458,7 +458,7 @@ const MarketData = ({ compact = false }) => {
 
     return (
       <div className="market-quote-details w-full p-2 bg-[var(--surface)]">
-        <div className="font-semibold text-lg pb-3 mb-3 border-b flex justify-between items-center" style={{ color: 'var(--accent)', borderColor: 'var(--border)' }}>
+        <div className="font-semibold text-lg pb-3 mb-3 border-b flex justify-between items-center" style={{ color: 'var(--accent-text)', borderColor: 'var(--border)' }}>
           <button
             type="button"
             onClick={() => handleOpenTicks(selectedQuote)}
@@ -480,8 +480,8 @@ const MarketData = ({ compact = false }) => {
                   {item.label}
                 </td>
                 <td className="py-1.5 text-right font-medium flex justify-end items-center gap-1.5" style={{ color: item.isUp === true ? 'var(--market-value-up)' : (item.isUp === false ? 'var(--market-value-down)' : 'var(--text)') }}>
-                  {item.isUp === true ? <ArrowUpRight size={14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={2.5} /> : null}
-                  {item.isUp === false ? <ArrowDownRight size={14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={2.5} /> : null}
+                  {item.isUp === true ? <ArrowUpRight size={14} style={{ color: 'var(--market-direction-up)' }} strokeWidth={1.75} /> : null}
+                  {item.isUp === false ? <ArrowDownRight size={14} style={{ color: 'var(--market-direction-down)' }} strokeWidth={1.75} /> : null}
                   <span className="font-mono text-[13px]">{item.value}</span>
                 </td>
               </tr>
@@ -527,7 +527,7 @@ const MarketData = ({ compact = false }) => {
 
     return (
       <div className="market-quote-ticks flex-1 min-h-0 min-w-0 overflow-hidden relative flex flex-col gap-2 p-2 bg-[var(--surface-2)]">
-        <div className="shrink-0 font-semibold" style={{ color: 'var(--accent)' }}>{selectedQuote.symbol}</div>
+        <div className="shrink-0 font-semibold" style={{ color: 'var(--accent-text)' }}>{selectedQuote.symbol}</div>
         <div className="shrink-0 px-2 py-1.5 text-xs rounded ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
           {tickHistory.length > 0
             ? `${tickHistory[tickHistory.length - 1].bid.toFixed(5)} / ${tickHistory[tickHistory.length - 1].ask.toFixed(5)}`
@@ -589,22 +589,23 @@ const MarketData = ({ compact = false }) => {
         }
         .market-watch-type .market-data-tab.is-active {
           font-weight: 600 !important;
-          background: color-mix(in srgb, var(--accent) 12%, transparent);
+          background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
           color: var(--accent-text);
         }
+        /* A tick only sets the direction colour: no glow or fade, so every
+           price in the grid keeps the same weight and strength. */
         @keyframes flashTextUp {
-          0% { color: var(--market-value-up); text-shadow: 0 0 8px var(--cc-market-glow-up, rgba(0, 168, 255, 0.4)); }
-          100% { color: var(--market-value-up); text-shadow: none; }
+          0%, 100% { color: var(--market-value-up); }
         }
         @keyframes flashTextDown {
-          0% { color: var(--market-value-down); text-shadow: 0 0 8px var(--cc-market-glow-down, rgba(255, 59, 82, 0.4)); }
-          100% { color: var(--market-value-down); text-shadow: none; }
+          0%, 100% { color: var(--market-value-down); }
         }
         .flash-up { animation: flashTextUp 0.8s ease-out forwards; }
         .flash-down { animation: flashTextDown 0.8s ease-out forwards; }
         .market-row { transition: background-color 0.1s ease; border-bottom: 1px solid var(--border); }
         .market-row:hover { background: var(--surface-hover, rgba(120, 120, 120, 0.05)); }
         .market-row.is-selected { background: var(--surface-hover, rgba(120, 120, 120, 0.1)); }
+        .market-data-compact .market-quote-price { overflow: hidden; text-overflow: ellipsis; }
       `}</style>
 
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -643,4 +644,5 @@ const MarketData = ({ compact = false }) => {
   );
 };
 
-export default MarketData;
+// Skip the workspace-wide re-render on route changes; props are primitives.
+export default memo(MarketData);

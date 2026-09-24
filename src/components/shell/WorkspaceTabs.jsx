@@ -9,7 +9,7 @@ import { useT } from '../../i18n/index.js';
 
 const DEFAULT_WORKSPACE_TABS = [
   { labelKey: 'tabs.dashboard', path: '/dashboard', match: (path) => ['/', '/dashboard', '/admin-dashboard'].includes(path) },
-  { labelKey: 'tabs.exposure', path: '/analytics/open-positions' },
+  { labelKey: 'tabs.exposure', path: '/exposure' },
   { labelKey: 'tabs.liquidity', path: '/symbols' },
   { labelKey: 'tabs.riskMonitor', path: '/dealer/restrictions' },
   { labelKey: 'tabs.compliance', path: '/clients' },
@@ -30,6 +30,8 @@ const QUICK_NAVIGATION = [
   { labelKey: 'tabs.ibTree', path: '/ib/tree', icon: GitBranch },
 ];
 
+import { loadAnalyticsTree, findNodeInfo } from '../analyticsNavigatorState.js';
+
 const isTabActive = (tab, pathname) => {
   if (tab.match) return tab.match(pathname);
   return pathname === tab.path || pathname.startsWith(`${tab.path}/`);
@@ -37,7 +39,17 @@ const isTabActive = (tab, pathname) => {
 
 const findKnownTab = (pathname) => {
   const allKnown = [...DEFAULT_WORKSPACE_TABS, ...QUICK_NAVIGATION];
-  return allKnown.find((tab) => isTabActive(tab, pathname));
+  const found = allKnown.find((tab) => isTabActive(tab, pathname));
+  if (found) return found;
+
+  if (pathname.startsWith('/analytics/custom')) {
+    const reportId = pathname.replace('/analytics/custom/', '').replace('/analytics/custom', '');
+    const tree = loadAnalyticsTree();
+    const info = reportId ? findNodeInfo(tree, reportId) : null;
+    const label = info?.node?.label || 'Custom Analytics';
+    return { label, path: pathname, icon: TrendingUp };
+  }
+  return null;
 };
 
 export default function WorkspaceTabs() {
@@ -58,7 +70,7 @@ export default function WorkspaceTabs() {
       if (current.some((tab) => tab.path === matchingKnown.path)) return current;
       // Re-insert closed defaults at their original position, append new ones at end.
       const defaultIndex = DEFAULT_WORKSPACE_TABS.findIndex((tab) => tab.path === matchingKnown.path);
-      if (defaultIndex === -1) return [...current, { labelKey: matchingKnown.labelKey, path: matchingKnown.path }];
+      if (defaultIndex === -1) return [...current, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path }];
       const next = [...current];
       let insertAt = next.length;
       for (let i = defaultIndex + 1; i < DEFAULT_WORKSPACE_TABS.length; i += 1) {
@@ -68,7 +80,7 @@ export default function WorkspaceTabs() {
           break;
         }
       }
-      next.splice(insertAt, 0, { labelKey: matchingKnown.labelKey, path: matchingKnown.path });
+      next.splice(insertAt, 0, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path });
       return next;
     });
   }, [location.pathname, location.key]);
@@ -113,7 +125,7 @@ export default function WorkspaceTabs() {
       <div className="cc-workspace-tab-scroll">
         {visibleTabs.map((tab) => {
           const isActive = isTabActive(tab, location.pathname);
-          const tabLabel = t(tab.labelKey);
+          const tabLabel = tab.label || t(tab.labelKey);
           return (
             <div key={tab.path} className={`cc-workspace-tab-shell ${isActive ? 'is-active' : ''}`}>
               <button

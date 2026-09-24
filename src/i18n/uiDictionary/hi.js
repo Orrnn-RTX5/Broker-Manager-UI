@@ -10,7 +10,7 @@ export default {
   "Account detail sections": "खाता विवरण अनुभाग",
   "Account Details": "खाता विवरण",
   "Account financial snapshot": "खाता वित्तीय स्नैपशॉट",
-  "Account Groups": "खाता समूह",
+  "Groups": "समूह",
   "Account information": "खाता जानकारी",
   "Account Limit Status": "खाता सीमा स्थिति",
   "Account limits": "खाता सीमाएं",

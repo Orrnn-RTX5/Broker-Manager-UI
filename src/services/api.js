@@ -1,3 +1,6 @@
+import { normalizePositionRow, getPositionTicket, mergePositionUpdates, reconcilePositionSnapshot } from './positionRecords.js';
+export { normalizePositionRow } from './positionRecords.js';
+
 import { loadSymbolManagement } from './symbolManagementLoader.js';
 import { fetchAvailableSymbolNames } from './symbolCatalogue.js';
 import { buildPermissionSessionFingerprint } from '../utils/sessionFingerprint.js';
@@ -12,6 +15,7 @@ import { chunkSymbolNames } from '../utils/symbolParams';
 import { createKeyedRequestCache } from './keyedRequestCache';
 import { MANAGER_API } from '../config/managerApiContract.js';
 import { requestReportsSummary } from './reportsSummary.js';
+import { fetchOnlineUsersSnapshot, pageOnlineUsers } from './onlineUsersSnapshot.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
@@ -167,60 +171,6 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   address: p.address || p.Address || '',
   comment: p.comment || p.Comment || '',
 });
-
-export const normalizePositionRow = (p = {}) => {
-  let type = 'unknown';
-  if (typeof p.action === 'string') type = p.action.toLowerCase();
-  else if (typeof p.side === 'string') type = p.side.toLowerCase();
-  else if (typeof p.type === 'string') type = p.type.toLowerCase();
-  else if (p.Action === 0 || p.action === 0 || p.cmd === 0 || p.Cmd === 0 || p.type === 0 || p.Type === 0) type = 'buy';
-  else if (p.Action === 1 || p.action === 1 || p.cmd === 1 || p.Cmd === 1 || p.type === 1 || p.Type === 1) type = 'sell';
-
-  if (type.includes('buy') || type.includes('deal_buy')) type = 'buy';
-  else if (type.includes('sell') || type.includes('deal_sell')) type = 'sell';
-  else if (type === 'unknown') type = 'buy';
-
-  let volume = p.lots !== undefined ? p.lots : (p.volumeExt !== undefined ? p.volumeExt : (p.Volume !== undefined ? p.Volume : (p.volume !== undefined ? p.volume : 0)));
-  if (volume >= 100) volume = volume / 10000;
-
-  const reasonRaw = p.reason ?? p.Reason ?? p.reason_type ?? p.comment ?? p.Comment ?? '';
-  let reason = 'Client';
-  if (typeof reasonRaw === 'number') {
-    const reasonMap = { 0: 'Client', 1: 'Expert', 2: 'Dealer', 3: 'Signal', 4: 'Gateway', 5: 'Mobile', 6: 'Web', 7: 'Auto' };
-    reason = reasonMap[reasonRaw] || 'Client';
-  } else if (String(reasonRaw).toLowerCase().includes('expert') || String(reasonRaw).toLowerCase().includes('ea')) {
-    reason = 'Expert';
-  } else if (String(reasonRaw).toLowerCase().includes('mobile') || String(reasonRaw).toLowerCase().includes('ios') || String(reasonRaw).toLowerCase().includes('android')) {
-    reason = 'Mobile';
-  } else if (String(reasonRaw).toLowerCase().includes('dealer')) {
-    reason = 'Dealer';
-  } else if (String(reasonRaw).toLowerCase().includes('web')) {
-    reason = 'Web';
-  } else if (reasonRaw) {
-    reason = String(reasonRaw);
-  }
-
-  return {
-    position: p.positionTicket || p.Position || p.ticket || p.Ticket || p.position || 0,
-    login: String(p.login || p.Login || ''),
-    name: p.accountName || p.AccountName || p.name || p.Name || '',
-    email: p.username || p.Username || p.email || p.Email || '',
-    group: p.accountGroup || p.AccountGroup || p.group || p.Group || '',
-    symbol: p.symbol || p.Symbol || '',
-    type,
-    volume,
-    reason,
-    priceOpen: p.priceOpen || p.PriceOpen || p.openPrice || p.OpenPrice || p.Price || p.price || 0,
-    priceCurrent: p.priceCurrent || p.PriceCurrent || p.closePrice || p.ClosePrice || 0,
-    priceSl: p.priceSl || p.PriceSl || p.sl || p.SL || 0,
-    priceTp: p.priceTp || p.PriceTp || p.tp || p.TP || 0,
-    profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
-    comment: String(p.comment || p.Comment || ''),
-    swap: p.storage || p.Storage || p.swap || p.Swap || 0,
-    timeCreate: p.timeCreate || p.TimeCreate || p.openTime || p.OpenTime || 0,
-    timeUpdate: p.timeUpdate || p.TimeUpdate || p.closeTime || p.CloseTime || 0,
-  };
-};
 
 export const normalizeOrderRow = (p = {}) => {
   let type = 'unknown';
@@ -464,23 +414,18 @@ export const getOnlineUsers = async () => {
   return page.rows;
 };
 
-const getAccountsOnlineSnapshot = async (params = {}, options = {}) => {
+const loadAccountsOnlineRows = async (options = {}) => {
   const data = await apiClient.get(MANAGER_API.accountsOnline, options);
   const records = Array.isArray(data?.users) ? data.users : getRecords(data, 'accounts');
-  const normalized = records.map((row) => normalizeOnlineUserRows([row])[0] || row);
-  const search = String(params.search || '').trim().toLowerCase();
-  const filtered = search
-    ? normalized.filter((row) => [row.login, row.name, row.group, row.ip, row.country]
-      .some((value) => String(value || '').toLowerCase().includes(search)))
-    : normalized;
-  const offset = Math.max(0, Number(params.offset) || 0);
-  const limit = Math.max(1, Number(params.limit) || 30);
+  return records.map((row) => normalizeOnlineUserRows([row])[0] || row);
+};
 
-  return {
-    rows: filtered.slice(offset, offset + limit),
-    total: filtered.length,
-    hasMore: offset + limit < filtered.length,
-  };
+const getAccountsOnlineSnapshot = async (params = {}, options = {}) => {
+  // The request is shared by every Online Users view, so one view unmounting
+  // (its abort signal) must not cancel it for the others.
+  const { signal: _signal, ...requestOptions } = options;
+  const snapshot = await fetchOnlineUsersSnapshot(() => loadAccountsOnlineRows(requestOptions));
+  return pageOnlineUsers(snapshot.rows, params);
 };
 
 export const getOnlineUsersPage = async (params = {}, options = {}) => {
@@ -565,8 +510,12 @@ let cachedPositionsDataset = null;
 let cachedPositionsDatasetTime = 0;
 let pendingPositionsDatasetPromise = null;
 let positionsCacheGeneration = 0;
+let positionsDatasetRevision = 0;
+let positionsDatasetComplete = false;
+const positionUpdateRevisions = new Map();
 const POSITIONS_CACHE_TTL_MS = 20_000;
 const POSITIONS_DATASET_CACHE_KEY = 'rtx5_positions_dataset_v2';
+const POSITIONS_STORAGE_MAX_AGE_MS = 60_000;
 const ACCOUNT_POSITIONS_CACHE_TTL_MS = 5_000;
 const ACCOUNT_POSITIONS_PRIORITY_WAIT_MS = 1_000;
 const ACCOUNT_POSITIONS_PAINT_GRACE_MS = 150;
@@ -579,8 +528,12 @@ const readStoredPositionsDataset = () => {
       : (sessionStorage.getItem(POSITIONS_DATASET_CACHE_KEY) || localStorage.getItem(POSITIONS_DATASET_CACHE_KEY));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.records) && parsed.records.length > 0) return parsed.records;
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    // Stored snapshots must expire: without a timestamp check a dataset from a
+    // previous session is re-served forever and newly opened trades never show.
+    if (!Array.isArray(parsed?.records) || parsed.records.length === 0) return null;
+    const savedAt = Number(parsed.timestamp) || 0;
+    if (savedAt <= 0 || Date.now() - savedAt > POSITIONS_STORAGE_MAX_AGE_MS) return null;
+    return parsed.records;
   } catch {
     // Ignore storage parse errors
   }
@@ -588,7 +541,11 @@ const readStoredPositionsDataset = () => {
 };
 
 const writeStoredPositionsDataset = (records) => {
-  if (!Array.isArray(records) || records.length === 0) return;
+  if (!Array.isArray(records)) return;
+  if (records.length === 0) {
+    clearPositionsStorageCache();
+    return;
+  }
   try {
     const payload = JSON.stringify({ records, timestamp: Date.now() });
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(POSITIONS_DATASET_CACHE_KEY, payload);
@@ -620,16 +577,14 @@ const buildAccountPositionsEndpoint = (logins, { offset = 0 } = {}) => {
 };
 
 const getFreshPositionsDataset = () => {
-  if (
-    Array.isArray(cachedPositionsDataset)
-    && Date.now() - cachedPositionsDatasetTime < POSITIONS_CACHE_TTL_MS
-  ) {
-    return cachedPositionsDataset;
+  if (Array.isArray(cachedPositionsDataset)) {
+    return Date.now() - cachedPositionsDatasetTime < POSITIONS_CACHE_TTL_MS ? cachedPositionsDataset : null;
   }
   const stored = readStoredPositionsDataset();
   if (stored) {
     cachedPositionsDataset = stored;
     cachedPositionsDatasetTime = Date.now();
+    positionsDatasetComplete = true;
     return cachedPositionsDataset;
   }
   return null;
@@ -640,6 +595,7 @@ const selectAccountPositions = (records, login) => records
   .filter((position) => String(position.login) === String(login));
 
 const activeAccountPositionRequests = new Set();
+const knownPositionLogins = new Set();
 let accountPositionsSessionGeneration = 0;
 const accountPositionsGenerations = new Map();
 const accountPositionsContinuationOffsets = new Map();
@@ -689,12 +645,13 @@ const accountPositionsRequests = createKeyedRequestCache({
     // account-scoped endpoint applies logins[] server-side and returns only the
     // requested account's positions.
     const accountRequestGeneration = getAccountPositionsGeneration(login);
+    const revisionAtStart = positionsDatasetRevision;
     const request = apiClient.get(buildAccountPositionsEndpoint([login]), options);
     activeAccountPositionRequests.add(request);
     try {
       const data = await request;
       const records = getRecords(data, 'positions');
-      const positions = selectAccountPositions(records, login);
+      const positions = selectAccountPositions(reconcileLivePositions(records, revisionAtStart), login);
       if (accountPositionsGenerationMatches(login, accountRequestGeneration)) {
         if (records.length === ACCOUNT_POSITIONS_INITIAL_LIMIT) {
           accountPositionsContinuationOffsets.set(String(login), { offset: records.length });
@@ -709,7 +666,11 @@ const accountPositionsRequests = createKeyedRequestCache({
   },
 });
 
-export const getAccountPositions = (login, options = {}) => accountPositionsRequests.get(login, options);
+export const getAccountPositions = (login, options = {}) => {
+  const key = String(login ?? '').trim();
+  if (key) knownPositionLogins.add(key);
+  return accountPositionsRequests.get(login, options);
+};
 export const preloadAccountPositions = (login) => getAccountPositions(login).catch(() => undefined);
 export const preloadAccountPositionsBatch = (logins = []) => {
   const normalizedLogins = [...new Set(
@@ -727,6 +688,7 @@ export const preloadAccountPositionsBatch = (logins = []) => {
     // cold single-login request. Register every per-login projection before
     // paint so pointer-down/modal readers share this exact in-flight request.
     const requestSessionGeneration = accountPositionsSessionGeneration;
+    const revisionAtStart = positionsDatasetRevision;
     const requestGenerations = new Map(
       unresolvedLogins.map((login) => [login, getAccountPositionsGeneration(login)]),
     );
@@ -757,7 +719,7 @@ export const preloadAccountPositionsBatch = (logins = []) => {
               accountPositionsContinuationOffsets.delete(login);
             }
           }
-          return selectAccountPositions(records, login);
+          return selectAccountPositions(reconcileLivePositions(records, revisionAtStart), login);
         }),
       );
     });
@@ -797,10 +759,10 @@ export const completeAccountPositions = (login, initialRows = [], { onPage } = {
     return pendingAccountPositionsContinuations.get(key);
   }
 
-  const expectedSnapshot = accountPositionsRequests.peek(key);
   const continuationMarker = accountPositionsContinuationOffsets.get(key);
   const continuationStartOffset = continuationMarker.offset;
   const continuationGeneration = getAccountPositionsGeneration(key);
+  const revisionAtStart = positionsDatasetRevision;
   let continuationRequest;
   continuationRequest = (async () => {
     const merged = new Map();
@@ -825,19 +787,24 @@ export const completeAccountPositions = (login, initialRows = [], { onPage } = {
         activeAccountPositionRequests.delete(request);
       }
       if (!accountPositionsGenerationMatches(key, continuationGeneration)) {
+        const current = accountPositionsRequests.peek(key);
+        if (accountPositionsSessionGeneration === continuationGeneration.session && current !== undefined) return current;
         throw new Error('Account positions continuation was invalidated.');
       }
 
       addRows(selectAccountPositions(records, key));
-      const rows = [...merged.values()];
+      const rows = selectAccountPositions(reconcileLivePositions(
+        [...merged.values()].map((row) => ({ ...row, lots: row.volume })),
+        revisionAtStart,
+      ), key);
       try {
         onPage?.(rows);
       } catch {
         // Rendering callbacks must not turn a successful page into an API error.
       }
       if (records.length < ACCOUNT_POSITIONS_INITIAL_LIMIT) {
-        const replacedCurrentSnapshot = accountPositionsRequests.replaceIf(key, expectedSnapshot, rows);
-        if (replacedCurrentSnapshot && accountPositionsContinuationOffsets.get(key) === continuationMarker) {
+        accountPositionsRequests.set(key, rows);
+        if (accountPositionsContinuationOffsets.get(key) === continuationMarker) {
           accountPositionsContinuationOffsets.delete(key);
         }
         return rows;
@@ -859,6 +826,9 @@ export const invalidateGlobalPositionsCache = () => {
   cachedPositionsDataset = null;
   cachedPositionsDatasetTime = 0;
   pendingPositionsDatasetPromise = null;
+  positionsDatasetRevision += 1;
+  positionsDatasetComplete = false;
+  positionUpdateRevisions.clear();
   clearPositionsStorageCache();
 };
 
@@ -876,17 +846,89 @@ export const invalidatePositionsCache = (login) => {
   }
   if (login === undefined || login === null || String(login).trim() === '') {
     activeAccountPositionRequests.clear();
+    knownPositionLogins.clear();
   }
 };
 
-const fetchAllPositionsDataset = async (options = {}) => {
+const reconcileLivePositions = (records, revision) => reconcilePositionSnapshot(
+  records,
+  Array.isArray(cachedPositionsDataset) ? cachedPositionsDataset : [],
+  (ticket, field) => {
+    const update = positionUpdateRevisions.get(ticket);
+    return (field === undefined ? update?.revision : update?.fields.get(field)) > revision;
+  },
+);
+
+const publishCompletePositionsDataset = (records) => {
+  const previous = cachedPositionsDataset || [];
+  cachedPositionsDataset = records;
+  cachedPositionsDatasetTime = Date.now();
+  positionsDatasetRevision += 1;
+  positionsDatasetComplete = true;
+  writeStoredPositionsDataset(records);
+  const retainedTickets = new Set(records.map(getPositionTicket));
+  for (const ticket of positionUpdateRevisions.keys()) {
+    if (!retainedTickets.has(ticket)) positionUpdateRevisions.delete(ticket);
+  }
+  const logins = new Set([...knownPositionLogins, ...[...previous, ...records].map((row) => String(row.login ?? row.Login ?? '')).filter(Boolean)]);
+  logins.forEach((login) => {
+    bumpAccountPositionsGeneration(login);
+    accountPositionsContinuationOffsets.delete(login);
+    accountPositionsRequests.set(login, selectAccountPositions(records, login));
+  });
+};
+
+// A stream frame is a partial update, not proof that absent tickets closed.
+// Only a completed HTTP snapshot may remove tickets from the shared book.
+export const applyPositionsSnapshot = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const previous = Array.isArray(cachedPositionsDataset) ? cachedPositionsDataset : [];
+  const mergedRecords = mergePositionUpdates(previous, rows);
+  const revision = ++positionsDatasetRevision;
+  const changedTickets = new Set(rows.map(getPositionTicket).filter((ticket) => ticket && ticket !== '0'));
+  const updatesByTicket = new Map(mergePositionUpdates([], rows).map((row) => [getPositionTicket(row), row]));
+  updatesByTicket.forEach((row) => {
+    const ticket = getPositionTicket(row);
+    const fields = positionUpdateRevisions.get(ticket)?.fields || new Map();
+    Object.keys(row).forEach((field) => fields.set(field, revision));
+    positionUpdateRevisions.set(ticket, { revision, fields });
+  });
+  cachedPositionsDataset = mergedRecords;
+  cachedPositionsDatasetTime = Date.now();
+  // Never persist an incomplete first slice as the entire position book.
+  if (positionsDatasetComplete) writeStoredPositionsDataset(mergedRecords);
+
+  const changedRecords = mergedRecords.filter((row) => changedTickets.has(getPositionTicket(row)));
+  const logins = new Set(changedRecords.map((row) => String(row.login ?? row.Login ?? '')).filter(Boolean));
+  logins.forEach((login) => {
+    const current = accountPositionsRequests.peek(login);
+    if (current === undefined) return;
+    // Keep all pages of a previously loaded account while patching its tickets.
+    const byTicket = new Map(current.map((row) => [String(row.position), row]));
+    const accountUpdates = changedRecords.filter((row) => String(row.login ?? row.Login ?? '') === login);
+    accountUpdates.forEach((raw) => {
+      const ticket = getPositionTicket(raw);
+      const existing = byTicket.get(ticket);
+      const base = existing ? { ...existing, lots: existing.volume } : undefined;
+      // An account request may be newer than the global baseline. Patch only
+      // fields present in this frame so its volume/stops cannot roll back.
+      const patch = existing ? updatesByTicket.get(ticket) : raw;
+      const [updated] = mergePositionUpdates(base ? [base] : [], [patch]);
+      byTicket.set(ticket, normalizePositionRow(updated));
+    });
+    accountPositionsRequests.set(login, [...byTicket.values()]);
+  });
+};
+
+export const fetchAllPositionsDataset = async ({ force = false, ...options } = {}) => {
   const freshDataset = getFreshPositionsDataset();
-  if (freshDataset !== null) return freshDataset;
+  if (!force && freshDataset !== null && positionsDatasetComplete) return freshDataset;
   if (pendingPositionsDatasetPromise) {
     return pendingPositionsDatasetPromise;
   }
 
   const requestGeneration = positionsCacheGeneration;
+  const revisionAtStart = positionsDatasetRevision;
   let datasetRequest;
   datasetRequest = (async () => {
     try {
@@ -900,12 +942,16 @@ const fetchAllPositionsDataset = async (options = {}) => {
         throw new Error('Invalid PositionsAll response', { cause: error });
       }
       const records = extractRows(parsed, ['positions']);
-      if (positionsCacheGeneration === requestGeneration) {
-        cachedPositionsDataset = records;
-        cachedPositionsDatasetTime = Date.now();
-        writeStoredPositionsDataset(records);
+      if (!Array.isArray(parsed) && !['positions', 'rows', 'data', 'answer', 'records', 'items'].some((key) => Array.isArray(parsed?.[key]))) {
+        throw new Error('Invalid PositionsAll snapshot');
       }
-      return records;
+      if (positionsCacheGeneration !== requestGeneration) {
+        throw new Error('Positions request was invalidated.');
+      }
+      // Force bypasses freshness only; it must never bypass live-update ordering.
+      const reconciled = reconcileLivePositions(records, revisionAtStart);
+      publishCompletePositionsDataset(reconciled);
+      return reconciled;
     } catch (error) {
       if (positionsCacheGeneration === requestGeneration && Array.isArray(cachedPositionsDataset)) {
         return cachedPositionsDataset;
@@ -930,7 +976,11 @@ export const getPositions = async () => {
 export const getPositionsPage = async (params = {}, options = {}) => {
   // 1. If we already have the cached positions in memory, filter and slice in < 1ms
   const freshDataset = getFreshPositionsDataset();
-  if (freshDataset !== null) return normalizePagedResult(freshDataset, params, normalizePositionRow, ['positions']);
+  if (freshDataset !== null) {
+    if (positionsDatasetComplete) return normalizePagedResult(freshDataset, params, normalizePositionRow, ['positions']);
+    const complete = await fetchAllPositionsDataset(options);
+    return normalizePagedResult(complete, params, normalizePositionRow, ['positions']);
+  }
 
   // Account details is direct user interaction. Keep dashboard and workspace
   // PositionsAll probes from competing with its much smaller request.
@@ -941,7 +991,7 @@ export const getPositionsPage = async (params = {}, options = {}) => {
     await new Promise((resolve) => setTimeout(resolve, ACCOUNT_POSITIONS_PAINT_GRACE_MS));
   }
   const datasetAfterPriorityWait = getFreshPositionsDataset();
-  if (datasetAfterPriorityWait !== null) {
+  if (datasetAfterPriorityWait !== null && positionsDatasetComplete) {
     return normalizePagedResult(datasetAfterPriorityWait, params, normalizePositionRow, ['positions']);
   }
 
@@ -959,6 +1009,7 @@ export const getPositionsPage = async (params = {}, options = {}) => {
 
   // 3. For cold initial loads, stream the first page immediately in < 150ms
   const requestGeneration = positionsCacheGeneration;
+  const revisionAtStart = positionsDatasetRevision;
   const collectedRows = [];
   const pagedResult = await getPaged('/PositionsAll', params, normalizePositionRow, ['positions'], {
     stream: true,
@@ -969,6 +1020,16 @@ export const getPositionsPage = async (params = {}, options = {}) => {
     },
   });
 
+  // A websocket snapshot that landed while PositionsAll streamed is fresher
+  // than this response. Serve the newer dataset so the grid never repaints
+  // stale rows, and never let the stale page overwrite the live cache.
+  if (positionsCacheGeneration === requestGeneration && positionsDatasetRevision !== revisionAtStart) {
+    const freshDataset = getFreshPositionsDataset();
+    if (freshDataset !== null && positionsDatasetComplete) {
+      return normalizePagedResult(freshDataset, params, normalizePositionRow, ['positions']);
+    }
+  }
+
   const filters = params.filters && typeof params.filters === 'object' ? params.filters : {};
   const isCompleteUnfilteredSnapshot = Number(params.offset || 0) === 0
     && !String(params.search || '').trim()
@@ -978,16 +1039,16 @@ export const getPositionsPage = async (params = {}, options = {}) => {
   // A filtered or truncated page is not a complete global dataset. Caching it
   // as one can incorrectly make another account appear to have no positions.
   if (isCompleteUnfilteredSnapshot && positionsCacheGeneration === requestGeneration) {
-    cachedPositionsDataset = collectedRows;
-    cachedPositionsDatasetTime = Date.now();
-    writeStoredPositionsDataset(collectedRows);
+    const reconciled = reconcileLivePositions(collectedRows, revisionAtStart);
+    publishCompletePositionsDataset(reconciled);
+    return normalizePagedResult(reconciled, params, normalizePositionRow, ['positions']);
   }
 
   // 4. In the background (non-blocking), warm the full dataset for instant dropdown filtering & search
   const requestedLimit = Number(params.limit || 30);
   if (
     positionsCacheGeneration === requestGeneration
-    && getFreshPositionsDataset() === null
+    && (!positionsDatasetComplete || getFreshPositionsDataset() === null)
     && requestedLimit > 1
   ) {
     fetchAllPositionsDataset(options).catch(() => undefined);

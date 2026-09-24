@@ -431,7 +431,7 @@ export default {
 'Open positions could not be loaded.': 'Offene Positionen konnten nicht geladen werden.',
 'Opened Orders': 'Offene Aufträge',
 'Operational footprint': 'Regionale Präsenz',
-'GLOBAL COVERAGE': 'WELTWEITE PRÄSENZ',
+'Global coverage': 'Weltweite Präsenz',
 'Regional presence': 'Regionale Präsenz',
 'World map showing regional coverage in North America, South America, Europe, the Middle East and North Africa, and Asia': 'Weltkarte mit regionaler Präsenz in Nordamerika, Südamerika, Europa, dem Nahen Osten und Nordafrika sowie Asien',
 'Order': 'Auftrag',

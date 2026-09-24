@@ -30,6 +30,10 @@ export default function usePagedData({
   refetchOnReconnect = false,
   keepRunningOnUnmount = false,
   initialData,
+  // (pagedParams) => data | undefined: seeds each page/search from a local
+  // snapshot so it renders on the first frame.
+  initialDataForParams,
+  initialDataUpdatedAt,
   placeholderData,
   meta,
 }) {
@@ -56,7 +60,8 @@ export default function usePagedData({
     refetchOnMount,
     refetchOnWindowFocus,
     refetchOnReconnect,
-    initialData,
+    initialData: initialDataForParams ? () => initialDataForParams(pagedParams) : initialData,
+    initialDataUpdatedAt,
     placeholderData: placeholderData || ((previousData) => previousData || initialData),
     meta,
   });

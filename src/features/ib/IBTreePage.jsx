@@ -9,16 +9,16 @@ import {
 } from './ibDomain';
 
 const STATUS_BADGE = {
-  active: 'ui-badge-success',
-  approved: 'ui-badge-info',
-  pending: 'ui-badge-warn',
-  suspended: 'ui-badge-neutral',
-  rejected: 'ui-badge-danger',
-  removed: 'ui-badge-danger',
+  active: 'ui-status-ok',
+  approved: 'ui-status-info',
+  pending: 'ui-status-warn',
+  suspended: 'ui-status-neutral',
+  rejected: 'ui-status-danger',
+  removed: 'ui-status-danger',
 };
 
 const StatusBadge = ({ status }) => (
-  <span className={`ui-badge text-[10px] px-1 ${STATUS_BADGE[status] || 'ui-badge-neutral'}`}>
+  <span className={`ui-status ${STATUS_BADGE[status] || 'ui-status-neutral'}`}>
     {String(status || '-').toUpperCase()}
   </span>
 );

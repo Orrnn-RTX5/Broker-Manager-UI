@@ -25,3 +25,8 @@ release
 *.sln
 *.sw?
 .env
+
+/tmp/
+/artifacts/
+nul
+

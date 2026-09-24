@@ -184,7 +184,7 @@ const DealerQueuePage = () => {
                       </td>
                       <td style={{ fontWeight: 500 }}>{row.symbol}</td>
                       <td>
-                        <span className={`ui-badge text-[10px] px-1 py-0 ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                        <span className={`ui-status ${isBuy ? 'ui-status-ok' : 'ui-status-danger'}`}>
                           {(row.side || '').toUpperCase()}
                         </span>
                       </td>

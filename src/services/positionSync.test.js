@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PositionSyncClient, getPositionUpdateLogin, getWsTicket, isPositionMutation } from './positionSyncCore.js';
+import { PositionSyncClient, getPositionSnapshotRows, getPositionUpdateLogin, getWsTicket, isPositionMutation } from './positionSyncCore.js';
 
 class FakeSocket {
   constructor(url) {
@@ -79,6 +79,144 @@ test('position event parsing accepts documented lifecycle actions and rejects co
   assert.equal(getWsTicket({ answer: { ticket: 'abc' } }), 'abc');
   assert.equal(isPositionMutation({ action: 'reversed' }), true);
   assert.equal(isPositionMutation({ type: 'heartbeat' }), false);
+});
+
+test('position array frames are mutations and are delivered to onSnapshot', async () => {
+  const sockets = [];
+  const events = [];
+  const snapshots = [];
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: 't' }),
+    createSocket: (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    buildUrl: () => 'ws://example.test/OnPositionUpdate',
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+    setTimeoutFn: () => 2,
+    clearTimeoutFn: () => {},
+    onSnapshot: (rows) => snapshots.push(rows),
+  });
+  client.subscribe((event) => events.push(event));
+
+  client.start();
+  await Promise.resolve();
+  sockets[0].readyState = 1;
+  sockets[0].onopen();
+  const rows = [{ account_login: 200001, ticket: 731260, symbol: 'EURUSD', side: 'buy' }];
+  sockets[0].onmessage({ data: JSON.stringify({ data: rows }) });
+  sockets[0].onmessage({ data: JSON.stringify({ data: [] }) });
+
+  assert.equal(isPositionMutation({ data: rows }), true);
+  assert.equal(isPositionMutation({ data: [] }), true);
+  assert.equal(getPositionSnapshotRows({ data: rows }), rows);
+  assert.equal(getPositionSnapshotRows({ data: { login: 1 } }), null);
+  assert.deepEqual(snapshots, [rows, []]);
+  assert.deepEqual(events.map((event) => event.snapshot), [undefined, true, true]);
+  client.stop();
+});
+
+test('queued position messages after stopping cannot update caches or subscribers', async () => {
+  let socket;
+  const snapshots = [];
+  const events = [];
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: 't' }),
+    createSocket: (url) => { socket = new FakeSocket(url); return socket; },
+    buildUrl: () => 'ws://example.test/OnPositionUpdate',
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+    onSnapshot: (rows) => snapshots.push(rows),
+  });
+  client.subscribe((event) => events.push(event));
+
+  client.start();
+  await Promise.resolve();
+  client.stop();
+  socket.onmessage({ data: JSON.stringify({ data: [{ ticket: 1, profit: 10 }] }) });
+  socket.onmessage({ data: JSON.stringify({ action: 'closed', login: 1001 }) });
+  socket.onopen();
+
+  assert.deepEqual(snapshots, []);
+  assert.deepEqual(events, []);
+});
+
+test('a replaced connection cannot overwrite current positions or schedule another reconnect', async () => {
+  const sockets = [];
+  const reconnects = [];
+  const snapshots = [];
+  const events = [];
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: 't' }),
+    createSocket: (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    buildUrl: () => 'ws://example.test/OnPositionUpdate',
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+    setTimeoutFn: (callback) => { reconnects.push(callback); return reconnects.length; },
+    clearTimeoutFn: () => {},
+    onSnapshot: (rows) => snapshots.push(rows),
+  });
+  client.subscribe((event) => events.push(event));
+
+  client.start();
+  await Promise.resolve();
+  const oldSocket = sockets[0];
+  oldSocket.onclose();
+  // Even before its replacement opens, the closed socket no longer owns state.
+  oldSocket.onmessage({ data: JSON.stringify({ data: [{ ticket: 1, profit: 10 }] }) });
+  reconnects[0]();
+  await Promise.resolve();
+
+  const currentRows = [{ ticket: 1, profit: 20 }];
+  sockets[1].onmessage({ data: JSON.stringify({ data: currentRows }) });
+  oldSocket.onmessage({ data: JSON.stringify({ data: [{ ticket: 1, profit: 10 }] }) });
+  oldSocket.onmessage({ data: JSON.stringify({ action: 'closed', login: 1001 }) });
+  oldSocket.onopen();
+  oldSocket.onclose();
+
+  assert.deepEqual(snapshots, [currentRows]);
+  assert.equal(events.length, 1);
+  assert.equal(reconnects.length, 1);
+  assert.equal(client.socket, sockets[1]);
+  client.stop();
+});
+
+test('a rejected ticket request from a previous session cannot reconnect the current session', async () => {
+  let rejectOldTicket;
+  let requests = 0;
+  let reconnects = 0;
+  const client = new PositionSyncClient({
+    requestTicket: () => {
+      requests += 1;
+      return requests === 1
+        ? new Promise((resolve, reject) => { rejectOldTicket = reject; })
+        : Promise.resolve({ ticket: 'current' });
+    },
+    createSocket: (url) => new FakeSocket(url),
+    buildUrl: (ticket) => `ws://example.test/OnPositionUpdate?ticket=${ticket}`,
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+    setTimeoutFn: () => { reconnects += 1; return reconnects; },
+    clearTimeoutFn: () => {},
+  });
+
+  client.start();
+  client.stop();
+  client.start();
+  await Promise.resolve();
+  const currentSocket = client.socket;
+  rejectOldTicket(new Error('Previous session expired'));
+  await Promise.resolve();
+
+  assert.equal(client.socket, currentSocket);
+  assert.equal(reconnects, 0);
+  client.stop();
 });
 
 test('position event login extraction handles nested broker envelopes', () => {

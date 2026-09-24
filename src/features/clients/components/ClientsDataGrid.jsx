@@ -47,10 +47,10 @@ const toClientPage = (page) => {
 };
 
 const STATUS_BADGE = {
-  Active: 'ui-badge-success',
-  Inactive: 'ui-badge-neutral',
-  Unregistered: 'ui-badge-warn',
-  Pending: 'ui-badge-info',
+  Active: 'ui-status-ok',
+  Inactive: 'ui-status-neutral',
+  Unregistered: 'ui-status-warn',
+  Pending: 'ui-status-info',
 };
 
 const ClientsDataGrid = ({
@@ -267,7 +267,7 @@ const ClientsDataGrid = ({
                   {isVisible('type') && <td style={{ color: 'var(--text-2)' }}>{row.type}</td>}
                   {isVisible('status') && (
                     <td>
-                      <span className={`ui-badge ${STATUS_BADGE[row.status] || 'ui-badge-neutral'}`}>
+                      <span className={`ui-status ${STATUS_BADGE[row.status] || 'ui-status-neutral'}`}>
                         {row.status}
                       </span>
                     </td>

@@ -105,6 +105,25 @@ export const applyAttributes = (element, dictionary, language) => {
   }
 };
 
+const ATTRIBUTE_SELECTOR = TRANSLATED_ATTRIBUTES.map((attr) => `[${attr}]`).join(', ');
+
+// Translates every text node and translatable attribute under root.
+const translateSubtree = (root, dictionary, language) => {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const parent = node.parentElement;
+      if (!parent || SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  for (const node of textNodes) applyText(node, dictionary, language);
+
+  if (root.matches?.(ATTRIBUTE_SELECTOR)) applyAttributes(root, dictionary, language);
+  for (const element of root.querySelectorAll(ATTRIBUTE_SELECTOR)) applyAttributes(element, dictionary, language);
+};
+
 export const runPass = (language, root = typeof document !== 'undefined' ? document.body : null) => {
   if (!root) return;
   const dictionary = UI_DICTIONARIES[language];
@@ -112,20 +131,42 @@ export const runPass = (language, root = typeof document !== 'undefined' ? docum
 
   isApplying = true;
   try {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) => {
-        const parent = node.parentElement;
-        if (!parent || SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-    const textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
-    for (const node of textNodes) applyText(node, dictionary, language);
+    translateSubtree(root, dictionary, language);
+  } finally {
+    isApplying = false;
+  }
+};
 
-    const selector = TRANSLATED_ATTRIBUTES.map((attr) => `[${attr}]`).join(', ');
-    const attributed = root.querySelectorAll(selector);
-    for (const element of attributed) applyAttributes(element, dictionary, language);
+/**
+ * Translates only what changed: the text nodes, elements and added subtrees
+ * named by MutationObserver records. Live data (price ticks, grids) mutates
+ * constantly, and rescanning the whole document for each change kept the
+ * main thread busy.
+ */
+export const runPassForMutations = (language, records) => {
+  const dictionary = UI_DICTIONARIES[language];
+  if (!dictionary || !records?.length) return;
+  const roots = new Set();
+  const attributeTargets = new Set();
+  for (const record of records) {
+    if (record.type === 'characterData') roots.add(record.target);
+    else if (record.type === 'attributes') attributeTargets.add(record.target);
+    else for (const node of record.addedNodes) roots.add(node);
+  }
+
+  isApplying = true;
+  try {
+    for (const node of roots) {
+      if (!node.isConnected) continue;
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (!SKIP_TAGS.has(node.parentElement?.tagName)) applyText(node, dictionary, language);
+      } else if (node.nodeType === Node.ELEMENT_NODE && !SKIP_TAGS.has(node.tagName)) {
+        translateSubtree(node, dictionary, language);
+      }
+    }
+    for (const element of attributeTargets) {
+      if (element.isConnected) applyAttributes(element, dictionary, language);
+    }
   } finally {
     isApplying = false;
   }

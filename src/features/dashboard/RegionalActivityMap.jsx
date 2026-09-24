@@ -26,7 +26,7 @@ const RegionalActivityMap = () => {
           ))}
         </g>
       </svg>
-      <div className="cc-map-caption"><span>GLOBAL COVERAGE</span><span><i /> Regional presence</span></div>
+      <div className="cc-map-caption"><span>Global coverage</span><span><i /> Regional presence</span></div>
     </div>
   );
 };

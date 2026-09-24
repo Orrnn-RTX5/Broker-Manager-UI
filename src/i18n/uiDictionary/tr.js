@@ -9,7 +9,7 @@ export default {
   "Account detail sections": "Hesap ayrıntı bölümleri",
   "Account Details": "Hesap Ayrıntıları",
   "Account financial snapshot": "Hesap finansal özeti",
-  "Account Groups": "Hesap Grupları",
+  "Groups": "Gruplar",
   "Account information": "Hesap bilgileri",
   "Account Limit Status": "Hesap Limit Durumu",
   "Account limits": "Hesap limitleri",

@@ -14,12 +14,14 @@ import { invalidatePositionsCache, invalidateSymbolManagementData, preloadSymbol
 import { preloadAllWorkspaceRoutes, preloadFrequentWorkspaceRoutes, preloadWorkspaceRoute, workspaceRouteLoaders } from './utils/workspaceRouteModules';
 import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQueries.js';
 import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
+import { WorkspaceNavigationBridge } from './hooks/useWorkspaceNavigation.js';
 import { clearStoredTerminalPage } from './features/terminal/terminalTrades.js';
 
 import Dashboard from './features/dashboard/Dashboard';
 import OnlineUsersDashboard from './features/analytics/OnlineUsersDashboard';
 import OpenOrdersDashboard from './features/analytics/OpenOrdersDashboard';
 import OpenPositionsPage from './features/clients/OpenPositionsPage';
+import ExposurePage from './features/exposure/ExposurePage';
 import ClientsDashboard from './features/clients/ClientsDashboard';
 import OrdersPage from './features/clients/OrdersPage';
 import GroupsPage from './features/groups/GroupsPage';
@@ -28,6 +30,20 @@ import PositionsPage from './features/clients/PositionsPage';
 import DealsPage from './features/clients/DealsPage';
 import OnlineUsersPage from './features/clients/OnlineUsersPage';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
+import CustomAnalyticsDashboard from './features/analytics/CustomAnalyticsDashboard';
+
+// An authenticated reload starts from the standard dashboard workspace.
+// Do this before BrowserRouter reads the URL so another route does not flash.
+if (typeof window !== 'undefined') {
+  const navigationType = window.performance?.getEntriesByType?.('navigation')?.[0]?.type;
+  if (
+    navigationType === 'reload' &&
+    authService.getSessionStatus().authenticated &&
+    !['/', '/dashboard'].includes(window.location.pathname)
+  ) {
+    window.history.replaceState(window.history.state, '', '/dashboard');
+  }
+}
 
 // Pre-warm the active route module immediately on hard refresh before render
 if (typeof window !== 'undefined' && window.location?.pathname) {
@@ -37,6 +53,7 @@ if (typeof window !== 'undefined' && window.location?.pathname) {
 // Keep primary navigation pages in the bundle for instant (<1s) zero-delay renders.
 // Auxiliary or deep views are loaded on-demand.
 const DailyReportPage = lazy(workspaceRouteLoaders.dailyReportPage);
+const AnalyticsOverviewDashboard = lazy(workspaceRouteLoaders.analyticsOverviewDashboard);
 const AdvertisingCampaignsDashboard = lazy(workspaceRouteLoaders.advertisingCampaignsDashboard);
 const ByCountryDashboard = lazy(workspaceRouteLoaders.byCountryDashboard);
 const GroupDetailsPage = lazy(workspaceRouteLoaders.groupDetailsPage);
@@ -56,9 +73,11 @@ const ROUTE_LOADING_LABELS = Object.freeze({
   '/dashboard': 'Dashboard',
   '/reports/daily': 'Daily Report',
   '/admin-dashboard': 'Dashboard',
+  '/analytics': 'Analytics',
   '/analytics/trading-accounts': 'Trading Accounts Analytics',
   '/analytics/online-users': 'Online Users',
   '/analytics/open-positions': 'Open Positions',
+  '/exposure': 'Exposure',
   '/analytics/advertising-campaigns': 'Advertising Campaigns',
   '/analytics/open-orders': 'Open Orders',
   '/analytics/by-country': 'By Country Analytics',
@@ -72,7 +91,7 @@ const ROUTE_LOADING_LABELS = Object.freeze({
   '/dealer/restrictions': 'Restricted Accounts',
   '/ib': 'IB Accounts',
   '/ib/tree': 'IB Tree',
-  '/groups': 'Account Groups',
+  '/groups': 'Groups',
   '/symbols': 'Symbols Browser',
   '/symbol-management': 'Symbol Management',
 });
@@ -347,6 +366,7 @@ function App() {
     // market-feed updates. React Router otherwise wraps every location change
     // in a transition, which can be postponed repeatedly by quote-store work.
     <Router unstable_useTransitions={false}>
+      <WorkspaceNavigationBridge />
       <GlobalErrorBoundary>
         <UiTranslator />
         <DesktopWindowControls variant={isAuthenticated ? 'workspace' : 'auth'} />
@@ -366,12 +386,16 @@ function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/reports/daily" element={<RequirePermission permission="view_accounts"><DailyReportPage /></RequirePermission>} />
                 <Route path="/admin-dashboard" element={<Dashboard />} />
+                <Route path="/analytics" element={<AnalyticsOverviewDashboard />} />
                 <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
                 <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />
                 <Route path="/analytics/open-positions" element={<OpenPositionsPage />} />
+                <Route path="/exposure" element={<ExposurePage />} />
                 <Route path="/analytics/advertising-campaigns" element={<AdvertisingCampaignsDashboard />} />
                 <Route path="/analytics/open-orders" element={<OpenOrdersDashboard />} />
                 <Route path="/analytics/by-country" element={<ByCountryDashboard />} />
+                <Route path="/analytics/custom/:reportId" element={<CustomAnalyticsDashboard />} />
+                <Route path="/analytics/custom" element={<CustomAnalyticsDashboard />} />
                 <Route path="/clients" element={<ClientsDashboard />} />
                 <Route path="/clients/online-users" element={<OnlineUsersPage />} />
                 <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />

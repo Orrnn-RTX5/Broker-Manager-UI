@@ -235,11 +235,11 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={17} className="text-center py-16" style={{ color: 'var(--muted)', fontSize: '12px' }}>
+              <tr><td colSpan={17} className="text-center py-16" style={{ color: 'var(--muted)', fontSize: '11px' }}>
                 {isIdle ? (
                   <div className="flex flex-col items-center gap-3">
-                    <span style={{ fontSize: '12px' }}>Deals are not loaded.</span>
-                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm" style={{ fontSize: '12px' }}>
+                    <span style={{ fontSize: '11px' }}>Deals are not loaded.</span>
+                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm" style={{ fontSize: '11px' }}>
                       <RefreshCw size={13} />
                       {loadLabel}
                     </button>
@@ -269,8 +269,8 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   <td>{row.accountName}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.accountGroup}</td>
                   <td>{row.symbol}</td>
-                  <td className="capitalize">
-                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`} style={{ fontSize: '10px' }}>
+                  <td className="uppercase">
+                    <span className={`ui-status ${isBuy ? 'ui-status-ok' : 'ui-status-danger'}`}>
                       {row.action}
                     </span>
                   </td>
@@ -281,7 +281,7 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.commission)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.swap)}</td>
                   <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.fee)}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: '12px' }}>{fmtDate(row.time)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: '11px' }}>{fmtDate(row.time)}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.comment}</td>
                 </tr>
               );

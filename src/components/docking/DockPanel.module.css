@@ -99,8 +99,8 @@
 }
 
 .workspaceUi {
-  font-size: var(--workspace-ui-font-size, 13px) !important;
-  font-weight: var(--workspace-ui-font-weight, 400) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
@@ -110,14 +110,14 @@
 }
 
 .panelIcon {
-  font-size: 14px;
+  font-size: 11px;
   color: var(--dock-icon-color, var(--accent, #1570ef));
   flex-shrink: 0;
 }
 
 .titleText {
-  font-size: 12px;
-  font-weight: var(--workspace-ui-title-font-weight, 600);
+  font-size: 11px;
+  font-weight: 400;
   color: var(--dock-title-text, #101828);
   letter-spacing: -0.01em;
   flex: 1;
@@ -143,7 +143,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   transition: background 0.12s, color 0.12s;
 }
 

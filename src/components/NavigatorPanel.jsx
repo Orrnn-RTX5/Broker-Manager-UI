@@ -6,20 +6,35 @@ import {
   Activity, BarChart2, ChevronDown, ChevronRight, CircleDollarSign, ClipboardCheck,
   FileClock, Folder, Gavel, GitBranch, Handshake, Landmark, LayoutDashboard,
   Award, BookOpen, Code, FileText, Globe, GraduationCap, Headphones, Mail,
-  Lock, LogIn, Megaphone, MessageSquare, Network, Newspaper, Plus, Search, ShoppingBag,
+  Lock, LogIn, Megaphone, MessageSquare, Network, Newspaper, Plus, RotateCcw, Search, ShoppingBag,
   Server, Settings2, Shield, ShieldCheck, TrendingUp, Unplug, User, Users, Users2, X,
 } from 'lucide-react';
-import { useGroupList } from '../hooks/useGroupList';
+import { useAllGroups } from '../hooks/useAllGroups';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
-import { getGroupDetailsPath } from '../features/groups/groupRoutes';
+import { getGroupsFolderPath } from '../features/groups/groupRoutes';
+import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
 import { PERMISSIONS } from '../utils/permissions';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
 import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
 import { SERVER_REPORT_FOLDERS } from './serverReportNavigation.js';
 import { APP_STORE_CATEGORIES, SUPPORT_ARTICLE_CATEGORIES } from './supportNavigation.js';
+import {
+  loadAnalyticsTree,
+  saveAnalyticsTree,
+  insertNode,
+  updateNode,
+  deleteNode,
+  generateUniqueName,
+  findNodeInfo,
+  getIconComponent,
+  PRESET_ANALYTICS_DEFINITIONS,
+  restoreDefaultPresets,
+} from './analyticsNavigatorState.js';
+import DeleteConfirmModal from './DeleteConfirmModal.jsx';
+import UndoToast from './UndoToast.jsx';
 
 const RenameIcon = ({ size = 14, color = '#38bdf8' }) => (
   <svg
@@ -230,8 +245,85 @@ const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu
   );
 };
 
-const TreeNode = ({ label, icon: Icon, children, defaultExpanded = false, count, path, activePath, disabled, disabledReason = 'Workspace adapter not connected yet', onClickNode, onExpandedChange, onIntent, onContextMenu }) => {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+const RenameInput = ({ initialValue, onCommit, onCancel }) => {
+  const [value, setValue] = useState(initialValue);
+  const inputRef = useRef(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, []);
+
+  const handleCommit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    const trimmed = value.trim();
+    if (trimmed) {
+      onCommit?.(trimmed);
+    } else {
+      onCancel?.();
+    }
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      handleCommit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      committedRef.current = true;
+      onCancel?.();
+    } else {
+      event.stopPropagation();
+    }
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      className="cc-tree-rename-input"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleCommit}
+      onKeyDown={handleKeyDown}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    />
+  );
+};
+
+const TreeNode = ({
+  label,
+  icon: Icon,
+  children,
+  defaultExpanded = false,
+  expandedProp,
+  count,
+  path,
+  activePath,
+  disabled,
+  disabledReason = 'Workspace adapter not connected yet',
+  onClickNode,
+  onExpandedChange,
+  onIntent,
+  onContextMenu,
+  isEditing = false,
+  onRenameCommit,
+  onRenameCancel,
+  onStartRename,
+  onDelete,
+  onAddFile,
+  onAddFolder,
+}) => {
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+  const isControlled = expandedProp !== undefined;
+  const expanded = isControlled ? expandedProp : internalExpanded;
   const hasChildren = Children.count(children) > 0;
   // Clients and IB Tree are separate destinations, not child views of their
   // neighboring list pages. Only detail routes inherit a list highlight.
@@ -241,20 +333,63 @@ const TreeNode = ({ label, icon: Icon, children, defaultExpanded = false, count,
     || (path === '/ib' && /^\/ib\/\d+(?:\/|$)/.test(activePath))
   );
   const activate = (event) => {
-    if (disabled) return;
+    if (disabled || isEditing) return;
+    const isChevron = Boolean(event?.target?.closest?.('.cc-tree-chevron'));
     if (hasChildren) {
-      const next = !expanded;
-      setExpanded(next);
-      onExpandedChange?.(next);
+      if (isChevron) {
+        const next = !expanded;
+        if (!isControlled) setInternalExpanded(next);
+        onExpandedChange?.(next);
+        return;
+      }
+      if (!expanded) {
+        if (!isControlled) setInternalExpanded(true);
+        onExpandedChange?.(true);
+      }
     }
     onClickNode?.(event);
   };
   return (
     <div className={`cc-tree-node ${hasChildren ? 'is-branch' : 'is-leaf'} ${active ? 'is-active' : ''} ${disabled ? 'is-disabled' : ''}`}>
-      <div role="treeitem" tabIndex={disabled ? -1 : 0} aria-expanded={hasChildren ? expanded : undefined} aria-disabled={disabled || undefined} aria-haspopup={onContextMenu ? 'menu' : undefined} title={disabled ? `${label} — ${disabledReason}` : label} onClick={activate} onPointerEnter={onIntent} onFocus={onIntent} onContextMenu={disabled ? undefined : onContextMenu} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event); } }}>
+      <div
+        role="treeitem"
+        tabIndex={disabled ? -1 : 0}
+        aria-expanded={hasChildren ? expanded : undefined}
+        aria-disabled={disabled || undefined}
+        aria-haspopup={onContextMenu ? 'menu' : undefined}
+        title={disabled ? `${label} — ${disabledReason}` : label}
+        onClick={activate}
+        onPointerEnter={onIntent}
+        onFocus={onIntent}
+        onContextMenu={disabled ? undefined : onContextMenu}
+        onKeyDown={(event) => {
+          if (isEditing) return;
+          if (event.key === 'F2') {
+            event.preventDefault();
+            onStartRename?.();
+          } else if (event.key === 'Delete') {
+            event.preventDefault();
+            onDelete?.();
+          } else if (event.key === 'Insert' && event.altKey) {
+            event.preventDefault();
+            onAddFolder?.();
+          } else if (event.key === 'Insert') {
+            event.preventDefault();
+            onAddFile?.();
+          } else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            activate(event);
+          }
+        }}
+      >
         <span className="cc-tree-chevron">{hasChildren ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : null}</span>
         <span className="cc-tree-icon">{Icon && <Icon size={13} strokeWidth={1.65} />}</span>
-        <span>{label}</span>{count != null && <b>{count}</b>}
+        {isEditing ? (
+          <RenameInput initialValue={label} onCommit={onRenameCommit} onCancel={onRenameCancel} />
+        ) : (
+          <span>{label}</span>
+        )}
+        {count != null && <b>{count}</b>}
       </div>
       {hasChildren && expanded && <div className="cc-tree-children">{children}</div>}
     </div>
@@ -267,37 +402,260 @@ export default function NavigatorPanel() {
   const navigate = useWorkspaceNavigation();
   const [loadGroups, setLoadGroups] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
-  const { groups, total, loading } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc', enabled: loadGroups });
+  const { groups, loading } = useAllGroups({ enabled: loadGroups });
+  const groupTree = useMemo(() => buildGroupNavigatorTree(groups), [groups]);
+  const currentWorkspacePath = `${location.pathname}${location.search}`;
   const { canAct, manager } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [brokerInfo] = useState(() => getBrokerInfo());
-  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || 'Nexa';
+  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || 'Broker';
   const managerLogin = String(manager.login ?? '').trim();
   const dailyReportLabel = managerLogin ? `(${managerLogin})- Daily Report` : 'Daily Report';
   const go = (path) => () => navigate(path);
+  // The Groups tree drops down to container folders (with their group counts)
+  // and every group name. A folder opens in the Groups explorer; a group opens
+  // its folder with the row selected and shows its properties.
+  const renderGroupTreeNode = (node) => {
+    if (node.type === 'group') {
+      const groupPath = getGroupsFolderPath(getGroupParentPath(node.path), node.path);
+      return (
+        <TreeNode
+          key={node.id}
+          label={node.label}
+          icon={Users}
+          path={groupPath}
+          activePath={currentWorkspacePath}
+          onClickNode={() => navigate(groupPath, { state: { openGroupProperties: true } })}
+        />
+      );
+    }
+    return (
+      <TreeNode key={node.id} label={node.label} icon={Folder} count={node.count} path={getGroupsFolderPath(node.path)} activePath={currentWorkspacePath} onClickNode={go(getGroupsFolderPath(node.path))}>
+        {node.children.map((child) => renderGroupTreeNode(child))}
+      </TreeNode>
+    );
+  };
+
+  // Dynamic analytics tree state
+  const [analyticsTree, setAnalyticsTree] = useState(() => loadAnalyticsTree());
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState(() => new Set());
+
   const [navigatorContextMenu, setNavigatorContextMenu] = useState(null);
   const closeNavigatorContextMenu = useCallback(() => setNavigatorContextMenu(null), []);
-  const openNavigatorContextMenu = useCallback((event, type) => {
+  const openNavigatorContextMenu = useCallback((event, type, targetItem = null) => {
     event.preventDefault();
     event.stopPropagation();
-    setNavigatorContextMenu({ x: event.clientX, y: event.clientY, type });
+    setNavigatorContextMenu({ x: event.clientX, y: event.clientY, type, targetItem });
   }, []);
   const openServerContextMenu = useCallback((event) => openNavigatorContextMenu(event, 'server'), [openNavigatorContextMenu]);
   const openDailyReportContextMenu = useCallback((event) => openNavigatorContextMenu(event, 'daily-report'), [openNavigatorContextMenu]);
-  const openTradingAnalyticsContextMenu = useCallback((event) => openNavigatorContextMenu(event, 'analytics'), [openNavigatorContextMenu]);
+  const openTradingAnalyticsContextMenu = useCallback((event, targetItem = null) => openNavigatorContextMenu(event, 'analytics', targetItem), [openNavigatorContextMenu]);
 
-  const analyticsContextMenuItems = useMemo(() => [
-    { action: 'add', label: 'Add', icon: Plus, tone: 'add', shortcut: 'Insert', plainShortcut: true },
-    { action: 'add-folder', label: 'Add Folder', icon: Folder, tone: 'folder', shortcut: 'Alt+Insert', plainShortcut: true },
-    { action: 'rename', label: 'Rename', icon: RenameIcon, tone: 'rename', shortcut: 'F2', plainShortcut: true },
-    { action: 'delete', label: 'Delete', icon: X, tone: 'danger', shortcut: 'Delete', plainShortcut: true },
-    { separator: true },
-    { action: 'preset-trading-accounts', label: 'Add Preset Trading Accounts', onClick: () => navigate('/analytics/trading-accounts') },
-    { action: 'preset-online-users', label: 'Add Preset Online Users', onClick: () => navigate('/analytics/online-users') },
-    { action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => navigate('/analytics/open-positions') },
-    { action: 'preset-open-orders', label: 'Add Preset Open Orders', onClick: () => navigate('/analytics/open-orders') },
-    { action: 'preset-advertising-campaigns', label: 'Add Preset Advertising Campaigns', onClick: () => navigate('/analytics/advertising-campaigns') },
-    { action: 'preset-by-country', label: 'Add Preset By Country', onClick: () => navigate('/analytics/by-country') },
+  const currentAnalyticsTarget = navigatorContextMenu?.type === 'analytics' ? navigatorContextMenu.targetItem : null;
+
+  const handleAddFile = useCallback((target = null) => {
+    const targetItem = target ?? currentAnalyticsTarget;
+    const isTargetFolder = targetItem?.type === 'folder';
+    const targetId = targetItem?.id || null;
+    const newId = 'analytics-file-' + Date.now();
+    const newName = generateUniqueName(analyticsTree, 'New Analytics View');
+    const newFile = {
+      id: newId,
+      label: newName,
+      iconName: 'FileText',
+      path: `/analytics/custom/${newId}`,
+      type: 'file',
+    };
+    setAnalyticsTree((prev) => {
+      const updated = insertNode(prev, targetId, newFile, isTargetFolder);
+      saveAnalyticsTree(updated);
+      return updated;
+    });
+    if (isTargetFolder && targetId) {
+      setExpandedFolderIds((prev) => new Set([...prev, targetId]));
+    }
+    setEditingNodeId(newId);
+  }, [currentAnalyticsTarget, analyticsTree]);
+
+  const handleAddFolder = useCallback((target = null) => {
+    const targetItem = target ?? currentAnalyticsTarget;
+    const isTargetFolder = targetItem?.type === 'folder';
+    const targetId = targetItem?.id || null;
+    const newId = 'analytics-folder-' + Date.now();
+    const newName = generateUniqueName(analyticsTree, 'New Folder');
+    const newFolder = {
+      id: newId,
+      label: newName,
+      iconName: 'Folder',
+      type: 'folder',
+      children: [],
+    };
+    setAnalyticsTree((prev) => {
+      const updated = insertNode(prev, targetId, newFolder, isTargetFolder);
+      saveAnalyticsTree(updated);
+      return updated;
+    });
+    if (isTargetFolder && targetId) {
+      setExpandedFolderIds((prev) => new Set([...prev, targetId]));
+    }
+    setExpandedFolderIds((prev) => new Set([...prev, newId]));
+    setEditingNodeId(newId);
+  }, [currentAnalyticsTarget, analyticsTree]);
+
+  const handleRename = useCallback((target = null) => {
+    const targetItem = target ?? currentAnalyticsTarget;
+    if (!targetItem?.id) return;
+    setEditingNodeId(targetItem.id);
+  }, [currentAnalyticsTarget]);
+
+  // Deletion confirmation & undo state
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [undoToast, setUndoToast] = useState(null);
+
+  const requestDelete = useCallback((target = null) => {
+    const targetItem = target ?? currentAnalyticsTarget;
+    if (!targetItem?.id) return;
+    setDeleteConfirmItem(targetItem);
+  }, [currentAnalyticsTarget]);
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteConfirmItem?.id) return;
+    const itemToDelete = deleteConfirmItem;
+    // Push snapshot to undo stack before deleting
+    setUndoStack((prev) => [
+      ...prev,
+      { tree: JSON.parse(JSON.stringify(analyticsTree)), deletedItem: itemToDelete }
+    ]);
+    setAnalyticsTree((prev) => {
+      const updated = deleteNode(prev, itemToDelete.id);
+      saveAnalyticsTree(updated);
+      return updated;
+    });
+    if (itemToDelete.path && location.pathname === itemToDelete.path) {
+      if (itemToDelete.path === '/analytics/trading-accounts') {
+        navigate('/dashboard');
+      } else {
+        navigate('/analytics/trading-accounts');
+      }
+    }
+    setDeleteConfirmItem(null);
+    setUndoToast({
+      message: `Deleted "${itemToDelete.label}".`,
+      deletedItem: itemToDelete,
+      canUndo: true,
+    });
+  }, [deleteConfirmItem, analyticsTree, location.pathname, navigate]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmItem(null);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    setUndoStack((prev) => {
+      if (!prev.length) return prev;
+      const last = prev[prev.length - 1];
+      setAnalyticsTree(last.tree);
+      saveAnalyticsTree(last.tree);
+      setUndoToast({
+        message: `Restored "${last.deletedItem?.label || 'item'}".`,
+        canUndo: false,
+      });
+      return prev.slice(0, prev.length - 1);
+    });
+  }, []);
+
+  // Auto-heal / restore Trading Analytics if it was accidentally deleted and is missing in current active tree
+  useEffect(() => {
+    const hasTradingAnalytics = findNodeInfo(analyticsTree, 'analytics-trading-accounts') ||
+      analyticsTree.some((item) => item.id === 'analytics-trading-accounts' || item.path === '/analytics/trading-accounts');
+    if (!hasTradingAnalytics) {
+      const tradingItem = {
+        id: 'analytics-trading-accounts',
+        label: 'Trading Analytics',
+        iconName: 'TrendingUp',
+        path: '/analytics/trading-accounts',
+        type: 'file',
+        isDefault: true,
+      };
+      setAnalyticsTree((prev) => {
+        const clone = JSON.parse(JSON.stringify(prev));
+        const dashIdx = clone.findIndex((item) => item.id === 'analytics-dashboard');
+        if (dashIdx !== -1) {
+          clone.splice(dashIdx + 1, 0, tradingItem);
+        } else {
+          clone.unshift(tradingItem);
+        }
+        saveAnalyticsTree(clone);
+        return clone;
+      });
+    }
+  }, [analyticsTree]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo]);
+
+  const handleRestoreDefaults = useCallback(() => {
+    setAnalyticsTree((prev) => {
+      const restored = restoreDefaultPresets(prev);
+      return restored;
+    });
+    setUndoToast({
+      message: 'Restored default analytics views including Trading Analytics.',
+      canUndo: false,
+    });
+    navigate('/analytics/trading-accounts');
+  }, [navigate]);
+
+  const handlePreset = useCallback((action, defaultPath) => {
+    const presetDef = PRESET_ANALYTICS_DEFINITIONS[action];
+    if (presetDef) {
+      const info = findNodeInfo(analyticsTree, presetDef.id);
+      if (!info) {
+        setAnalyticsTree((prev) => {
+          const clone = JSON.parse(JSON.stringify(prev));
+          if (presetDef.id === 'analytics-trading-accounts') {
+            const dashIdx = clone.findIndex((item) => item.id === 'analytics-dashboard');
+            if (dashIdx !== -1) {
+              clone.splice(dashIdx + 1, 0, { ...presetDef });
+            } else {
+              clone.unshift({ ...presetDef });
+            }
+          } else {
+            clone.push({ ...presetDef });
+          }
+          saveAnalyticsTree(clone);
+          return clone;
+        });
+      }
+    }
+    navigate(defaultPath);
+  }, [analyticsTree, navigate]);
+
+  // Root "Analytics" node menu: the group itself cannot be renamed or deleted,
+  // so only Add actions and the preset catalogue are offered.
+  const analyticsRootContextMenuItems = useMemo(() => [
+    { action: 'add', label: 'Add', icon: Plus, tone: 'add', shortcut: 'Insert', plainShortcut: true, onClick: () => handleAddFile(null) },
+    { action: 'add-folder', label: 'Add Folder', icon: Folder, tone: 'folder', shortcut: 'Alt+Insert', plainShortcut: true, onClick: () => handleAddFolder(null) },
+    { action: 'preset-trading-accounts', label: 'Add Preset Trading Accounts', icon: TrendingUp, onClick: () => handlePreset('preset-trading-accounts', '/analytics/trading-accounts') },
+    { action: 'preset-online-users', label: 'Add Preset Online Users', onClick: () => handlePreset('preset-online-users', '/analytics/online-users') },
+    { action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') },
+    { action: 'preset-open-orders', label: 'Add Preset Open Orders', onClick: () => handlePreset('preset-open-orders', '/analytics/open-orders') },
+    { action: 'preset-advertising-campaigns', label: 'Add Preset Advertising Campaigns', onClick: () => handlePreset('preset-advertising-campaigns', '/analytics/advertising-campaigns') },
+    { action: 'preset-by-country', label: 'Add Preset By Country', onClick: () => handlePreset('preset-by-country', '/analytics/by-country') },
     {
       action: 'preset-finteza-website',
       label: 'Add Preset Finteza Website',
@@ -322,7 +680,117 @@ export default function NavigatorPanel() {
         { action: 'finteza-roi', label: 'Cost & ROI Tracking', onClick: () => navigate('/analytics/advertising-campaigns?view=roi') },
       ],
     },
-  ], [navigate]);
+  ], [handleAddFile, handleAddFolder, handlePreset, navigate]);
+
+  const analyticsContextMenuItems = useMemo(() => [
+    { action: 'add', label: 'Add', icon: Plus, tone: 'add', shortcut: 'Insert', plainShortcut: true, onClick: () => handleAddFile(currentAnalyticsTarget) },
+    { action: 'add-folder', label: 'Add Folder', icon: Folder, tone: 'folder', shortcut: 'Alt+Insert', plainShortcut: true, onClick: () => handleAddFolder(currentAnalyticsTarget) },
+    { action: 'rename', label: 'Rename', icon: RenameIcon, tone: 'rename', shortcut: 'F2', plainShortcut: true, onClick: () => handleRename(currentAnalyticsTarget) },
+    { action: 'delete', label: 'Delete', icon: X, tone: 'danger', shortcut: 'Delete', plainShortcut: true, onClick: () => requestDelete(currentAnalyticsTarget) },
+    { separator: true },
+    { action: 'restore-defaults', label: 'Restore Default Analytics', icon: RotateCcw, onClick: handleRestoreDefaults },
+    { action: 'preset-trading-accounts', label: 'Restore Trading Analytics', icon: TrendingUp, onClick: () => handlePreset('preset-trading-accounts', '/analytics/trading-accounts') },
+    { action: 'preset-online-users', label: 'Add Preset Online Users', onClick: () => handlePreset('preset-online-users', '/analytics/online-users') },
+    { action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') },
+    { action: 'preset-open-orders', label: 'Add Preset Open Orders', onClick: () => handlePreset('preset-open-orders', '/analytics/open-orders') },
+    { action: 'preset-advertising-campaigns', label: 'Add Preset Advertising Campaigns', onClick: () => handlePreset('preset-advertising-campaigns', '/analytics/advertising-campaigns') },
+    { action: 'preset-by-country', label: 'Add Preset By Country', onClick: () => handlePreset('preset-by-country', '/analytics/by-country') },
+    {
+      action: 'preset-finteza-website',
+      label: 'Add Preset Finteza Website',
+      hasSubmenu: true,
+      onClick: () => navigate('/analytics/advertising-campaigns?source=website'),
+      submenuItems: [
+        { action: 'finteza-traffic', label: 'Overview & Traffic', onClick: () => navigate('/analytics/advertising-campaigns?source=website') },
+        { action: 'finteza-audience', label: 'Audience & Geography', onClick: () => navigate('/analytics/by-country?source=website') },
+        { action: 'finteza-conversions', label: 'Conversions & Goals', onClick: () => navigate('/analytics/advertising-campaigns?source=goals') },
+        { action: 'finteza-funnel', label: 'E-Commerce Funnel', onClick: () => navigate('/analytics/advertising-campaigns?source=funnel') },
+      ],
+    },
+    {
+      action: 'preset-finteza-campaign',
+      label: 'Add Preset Finteza Campaign',
+      hasSubmenu: true,
+      onClick: () => navigate('/analytics/advertising-campaigns?view=sources'),
+      submenuItems: [
+        { action: 'finteza-sources', label: 'Advertising Sources', onClick: () => navigate('/analytics/advertising-campaigns?view=sources') },
+        { action: 'finteza-utm', label: 'UTM Campaigns', onClick: () => navigate('/analytics/advertising-campaigns?view=utm') },
+        { action: 'finteza-banners', label: 'Ad Banners Performance', onClick: () => navigate('/analytics/advertising-campaigns?view=banners') },
+        { action: 'finteza-roi', label: 'Cost & ROI Tracking', onClick: () => navigate('/analytics/advertising-campaigns?view=roi') },
+      ],
+    },
+  ], [currentAnalyticsTarget, handleAddFile, handleAddFolder, handleRename, requestDelete, handlePreset, navigate]);
+
+  const renderAnalyticsItem = useCallback((item) => {
+    const isFolder = item.type === 'folder';
+    const Icon = getIconComponent(item.iconName, isFolder);
+    const isEditing = editingNodeId === item.id;
+    const isExpanded = isFolder ? expandedFolderIds.has(item.id) : false;
+
+    if (isFolder) {
+      return (
+        <TreeNode
+          key={item.id}
+          label={item.label}
+          icon={Icon}
+          defaultExpanded={true}
+          expandedProp={isExpanded}
+          onExpandedChange={(next) => {
+            setExpandedFolderIds((prev) => {
+              const nextSet = new Set(prev);
+              if (next) nextSet.add(item.id);
+              else nextSet.delete(item.id);
+              return nextSet;
+            });
+          }}
+          isEditing={isEditing}
+          onRenameCommit={(newLabel) => {
+            setAnalyticsTree((prev) => {
+              const updated = updateNode(prev, item.id, { label: newLabel });
+              saveAnalyticsTree(updated);
+              return updated;
+            });
+            setEditingNodeId(null);
+          }}
+          onRenameCancel={() => setEditingNodeId(null)}
+          onContextMenu={(e) => openTradingAnalyticsContextMenu(e, item)}
+          onStartRename={() => setEditingNodeId(item.id)}
+          onDelete={() => requestDelete(item)}
+          onAddFile={() => handleAddFile(item)}
+          onAddFolder={() => handleAddFolder(item)}
+        >
+          {Array.isArray(item.children) && item.children.map(renderAnalyticsItem)}
+        </TreeNode>
+      );
+    }
+
+    return (
+      <TreeNode
+        key={item.id}
+        label={item.label}
+        icon={Icon}
+        path={item.path}
+        activePath={location.pathname}
+        isEditing={isEditing}
+        onRenameCommit={(newLabel) => {
+          setAnalyticsTree((prev) => {
+            const updated = updateNode(prev, item.id, { label: newLabel });
+            saveAnalyticsTree(updated);
+            return updated;
+          });
+          setEditingNodeId(null);
+        }}
+        onRenameCancel={() => setEditingNodeId(null)}
+        onIntent={() => item.path && preloadAnalyticsDestination(queryClient, item.path)}
+        onClickNode={() => item.path && navigate(item.path)}
+        onContextMenu={(e) => openTradingAnalyticsContextMenu(e, item)}
+        onStartRename={() => setEditingNodeId(item.id)}
+        onDelete={() => requestDelete(item)}
+        onAddFile={() => handleAddFile(item)}
+        onAddFolder={() => handleAddFolder(item)}
+      />
+    );
+  }, [editingNodeId, expandedFolderIds, location.pathname, openTradingAnalyticsContextMenu, requestDelete, handleAddFile, handleAddFolder, queryClient, navigate]);
 
   const node = (label, icon, path, preload = 'workspace', onContextMenu) => (
     <TreeNode key={label} label={label} icon={icon} path={path} activePath={location.pathname} onIntent={() => preload === 'analytics' ? preloadAnalyticsDestination(queryClient, path) : preloadWorkspaceDestination(queryClient, path)} onClickNode={go(path)} onContextMenu={onContextMenu} />
@@ -349,14 +817,17 @@ export default function NavigatorPanel() {
           <TreeNode label="Backup Servers" icon={Network} disabled />
         </TreeNode>
 
-        <TreeNode label="Analytics" icon={BarChart2} defaultExpanded onContextMenu={openTradingAnalyticsContextMenu}>
-          {node('Dashboard', LayoutDashboard, '/dashboard', 'analytics')}
-          {node('Trading Analytics', TrendingUp, '/analytics/trading-accounts', 'analytics', openTradingAnalyticsContextMenu)}
-          {node('Online Users', Users, '/analytics/online-users', 'analytics', openTradingAnalyticsContextMenu)}
-          {node('Open Positions', Activity, '/analytics/open-positions', 'analytics', openTradingAnalyticsContextMenu)}
-          {node('Open Orders', ClipboardCheck, '/analytics/open-orders', 'analytics', openTradingAnalyticsContextMenu)}
-          {node('Advertising Campaigns', Megaphone, '/analytics/advertising-campaigns', 'analytics', openTradingAnalyticsContextMenu)}
-          {node('By Country', Globe, '/analytics/by-country', 'analytics', openTradingAnalyticsContextMenu)}
+        <TreeNode
+          label="Analytics"
+          icon={BarChart2}
+          defaultExpanded
+          path="/analytics"
+          activePath={location.pathname}
+          onClickNode={() => navigate('/analytics')}
+          onIntent={() => preloadAnalyticsDestination(queryClient, '/analytics')}
+          onContextMenu={(e) => openTradingAnalyticsContextMenu(e, null)}
+        >
+          {analyticsTree.map(renderAnalyticsItem)}
         </TreeNode>
 
         <TreeNode label="Server Reports" icon={FileClock} defaultExpanded>
@@ -395,7 +866,7 @@ export default function NavigatorPanel() {
         </TreeNode>
 
         <TreeNode label="Risk Management" icon={Shield} defaultExpanded>
-          {node('Exposure', Activity, '/analytics/open-positions')}
+          {node('Exposure', Activity, '/exposure')}
           <TreeNode label="Margin Rules" icon={Settings2} disabled />
           {node('Restricted Accounts', Shield, '/dealer/restrictions')}
         </TreeNode>
@@ -418,9 +889,9 @@ export default function NavigatorPanel() {
           {node('Symbol Management', Settings2, '/symbol-management')}
         </TreeNode>
 
-        <TreeNode label="Account Groups" icon={Users2} count={loadGroups ? (loading ? '…' : total ?? groups.length) : null} onExpandedChange={(open) => open && setLoadGroups(true)}>
-          {groups.map((group) => <TreeNode key={group.name} label={group.name} icon={Folder} path={getGroupDetailsPath(group.name)} activePath={location.pathname} onClickNode={go(getGroupDetailsPath(group.name))} />)}
-          {canManageGroups && <TreeNode label="New Group" icon={Users2} onClickNode={() => setNewGroupOpen(true)} />}
+        <TreeNode label="Groups" icon={Users2} count={loadGroups ? (loading ? '…' : groups.length) : null} path="/groups" activePath={location.search ? currentWorkspacePath : location.pathname} onClickNode={go('/groups')} onExpandedChange={(open) => open && setLoadGroups(true)}>
+          {groupTree.map((node) => renderGroupTreeNode(node))}
+          {canManageGroups && <TreeNode label="New Group" icon={Plus} onClickNode={() => setNewGroupOpen(true)} />}
         </TreeNode>
 
         <TreeNode label="Mailbox" icon={Mail} disabled disabledReason="Mailbox not available yet" />
@@ -465,20 +936,35 @@ export default function NavigatorPanel() {
             navigatorContextMenu.type === 'daily-report'
               ? DAILY_REPORT_CONTEXT_MENU_ITEMS
               : navigatorContextMenu.type === 'analytics'
-                ? analyticsContextMenuItems
+                ? (currentAnalyticsTarget ? analyticsContextMenuItems : analyticsRootContextMenuItems)
                 : SERVER_CONTEXT_MENU_ITEMS
           }
           ariaLabel={
             navigatorContextMenu.type === 'daily-report'
               ? 'Daily Report actions'
               : navigatorContextMenu.type === 'analytics'
-                ? 'Trading Analytics actions'
+                ? 'Analytics actions'
                 : `${serverLabel} connection actions`
           }
           onClose={closeNavigatorContextMenu}
         />
       )}
       {newGroupOpen && canManageGroups && <NewGroupModal onClose={() => setNewGroupOpen(false)} onSuccess={() => setNewGroupOpen(false)} />}
+      {deleteConfirmItem && (
+        <DeleteConfirmModal
+          item={deleteConfirmItem}
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
+      )}
+      {undoToast && (
+        <UndoToast
+          message={undoToast.message}
+          canUndo={undoToast.canUndo}
+          onUndo={handleUndo}
+          onClose={() => setUndoToast(null)}
+        />
+      )}
     </div>
   );
 }

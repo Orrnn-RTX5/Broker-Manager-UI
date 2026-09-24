@@ -28,7 +28,7 @@ const RealAccountsChart = () => {
             <Tooltip
               cursor={{ stroke: 'var(--muted)', strokeWidth: 1, strokeDasharray: '3 3' }}
               contentStyle={{
-                fontSize: '12px',
+                fontSize: '11px',
                 borderRadius: '8px',
                 border: '1px solid var(--border)',
                 boxShadow: 'var(--shadow-md)',

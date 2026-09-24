@@ -228,7 +228,7 @@ export default {
   'Open Owner Console': 'オーナーコンソールを開く',
   'Opened Orders': '有効な注文',
   'Operational footprint': '地域別の展開状況',
-  'GLOBAL COVERAGE': '世界各地での展開',
+  'Global coverage': '世界各地での展開',
   'Regional presence': '地域別拠点',
   'Order': '注文',
   'Order comment (optional)...': '注文コメント（任意）...',

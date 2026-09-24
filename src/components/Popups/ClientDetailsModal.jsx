@@ -1,10 +1,10 @@
 import { X, User, Mail, Phone, MapPin, Globe, Tag, BadgeCheck, Target } from 'lucide-react';
 
 const STATUS_BADGE = {
-  Active:       'ui-badge-success',
-  Inactive:     'ui-badge-neutral',
-  Unregistered: 'ui-badge-warn',
-  Pending:      'ui-badge-info',
+  Active:       'ui-status-ok',
+  Inactive:     'ui-status-neutral',
+  Unregistered: 'ui-status-warn',
+  Pending:      'ui-status-info',
 };
 
 const Row = ({ icon: Icon, label, value, mono }) => (
@@ -46,7 +46,7 @@ export default function ClientDetailsModal({ client, onClose }) {
             <div className="flex items-center gap-2 mt-1">
               <span className="tabular text-xs font-mono" style={{ color: 'var(--text-3)' }}>ID {client.id}</span>
               {client.status && (
-                <span className={`ui-badge ${STATUS_BADGE[client.status] || 'ui-badge-neutral'}`}>
+                <span className={`ui-status ${STATUS_BADGE[client.status] || 'ui-status-neutral'}`}>
                   {client.status}
                 </span>
               )}

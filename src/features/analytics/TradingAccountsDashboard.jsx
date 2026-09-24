@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
@@ -6,7 +6,7 @@ import {
   CartesianGrid, Cell, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DonutChart } from '../../components/ui/donut-chart';
 import DateRangePicker from '../../components/Popups/DateRangePicker';
@@ -65,7 +65,7 @@ const EmptyReport = ({ children }) => (
   <div className="trading-analytics-empty"><span>{children}</span></div>
 );
 
-export default function TradingAccountsDashboard() {
+export default function TradingAccountsDashboard({ title = 'Trading Accounts' } = {}) {
   const navigate = useNavigate();
   const toolbarRef = useOwnerConsoleAutoCollapse(':scope > :last-child');
   const [campaign, setCampaign] = useState(ALL_CAMPAIGNS);
@@ -80,6 +80,20 @@ export default function TradingAccountsDashboard() {
     brokerId: claims.brokerId,
   });
   const accountQuery = useQuery(getTradingAccountsAnalyticsQueryOptions(scope));
+
+  // Reactive listener for external account updates or deletions
+  useEffect(() => {
+    const handleAccountsChanged = () => {
+      accountQuery.refetch();
+    };
+    window.addEventListener('trading-accounts-changed', handleAccountsChanged);
+    window.addEventListener('accounts-updated', handleAccountsChanged);
+    return () => {
+      window.removeEventListener('trading-accounts-changed', handleAccountsChanged);
+      window.removeEventListener('accounts-updated', handleAccountsChanged);
+    };
+  }, [accountQuery]);
+
   const accounts = accountQuery.data || EMPTY_ACCOUNTS;
   const filterOptions = useMemo(() => buildTradingAccountFilterOptions(accounts), [accounts]);
   const report = useMemo(() => buildTradingAccountReport(accounts, {
@@ -121,7 +135,7 @@ export default function TradingAccountsDashboard() {
     <main className="trading-analytics-page">
       <header className="trading-analytics-heading">
         <div className="trading-analytics-title">
-          <h1>Trading Accounts</h1>
+          <h1>{title}</h1>
         </div>
         <div ref={toolbarRef} className="trading-analytics-toolbar" role="group" aria-label="Report filters">
           <FilterDropdown value={campaign} options={createOptions(ALL_CAMPAIGNS, filterOptions.campaigns)} onChange={setCampaign} className="trading-analytics-filter trading-analytics-filter-campaign" style={{ width: 144 }} loading={loading} />
@@ -129,6 +143,15 @@ export default function TradingAccountsDashboard() {
           <FilterDropdown value={country} options={createOptions(ALL_COUNTRIES, filterOptions.countries)} onChange={setCountry} className="trading-analytics-filter trading-analytics-filter-country" style={{ width: 118 }} loading={loading} />
           <FilterDropdown value={group} options={createOptions(ALL_GROUPS, filterOptions.groups)} onChange={setGroup} className="trading-analytics-filter trading-analytics-filter-group" style={{ width: 108 }} loading={loading} />
           <div className="trading-analytics-date-range"><DateRangePicker onChange={setDateRange} /></div>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary ui-btn-sm"
+            onClick={() => accountQuery.refetch()}
+            title="Refresh analytics data"
+            aria-label="Refresh analytics data"
+          >
+            <RotateCw size={13} className={accountQuery.isFetching ? 'animate-spin' : ''} aria-hidden="true" />
+          </button>
           <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => navigate('/clients/trading-accounts')}>
             View accounts <ArrowUpRight size={13} aria-hidden="true" />
           </button>
@@ -161,7 +184,7 @@ export default function TradingAccountsDashboard() {
                           <XAxis dataKey="date" axisLine={{ stroke: 'var(--border-3)' }} tickLine={false} minTickGap={40} tick={{ fill: 'var(--text-3)', fontSize: 9 }} />
                           <YAxis allowDecimals={false} width={42} axisLine={{ stroke: 'var(--border-3)' }} tickLine={false} tickFormatter={(value) => compactFormatter.format(value)} tick={{ fill: 'var(--text-3)', fontSize: 9 }} />
                           <Tooltip contentStyle={tooltipStyle} formatter={(value) => [countFormatter.format(value), 'Accounts']} />
-                          <Line type="linear" dataKey="count" name="Accounts" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--accent)', strokeWidth: 2 }} activeDot={{ r: 4 }} isAnimationActive={false} />
+                          <Line type="linear" dataKey="count" name="Accounts" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--accent)', strokeWidth: 2 }} activeDot={{ r: 4 }} isAnimationActive={true} animationDuration={600} />
                         </LineChart>
                       </ResponsiveContainer>
                     )}

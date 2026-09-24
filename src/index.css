@@ -14,19 +14,24 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace;
   --feature-sans: normal;
   --feature-num: "tnum", "lnum", "zero";
-  --ui-font-small: 10px;
-  --ui-font-base: 12px;
+  --ui-font-small: 11px;
+  --ui-font-base: 11px;
+  --ui-font-lg: 11px;
   --ui-weight-regular: 400;
-  --ui-weight-medium: 500;
-  --ui-weight-semibold: 600;
+  --ui-weight-medium: 400;
+  --ui-weight-semibold: 400;
+  --ui-weight-bold: 400;
   /* Terminal workspace type: shared by the menu, docked panels and quote grid. */
-  --workspace-ui-font-size: 12px;
+  --workspace-ui-font-size: 11px;
   --workspace-ui-font-weight: 400;
-  --workspace-ui-small-font-size: var(--ui-font-small);
+  --workspace-ui-small-font-size: 11px;
   --workspace-ui-small-font-weight: 400;
-  --workspace-ui-control-font-size: var(--ui-font-base);
-  --workspace-ui-title-font-size: var(--ui-font-base);
-  --workspace-ui-title-font-weight: 600;
+  --workspace-ui-control-font-size: 11px;
+  --workspace-ui-title-font-size: 11px;
+  --workspace-ui-title-font-weight: 400;
+  --account-ui-small: 11px;
+  --account-ui-base: 11px;
+  --account-ui-heading: 11px;
   /* tabular, lining, slashed zero */
 
   /* Surfaces โ€” cool slate light theme */
@@ -127,17 +132,24 @@
   --border: #3b3b3b;
   --border-2: #303030;
   --border-3: #575757;
-  --text: #a9b1d6;
-  --text-2: #b5b5bd;
-  --text-3: #a2a2ac;
-  --muted: #a2a2ac;
+  /* Text is white at graded strength: softer than pure white on the
+     charcoal surfaces, with the hierarchy carried by strength and weight. */
+  --ink-strong: rgba(255, 255, 255, 0.96);
+  --ink-1: rgba(255, 255, 255, 0.88);
+  --ink-2: rgba(255, 255, 255, 0.78);
+  --ink-3: rgba(255, 255, 255, 0.7);
+  --ink-placeholder: rgba(255, 255, 255, 0.45);
+  --text: var(--ink-1);
+  --text-2: var(--ink-2);
+  --text-3: var(--ink-3);
+  --muted: var(--ink-3);
   --accent: #007ecf;
   --accent-hover: #0075c2;
   --accent-press: #0069ad;
   --accent-soft: #2f2f2f;
   --accent-soft-2: #292929;
   --accent-border: #007ecf;
-  --accent-text: #80c6f4;
+  --accent-text: var(--ink-strong);
   --ok: #8fbd9d;
   --ok-soft: #252e28;
   --ok-text: #a4cfb0;
@@ -152,7 +164,7 @@
   --warn-border: rgba(254, 200, 75, 0.32);
   --info: #66b8ed;
   --info-soft: #23313b;
-  --info-text: #80c6f4;
+  --info-text: var(--ink-1);
   --info-border: #34566d;
   --ring: 0 0 0 3px rgba(0, 126, 207, .3);
 }
@@ -167,8 +179,8 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--sans);
-  font-size: var(--ui-font-base);
-  font-weight: var(--ui-weight-regular);
+  font-size: 11px;
+  font-weight: 400;
   font-feature-settings: var(--feature-sans);
   color: var(--text);
   background: var(--bg);
@@ -178,60 +190,57 @@ body {
   letter-spacing: -0.005em;
 }
 
-/* Manager-wide type system: keep everyday UI text readable and consistent.
-   Historical screens used several 6pxโ€“12px utility values, which made the
-   manager feel like separate applications. Page and dialog headings remain
-   distinct through weight and color while staying on a 10px/12px scale. */
-#root :where(.text-xs,
-  .text-\[6px\], .text-\[8px\], .text-\[9px\], .text-\[10px\]) {
-  font-size: var(--ui-font-small) !important;
-  line-height: 1.4;
+/* Universal Typography System (11px / 400):
+   Strictly uniform font size and weight across the entire application:
+   all folders, subfolders, files, pages, features, dialogs, tables, and future
+   feature implementations. */
+html,
+body,
+#root {
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
-#root :where(.text-sm, .text-base, .text-lg, .text-xl, .text-2xl,
-  .text-\[11px\], .text-\[12px\], .text-\[13px\], .text-\[14px\],
-  .text-\[15px\], .text-\[16px\], .text-\[18px\], .text-\[20px\],
-  .text-\[22px\], .text-\[24px\], .text-\[26px\], .text-\[28px\]) {
-  font-size: var(--ui-font-base) !important;
-  line-height: 1.4;
+body :is(
+  h1, h2, h3, h4, h5, h6,
+  p, span, div, a, label, li, ul, ol,
+  button, input, select, textarea, option, optgroup,
+  table, thead, tbody, tfoot, tr, th, td,
+  strong, b, em, i, small, kbd, code, pre,
+  dt, dd, dl, section, header, footer, nav, aside,
+  article, main, dialog, form, fieldset, legend
+) {
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
-#root :where(h1, h2, h3, h4, h5, h6) {
-  font-size: var(--ui-font-base) !important;
-  font-weight: var(--ui-weight-semibold) !important;
+/* Tailwind utility overrides: all text size and font weight utilities resolve to 12px and 400 */
+body :where(
+  [class*="text-"],
+  [class*="font-"],
+  .text-xs, .text-sm, .text-base, .text-lg, .text-xl, .text-2xl, .text-3xl, .text-4xl,
+  .font-thin, .font-extralight, .font-light, .font-normal, .font-medium, .font-semibold, .font-bold, .font-extrabold, .font-black
+) {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+.workspace-ui,
+.workspace-ui * {
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
-#root :where(button, input, select, textarea) {
-  font-size: var(--ui-font-base);
-  font-weight: var(--ui-weight-medium);
-}
-
-#root :where(.font-normal) { font-weight: var(--ui-weight-regular) !important; }
-#root :where(.font-medium) { font-weight: var(--ui-weight-medium) !important; }
-#root :where(.font-semibold, .font-bold, .font-extrabold, .font-black) {
-  font-weight: var(--ui-weight-semibold) !important;
-}
-
-/* Keep the dense terminal workspace visually coherent.  Components in this
-   area used to mix 10px--13px labels and medium/semibold weights, so adjacent
-   controls read as though they belonged to different products. */
-.workspace-ui {
-  font-size: var(--workspace-ui-font-size);
-  font-weight: var(--workspace-ui-font-weight);
-  line-height: 1.35;
-}
-
-/* Navigator: 12px section headings, 10px leaf items. */
 .navigator-type,
 .navigator-type * {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 .navigator-type .tree-node--branch > div:first-child > span {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -342,16 +351,16 @@ body {
 }
 
 .manager-menu-brand { min-width: 96px; padding-inline: 4px !important; }
-.manager-menu-brand > div:first-child { font-size: var(--workspace-ui-small-font-size) !important; font-weight: 600 !important; }
-.manager-menu-brand-name { font-size: var(--workspace-ui-title-font-size) !important; font-weight: var(--workspace-ui-title-font-weight) !important; }
-.manager-menu-brand-subtitle { font-size: var(--workspace-ui-small-font-size) !important; font-weight: 500 !important; }
+.manager-menu-brand > div:first-child { font-size: 11px !important; font-weight: 400 !important; }
+.manager-menu-brand-name { font-size: 11px !important; font-weight: 400 !important; }
+.manager-menu-brand-subtitle { font-size: 11px !important; font-weight: 400 !important; }
 .manager-menu-items { margin-left: 12px !important; gap: 2px !important; }
 .manager-menu-item {
   height: 30px !important;
   padding-inline: 10px !important;
   border-radius: var(--radius-sm) !important;
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
   background: transparent;
   transition: background 140ms ease, color 140ms ease;
@@ -369,8 +378,8 @@ body {
 }
 
 #root .manager-menu-bar .manager-menu-item {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
@@ -381,7 +390,7 @@ body {
 
 #root .manager-menu-dropdown,
 #root .manager-menu-dropdown :where(div, span) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -396,7 +405,7 @@ body {
   }
 }
 .manager-menu-status { gap: 10px !important; padding-inline: 0 !important; }
-#root .manager-menu-status :is(button, span) { font-size: 11px !important; font-weight: var(--workspace-ui-small-font-weight) !important; }
+#root .manager-menu-status :is(button, span) { font-size: 11px !important; font-weight: 400 !important; }
 
 @media (max-width: 760px) {
   .manager-menu-brand > div:last-child,
@@ -469,8 +478,8 @@ body {
   padding: 0 7px;
   border-radius: var(--radius-sm);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -491,7 +500,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1 !important;
 }
 
@@ -516,6 +526,8 @@ body {
 ) > span {
   display: inline-flex;
   align-items: center;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1;
   transform: translateY(0.5px);
 }
@@ -560,24 +572,19 @@ body {
 
 .manager-action-menu { position: relative; flex: 0 0 auto; }
 
-#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown,
-.manager-action-menu[data-menu="management"] .manager-toolbar-trigger {
+#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown {
   padding: 0 7px 0 8px;
   gap: 4px;
 }
 
-#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown .manager-toolbar-chevron,
-.manager-action-menu[data-menu="management"] .manager-toolbar-chevron {
+#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown .manager-toolbar-chevron {
   opacity: 0.78;
   transition: transform 160ms ease, opacity 140ms ease;
 }
 
 #root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown:hover .manager-toolbar-chevron,
 #root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown.is-open .manager-toolbar-chevron,
-#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown.is-active .manager-toolbar-chevron,
-.manager-action-menu[data-menu="management"] .manager-toolbar-trigger:hover .manager-toolbar-chevron,
-.manager-action-menu[data-menu="management"] .manager-toolbar-trigger.is-open .manager-toolbar-chevron,
-.manager-action-menu[data-menu="management"] .manager-toolbar-trigger.is-active .manager-toolbar-chevron {
+#root .manager-toolbar .manager-toolbar-trigger.is-icon-dropdown.is-active .manager-toolbar-chevron {
   opacity: 1;
 }
 
@@ -620,8 +627,8 @@ body {
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: 10px;
-  font-weight: var(--workspace-ui-small-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1;
   text-align: left;
   white-space: nowrap;
@@ -637,7 +644,7 @@ body {
 #root .manager-action-popover :where(button, span, kbd),
 #root .manager-account-lookup-popover,
 #root .manager-account-lookup-popover :where(label, input, button) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -671,8 +678,8 @@ body {
   color: var(--text-2);
   box-shadow: none;
   font: inherit;
-  font-size: var(--workspace-ui-control-font-size);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -691,18 +698,18 @@ body {
   animation: manager-menu-open 160ms ease-out;
   transform-origin: top right;
 }
-.manager-account-lookup-popover label { display: block; margin-bottom: 7px; color: var(--text-2); font-size: var(--workspace-ui-small-font-size); font-weight: 500; }
+.manager-account-lookup-popover label { display: block; margin-bottom: 7px; color: var(--text-2); font-size: 11px; font-weight: 400; }
 .manager-account-lookup-popover > div { display: flex; overflow: hidden; border: 1px solid var(--border-3); border-radius: var(--radius-md); }
 .manager-account-lookup-popover > div:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
-.manager-account-lookup-popover input { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 0; outline: 0; background: var(--surface); color: var(--text); font: inherit; font-size: var(--workspace-ui-small-font-size); }
+.manager-account-lookup-popover input { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 0; outline: 0; background: var(--surface); color: var(--text); font: inherit; font-size: 11px; }
 .manager-account-lookup-popover input::placeholder { color: var(--muted); }
-.manager-account-lookup-popover button { padding: 0 11px; border: 0; border-left: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-text); font: inherit; font-size: var(--workspace-ui-small-font-size); font-weight: 500; cursor: pointer; }
+.manager-account-lookup-popover button { padding: 0 11px; border: 0; border-left: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-text); font: inherit; font-size: 11px; font-weight: 400; cursor: pointer; }
 .manager-account-lookup-popover button:hover { background: var(--accent); color: #fff; }
 
 .manager-new-account {
   min-height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
   border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent); color: #fff;
-  box-shadow: none; font: inherit; font-size: var(--workspace-ui-control-font-size); font-weight: 500; white-space: nowrap; cursor: pointer;
+  box-shadow: none; font: inherit; font-size: 11px; font-weight: 400; white-space: nowrap; cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
 }
 .manager-new-account:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
@@ -716,7 +723,7 @@ body {
   color: var(--text-3);
   font-family: var(--mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0.3px;
   padding: 1px 6px;
   border-radius: 4px;
@@ -740,8 +747,8 @@ body {
   background: transparent;
   box-shadow: none;
   font: inherit;
-  font-size: var(--workspace-ui-control-font-size);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -754,8 +761,8 @@ body {
   background: var(--surface-2);
   color: var(--text-3);
   font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .manager-command-backdrop {
@@ -821,7 +828,7 @@ body {
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 14px;
+  font-size: 11px;
   line-height: 1.5;
   caret-color: var(--accent-text);
 }
@@ -876,9 +883,9 @@ body {
 }
 .manager-command-results > button.is-selected .manager-command-icon { background: var(--surface); }
 .manager-command-label { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; }
-.manager-command-label strong { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.manager-command-label strong { font-size: 11px; font-weight: 400; line-height: 1.25; }
 .manager-command-label small { color: var(--text-3); font-size: 11px; line-height: 1.2; }
-.manager-command-empty { padding: 28px 16px; color: var(--text-3); font-size: 13px; text-align: center; }
+.manager-command-empty { padding: 28px 16px; color: var(--text-3); font-size: 11px; text-align: center; }
 .manager-command-footer {
   min-height: 38px;
   display: flex;
@@ -974,7 +981,7 @@ h2,
 h3,
 h4 {
   letter-spacing: -0.02em;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 *:focus-visible {
@@ -997,8 +1004,8 @@ h4 {
   justify-content: center;
   gap: 6px;
   padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -1066,7 +1073,7 @@ h4 {
 
 .ui-btn-sm {
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .ui-btn-xs {
@@ -1094,7 +1101,7 @@ h4 {
   border: 1px solid transparent;
   border-radius: 8px;
   font-family: inherit;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0;
   white-space: nowrap;
   cursor: pointer;
@@ -1136,14 +1143,14 @@ h4 {
 .dark .desktop-app-download-button-menu {
   background: transparent;
   border-color: transparent;
-  color: #93c5fd;
+  color: var(--ink-2);
   box-shadow: none;
 }
 
 .dark .desktop-app-download-button-menu:hover:not(:disabled) {
   background: transparent;
   border-color: transparent;
-  color: #a9ccff;
+  color: var(--ink-strong);
   box-shadow: none;
 }
 
@@ -1160,7 +1167,7 @@ h4 {
   color: var(--text-2);
   font-family: inherit;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0;
   white-space: nowrap;
   cursor: pointer;
@@ -1202,7 +1209,7 @@ h4 {
   background: #f4f8ff;
   border-color: rgba(37, 99, 235, 0.22);
   color: #1d4ed8;
-  font-size: 14px;
+  font-size: 11px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
@@ -1215,7 +1222,7 @@ h4 {
 .desktop-app-download-error {
   margin: 0;
   color: #b42318;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
   text-align: center;
 }
@@ -1228,7 +1235,7 @@ h4 {
   display: block;
   width: 100%;
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.4;
   color: var(--text);
   background: var(--surface);
@@ -1263,7 +1270,7 @@ h4 {
 
 .ui-input-sm {
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 /* Card */
@@ -1283,20 +1290,20 @@ h4 {
    remains balanced even when permanent left-side panels are open. */
 .dashboard-page {
   box-sizing: border-box;
-  font-size: var(--workspace-ui-small-font-size);
-  font-weight: var(--workspace-ui-small-font-weight);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 #root .dashboard-page .dashboard-page-title {
-  font-size: var(--workspace-ui-title-font-size) !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3;
 }
 
 #root .dashboard-page .dashboard-page-subtitle,
 .dashboard-page .ui-btn-sm {
-  font-size: var(--workspace-ui-small-font-size) !important;
-  font-weight: var(--workspace-ui-small-font-weight);
+  font-size: 11px !important;
+  font-weight: 400;
 }
 
 .dashboard-kpi-grid {
@@ -1334,8 +1341,8 @@ h4 {
 .dashboard-kpi-label {
   display: flex;
   align-items: flex-start;
-  font-size: var(--workspace-ui-small-font-size);
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 14px;
   letter-spacing: 0.045em;
   text-transform: uppercase;
@@ -1343,8 +1350,8 @@ h4 {
 
 .dashboard-kpi-value {
   overflow: hidden;
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 34px;
   letter-spacing: -0.035em;
   text-overflow: ellipsis;
@@ -1352,7 +1359,7 @@ h4 {
 }
 
 .dashboard-kpi-hint {
-  font-size: var(--workspace-ui-small-font-size);
+  font-size: 11px;
   line-height: 14px;
 }
 
@@ -1406,8 +1413,8 @@ h4 {
   margin: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1429,8 +1436,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -1445,15 +1452,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .data-state-card-content strong {
   color: var(--text-2);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .data-state-card-content p {
   max-width: 36ch;
   margin: 6px 0 0;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1461,7 +1468,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding-top: 12px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -1480,7 +1487,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .data-state-compact-main p {
   margin: 8px 0 0 44px;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1528,8 +1535,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   --manager-brand-width: 148px;
   --manager-brand-height: 54px;
   --manager-brand-margin-bottom: 14px;
-  --manager-title-font-size: 24px;
-  --manager-subtitle-font-size: 15px;
+  --manager-title-font-size: 11px;
+  --manager-subtitle-font-size: 11px;
   --manager-title-rule-margin-top: 26px;
   --manager-form-gap: 18px;
   --manager-label-margin-bottom: 10px;
@@ -1541,7 +1548,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   --manager-input-padding-block: 11px;
   --manager-submit-min-height: 52px;
   --manager-submit-padding-block: 12px;
-  --manager-helper-font-size: 14px;
+  --manager-helper-font-size: 11px;
   min-height: 100vh;
   min-height: 100dvh;
   overflow-y: auto;
@@ -1634,8 +1641,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .manager-auth-header h1 {
   margin: 0;
   color: #050812;
-  font-size: var(--manager-title-font-size);
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.18;
   letter-spacing: 0;
 }
@@ -1643,7 +1650,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .manager-auth-header p {
   margin: 8px 0 0;
   color: #667085;
-  font-size: var(--manager-subtitle-font-size);
+  font-size: 11px;
   line-height: 1.45;
   letter-spacing: 0;
 }
@@ -1688,15 +1695,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   display: block;
   margin-bottom: var(--manager-label-margin-bottom);
   color: #101828;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
   letter-spacing: 0;
 }
 
 .manager-broker-label {
   margin-bottom: 0;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .manager-loading-row {
@@ -1706,7 +1713,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   gap: 10px;
   min-height: 64px;
   color: #667085;
-  font-size: var(--manager-helper-font-size);
+  font-size: 11px;
 }
 
 .manager-retry-button {
@@ -1738,7 +1745,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 .manager-broker-name {
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1.3;
   letter-spacing: 0;
 }
@@ -1753,7 +1760,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   gap: 12px;
   margin: var(--manager-broker-count-margin-top) 0 0;
   color: #667085;
-  font-size: var(--manager-helper-font-size);
+  font-size: 11px;
   line-height: 1.4;
   letter-spacing: 0;
 }
@@ -1783,7 +1790,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border-radius: 8px;
   background: #ffffff;
   color: #050812;
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1.35;
   letter-spacing: 0;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
@@ -1842,7 +1849,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   min-width: 0;
   gap: 10px;
   color: #344054;
-  font-size: var(--manager-helper-font-size);
+  font-size: 11px;
   line-height: 1.35;
   letter-spacing: 0;
   cursor: pointer;
@@ -1889,8 +1896,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   background: #2563eb;
   color: #ffffff;
   font: inherit;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
   box-shadow: 0 6px 14px rgba(44, 154, 29, 0.22);
@@ -1913,7 +1920,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .manager-contact-copy {
   margin: 0;
   color: #667085;
-  font-size: var(--manager-helper-font-size);
+  font-size: 11px;
   line-height: 1.45;
   text-align: center;
   letter-spacing: 0;
@@ -1950,7 +1957,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 132px;
     --manager-brand-height: 48px;
     --manager-brand-margin-bottom: 12px;
-    --manager-subtitle-font-size: 14px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 20px;
     --manager-form-gap: 16px;
     --manager-broker-row-min-height: 54px;
@@ -1967,7 +1974,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   }
 
   .manager-auth-header h1 {
-    font-size: 24px;
+    font-size: 11px;
   }
 
   .manager-broker-button {
@@ -2028,8 +2035,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 128px;
     --manager-brand-height: 46px;
     --manager-brand-margin-bottom: 8px;
-    --manager-title-font-size: 22px;
-    --manager-subtitle-font-size: 14px;
+    --manager-title-font-size: 11px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 14px;
     --manager-form-gap: 11px;
     --manager-label-margin-bottom: 6px;
@@ -2041,7 +2048,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-input-padding-block: 7px;
     --manager-submit-min-height: 44px;
     --manager-submit-padding-block: 8px;
-    --manager-helper-font-size: 13px;
+    --manager-helper-font-size: 11px;
   }
 
   .manager-auth-header h1 {
@@ -2059,8 +2066,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 120px;
     --manager-brand-height: 42px;
     --manager-brand-margin-bottom: 6px;
-    --manager-title-font-size: 20px;
-    --manager-subtitle-font-size: 13px;
+    --manager-title-font-size: 11px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 10px;
     --manager-form-gap: 8px;
     --manager-label-margin-bottom: 4px;
@@ -2072,7 +2079,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-input-padding-block: 6px;
     --manager-submit-min-height: 42px;
     --manager-submit-padding-block: 7px;
-    --manager-helper-font-size: 12px;
+    --manager-helper-font-size: 11px;
   }
 
   .manager-auth-header p {
@@ -2117,8 +2124,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   background: #2563eb;
   color: #ffffff;
   font: inherit;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
   box-shadow: 0 6px 14px rgba(44, 154, 29, 0.22);
@@ -2141,7 +2148,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .manager-contact-copy {
   margin: 0;
   color: #667085;
-  font-size: var(--manager-helper-font-size);
+  font-size: 11px;
   line-height: 1.45;
   text-align: center;
   letter-spacing: 0;
@@ -2178,7 +2185,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 132px;
     --manager-brand-height: 48px;
     --manager-brand-margin-bottom: 12px;
-    --manager-subtitle-font-size: 14px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 20px;
     --manager-form-gap: 16px;
     --manager-broker-row-min-height: 54px;
@@ -2195,7 +2202,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   }
 
   .manager-auth-header h1 {
-    font-size: 24px;
+    font-size: 11px;
   }
 
   .manager-broker-button {
@@ -2256,8 +2263,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 128px;
     --manager-brand-height: 46px;
     --manager-brand-margin-bottom: 8px;
-    --manager-title-font-size: 22px;
-    --manager-subtitle-font-size: 14px;
+    --manager-title-font-size: 11px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 14px;
     --manager-form-gap: 11px;
     --manager-label-margin-bottom: 6px;
@@ -2269,7 +2276,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-input-padding-block: 7px;
     --manager-submit-min-height: 44px;
     --manager-submit-padding-block: 8px;
-    --manager-helper-font-size: 13px;
+    --manager-helper-font-size: 11px;
   }
 
   .manager-auth-header h1 {
@@ -2287,8 +2294,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-brand-width: 120px;
     --manager-brand-height: 42px;
     --manager-brand-margin-bottom: 6px;
-    --manager-title-font-size: 20px;
-    --manager-subtitle-font-size: 13px;
+    --manager-title-font-size: 11px;
+    --manager-subtitle-font-size: 11px;
     --manager-title-rule-margin-top: 10px;
     --manager-form-gap: 8px;
     --manager-label-margin-bottom: 4px;
@@ -2300,7 +2307,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     --manager-input-padding-block: 6px;
     --manager-submit-min-height: 42px;
     --manager-submit-padding-block: 7px;
-    --manager-helper-font-size: 12px;
+    --manager-helper-font-size: 11px;
   }
 
   .manager-auth-header p {
@@ -2319,8 +2326,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.4;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -2362,19 +2369,56 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border-color: var(--accent-border);
 }
 
+/* Status text: plain semantic words (no pill), matching the Open Positions
+   BUY/SELL column so status and side labels read like a trading terminal. */
+:root {
+  --status-ok-color: #107c10;
+  --status-danger-color: #c42b1c;
+  --status-warn-color: #b54708;
+  --status-info-color: #026aa2;
+  --status-neutral-color: var(--text-3);
+}
+
+.dark {
+  --status-ok-color: rgb(88, 174, 104);
+  --status-danger-color: rgb(235, 112, 112);
+  --status-warn-color: rgb(226, 176, 84);
+  --status-info-color: rgb(110, 168, 230);
+  --status-neutral-color: var(--text-3);
+}
+
+.ui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ui-status-ok { color: var(--status-ok-color); }
+.ui-status-danger { color: var(--status-danger-color); }
+.ui-status-warn { color: var(--status-warn-color); }
+.ui-status-info { color: var(--status-info-color); }
+.ui-status-neutral { color: var(--status-neutral-color); }
+
 /* Data grid */
 .ui-grid {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
 .ui-grid thead th {
   text-align: left;
   padding: 10px 14px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-3);
@@ -2386,7 +2430,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .ui-grid tbody td {
   padding: 10px 14px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
   border-bottom: 1px solid var(--border-2);
 }
@@ -2428,8 +2472,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .accounts-sidebar-grid thead th {
   padding: 7px 10px;
-  font-size: var(--workspace-ui-small-font-size);
-  font-weight: var(--workspace-ui-small-font-weight);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 #root .accounts-sidebar-grid tbody td {
@@ -2450,7 +2494,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 12px !important;
   gap: 8px !important;
   overflow: hidden !important;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2474,13 +2518,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .dealer-queue-page :is(h1, h2, h3, .dealer-queue-title) {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.2 !important;
 }
 
@@ -2490,20 +2534,20 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .dealer-queue-page .dealer-queue-error,
 #root .dealer-queue-page .dealer-queue-grid .ui-grid thead th,
 #root .dealer-queue-page .dealer-queue-footer {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .dealer-queue-page .dealer-queue-grid .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td,
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td *,
 #root .dealer-queue-page .dealer-queue-empty-state,
 #root .dealer-queue-page .dealer-queue-empty-state > span {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2518,12 +2562,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .dealer-queue-page .dealer-queue-empty-state :is(button, .ui-btn) {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td :is(.ui-badge, .ui-btn),
 #root .dealer-queue-page .dealer-queue-grid .ui-grid tbody td :is(.ui-badge, .ui-btn) * {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 #root .dealer-queue-page .dealer-queue-subtitle {
@@ -2543,7 +2587,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 /* Restricted Accounts: 12px primary content and 10px supporting text/controls. */
 #root .restricted-accounts-page {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2552,13 +2596,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .restricted-accounts-page :is(h1, h2, h3, .restricted-accounts-title) {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -2568,19 +2612,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .restricted-accounts-page .restricted-accounts-error,
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid thead th,
 #root .restricted-accounts-page .restricted-accounts-footer {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid tbody td,
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid tbody td *,
 #root .restricted-accounts-page .restricted-accounts-empty-state {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2597,7 +2641,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid tbody td :is(.ui-badge, .ui-btn),
 #root .restricted-accounts-page .restricted-accounts-grid .ui-grid tbody td :is(.ui-badge, .ui-btn) * {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 /* IB Management: 12px primary content and 10px supporting text/controls. */
@@ -2607,7 +2651,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 12px !important;
   gap: 8px !important;
   overflow: hidden !important;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2616,13 +2660,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .ib-management-page :is(h1, h2, h3, .ib-management-title) {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.2 !important;
 }
 
@@ -2659,19 +2703,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .ib-management-page .ib-management-grid .ui-grid thead th,
 #root .ib-management-page .ib-management-footer,
 #root .ib-management-page .ib-management-footer * {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .ib-management-page .ib-management-grid .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 #root .ib-management-page .ib-management-grid .ui-grid tbody td,
 #root .ib-management-page .ib-management-grid .ui-grid tbody td *,
 #root .ib-management-page .ib-management-empty-state {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2688,7 +2732,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .ib-management-page .ib-management-grid .ui-grid tbody td :is(.ui-badge, .ui-btn),
 #root .ib-management-page .ib-management-grid .ui-grid tbody td :is(.ui-badge, .ui-btn) * {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 /* IB Tree: 12px primary content and 10px supporting text/controls. */
@@ -2698,7 +2742,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 12px !important;
   gap: 8px !important;
   overflow: hidden !important;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2707,13 +2751,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .ib-tree-page :is(h1, h2, h3, .ib-tree-title, .ib-tree-selected-title) {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.2 !important;
 }
 
@@ -2724,7 +2768,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .ib-tree-page .ib-tree-node-expander,
 #root .ib-tree-page .ib-tree-node-meta,
 #root .ib-tree-page .ui-badge {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
@@ -2732,17 +2776,17 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .ib-tree-page .ib-tree-node-primary,
 #root .ib-tree-page .ib-tree-selected-details > span,
 #root .ib-tree-page .ib-tree-selected-details > span > span {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .ib-tree-page .ib-tree-selected-details strong {
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
 #root .ib-tree-page .ui-badge {
-  font-weight: 500 !important;
+  font-weight: 400 !important;
 }
 
 #root .ib-tree-header {
@@ -2785,7 +2829,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   align-items: center;
   justify-content: center;
   min-height: 100%;
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -2799,28 +2843,28 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .trading-analytics-page { display:flex; width:100%; height:100%; min-width:0; min-height:0; flex-direction:column; padding:13px 10px 10px; overflow:auto; background:var(--bg); container-type:inline-size; }
 .trading-analytics-heading { display:flex; min-height:32px; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
 .trading-analytics-title { display:flex; align-items:center; flex-shrink:0; }
-#root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size:11px !important; font-weight:600 !important; line-height:1.4; color:var(--text); }
-#root .trading-analytics-page h1 { font-size:12px !important; white-space:nowrap; }
-#root .trading-analytics-page p { margin:2px 0 0; color:var(--text-3); font-size:9px; line-height:1.4; }
+#root .trading-analytics-page :is(h1,h2,h3) { margin:0; font-size: 11px !important; font-weight: 400 !important; line-height:1.4; color:var(--text); }
+#root .trading-analytics-page h1 { font-size: 11px !important; white-space:nowrap; }
+#root .trading-analytics-page p { margin:2px 0 0; color:var(--text-3); font-size: 11px; line-height:1.4; }
 .trading-analytics-toolbar { display:flex; align-items:center; gap:6px; min-width:0; flex-wrap:nowrap; justify-content:flex-end; }
 .trading-analytics-toolbar .trading-analytics-filter { min-width:88px; flex-shrink:1; }
 .trading-analytics-toolbar .trading-analytics-date-range { flex-shrink:0; }
 .trading-analytics-toolbar > button { min-height:28px; height:28px; flex-shrink:0; white-space:nowrap; }
-.trading-analytics-error { display:flex; min-height:30px; align-items:center; gap:7px; margin-bottom:8px; padding:5px 9px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:var(--danger-soft); color:var(--danger-text); font-size:9px; }
-.trading-analytics-error button { margin-left:auto; border:0; background:transparent; color:inherit; font-size:9px; font-weight:600; cursor:pointer; }
+.trading-analytics-error { display:flex; min-height:30px; align-items:center; gap:7px; margin-bottom:8px; padding:5px 9px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:var(--danger-soft); color:var(--danger-text); font-size: 11px; }
+.trading-analytics-error button { margin-left:auto; border:0; background:transparent; color:inherit; font-size: 11px; font-weight: 400; cursor:pointer; }
 .trading-analytics-content { display:grid; min-height:520px; flex:1; grid-template-rows:minmax(230px,.9fr) minmax(250px,1.1fr); gap:8px; }
 .trading-analytics-card { display:flex; min-width:0; min-height:0; flex-direction:column; overflow:hidden; border:1px solid var(--border); border-radius:2px; background:var(--surface); }
 .trading-analytics-card > header { display:flex; min-height:31px; flex:0 0 31px; align-items:center; justify-content:space-between; gap:10px; padding:6px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); }
-.trading-analytics-card > header > span { color:var(--text-3); font-size:9px; white-space:nowrap; }
+.trading-analytics-card > header > span { color:var(--text-3); font-size: 11px; white-space:nowrap; }
 .trading-analytics-chart { min-height:0; flex:1; padding:4px 7px 4px 0; }
 .trading-analytics-lower-grid { display:grid; min-height:0; grid-template-columns:1fr 1fr; gap:8px; }
 .trading-analytics-map { display:flex; min-height:0; flex:1; flex-direction:column; }
 .trading-analytics-map-canvas { min-height:0; flex:1; overflow:hidden; }
 .trading-analytics-map-canvas svg { display:block; width:100%; height:100%; }
 .trading-analytics-country-summary { display:grid; flex:0 0 auto; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; padding:5px 9px 7px; border-top:1px solid var(--border-2); }
-.trading-analytics-country-summary span { display:grid; min-width:0; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:5px; overflow:hidden; color:var(--text-2); font-size:9px; white-space:nowrap; }
+.trading-analytics-country-summary span { display:grid; min-width:0; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:5px; overflow:hidden; color:var(--text-2); font-size: 11px; white-space:nowrap; }
 .trading-analytics-country-summary span i { width:6px; height:6px; border-radius:50%; background:var(--accent); }
-.trading-analytics-country-summary span b { color:var(--text); font-weight:600; }
+.trading-analytics-country-summary span b { color:var(--text); font-weight: 400; }
 .trading-analytics-group { display:flex; min-height:0; flex:1; align-items:center; padding:2px 8px; }
 .trading-analytics-group-layout { display:flex; width:100%; height:100%; align-items:center; justify-content:center; gap:16px; padding:4px 10px; }
 .trading-analytics-group-chart { display:flex; flex-shrink:0; align-items:center; justify-content:center; }
@@ -2829,17 +2873,34 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .trading-analytics-group-row:hover, .trading-analytics-group-row.is-active { background:var(--surface-2); }
 .trading-analytics-group-row-info { display:flex; align-items:center; gap:6px; min-width:0; }
 .trading-analytics-group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.trading-analytics-group-name { font-size:10px; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.trading-analytics-group-row-stats { display:flex; align-items:center; gap:8px; flex-shrink:0; font-size:10px; }
-.trading-analytics-group-count { font-weight:600; color:var(--text); }
+.trading-analytics-group-name { font-size: 11px; color:var(--text); font-weight: 400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.trading-analytics-group-row-stats { display:flex; align-items:center; gap:8px; flex-shrink:0; font-size: 11px; }
+.trading-analytics-group-count { font-weight: 400; color:var(--text); }
 .trading-analytics-group-pct { color:var(--text-3); min-width:42px; text-align:right; }
 .trading-analytics-pie-wrap { position:relative; width:100%; height:100%; min-height:220px; overflow:visible; }
 .trading-analytics-pie-total { position:absolute; inset:50% auto auto 50%; display:flex; width:72px; height:72px; align-items:center; justify-content:center; flex-direction:column; transform:translate(-50%,-50%); pointer-events:none; }
-.trading-analytics-pie-total strong { color:var(--text); font-size:12px; font-weight:600; }
-.trading-analytics-pie-total span { color:var(--text-3); font-size:8px; }
+.trading-analytics-pie-total strong { color:var(--text); font-size: 11px; font-weight: 400; }
+.trading-analytics-pie-total span { color:var(--text-3); font-size: 11px; }
 .trading-analytics-pie-label path { fill:none; stroke:var(--text-3); stroke-width:1; }
-.trading-analytics-pie-label text { fill:var(--text-2); font-size:9px; font-weight:500; }
-.trading-analytics-empty { display:grid; width:100%; height:100%; min-height:110px; place-items:center; padding:16px; color:var(--text-3); font-size:9px; text-align:center; }
+.trading-analytics-pie-label text { fill:var(--text-2); font-size: 11px; font-weight: 400; }
+.trading-analytics-empty { display:grid; width:100%; height:100%; min-height:110px; place-items:center; padding:16px; color:var(--text-3); font-size: 11px; text-align:center; }
+
+/* Combined Analytics overview: six preview panels in a responsive grid. */
+.analytics-overview-grid { display:grid; min-height:0; flex:1; grid-template-columns:repeat(3,minmax(0,1fr)); grid-auto-rows:minmax(210px,1fr); gap:8px; }
+.analytics-overview-card { cursor:pointer; }
+.analytics-overview-card:hover { border-color:var(--border-3); }
+.analytics-overview-card:focus-visible { outline:2px solid var(--accent); outline-offset:-1px; }
+.analytics-overview-body { position:relative; min-height:0; flex:1; padding:4px 8px 4px 2px; }
+.analytics-overview-body svg { display:block; }
+.analytics-overview-search { width:110px; flex-shrink:0; }
+.analytics-overview-groups { display:flex; flex-direction:column; justify-content:center; gap:8px; height:100%; padding:6px 12px; }
+.analytics-overview-groups-row { display:grid; grid-template-columns:minmax(0,110px) 1fr auto; align-items:center; gap:8px; font-size: 11px; color:var(--text-2); }
+.analytics-overview-groups-row > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.analytics-overview-groups-row > b { color:var(--text); font-weight: 400; font-variant-numeric:tabular-nums; }
+.analytics-overview-groups-bar { height:5px; border-radius:3px; background:var(--surface-2); overflow:hidden; }
+.analytics-overview-groups-bar i { display:block; height:100%; border-radius:3px; background:var(--accent); }
+@container (max-width: 1100px) { .analytics-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@container (max-width: 700px) { .analytics-overview-grid { grid-template-columns:minmax(0,1fr); } }
 
 /* A user can keep the right workspace panel open. Reflow this report view
    into the remaining center space instead of allowing its filters to clip. */
@@ -2872,10 +2933,27 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   .trading-analytics-country-summary { grid-template-columns:1fr; }
 }
 
+/* Online Users analytics: 2x2 distribution panels above the live grid. */
+#root .online-users-page { container-type:inline-size; }
+.online-users-analytics-grid { display:grid; flex:0 0 auto; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(250px,auto); gap:8px; }
+.online-users-analytics-grid .trading-analytics-card { min-height:250px; }
+.online-users-analytics-grid .trading-analytics-empty { height:auto; min-height:0; flex:1; }
+.online-users-chart-body { position:relative; display:flex; min-height:0; flex:1; }
+.online-users-donut { position:relative; min-height:0; flex:1; }
+.online-users-donut svg { display:block; }
+.online-users-donut-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.online-users-donut-center strong { color:var(--text); font-size: 11px; font-weight: 400; }
+.online-users-build-chart { position:relative; min-height:0; flex:1; cursor:crosshair; padding:0 6px 4px 0; }
+.online-users-build-chart svg { display:block; }
+
+@container (max-width: 900px) {
+  .online-users-analytics-grid { grid-template-columns:minmax(0,1fr); }
+}
+
 /* Symbol Browser: enforce the 12px/10px scale inside every category card. */
 #root .symbol-browser-page,
 #root .symbol-browser-page .symbol-browser-card {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -2893,7 +2971,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   .symbol-browser-card-name,
   .symbol-browser-card-count
 ) {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.3 !important;
 }
 
@@ -2901,7 +2979,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   .symbol-browser-subtitle,
   .symbol-browser-card-description
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2911,7 +2989,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 /* Symbol Management: 12px primary content, 10px supporting text and controls. */
 #root .symbol-management-page {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -2920,7 +2998,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2928,12 +3006,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   h1, h2, h3, h4,
   .symbol-management-tab
 ) {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.3 !important;
 }
 
 #root .symbol-management-page .ui-grid thead th {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2951,7 +3029,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .symbol-management-page .ui-grid tbody td,
 #root .symbol-management-page .ui-grid tbody td * {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -2961,12 +3039,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .symbol-management-page .ui-grid tbody td .ui-badge {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .symbol-management-page :is(input, textarea)::placeholder {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 /* Compact symbol controls reserve space for the instrument list. */
@@ -2975,7 +3053,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   justify-content: center;
   white-space: nowrap;
   padding: 6px 8px;
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 #root .symbol-management-page .symbols-toolbar {
@@ -3067,8 +3145,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .opened-orders-title,
 #root .opened-orders-section-title,
 #root .opened-orders-metric-value {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3;
 }
 
@@ -3082,7 +3160,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .online-users-metric-hint,
 #root .opened-orders-metric-description,
 #root .opened-orders-loading-label {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35;
 }
@@ -3090,13 +3168,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .orders-page .orders-search .ui-input,
 #root .online-users-page .online-users-search .ui-input,
 #root .orders-filters button {
-  font-size: 12px !important;
+  font-size: 11px !important;
 }
 
 /* Open Positions: 12px heading, 10px supporting text. */
 #root .open-positions-page {
-  font-size: 10px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3105,14 +3183,14 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, strong, small, label,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .open-positions-page :is(h1, h2, h3, .open-positions-title) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -3126,19 +3204,53 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .open-positions-page .open-positions-grid .ui-grid tbody td *,
 #root .open-positions-page .open-positions-grid-footer,
 #root .open-positions-page .open-positions-grid-footer :is(button, span) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
+/* Open Positions values stay high-contrast while Action and Profit preserve
+   their trading semantics. Action colors mirror the Operations Terminal. */
+#root .open-positions-page .open-positions-grid {
+  --open-position-value-color: var(--text);
+  --open-position-buy-color: #107c10;
+  --open-position-sell-color: #c42b1c;
+}
+
+.dark #root .open-positions-page .open-positions-grid {
+  --open-position-value-color: var(--ink-1);
+  --open-position-buy-color: rgb(88, 174, 104);
+  --open-position-sell-color: rgb(235, 112, 112);
+}
+
+#root .open-positions-page .open-position-value {
+  color: var(--open-position-value-color);
+}
+
+#root .open-positions-page .open-position-action {
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+#root .open-positions-page .open-position-action.is-buy {
+  color: var(--open-position-buy-color);
+}
+
+#root .open-positions-page .open-position-action.is-sell {
+  color: var(--open-position-sell-color);
+}
+
 #root .open-positions-page .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 /* Online Users: same type scale as Market Watch / Navigator.
    12px body, 10px chrome, weight 400 everywhere except the page title (600). */
 #root .online-users-page {
-  font-size: 12px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3147,12 +3259,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, strong, small, label,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge, .font-medium, .font-semibold
 ) {
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-weight: 400 !important;
 }
 
 #root .online-users-page :is(h1, h2, h3, .online-users-title) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -3160,8 +3272,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .online-users-page .online-users-metric-label,
 #root .online-users-page .online-users-metric-hint,
 #root .online-users-page .online-users-grid-title {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
@@ -3173,15 +3285,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .online-users-page .online-users-grid-error,
 #root .online-users-page [role="status"],
 #root .online-users-page [role="status"] span {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
 #root .online-users-page .ui-grid tbody td,
 #root .online-users-page .ui-grid tbody td * {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
@@ -3189,34 +3301,34 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .online-users-page .ui-badge,
 #root .online-users-page .online-users-grid-footer,
 #root .online-users-page .online-users-grid-footer span {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
 #root .online-users-page .online-users-grid-footer :is(button, .ui-btn),
 #root .online-users-page .online-users-grid-header :is(button, .ui-btn) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
 #root .deals-grid .ui-grid thead th,
 #root .trading-accounts-grid .ui-grid thead th,
 #root .orders-grid .ui-grid thead th {
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
 #root .online-users-grid .ui-grid thead th {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
 #root .open-positions-grid .ui-grid thead th {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
@@ -3225,7 +3337,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .open-positions-grid .ui-grid tbody td,
 #root .online-users-grid .ui-grid tbody td,
 #root .orders-grid .ui-grid tbody td {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35;
 }
 
@@ -3240,13 +3352,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .orders-grid .orders-grid-footer,
 #root .orders-grid .orders-grid-footer :where(button, span),
 #root .ui-badge {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35;
 }
 
 /* Compact Online Users table: consistent 10px text and shorter table chrome. */
 #root .online-users-page .online-users-grid :is(th, td, td *, button, span, .online-users-grid-title) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 14px;
 }
 
@@ -3267,7 +3379,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   min-height: 22px;
   padding-top: 2px;
   padding-bottom: 2px;
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 /* Orders follows the compact Clients layout without a selection column. */
@@ -3277,7 +3389,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .orders-page :is(.orders-subtitle, .orders-search .ui-input, .orders-search .ui-input::placeholder, .orders-filters button, .orders-filters span) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -3285,6 +3397,32 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   height: 28px;
   padding-block: 5px;
   font-weight: 400 !important;
+}
+
+/* Orders Type column: trading semantics carried by text color only, no badge.
+   Colors mirror the Open Positions Action column. */
+#root .orders-page .orders-grid {
+  --order-type-buy-color: #107c10;
+  --order-type-sell-color: #c42b1c;
+}
+
+.dark #root .orders-page .orders-grid {
+  --order-type-buy-color: rgb(88, 174, 104);
+  --order-type-sell-color: rgb(235, 112, 112);
+}
+
+#root .orders-page .orders-type-text {
+  color: var(--text-2);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+#root .orders-page .orders-type-text.is-buy {
+  color: var(--order-type-buy-color);
+}
+
+#root .orders-page .orders-type-text.is-sell {
+  color: var(--order-type-sell-color);
 }
 
 #root .orders-page .orders-grid-footer {
@@ -3308,7 +3446,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .orders-page .orders-grid-footer .ui-btn {
   height: 22px;
   min-height: 22px;
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1 !important;
 }
 
@@ -3316,7 +3454,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .clients-page {
   min-width: 0;
   min-height: 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -3332,7 +3470,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .clients-page :is(h1, h2, h3, .clients-title) {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.3 !important;
 }
 
@@ -3344,12 +3482,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .clients-page .clients-filters span,
 #root .clients-page .clients-filters [role="option"],
 #root .clients-page .clients-filters [role="option"] span {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .clients-grid .ui-grid thead th {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
   height: 28px;
   padding-top: 5px;
@@ -3370,7 +3508,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .clients-grid .ui-grid tbody td,
 #root .clients-grid .ui-grid tbody td * {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -3379,7 +3517,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .clients-grid .clients-grid-footer span,
 #root .clients-grid .clients-grid-footer span *,
 #root .clients-grid .clients-grid-footer :is(button, .ui-btn) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -3440,8 +3578,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 12px;
   gap: 8px;
   overflow: hidden;
-  font-size: 10px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3488,19 +3626,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .deals-page :is(h1, h2, h3, .deals-title) {
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
 #root .deals-page :is(p, .deals-subtitle) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .deals-page :is(button, input, select, textarea, .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -3510,44 +3648,44 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .deals-page .deals-filters span,
 #root .deals-page .deals-filters [role="option"],
 #root .deals-page .deals-filters [role="option"] span {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 #root .deals-grid .ui-grid thead th {
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
 }
 
 #root .deals-grid .ui-grid tbody td,
 #root .deals-grid .ui-grid tbody td * {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .deals-grid .ui-grid tbody td .ui-badge {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .deals-grid .deals-grid-footer,
 #root .deals-grid .deals-grid-footer span,
 #root .deals-grid .deals-grid-footer span * {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .deals-grid .deals-grid-footer :is(button, .ui-btn),
 #root .deals-grid .deals-grid-footer .pagination-page {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 /* Position History: 12px headings, 10px supporting text. */
 #root .position-history-page {
   min-width: 0;
   min-height: 0;
-  font-size: 10px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3589,25 +3727,25 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .position-history-page :is(h1, h2, h3, .position-history-title, .position-history-heading) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
 #root .position-history-page .position-history-subtitle,
 #root .position-history-page .position-history-copy,
 #root .position-history-page .ui-grid thead th {
-  font-size: 10px !important;
-  font-weight: var(--workspace-ui-small-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
 #root .position-history-page .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 /* Keep the lookup panel compact when a docked panel reduces the center area. */
@@ -3658,8 +3796,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 /* Active Sessions: 12px headings, 10px supporting text. */
 #root .active-sessions-page {
-  font-size: 10px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3668,13 +3806,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .active-sessions-page :is(h1, h2, h3, .active-sessions-title, .active-sessions-heading) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -3685,12 +3823,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .active-sessions-page .ui-input,
 #root .active-sessions-page .ui-btn,
 #root .active-sessions-page .ui-badge {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .active-sessions-page .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 #root .active-sessions-page .ui-grid tbody td {
@@ -3704,8 +3842,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 12px !important;
   gap: 8px !important;
   overflow: hidden !important;
-  font-size: 10px;
-  font-weight: var(--workspace-ui-font-weight);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3736,13 +3874,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .trading-accounts-page :is(h1, h2, h3, .trading-accounts-title) {
-  font-size: 12px !important;
-  font-weight: var(--workspace-ui-title-font-weight) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -3754,22 +3892,22 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .trading-accounts-page .ui-grid thead th,
 #root .trading-accounts-page .trading-accounts-grid-footer,
 #root .trading-accounts-page .trading-accounts-grid-footer :is(button, span) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .trading-accounts-page .ui-grid thead th {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
 }
 
 #root .trading-accounts-page .trading-accounts-grid .ui-grid tbody td {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .trading-accounts-page .trading-accounts-grid .ui-badge {
-  font-size: 10px !important;
-  font-weight: 500 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
 #root .trading-accounts-grid .grid-scroll-area {
@@ -3813,7 +3951,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .opened-orders-page {
   min-width: 0;
   min-height: 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
   container-type: inline-size;
 }
@@ -3869,12 +4007,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   button, input, select, textarea, span, p, td, th, label, small,
   .ui-input, .ui-btn, .ui-btn-sm, .ui-btn-xs, .ui-badge
 ) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
 #root .opened-orders-page .opened-orders-search .ui-input::placeholder {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 @container (min-width: 581px) {
@@ -3939,7 +4077,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   .orders-by-reason-item-name,
   .orders-by-reason-total-value
 ) {
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.3 !important;
 }
 
@@ -3947,7 +4085,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   min-height: 90px;
   padding: 10px !important;
   gap: 8px !important;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
 }
 
@@ -3971,8 +4109,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .opened-orders-page .opened-orders-metric-label {
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 12px !important;
   letter-spacing: 0.025em;
 }
@@ -4015,13 +4153,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .opened-orders-page .orders-by-reason-item-name {
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
 }
 
 #root .opened-orders-page .ui-badge {
-  font-size: 10px !important;
-  font-weight: 500 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.35;
 }
 
@@ -4054,8 +4192,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   color: var(--text);
 }
 
@@ -4076,7 +4214,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   padding: 20px;
   overflow: auto;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .ui-modal-footer {
@@ -4137,8 +4275,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .keyboard-shortcuts-header h2,
 .keyboard-shortcuts-group h3 {
   margin: 0;
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.3 !important;
 }
 
@@ -4146,7 +4284,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .keyboard-shortcuts-group-heading p {
   margin: 3px 0 0;
   color: var(--text-3);
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
@@ -4204,7 +4342,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   gap: 10px;
   padding: 7px 12px;
   color: var(--text-2);
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
@@ -4229,7 +4367,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .keyboard-shortcuts-or {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
 }
 
@@ -4246,8 +4384,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
   color: var(--text);
   font-family: var(--mono);
-  font-size: 10px !important;
-  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   line-height: 1.25 !important;
   text-align: center;
   white-space: nowrap;
@@ -4258,7 +4396,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border-top: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
 }
@@ -4296,15 +4434,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   flex-direction: column;
   gap: 2px;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.2;
 }
 
 .new-account-header-copy small {
   overflow: hidden;
   color: var(--text-3);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4352,15 +4490,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .new-account-section-heading h2 {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.3;
 }
 
 .new-account-section-heading p {
   margin: 3px 0 0;
   color: var(--text-3);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -4396,8 +4534,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .new-account-field-label label {
   overflow: hidden;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4405,13 +4543,13 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .new-account-field-label > span {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
 .new-account-modal .ui-input,
 .new-account-modal .ui-select {
-  height: 32px; min-height: 32px; font-size: 10px; font-weight: 400; line-height: 1.35;
+  height: 32px; min-height: 32px; font-size: 11px; font-weight: 400; line-height: 1.35;
   padding-block: 0;
 }
 
@@ -4467,14 +4605,14 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .new-account-required-note,
 .new-account-permission-note {
   margin-right: auto;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
-.new-account-modal .ui-btn, .new-account-group-combobox [role='listbox'] { font-size: 10px; line-height: 1.35; }
+.new-account-modal .ui-btn, .new-account-group-combobox [role='listbox'] { font-size: 11px; line-height: 1.35; }
 
 #root .new-account-modal :is(input, select, button, small, label, p, [role='option']) {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.35 !important;
 }
 
@@ -4515,15 +4653,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .new-account-result h2 {
   margin: 0;
   color: var(--text);
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .new-account-result p {
   max-width: 44ch;
   margin: 5px 0 0;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -4537,8 +4675,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   background: var(--surface-2);
 }
 
-.new-account-login span { color: var(--text-3); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-.new-account-login strong { color: var(--text); font-size: 16px; }
+.new-account-login span { color: var(--text-3); font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.06em; }
+.new-account-login strong { color: var(--text); font-size: 11px; }
 
 @media (max-width: 640px) {
   .new-account-modal-backdrop { padding: 10px; }
@@ -4569,7 +4707,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   box-shadow: var(--shadow-lg);
   padding: 6px;
   min-width: 220px;
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -4688,7 +4826,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .account-details-window {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.45;
   color: var(--text);
 }
@@ -4948,15 +5086,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 /* Account details โ€” focused professional trading workspace ---------------- */
 .account-details-window {
-  --account-ui-small: 10px;
-  --account-ui-base: 12px;
-  --account-ui-heading: 12px;
+  --account-ui-small: 11px;
+  --account-ui-base: 11px;
+  --account-ui-heading: 11px;
+  /* Action fills stay dark enough for white labels in both themes. */
+  --account-close-fill: #b42318;
+  --account-close-hover: #912018;
+  --account-close-active: #7a1b14;
   container-name: account-details;
   container-type: inline-size;
   border-radius: var(--radius-xl) !important;
   font-family: var(--sans) !important;
-  font-size: var(--account-ui-small) !important;
-  font-weight: 400;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   background: var(--surface) !important;
 }
 
@@ -4968,7 +5110,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 .account-details-title-icon { color: var(--accent); }
-.account-details-title { color: var(--text); font-size: var(--account-ui-base); font-weight: 600; }
+.account-details-title { color: var(--text); font-size: 11px !important; font-weight: 400 !important; }
 .account-details-window-controls { display: flex; align-items: center; gap: 2px; }
 .account-details-window-controls button {
   width: 28px;
@@ -5005,8 +5147,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .account-update-notification.is-error { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger-text); }
 .account-update-notification-icon { display: inline-flex; align-items: center; justify-content: center; padding-top: 1px; }
 .account-update-notification-copy { min-width: 0; }
-.account-update-notification-copy strong { display: block; font-size: 12px !important; font-weight: 600; line-height: 1.35; }
-.account-update-notification-copy p { margin: 3px 0 0; color: currentColor; font-size: 10px !important; font-weight: 400; line-height: 1.45; }
+.account-update-notification-copy strong { display: block; font-size: 11px !important; font-weight: 400; line-height: 1.35; }
+.account-update-notification-copy p { margin: 3px 0 0; color: currentColor; font-size: 11px !important; font-weight: 400; line-height: 1.45; }
 .account-update-notification > button {
   display: inline-flex;
   width: 24px;
@@ -5045,8 +5187,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border: 0;
   background: transparent;
   color: var(--text-3);
-  font-size: var(--account-ui-base);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -5058,46 +5200,46 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .account-details-content { gap: 20px; padding: 20px; background: var(--bg); }
 body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connection, .manager-menu-connection) { display: none !important; }
-.account-details-status { display: flex; min-height: 30px; flex: 0 0 auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 10px !important; font-weight: 500; }
+.account-details-status { display: flex; min-height: 30px; flex: 0 0 auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 11px !important; font-weight: 400; }
 .account-details-status.is-loading { background: var(--surface); color: var(--text-3); }
 .account-details-status.is-error { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger-text); }
-.account-overview-summary { padding-bottom: 16px; border-bottom: 1px solid var(--border); font-size: 10px; font-weight: 400; }
+.account-overview-summary { padding-bottom: 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 400; }
 .account-overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .account-overview-identity { display: flex; align-items: center; gap: 10px; }
 .account-overview-identity-icon { display: inline-flex; width: 30px; height: 30px; flex: 0 0 30px; align-items: center; justify-content: center; border: 1px solid var(--accent-border); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-text); box-shadow: var(--shadow-xs); }
 .account-overview-name-row { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 6px; }
-.account-overview-eyebrow { margin: 0 0 2px; color: var(--text-3); font-size: 10px !important; font-weight: 600; letter-spacing: .06em; line-height: 1.3; text-transform: uppercase; }
-.account-overview-heading h2 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; line-height: 1.3; }
-.account-overview-login { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text-3); font-size: 10px !important; font-weight: 500; line-height: 1.3; }
+.account-overview-eyebrow { margin: 0 0 2px; color: var(--text-3); font-size: 11px !important; font-weight: 400; letter-spacing: .06em; line-height: 1.3; text-transform: uppercase; }
+.account-overview-heading h2 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
+.account-overview-login { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
 .account-overview-badges { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
-.account-overview-group { color: var(--accent-text) !important; font-size: 12px !important; font-weight: 600; line-height: 1.3; text-decoration: none; }
-.account-overview-badges > span { font-size: 12px !important; font-weight: 600 !important; line-height: 1.3; }
+.account-overview-group { color: var(--accent-text) !important; font-size: 11px !important; font-weight: 400; line-height: 1.3; text-decoration: none; }
+.account-overview-badges > span { font-size: 11px !important; font-weight: 400 !important; line-height: 1.3; }
 .account-overview-group:hover { text-decoration: underline; }
 .account-overview-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 20px; margin-top: 18px; }
 .account-overview-details > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.account-overview-details span { color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.3; }
+.account-overview-details span { color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
 .account-overview-details strong,
-.account-overview-details a { overflow: hidden; color: var(--text); font-size: 12px !important; font-weight: 500; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.account-overview-details a { overflow: hidden; color: var(--text); font-size: 11px !important; font-weight: 400; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .account-overview-details a { color: var(--accent-text) !important; text-decoration: none; }
-.account-overview-timestamps { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.3; }
-.account-overview-timestamps > span { font-size: 10px !important; font-weight: 400; }
+.account-overview-timestamps { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
+.account-overview-timestamps > span { font-size: 11px !important; font-weight: 400; }
 
 .account-personal-tab { display: flex; width: 100%; margin: 0; flex-direction: column; gap: 16px; padding: 0; }
 .account-personal-intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.account-personal-intro h2 { margin: 0; font-size: 15px !important; font-weight: 600; color: var(--text); }
+.account-personal-intro h2 { margin: 0; font-size: 11px !important; font-weight: 400; color: var(--text); }
 .account-personal-intro p { margin: 4px 0 0; font-size: 11px !important; color: var(--text-3); }
 .account-personal-account-ref { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 .account-personal-section { flex: 0 0 auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
 .account-personal-section-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-2); }
-.account-personal-section-header h3 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; line-height: 1.35; }
-.account-personal-section-header p { margin: 2px 0 0; color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.35; }
+.account-personal-section-header h3 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; line-height: 1.35; }
+.account-personal-section-header p { margin: 2px 0 0; color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.35; }
 .account-personal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
 .account-personal-grid-three { grid-template-columns: repeat(3, minmax(0, 180px)); }
 .account-personal-span-full { grid-column: 1 / -1; }
 .account-personal-field { display: flex; min-width: 0; width: 100%; flex-direction: column; gap: 6px; }
 .account-personal-field.account-personal-span-full { max-width: none; }
-.account-personal-field > span { color: var(--text-3); font-size: 10px !important; font-weight: 500; line-height: 1.3; }
-.account-personal-field > :is(input, select) { width: 100%; height: 28px; min-height: 28px; padding: 0 9px !important; border: 1px solid var(--border-3) !important; border-radius: var(--radius-md) !important; background: var(--surface-2) !important; color: var(--text) !important; font-size: 12px !important; font-weight: 500; line-height: 1.35; outline: none; transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease; }
+.account-personal-field > span { color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
+.account-personal-field > :is(input, select) { width: 100%; height: 28px; min-height: 28px; padding: 0 9px !important; border: 1px solid var(--border-3) !important; border-radius: var(--radius-md) !important; background: var(--surface-2) !important; color: var(--text) !important; font-size: 11px !important; font-weight: 400; line-height: 1.35; outline: none; transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease; }
 .account-personal-field > select { padding-right: 28px !important; }
 .account-personal-field > :is(input, select):hover { border-color: var(--muted) !important; }
 .account-personal-field > :is(input, select):focus { border-color: var(--accent) !important; background: var(--surface) !important; box-shadow: none; }
@@ -5147,8 +5289,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   background: var(--accent-soft);
   color: var(--accent-text);
 }
-.account-deposit-header h2 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; line-height: 1.35; }
-.account-deposit-header p { margin: 2px 0 0; color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.4; }
+.account-deposit-header h2 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; line-height: 1.35; }
+.account-deposit-header p { margin: 2px 0 0; color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.4; }
 .account-deposit-body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5167,8 +5309,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   background: var(--accent-soft-2);
   grid-column: 1 / -1;
 }
-.account-deposit-balance span { color: var(--text-3); font-size: 10px !important; font-weight: 500; }
-.account-deposit-balance strong { color: var(--text); font-size: 12px !important; font-weight: 600; }
+.account-deposit-balance span { color: var(--text-3); font-size: 11px !important; font-weight: 400; }
+.account-deposit-balance strong { color: var(--text); font-size: 11px !important; font-weight: 400; }
 .account-deposit-message {
   display: flex;
   align-items: flex-start;
@@ -5176,8 +5318,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   padding: 9px 10px;
   border: 1px solid;
   border-radius: var(--radius-md);
-  font-size: 10px !important;
-  font-weight: 500;
+  font-size: 11px !important;
+  font-weight: 400;
   line-height: 1.45;
   grid-column: 1 / -1;
 }
@@ -5185,7 +5327,7 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-deposit-message.is-error { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger-text); }
 .account-deposit-message.is-success { border-color: var(--ok-border); background: var(--ok-soft); color: var(--ok-text); }
 .account-deposit-field { display: flex; flex-direction: column; gap: 5px; }
-.account-deposit-field > span { color: var(--text-2); font-size: 10px !important; font-weight: 500; line-height: 1.3; }
+.account-deposit-field > span { color: var(--text-2); font-size: 11px !important; font-weight: 400; line-height: 1.3; }
 .account-deposit-field > span em { color: var(--danger-text); font-style: normal; }
 .account-deposit-field > input {
   width: 100%;
@@ -5197,8 +5339,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   outline: none;
   background: var(--surface-2) !important;
   color: var(--text) !important;
-  font-size: 12px !important;
-  font-weight: 500;
+  font-size: 11px !important;
+  font-weight: 400;
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 .account-deposit-field > input::placeholder { color: var(--muted); font-weight: 400; }
@@ -5220,8 +5362,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-deposit-credit.is-selected { border-color: var(--accent-border); background: var(--accent-soft-2); }
 .account-deposit-credit > input { width: 14px; height: 14px; flex: 0 0 14px; margin: 1px 0 0; accent-color: var(--accent); }
 .account-deposit-credit-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.account-deposit-credit-copy strong { color: var(--text-2); font-size: 12px !important; font-weight: 500; line-height: 1.35; }
-.account-deposit-credit-copy small { color: var(--text-3); font-size: 10px !important; font-weight: 400; line-height: 1.4; }
+.account-deposit-credit-copy strong { color: var(--text-2); font-size: 11px !important; font-weight: 400; line-height: 1.35; }
+.account-deposit-credit-copy small { color: var(--text-3); font-size: 11px !important; font-weight: 400; line-height: 1.4; }
 .account-deposit-actions { display: flex; justify-content: flex-end; grid-column: 1 / -1; padding-top: 2px; }
 .account-deposit-actions > button {
   display: inline-flex;
@@ -5236,8 +5378,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   border-radius: var(--radius-md);
   background: var(--accent);
   color: #fff;
-  font-size: 12px !important;
-  font-weight: 600;
+  font-size: 11px !important;
+  font-weight: 400;
   box-shadow: var(--shadow-xs);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
@@ -5252,22 +5394,22 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-positions-card { min-height: 272px; flex-shrink: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
 .account-positions-table-shell { min-width: 0; min-height: 138px; flex: 1 1 0; overflow: auto; scrollbar-gutter: stable; }
 .account-positions-grid { display: grid; grid-template-columns: minmax(88px, 1.3fr) 58px 68px 80px 80px 80px 88px 62px minmax(64px, 1fr) 76px; min-width: 744px; }
-.account-positions-header { position: sticky; top: 0; z-index: 1; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-3); font-size: var(--account-ui-small); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.account-positions-header { position: sticky; top: 0; z-index: 1; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-3); font-size: 11px; font-weight: 400; letter-spacing: .03em; text-transform: uppercase; }
 .account-positions-header > div { padding: 11px 12px !important; border-right: 0 !important; }
 .account-positions-body { min-width: 744px; }
-.account-positions-row { min-height: 46px; align-items: center; border-bottom: 1px solid var(--border-2); background: var(--surface); font-size: var(--account-ui-base); }
+.account-positions-row { min-height: 46px; align-items: center; border-bottom: 1px solid var(--border-2); background: var(--surface); font-size: 11px; }
 .account-positions-row:hover { background: var(--accent-soft-2); }
 .account-positions-row > div { min-width: 0; padding: 7px 12px !important; border-right: 0 !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .account-positions-grid [title*="Double-click"] { background: transparent !important; border: 0 !important; border-radius: 0 !important; }
-.account-positions-empty { display: grid; width: 100%; height: 100%; min-height: 0; place-items: center; padding: 16px 24px; color: var(--text-3); font-size: var(--account-ui-base); text-align: center; }
+.account-positions-empty { display: grid; width: 100%; height: 100%; min-height: 0; place-items: center; padding: 16px 24px; color: var(--text-3); font-size: 11px; text-align: center; }
 .account-positions-card:has(.account-positions-empty) { flex: 0 0 auto; min-height: 0; }
 .account-positions-table-shell:has(.account-positions-empty) { flex: 0 0 auto; min-height: 0; }
 .account-positions-body > .account-positions-empty { height: auto; min-height: 56px; }
-.account-positions-state { display: flex; width: 100%; height: 100%; min-height: 0; align-items: center; justify-content: center; gap: 10px; padding: 16px 24px; color: var(--text-3); font-size: var(--account-ui-base); font-weight: 500; text-align: center; }
+.account-positions-state { display: flex; width: 100%; height: 100%; min-height: 0; align-items: center; justify-content: center; gap: 10px; padding: 16px 24px; color: var(--text-3); font-size: 11px; font-weight: 400; text-align: center; }
 .account-positions-state-content { display: inline-flex; align-items: center; gap: 8px; }
 .account-positions-state.is-loading svg { color: var(--accent-text); }
 .account-positions-state.is-error { flex-direction: column; color: var(--danger-text); }
-.account-positions-state.is-error > button { min-height: 28px; padding: 0 10px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger-text) !important; font-size: var(--account-ui-small); font-weight: 600; cursor: pointer; }
+.account-positions-state.is-error > button { min-height: 28px; padding: 0 10px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger-text) !important; font-size: 11px; font-weight: 400; cursor: pointer; }
 .account-positions-state.is-error > button:hover { border-color: var(--danger); background: var(--danger); color: #fff !important; }
 .account-positions-partial-error {
   position: sticky;
@@ -5282,20 +5424,42 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   border-bottom: 1px solid var(--danger-border);
   background: color-mix(in srgb, var(--danger-soft) 94%, var(--surface));
   color: var(--danger-text);
-  font-size: var(--account-ui-small);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 400;
 }
-.account-positions-partial-error > button { min-height: 22px; padding: 0 8px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--danger-text); font-size: var(--account-ui-small); font-weight: 600; cursor: pointer; }
+.account-positions-partial-error > button { min-height: 22px; padding: 0 8px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--danger-text); font-size: 11px; font-weight: 400; cursor: pointer; }
 .account-positions-partial-error > button:hover { border-color: var(--danger); background: var(--danger); color: #fff; }
-.account-position-close-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger-text); font-size: var(--account-ui-small); font-weight: 600; letter-spacing: .01em; cursor: pointer; }
-.account-position-close-button:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
-.account-position-close-button:disabled { cursor: not-allowed; opacity: .45; }
+.account-positions-row > div:last-child { padding-inline: 8px !important; }
+.account-details-window .account-position-close-button {
+  display: inline-flex;
+  min-width: 56px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  /* Override the legacy popup's catch-all button text color. */
+  color: var(--danger-text) !important;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.account-details-window .account-position-close-button:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger-text); }
+.account-details-window .account-position-close-button:active:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); }
+.account-details-window .account-position-close-button:disabled { background: var(--surface-2); border-color: var(--border); color: var(--muted) !important; cursor: not-allowed; }
 .account-balance-summary {
   flex-shrink: 0;
   overflow: hidden;
   border-top: 1px solid var(--border);
   background: var(--surface);
-  font-size: var(--account-ui-small);
+  font-size: 11px;
 }
 .account-balance-summary-header {
   display: flex;
@@ -5312,8 +5476,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-balance-summary-title {
   gap: 7px;
   color: var(--text-2);
-  font-size: 10px !important;
-  font-weight: 600;
+  font-size: 11px !important;
+  font-weight: 400;
   letter-spacing: .045em;
   text-transform: uppercase;
 }
@@ -5331,8 +5495,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-balance-summary-status {
   gap: 6px;
   color: var(--text-3);
-  font-size: 10px !important;
-  font-weight: 500;
+  font-size: 11px !important;
+  font-weight: 400;
 }
 .account-balance-summary-status > svg { flex: 0 0 auto; color: var(--text-3); }
 .account-balance-metrics {
@@ -5340,7 +5504,7 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
   padding: 0;
-  font-size: var(--account-ui-small) !important;
+  font-size: 11px !important;
   font-weight: 400 !important;
 }
 .account-balance-stat {
@@ -5362,8 +5526,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-balance-stat > dt {
   overflow: hidden;
   color: var(--text-3);
-  font-size: 10px !important;
-  font-weight: 500;
+  font-size: 11px !important;
+  font-weight: 400;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5372,8 +5536,8 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   margin: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 12px !important;
-  font-weight: 600;
+  font-size: 11px !important;
+  font-weight: 400;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5391,9 +5555,9 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-balance-stat.is-primary > dd { color: var(--accent-text); }
 .account-balance-stat.is-positive > dd { color: var(--ok-text); }
 .account-balance-stat.is-negative > dd { color: var(--danger-text); }
-.account-balance-label { font-size: var(--account-ui-small) !important; font-weight: 500 !important; }
-.account-balance-value { font-size: var(--account-ui-base) !important; font-weight: 600 !important; }
-.account-margin-call-warning { font-size: var(--account-ui-base) !important; font-weight: 600 !important; line-height: 1.3; }
+.account-balance-label { font-size: 11px !important; font-weight: 400 !important; }
+.account-balance-value { font-size: 11px !important; font-weight: 400 !important; }
+.account-margin-call-warning { font-size: 11px !important; font-weight: 400 !important; line-height: 1.3; }
 
 .account-settings-tab,
 .account-security-tab,
@@ -5405,23 +5569,23 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-section-heading { display: flex; min-height: 42px; align-items: center; gap: 10px; }
 .account-section-heading-icon { display: inline-flex; width: 34px; height: 34px; flex: 0 0 34px; align-items: center; justify-content: center; border: 1px solid var(--accent-border); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-text); }
 .account-section-heading > div:nth-child(2) { min-width: 0; }
-.account-section-heading h2 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; line-height: 1.35; }
-.account-section-heading p { margin: 2px 0 0; color: var(--text-3); font-size: 10px !important; line-height: 1.4; }
+.account-section-heading h2 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; line-height: 1.35; }
+.account-section-heading p { margin: 2px 0 0; color: var(--text-3); font-size: 11px !important; line-height: 1.4; }
 .account-history-refresh { margin-left: auto; flex: 0 0 auto; }
 
 .account-settings-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
 .account-settings-card-title { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.account-settings-card-title h3 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; }
+.account-settings-card-title h3 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; }
 .account-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; padding: 16px; }
 .account-settings-span-full { grid-column: 1 / -1; }
 .account-settings-field { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-.account-settings-field > span { color: var(--text-2); font-size: 10px !important; font-weight: 600; }
+.account-settings-field > span { color: var(--text-2); font-size: 11px !important; font-weight: 400; }
 .account-settings-field > :is(input, select) { width: 100%; height: 34px; min-height: 34px; padding: 0 10px !important; border: 1px solid var(--border-3) !important; border-radius: var(--radius-md) !important; background: var(--surface) !important; color: var(--text) !important; outline: none; }
 .account-settings-field > :is(input, select):focus { border-color: var(--accent) !important; box-shadow: var(--ring) !important; }
-.account-settings-field > small { color: var(--text-3); font-size: 10px !important; line-height: 1.4; }
+.account-settings-field > small { color: var(--text-3); font-size: 11px !important; line-height: 1.4; }
 .account-settings-field.is-readonly { min-height: 58px; justify-content: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.account-settings-field.is-readonly strong { color: var(--text); font-size: 12px !important; font-weight: 600; }
-.account-settings-note { display: flex; align-items: flex-start; gap: 9px; padding: 11px 12px; border: 1px solid var(--accent-border); border-radius: var(--radius-md); background: var(--accent-soft-2); color: var(--text-2); font-size: 10px !important; line-height: 1.5; }
+.account-settings-field.is-readonly strong { color: var(--text); font-size: 11px !important; font-weight: 400; }
+.account-settings-note { display: flex; align-items: flex-start; gap: 9px; padding: 11px 12px; border: 1px solid var(--accent-border); border-radius: var(--radius-md); background: var(--accent-soft-2); color: var(--text-2); font-size: 11px !important; line-height: 1.5; }
 .account-settings-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--accent-text); }
 .account-risk-card { display: grid; grid-template-columns: minmax(0, 1fr) 190px; padding: 16px; gap: 18px; }
 .account-risk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -5430,14 +5594,14 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-percent-field > input { width: 100%; height: 32px; min-height: 32px; padding: 0 10px !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 .account-percent-field > span { display: inline-flex; height: 100%; min-width: 34px; align-items: center; justify-content: center; border-left: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); }
 .account-risk-preview { display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 14px; border: 1px solid var(--ok-border); border-radius: var(--radius-md); background: var(--ok-soft); }
-.account-risk-preview > span { color: var(--ok-text); font-size: 10px !important; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.account-risk-preview > strong { color: var(--text); font-size: 12px !important; font-weight: 600; }
-.account-risk-preview > small { color: var(--text-3); font-size: 10px !important; }
+.account-risk-preview > span { color: var(--ok-text); font-size: 11px !important; font-weight: 400; text-transform: uppercase; letter-spacing: .04em; }
+.account-risk-preview > strong { color: var(--text); font-size: 11px !important; font-weight: 400; }
+.account-risk-preview > small { color: var(--text-3); font-size: 11px !important; }
 .account-limits-tab { gap: 18px; padding-right: 4px; }
 .account-transaction-tab { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px; }
 .account-transaction-card { flex-shrink: 0; width: min(500px, 100%); margin: auto; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
 .account-transaction-header { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.account-transaction-header h2 { color: var(--text); font-size: 12px !important; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.account-transaction-header h2 { color: var(--text); font-size: 11px !important; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .account-transaction-body { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
 .account-transaction-balance { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; color: var(--text-2); font-size: 11px; }
 .account-transaction-body label { color: var(--text-3); font-size: 11px !important; font-weight: 400; }
@@ -5447,7 +5611,7 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-transaction-body input { height: 32px; min-height: 32px; border: 1px solid var(--border-3) !important; border-radius: 4px !important; background: var(--surface-2) !important; color: var(--text) !important; font-size: 11px !important; font-weight: 400; }
 .account-transaction-body input::placeholder { color: var(--text-3) !important; opacity: 1; }
 .account-transaction-body input:focus { border-color: var(--accent) !important; box-shadow: none !important; }
-.account-transaction-body .account-transaction-submit { align-self: flex-end; min-width: 90px; min-height: 32px; margin-top: 4px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 500; box-shadow: none; cursor: pointer; }
+.account-transaction-body .account-transaction-submit { align-self: flex-end; min-width: 90px; min-height: 32px; margin-top: 4px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 400; box-shadow: none; cursor: pointer; }
 .account-transaction-body .account-transaction-submit:disabled { opacity: .45; cursor: not-allowed; }
 .account-trade-workspace { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(360px, 1fr); gap: 0; flex: 1; min-height: 0; padding: 4px; overflow: auto; color: var(--text); }
 .account-trade-workspace .account-trade-chart { width: auto; min-height: 360px; border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; }
@@ -5463,32 +5627,32 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-trade-prices > div:nth-child(2) { align-items: flex-end; border-left: 1px solid var(--border); }
 .account-trade-spread { grid-column: 1 / -1; text-align: center; }
 .account-trade-workspace :is(input, select) { font-size: 11px !important; font-weight: 400 !important; color: var(--text); }
-.account-trade-workspace .font-extrabold, .account-trade-workspace .font-bold { font-weight: 500; }
+.account-trade-workspace .font-extrabold, .account-trade-workspace .font-bold { font-weight: 400; }
 .account-trade-workspace .shadow-md { box-shadow: none; }
 @media (max-width: 760px) { .account-trade-workspace { grid-template-columns: 1fr; } .account-trade-workspace .account-trade-order { height: auto; overflow: visible; } }
 .account-limits-tab > * { flex-shrink: 0; }
-.account-limits-tab .account-section-heading h2 { font-size: 15px !important; }
+.account-limits-tab .account-section-heading h2 { font-size: 11px !important; }
 .account-limits-tab .account-section-heading p { margin-top: 5px; font-size: 11px !important; }
 .account-limits-tab .account-risk-card { display: flex; flex-direction: column; gap: 0; padding: 0; }
 .account-limits-tab .account-risk-grid { padding: 16px 20px; gap: 24px; }
 .account-limits-tab .account-settings-field { gap: 8px; }
-.account-limits-tab .account-settings-field > span { font-size: 11px !important; font-weight: 500; }
+.account-limits-tab .account-settings-field > span { font-size: 11px !important; font-weight: 400; }
 .account-limits-tab .account-percent-field { height: 32px; border-radius: 4px; background: var(--surface-2); }
-.account-limits-tab .account-percent-field > input { min-width: 0; height: 30px; min-height: 30px; background: transparent !important; font-size: 10px !important; font-weight: 400; font-variant-numeric: tabular-nums; }
+.account-limits-tab .account-percent-field > input { min-width: 0; height: 30px; min-height: 30px; background: transparent !important; font-size: 11px !important; font-weight: 400; font-variant-numeric: tabular-nums; }
 .account-limits-tab .account-percent-field:focus-within { box-shadow: none; }
 .account-limits-tab .account-risk-preview { padding: 10px 20px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--surface-2); gap: 8px; }
-.account-limits-tab .account-risk-preview > span { color: var(--text-3); font-weight: 500; }
+.account-limits-tab .account-risk-preview > span { color: var(--text-3); font-weight: 400; }
 .account-limits-tab .account-risk-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; }
 .account-limits-tab .account-risk-preview dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .account-limits-tab .account-risk-preview dt { color: var(--text-3); font-size: 11px; }
 .account-limits-tab .account-risk-preview dd { margin: 0; color: var(--text); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .account-limits-tab .account-settings-note { flex-direction: column; gap: 4px; border-color: var(--border); background: transparent; padding: 10px 16px; color: var(--text-3); }
-.account-limits-tab .account-settings-note strong { color: var(--text-2); font-size: 11px; font-weight: 500; }
+.account-limits-tab .account-settings-note strong { color: var(--text-2); font-size: 11px; font-weight: 400; }
 
 .account-security-list { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .account-security-card { display: grid; grid-template-columns: minmax(180px, .75fr) minmax(430px, 1.4fr); align-items: center; gap: 18px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
-.account-security-copy h3 { margin: 0; color: var(--text); font-size: 12px !important; font-weight: 600; }
-.account-security-copy p { margin: 3px 0 0; color: var(--text-3); font-size: 10px !important; line-height: 1.4; }
+.account-security-copy h3 { margin: 0; color: var(--text); font-size: 11px !important; font-weight: 400; }
+.account-security-copy p { margin: 3px 0 0; color: var(--text-3); font-size: 11px !important; line-height: 1.4; }
 .account-security-controls { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto; align-items: center; gap: 8px; }
 .account-password-input { position: relative; min-width: 0; }
 .account-password-input > input { width: 100%; height: 32px; min-height: 32px; padding: 0 62px 0 10px !important; border-radius: var(--radius-md) !important; }
@@ -5498,10 +5662,10 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-password-input > button:hover:not(:disabled) { background: var(--surface-3); color: var(--text) !important; }
 .account-password-input > button:disabled { opacity: .35; }
 .account-history-tab > .ui-card { min-height: 0 !important; flex: 1 1 auto; box-shadow: var(--shadow-xs); }
-.account-history-tab .position-history-heading { font-size: 12px !important; }
-.account-history-tab .position-history-copy { font-size: 10px !important; }
+.account-history-tab .position-history-heading { font-size: 11px !important; }
+.account-history-tab .position-history-copy { font-size: 11px !important; }
 .account-details-window :is(input, select, textarea, button) {
-  font-size: var(--account-ui-base) !important;
+  font-size: 11px !important;
 }
 
 /* Normalize the remaining utility-sized text used by the legacy tab bodies to
@@ -5513,7 +5677,7 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   [class~="text-[11px]"],
   .text-xs
 ) {
-  font-size: var(--account-ui-small) !important;
+  font-size: 11px !important;
 }
 
 .account-details-window :is(
@@ -5522,11 +5686,11 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   [class~="text-[26px]"],
   .text-sm
 ) {
-  font-size: var(--account-ui-base) !important;
+  font-size: 11px !important;
 }
 
 .account-details-footer { min-height: 64px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--border); }
-.account-details-footer button { min-height: 36px; border-radius: var(--radius-md) !important; font-size: var(--account-ui-base) !important; font-weight: 500; }
+.account-details-footer button { min-height: 36px; border-radius: var(--radius-md) !important; font-size: 11px !important; font-weight: 400; }
 .account-details-footer button:first-child { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
 .account-details-footer button:first-child:disabled { background: var(--surface-3) !important; border-color: var(--border) !important; color: var(--muted) !important; }
 .account-details-footer button:not(:first-child) { background: var(--surface) !important; border-color: var(--border-3) !important; color: var(--text-2) !important; }
@@ -5539,31 +5703,63 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: color-mix(in srgb, var(--bg) 76%, transparent);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgb(0 0 0 / 44%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 .trade-close-confirmation-card {
-  width: min(100%, 400px);
-  overflow: hidden;
-  border: 1px solid var(--border-3);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  --trade-confirm-surface: #ffffff;
+  --trade-confirm-raised: #f6f7f9;
+  --trade-confirm-text: #20252e;
+  --trade-confirm-muted: #616975;
+  --trade-confirm-border: #dfe3e8;
+  width: min(100%, 440px);
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--trade-confirm-border);
+  border-radius: 12px;
+  background: var(--trade-confirm-surface);
+  color: var(--trade-confirm-text);
   box-shadow: var(--shadow-lg);
 }
-.trade-close-confirmation-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
-.trade-close-confirmation-eyebrow { margin: 0 0 4px; color: var(--text-3); font-size: var(--account-ui-small); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.trade-close-confirmation-header h2 { margin: 0; color: var(--text); font-size: var(--account-ui-base); font-weight: 700; }
-.trade-close-confirmation-dismiss { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer; }
-.trade-close-confirmation-dismiss:hover { background: var(--surface-3); color: var(--text); }
-.trade-close-confirmation-message { margin: 0; padding: 18px 20px; color: var(--text-2); font-size: var(--account-ui-base); line-height: 1.55; }
-.trade-close-confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px 20px; border-top: 1px solid var(--border); }
-.trade-close-confirmation-actions button { min-height: 36px; padding: 0 14px; border-radius: var(--radius-md); font-family: inherit; font-size: var(--account-ui-base); font-weight: 600; cursor: pointer; }
-.trade-close-confirmation-cancel { border: 1px solid var(--border-3); background: var(--surface); color: var(--text-2); }
-.trade-close-confirmation-cancel:hover { background: var(--surface-2); color: var(--text); }
-.trade-close-confirmation-confirm { border: 1px solid var(--danger-border); background: var(--danger); color: #fff; }
-.trade-close-confirmation-confirm:hover { filter: brightness(1.08); }
-.trade-close-confirmation-confirm:disabled { cursor: wait; opacity: .65; }
+.dark .trade-close-confirmation-card {
+  --trade-confirm-surface: #1e1f22;
+  --trade-confirm-raised: #25262a;
+  --trade-confirm-text: #edf0f3;
+  --trade-confirm-muted: #afb4bd;
+  --trade-confirm-border: #3a3d43;
+}
+.trade-close-confirmation-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px 24px 0; }
+#root .trade-close-confirmation-header h2 { margin: 0; color: var(--trade-confirm-text); font-size: 11px !important; font-weight: 400; line-height: 1.4; letter-spacing: 0; }
+.trade-close-confirmation-subtitle { margin: 6px 0 0; color: var(--trade-confirm-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
+.account-details-window .trade-close-confirmation-dismiss { display: inline-flex; width: 28px; height: 28px; flex-shrink: 0; align-items: center; justify-content: center; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--trade-confirm-muted) !important; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease; }
+.account-details-window .trade-close-confirmation-dismiss:hover:not(:disabled) { background: var(--trade-confirm-raised); border-color: var(--trade-confirm-border); color: var(--trade-confirm-text) !important; }
+.account-details-window :is(.trade-close-confirmation-dismiss, .trade-close-confirmation-cancel):disabled { cursor: not-allowed; color: var(--muted) !important; }
+.trade-close-confirmation-body { display: flex; flex-direction: column; gap: 18px; padding: 20px 24px; }
+.trade-close-confirmation-details { min-width: 0; border: 1px solid var(--trade-confirm-border); border-radius: 8px; background: var(--trade-confirm-raised); }
+.trade-close-confirmation-instrument { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--trade-confirm-border); }
+.trade-close-confirmation-instrument > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.trade-close-confirmation-instrument > div > span { color: var(--trade-confirm-muted); font-size: 11px; }
+.trade-close-confirmation-instrument strong { color: var(--trade-confirm-text); font-size: 11px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.trade-close-confirmation-side { max-width: 50%; padding: 3px 9px; border: 1px solid var(--trade-confirm-border); border-radius: 4px; background: var(--trade-confirm-surface); color: var(--trade-confirm-text); font-size: 11px; font-weight: 400; line-height: 1.5; text-transform: capitalize; overflow-wrap: anywhere; }
+.trade-close-confirmation-summary { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 12px 16px; font-size: 11px; line-height: 1.5; }
+.trade-close-confirmation-summary > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: baseline; gap: 16px; }
+.trade-close-confirmation-summary dt { margin: 0; color: var(--trade-confirm-muted); font-weight: 400; overflow-wrap: anywhere; }
+.trade-close-confirmation-summary dd { margin: 0; color: var(--trade-confirm-text); font-weight: 400; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.trade-close-confirmation-notice { display: flex; align-items: flex-start; gap: 9px; }
+.trade-close-confirmation-notice > svg { flex-shrink: 0; margin-top: 2px; color: var(--trade-confirm-muted); }
+.trade-close-confirmation-message { min-width: 0; margin: 0; color: var(--trade-confirm-text); font-size: 11px; font-weight: 400; line-height: 1.6; }
+.trade-close-confirmation-message > strong { display: block; font-weight: 400; }
+.trade-close-confirmation-message > span { display: block; margin-top: 3px; color: var(--trade-confirm-muted); }
+.trade-close-confirmation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 24px; padding: 16px 0 20px; border-top: 1px solid var(--trade-confirm-border); }
+.trade-close-confirmation-actions button { display: inline-flex; min-width: 88px; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; border-radius: 6px; font-family: inherit; font-size: 11px; font-weight: 400; line-height: 1.25; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.account-details-window .trade-close-confirmation-cancel { border: 1px solid var(--trade-confirm-border); background: transparent; color: var(--trade-confirm-text) !important; }
+.account-details-window .trade-close-confirmation-cancel:hover:not(:disabled) { background: var(--trade-confirm-raised); color: var(--trade-confirm-text) !important; }
+.account-details-window .trade-close-confirmation-confirm { min-width: 128px; border: 1px solid var(--account-close-fill); background: var(--account-close-fill); color: #fff !important; }
+.account-details-window .trade-close-confirmation-confirm:hover:not(:disabled) { background: var(--account-close-hover); border-color: var(--account-close-hover); }
+.account-details-window .trade-close-confirmation-confirm:active:not(:disabled) { background: var(--account-close-active); border-color: var(--account-close-active); }
+.account-details-window .trade-close-confirmation-confirm:disabled { cursor: wait; }
+#root .account-details-window :is(.account-position-close-button, .trade-close-confirmation-dismiss, .trade-close-confirmation-cancel, .trade-close-confirmation-confirm):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 
 @media (max-width: 760px) {
   .account-details-content { padding: 14px; }
@@ -5640,3 +5836,165 @@ html[lang="tr"] .data-state-card-header { flex-wrap: wrap; }
 html[lang="tr"] .data-state-card-title h3 { white-space: normal; overflow-wrap: anywhere; }
 html[lang="tr"] .cc-metric-card[data-placeholder="true"]::after { content: "BAฤDAลTIRICI"; letter-spacing: normal; }
 html[lang="tr"] .cc-metric-card[data-placeholder="true"] { padding-top: 15px; }
+
+
+/* ==========================================================================
+   UNIVERSAL TYPOGRAPHY LOCK (11px / 400)
+   Strictly enforces 11px font size and 400 font weight across the entire
+   application: every page, subfolder, file, control, option, dialog, table,
+   and any newly implemented feature or component.
+   ========================================================================== */
+html,
+body,
+#root,
+#root *,
+#root *::before,
+#root *::after,
+body *,
+body *::before,
+body *::after,
+[class],
+[id] {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+#root#root#root *,
+#root#root#root *::before,
+#root#root#root *::after,
+body#root#root *,
+:root body * {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+/* Dark theme: words that used light-blue type are white. Only the colour
+   changes; font size and weight stay as each element already sets them.
+   Icons (svg) keep their own colour. */
+.dark :is(
+  .text-blue-300,
+  .text-blue-400,
+  .text-blue-500,
+  .text-blue-600,
+  .text-sky-500,
+  .text-cyan-500,
+  .text-cyan-600,
+  .text-indigo-500,
+  [class~="dark:text-blue-300"],
+  [class~="dark:text-blue-400"],
+  [class~="hover:text-blue-800"]:hover
+):not(svg),
+.dark [class*="text-blue-500/"]:not(svg),
+.dark .exposure-eyebrow,
+.dark #root .manager-auth-shell :is(
+  .manager-link-button,
+  .manager-link-button:hover,
+  .manager-preview-toolbar .is-active,
+  .manager-preview-tabs .is-active,
+  .manager-preview-nav-row.is-active,
+  .manager-preview-avatar
+) {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell { --accent-text: var(--ink-strong); }
+
+/* Dark theme: words that used grey type are white as well. Colour only;
+   each element keeps its own font size and weight. */
+.dark :is(
+  .text-gray-200,
+  .text-gray-300,
+  .text-gray-400,
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-700,
+  .text-gray-800,
+  .text-gray-900,
+  [class~="dark:text-gray-200"],
+  [class~="dark:text-gray-300"],
+  [class~="dark:text-gray-400"],
+  [class~="hover:text-gray-600"]:hover,
+  [class~="dark:hover:text-gray-200"]:hover
+):not(svg) {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell {
+  --text-2: var(--ink-2);
+  --text-3: var(--ink-3);
+  --muted: var(--ink-3);
+}
+
+/* Non-text parts that borrowed the grey text tokens keep their grey. */
+.dark [class*="bottomResizer"] span,
+.dark *::-webkit-scrollbar-thumb:hover { background: #a2a2ac; }
+.dark .account-personal-field > :is(input, select):hover,
+.dark .account-deposit-field > input:hover { border-color: #a2a2ac !important; }
+.dark .trading-analytics-pie-label path { stroke: #a2a2ac; }
+.dark .cc-notification-dot.is-read { background: #a2a2ac; }
+.dark .cc-sparkline.is-neutral path { stroke: #b5b5bd; }
+.dark .cc-navigator .cc-tree-node > [role="treeitem"]:focus-visible { outline-color: #a2a2ac; }
+.dark :is(
+  [class~="text-[#6b7280]"],
+  [class~="text-[#8f9298]"],
+  [class~="text-[#9ea0a6]"],
+  [class~="text-[#94a3b8]"],
+  [class~="text-[#64748b]"],
+  [class~="text-[#475569]"],
+  [class~="text-[#c4c6ca]"],
+  [class~="text-[#d6d8db]"],
+  [class~="text-[#e2e4e8]"]
+):not(svg) {
+  color: var(--ink-2);
+}
+
+/* Dark theme type hierarchy. Sizes are unchanged; strength of the white ink
+   and weight carry the hierarchy. The :not(#โ€ฆ) chain always matches; it only
+   lifts specificity above the #root#root#root 11px/400 reset above. */
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(
+  h1,
+  h2,
+  .account-details-title,
+  .symbol-browser-title,
+  .trading-analytics-title,
+  .opened-orders-title,
+  .data-state-card-title,
+  .manager-menu-brand-name
+) {
+  color: var(--ink-strong);
+  font-weight: 600 !important;
+}
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(
+  h3,
+  h4,
+  th,
+  [role="columnheader"],
+  [class*="titleText"],
+  .cc-panel-title strong,
+  .cc-section-title,
+  .account-section-heading,
+  .account-settings-card-title,
+  .account-balance-summary-title,
+  .new-account-section-heading,
+  .opened-orders-section-title,
+  .keyboard-shortcuts-group-heading,
+  .cc-metric-card strong,
+  .ui-badge
+) {
+  font-weight: 500 !important;
+}
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(
+  [role="tab"][aria-selected="true"],
+  .account-details-tab.is-active,
+  .cc-workspace-tab-shell.is-active .cc-workspace-tab,
+  .cc-terminal-tabs button.is-active,
+  .manager-primary-link.is-active,
+  [aria-current="page"],
+  .cc-tree-node > [role="treeitem"][aria-selected="true"]
+) {
+  color: var(--ink-strong) !important;
+  font-weight: 500 !important;
+}
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) .cc-metric-card strong { color: var(--ink-strong); }
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(input, textarea)::placeholder {
+  color: var(--ink-placeholder) !important;
+  opacity: 1;
+}

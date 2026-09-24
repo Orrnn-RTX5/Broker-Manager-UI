@@ -4,7 +4,14 @@ import { useDockingContext } from '../components/docking/DockingContext';
 export default function useOwnerConsoleAutoCollapse(filterSelector) {
   const headerRef = useRef(null);
   const autoCollapsedOwner = useRef(false);
-  const { panels, updatePanel } = useDockingContext();
+  let ctx = null;
+  try {
+    ctx = useDockingContext();
+  } catch {
+    // Outside of DockingProvider
+  }
+  const panels = ctx?.panels || {};
+  const updatePanel = ctx?.updatePanel;
   const ownerVisible = panels.owner_console?.visible;
   const ownerPosition = panels.owner_console?.position;
   const ownerPinned = panels.owner_console?.userPinned;

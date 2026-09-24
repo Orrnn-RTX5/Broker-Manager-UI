@@ -255,8 +255,8 @@ const TradingAccountsDataGrid = ({
                     <span className="tabular">{row.login}</span>
                   </td>
                   <td>
-                    <span className={`ui-badge text-[9px] px-1 py-0 ${
-                      status === 'active' ? 'ui-badge-success' : status === 'disabled' ? 'ui-badge-danger' : 'ui-badge-warn'
+                    <span className={`ui-status ${
+                      status === 'active' ? 'ui-status-ok' : status === 'disabled' ? 'ui-status-danger' : 'ui-status-warn'
                     }`}>
                       {status.toUpperCase()}
                     </span>

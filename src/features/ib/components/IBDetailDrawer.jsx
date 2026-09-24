@@ -45,15 +45,15 @@ const TABS = [
 ];
 
 const STATUS_BADGE = {
-  active: 'ui-badge-success',
-  approved: 'ui-badge-info',
-  pending: 'ui-badge-warn',
-  suspended: 'ui-badge-neutral',
-  rejected: 'ui-badge-danger',
-  removed: 'ui-badge-danger',
-  accrued: 'ui-badge-neutral',
-  pending_review: 'ui-badge-warn',
-  paid: 'ui-badge-success',
+  active: 'ui-status-ok',
+  approved: 'ui-status-info',
+  pending: 'ui-status-warn',
+  suspended: 'ui-status-neutral',
+  rejected: 'ui-status-danger',
+  removed: 'ui-status-danger',
+  accrued: 'ui-status-neutral',
+  pending_review: 'ui-status-warn',
+  paid: 'ui-status-ok',
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -71,7 +71,7 @@ const fmtDate = (value) => {
 };
 
 const StatusBadge = ({ status }) => (
-  <span className={`ui-badge text-[9px] px-1 ${STATUS_BADGE[status] || 'ui-badge-neutral'}`}>
+  <span className={`ui-status ${STATUS_BADGE[status] || 'ui-status-neutral'}`}>
     {String(status || '-').toUpperCase()}
   </span>
 );
@@ -327,7 +327,7 @@ const ClientsTab = ({ login, onOpenLinker }) => {
               <tr key={`${client.client_login}-${index}`}>
                 <td className="tabular font-mono">{client.client_login}</td>
                 <td className="tabular">{client.ib_login}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{client.link_source || '-'}</span></td>
+                <td><span className="ui-status ui-status-neutral">{client.link_source || '-'}</span></td>
                 <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(client.linked_at)}</td>
               </tr>
             ))}
@@ -450,13 +450,13 @@ const PlansTab = ({ login }) => {
             ) : plans.map((plan) => (
               <tr key={plan.id}>
                 <td style={{ fontWeight: 500 }}>{plan.plan_name}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{plan.commission_type}</span></td>
+                <td><span className="ui-status ui-status-neutral">{plan.commission_type}</span></td>
                 <td className="tabular">{fmt(plan.rate)}</td>
                 <td className="tabular">{fmt(plan.override_rate)}</td>
                 <td>{plan.symbol_filter || 'All'}</td>
                 <td>{plan.group_filter || 'All'}</td>
                 <td className="tabular">{fmt(plan.min_lots)} - {plan.max_lots > 0 ? fmt(plan.max_lots) : 'unlimited'}</td>
-                <td><span className={`ui-badge text-[9px] ${plan.enabled ? 'ui-badge-success' : 'ui-badge-neutral'}`}>{plan.enabled ? 'ENABLED' : 'DISABLED'}</span></td>
+                <td><span className={`ui-status ${plan.enabled ? 'ui-status-ok' : 'ui-status-neutral'}`}>{plan.enabled ? 'ENABLED' : 'DISABLED'}</span></td>
               </tr>
             ))}
           </tbody>
@@ -610,12 +610,12 @@ const LedgerTab = ({ login, canManageIB, onRefreshRelated }) => {
                 <td className="tabular">{row.deal_ticket}</td>
                 <td>{row.symbol}</td>
                 <td className="tabular">{fmt(row.lots)}</td>
-                <td><span className="ui-badge ui-badge-neutral text-[9px]">{row.commission_type}</span></td>
+                <td><span className="ui-status ui-status-neutral">{row.commission_type}</span></td>
                 <td className="tabular">{fmt(row.commission_amount)}</td>
                 <td className="tabular">{fmt(row.override_amount)}</td>
                 <td className="tabular font-semibold">{fmt(row.total_amount)}</td>
                 <td><StatusBadge status={row.status} /></td>
-                <td><span className={`ui-badge text-[9px] ${row.paid ? 'ui-badge-success' : 'ui-badge-warn'}`}>{row.paid ? 'PAID' : 'UNPAID'}</span></td>
+                <td><span className={`ui-status ${row.paid ? 'ui-status-ok' : 'ui-status-warn'}`}>{row.paid ? 'PAID' : 'UNPAID'}</span></td>
                 <td className="tabular text-xs" style={{ color: 'var(--text-3)' }}>{fmtDate(row.calculated_at)}</td>
               </tr>
             ))}

@@ -466,11 +466,11 @@ const SymbolsTab = ({ actionsHost }) => {
                   <td className="symbol-name-cell" style={{ color: 'var(--accent-text)', fontWeight: 400 }}>
                     {s.symbol}
                     {s.symbolType === 'derived' && s.parentSymbol && (
-                      <span className="ml-2 ui-badge ui-badge-primary text-[10px]">derived: {s.parentSymbol}</span>
+                      <span className="ml-2 ui-status ui-status-neutral">derived: {s.parentSymbol}</span>
                     )}
                   </td>
                   <td>
-                    <span className={`ui-badge text-[10px] ${s.__managementPartial && !s.symbolType ? '' : s.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
+                    <span className={`ui-status ${s.__managementPartial && !s.symbolType ? '' : s.symbolType === 'derived' ? 'ui-status-warn' : 'ui-status-ok'}`}>
                       {s.__managementFeedOnly ? 'Feed only' : s.symbolType || (s.__managementPartial ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : 'base')}
                     </span>
                   </td>
@@ -483,7 +483,7 @@ const SymbolsTab = ({ actionsHost }) => {
                   </td>
                   <td style={{ color: 'var(--text-2)' }}>{s.calcMode || '—'}</td>
                   <td>
-                    <span className={`ui-badge text-[10px] ${typeof s.enabled !== 'boolean' ? '' : s.enabled ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                    <span className={`ui-status ${typeof s.enabled !== 'boolean' ? '' : s.enabled ? 'ui-status-ok' : 'ui-status-danger'}`}>
                       {typeof s.enabled !== 'boolean' ? (s.__managementLoading === false ? 'Unavailable' : 'Loading…') : s.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>

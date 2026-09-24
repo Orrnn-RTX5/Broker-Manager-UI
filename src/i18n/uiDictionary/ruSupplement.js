@@ -78,7 +78,7 @@ export default {
   'Online Users by Build': 'Пользователи в сети по версиям', 'Online Users by Country': 'Пользователи в сети по странам',
   'Online Users by Group': 'Пользователи в сети по группам', 'Online Users by Type': 'Пользователи в сети по типам',
   'Open Owner Console': 'Открыть консоль владельца', 'Opened Orders': 'Открытые ордера', 'Operational footprint': 'География деятельности',
-  'GLOBAL COVERAGE': 'ГЛОБАЛЬНЫЙ ОХВАТ', 'Regional presence': 'Региональное присутствие', 'Order': 'Ордер',
+  'Global coverage': 'Глобальный охват', 'Regional presence': 'Региональное присутствие', 'Order': 'Ордер',
   'Order comment (optional)...': 'Комментарий к ордеру (необязательно)...', 'Order Parameters': 'Параметры ордера',
   'Order State': 'Состояние ордера', 'Orders by Sentiment': 'Ордера по направлению', 'Orders by Symbol': 'Ордера по инструментам',
   'Override': 'Индивидуальная настройка', 'Override rate': 'Индивидуальная ставка', 'Owner console views': 'Представления консоли владельца',

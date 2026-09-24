@@ -123,6 +123,31 @@ test('manager dev proxy is enabled for VS Code / Dev Tunnels origins', () => {
   }
 });
 
+test('manager dev proxy is enabled for LAN IP and tunnel origins served by Vite', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_MANAGER_USE_DEV_PROXY: 'true',
+  };
+  const previousWindow = globalThis.window;
+  const origins = [
+    'http://192.168.1.38:5180',
+    'https://rtx5-manager.example-tunnel.com',
+    'https://abc-123.trycloudflare.com',
+  ];
+
+  try {
+    for (const origin of origins) {
+      globalThis.window = { location: { origin, hostname: new URL(origin).hostname } };
+      assert.equal(shouldUseManagerDevProxy(true), true, origin);
+      assert.equal(shouldUseFeedDevProxy(true), true, origin);
+    }
+    globalThis.window = { location: { origin: 'file://', hostname: '' } };
+    assert.equal(shouldUseManagerDevProxy(true), false);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test('manager dev proxy remains opt-in', () => {
   assert.equal(shouldUseManagerDevProxy(true, true), false);
 });
@@ -137,6 +162,33 @@ test('broker v2 API paths never receive the legacy /manager prefix', () => {
     buildBrokerApiUrl('/api/v2/positions/history'),
     'https://fxtrustbrokerbackend.orrnn.com/api/v2/positions/history'
   );
+});
+
+test('a pinned env profile routes APIs and feed to its broker despite saved Nex endpoints', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    BROKER_ID: 'orrnn',
+    API_HOST: 'https://service.orrnn.com',
+    API_HOST_EXT: 'https://service.orrnn.com',
+    WS_HOST: 'wss://service.orrnn.com',
+    WS_FEED_PATH: '/ws/feed',
+    FEED_BROKER_ID: 'orrnn',
+    FEED_SEND_TOKEN: 'false',
+    DEFAULT_MT5_SERVER: '51.195.188.172',
+  };
+  sessionStorage.setItem('broker_info', JSON.stringify({
+    broker_id: 'Nexa',
+    backend_url: 'https://nexa.orrnn.com',
+    feed_ws_url: 'wss://nexa.orrnn.com/ws/feed',
+    feed_broker_token: 'old-token',
+  }));
+
+  assert.equal(buildBrokerApiUrl('/api/v2/positions/history'), 'https://service.orrnn.com/api/v2/positions/history');
+  assert.equal(buildFeedStatusUrl(), 'https://service.orrnn.com/ws/feed/status');
+  const feedUrl = new URL(buildFeedWsUrl());
+  assert.equal(feedUrl.origin, 'wss://service.orrnn.com');
+  assert.equal(feedUrl.pathname, '/ws/feed');
+  assert.equal(feedUrl.searchParams.get('broker_id'), 'orrnn');
+  assert.equal(feedUrl.searchParams.has('token'), false);
 });
 
 test('manager client keeps versioned transaction routes at the broker root', () => {

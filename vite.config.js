@@ -77,6 +77,19 @@ export default defineConfig(({ mode, command }) => {
           changeOrigin: true,
           secure: proxySecure,
           rewrite: (path) => path.replace(/^\/discovery-api/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              try {
+                const origin = new URL(discoveryHost).origin
+                proxyReq.setHeader('origin', origin)
+                proxyReq.setHeader('referer', `${origin}/`)
+              } catch {
+                // Keep the incoming headers if the discovery host is not a URL.
+              }
+              // Tunnel auth cookies must reach Vite, not the discovery host.
+              proxyReq.removeHeader('cookie')
+            })
+          },
         },
         '^/api/manager(?:/|\\?|$)': {
           target: apiHost,

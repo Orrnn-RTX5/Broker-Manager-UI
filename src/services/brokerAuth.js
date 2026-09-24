@@ -132,7 +132,9 @@ export const fetchBrokerList = async () => {
       buildBrokerDiscoveryUrl(),
       {
         method: 'GET',
-        credentials: 'omit',
+        // Same-origin keeps Dev Tunnels / Vite auth cookies on the local
+        // `/discovery-api` proxy. Cross-origin discovery still sends none.
+        credentials: 'same-origin',
         headers: { Accept: 'application/json' },
       }
     );
@@ -156,11 +158,11 @@ export const fetchBrokerList = async () => {
   const wantsNexaBroker = runtimeBrokerId === 'nexa' || runtimeBrokerId === 'nexa-broker';
   const usable = normalized.filter((broker) => !isOpaqueLocalTestBroker(broker));
   const hasTestBroker = usable.some((broker) => isTestBrokerInfo(broker));
-  if (!hasTestBroker && (wantsTestBroker || normalized.length === 0 || normalized.some((broker) => isTestBrokerInfo(broker)))) {
+  if (!hasTestBroker && (wantsTestBroker || normalized.some((broker) => isTestBrokerInfo(broker)))) {
     usable.push(normalizeBrokerInfo(TEST_BROKER_DEFAULT_ENTRY));
   }
   const hasNexaBroker = usable.some((broker) => String(broker?.broker_id || '').trim().toLowerCase() === 'nexa');
-  if (!hasNexaBroker && (wantsNexaBroker || normalized.length === 0)) {
+  if (!hasNexaBroker && wantsNexaBroker) {
     usable.unshift(normalizeBrokerInfo(NEXA_BROKER_DEFAULT_ENTRY));
   }
 
@@ -447,6 +449,7 @@ export const resolveBrokerSelection = (
     brokerList.filter((broker) => brokerMatchesSelectionId(broker, runtimeBrokerId))
   );
   if (runtimeBroker) return createBrokerSelectionResult(runtimeBroker, 'runtime-broker-id', true);
+  if (runtimeBrokerId) return createBrokerSelectionResult(null, 'runtime-broker-missing', true);
 
   const hostnameMatchedBroker = brokerList.find((broker) => brokerMatchesHostname(broker, currentHostname));
   if (hostnameMatchedBroker) return createBrokerSelectionResult(hostnameMatchedBroker, 'hostname', true);
@@ -500,7 +503,9 @@ const postJson = async (url, body) => {
   try {
     response = await fetch(url, {
       method: 'POST',
-      credentials: 'omit',
+      // Local Vite / Dev Tunnels routing needs its host cookies. Cross-origin
+      // broker logins still omit cookies with this policy.
+      credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -588,6 +593,12 @@ export const getBrokerInfo = () => {
     const raw = sessionStorage.getItem(BROKER_INFO_KEY);
     if (!raw) return null;
     const normalized = normalizeBrokerInfo(JSON.parse(raw));
+    const configuredBrokerId = String(getRuntimeBrokerId() || '').trim().toLowerCase();
+    const storedBrokerId = String(normalized.broker_id || normalized.id || '').trim().toLowerCase();
+    if (configuredBrokerId && storedBrokerId !== configuredBrokerId) {
+      clearBrokerInfo();
+      return null;
+    }
     saveBrokerInfo(normalized);
     return normalized;
   } catch {

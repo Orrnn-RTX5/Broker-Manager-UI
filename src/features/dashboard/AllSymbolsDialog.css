@@ -1,22 +1,22 @@
 .all-symbols-dialog { box-sizing:border-box; width:min(780px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); margin:auto; padding:0; overflow:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text); font-family:var(--sans); box-shadow:var(--shadow-xl); }
 .all-symbols-dialog::backdrop { background:rgba(15,23,42,.45); }
 .all-symbols-dialog header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:20px; border-bottom:1px solid var(--border); }
-.all-symbols-dialog h2 { margin:0 0 6px; font-size:18px; font-weight:600; }
-.all-symbols-dialog p { margin:0; color:var(--text-2); font-size:12px; line-height:1.5; }
+.all-symbols-dialog h2 { margin:0 0 6px; font-size: 11px; font-weight:400; }
+.all-symbols-dialog p { margin:0; color:var(--text-2); font-size: 11px; line-height:1.5; font-weight:400; }
 .all-symbols-controls { display:flex; gap:12px; padding:16px 20px; }
 .all-symbols-controls label { display:flex; flex:1; min-width:0; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border-3); border-radius:6px; color:var(--text-3); background:var(--surface-2); }
-.all-symbols-controls input { width:100%; min-width:0; border:0; outline:none; background:transparent; color:var(--text); font:inherit; font-size:12px; }
+.all-symbols-controls input { width:100%; min-width:0; border:0; outline:none; background:transparent; color:var(--text); font:inherit; font-size: 11px; font-weight:400; }
 .all-symbols-controls input:focus-visible { outline:none; box-shadow:none; }
 .all-symbols-controls label:focus-within { border-color:var(--accent); outline:none; box-shadow:none; }
 .all-symbols-table { max-height: min(480px,50dvh); overflow:auto; }
-.all-symbols-table table { width:100%; border-collapse:collapse; font-size:12px; }
-.all-symbols-table th { position:sticky; top:0; background:var(--surface-2); color:var(--text-2); text-align:left; font-weight:600; }
+.all-symbols-table table { width:100%; border-collapse:collapse; font-size: 11px; font-weight:400; }
+.all-symbols-table th { position:sticky; top:0; background:var(--surface-2); color:var(--text-2); text-align:left; font-weight:400; font-size: 11px; }
 .all-symbols-table :is(th,td) { padding:10px 16px; border-bottom:1px solid var(--border-2); }
 .all-symbols-table td { overflow-wrap:anywhere; }
 .all-symbols-table :is(th,td):nth-child(n+3) { text-align:right; font-variant-numeric:tabular-nums; }
 .all-symbols-table tbody tr:hover { background:var(--accent-soft); }
 .all-symbols-table .all-symbols-empty { padding:40px 20px; text-align:center; color:var(--text-2); }
-.all-symbols-dialog footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; padding:16px 20px; border-top:1px solid var(--border); color:var(--text-2); font-size:12px; }
+.all-symbols-dialog footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; padding:16px 20px; border-top:1px solid var(--border); color:var(--text-2); font-size: 11px; }
 .all-symbols-dialog footer > div { display:flex; gap:8px; }
-.all-symbols-error { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 20px 16px; padding:10px; border:1px solid var(--danger-border); border-radius:6px; background:var(--danger-soft); color:var(--danger-text); font-size:12px; }
+.all-symbols-error { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 20px 16px; padding:10px; border:1px solid var(--danger-border); border-radius:6px; background:var(--danger-soft); color:var(--danger-text); font-size: 11px; }
 .all-symbols-dialog button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

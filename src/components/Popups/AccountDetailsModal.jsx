@@ -1,9 +1,9 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef } from 'react';
-import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck } from 'lucide-react';
-import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
+import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, CircleAlert } from 'lucide-react';
+import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
-import { getPositionUpdateLogin, subscribeToPositionSync } from '../../services/positionSync';
+import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync } from '../../services/positionSync';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
@@ -17,6 +17,7 @@ import { updateManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
+import { normalizeResult } from '../../utils/resultMessage';
 import {
   canCloseAccountTrades,
   canMutateAccountTrades,
@@ -274,6 +275,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const canManipulateTrades = canMutateAccountTrades(canAct);
   const canCloseTrades = canCloseAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [focusedTicket, setFocusedTicket] = useState(targetTicket);
   const [accountData, setAccountData] = useState(null);
   const [detailsLoading, setLoading] = useState(false);
   const [detailsError, setError] = useState(null);
@@ -315,6 +317,39 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [selectedTicketRow, setSelectedTicketRow] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
+  const tradeConfirmationRef = useRef(null);
+  const isOrderCancellation = entity === 'order';
+
+  useEffect(() => {
+    if (!pendingTradeClose) return;
+    const trigger = document.activeElement;
+    const dialog = tradeConfirmationRef.current;
+    dialog.querySelector('.trade-close-confirmation-cancel')?.focus();
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (dialog.getAttribute('aria-busy') !== 'true') setPendingTradeClose(null);
+      }
+      if (event.key !== 'Tab') return;
+      const buttons = [...dialog.querySelectorAll('button:not(:disabled)')];
+      if (!buttons.length) {
+        event.preventDefault();
+        dialog.focus();
+      } else if (event.shiftKey && document.activeElement === buttons[0]) {
+        event.preventDefault();
+        buttons.at(-1).focus();
+      } else if (!event.shiftKey && document.activeElement === buttons.at(-1)) {
+        event.preventDefault();
+        buttons[0].focus();
+      }
+    };
+    dialog.addEventListener('keydown', handleKeyDown);
+    return () => {
+      dialog.removeEventListener('keydown', handleKeyDown);
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [pendingTradeClose]);
 
   const [ctxMenu, setCtxMenu] = useState({ x: 0, y: 0, isOpen: false, data: null });
 
@@ -460,7 +495,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       showResult.info('Deals are historical records and cannot be deleted from this view.');
       return;
     }
-    setPendingTradeClose(trade);
+    const positionDetails = entity === 'position'
+      ? positions.find(position => String(position.position) === String(trade.position))
+      : undefined;
+    setPendingTradeClose({ ...positionDetails, ...trade });
   };
 
   const handleDeleteTrade = async (ticket) => {
@@ -476,16 +514,32 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       }
       console.log(`[${label}] response:`, redactSensitive(result));
       const message = result?.message || JSON.stringify(result);
-      showResult({ ...result, message: `${label}\n\n${message}` });
+      const outcome = normalizeResult(result);
+      if (entity === 'order') {
+        showResult({ ...result, message: `${label}\n\n${message}` });
+      }
+      // A completed HTTP request can still report a rejected or pending close.
+      // Only remove a trade when the result confirms success.
+      if (outcome.type !== 'success') return;
       invalidatePositionsCache(loginId);
-      setPositions(prev => prev.filter(p => p.position !== ticket));
+      setPositions(prev => prev.filter(p => String(p.position) !== String(ticket)));
+      if (entity === 'position') {
+        setSelectedTicketRow(null);
+        setPositionSyncRevision(revision => revision + 1);
+      }
     } catch (err) {
       console.error(`[${label}] error:`, err);
       const status = err?.code || err?.status || 'ERROR';
-      showResult.error(`${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`);
+      const message = `${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`;
+      if (entity === 'order') showResult.error(message);
     } finally {
       setIsDeleting(false);
       setPendingTradeClose(null);
+      if (entity === 'position') {
+        // Keep the full account trade list visible after either outcome.
+        setFocusedTicket(null);
+        setActiveTab('Overview');
+      }
     }
   };
 
@@ -494,7 +548,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const runRefresh = () => {
         pendingPositionsRefreshTimerRef.current = null;
         lastPositionsRequestAtRef.current = Date.now();
-        invalidatePositionsCache(loginId);
+        invalidateAccountPositionsCache(loginId);
         setPositionSyncRevision((revision) => revision + 1);
       };
 
@@ -514,14 +568,32 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       // The modal already performs its initial account-scoped fetch. A websocket
       // reconnect can happen repeatedly on an unavailable feed, so treating every
       // `connected` snapshot as data invalidation creates a request loop.
-      if (event?.type === 'snapshot' && event?.reason === 'connected') return;
+      if (event?.type === 'snapshot') {
+        if (event.reason === 'reconciled') setPositionSyncRevision((revision) => revision + 1);
+        return;
+      }
 
       if (event?.type === 'position') {
+        if (event?.snapshot) {
+          // applyPositionsSnapshot already wrote this account's scoped cache;
+          // re-reading it is instant and must not invalidate it back to HTTP.
+          const snapshotRows = getPositionSnapshotRows(event.payload) || [];
+          const hasLogin = snapshotRows.some((row) => (
+            String(row?.account_login ?? row?.accountLogin ?? row?.login ?? row?.Login ?? '') === String(loginId)
+          ));
+          const cached = peekAccountPositions(loginId);
+          const updatedTickets = new Set(snapshotRows.map((row) => String(row?.positionTicket ?? row?.Position ?? row?.ticket ?? row?.Ticket ?? row?.position ?? '')));
+          const hasUpdatedTicket = cached?.some((row) => updatedTickets.has(String(row.position)));
+          if (cached !== undefined && (hasLogin || hasUpdatedTicket)) {
+            setPositionSyncRevision((revision) => revision + 1);
+          }
+          return;
+        }
         const updateLogin = getPositionUpdateLogin(event.payload);
         // Untargeted frames must not make every open account refetch. The
         // periodic snapshot below reconciles any malformed server envelope.
         if (updateLogin === undefined || String(updateLogin) !== String(loginId)) return;
-      } else if (event?.type !== 'snapshot' || event?.reason !== 'poll') {
+      } else {
         return;
       }
 
@@ -631,14 +703,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           setPositions(mine);
         }
 
-        // When the popup was opened via double-click on a row, `targetTicket`
+        // When the popup was opened via double-click on a row, `focusedTicket`
         // holds that row's ticket. Auto-select it so the Trade tab is pre-wired
         // to that position (no more "Select a row" placeholder).
-        if (targetTicket) {
+        if (focusedTicket) {
           const hit = mine.find(p =>
-            p.position === targetTicket ||
-            p.ticket === targetTicket ||
-            String(p.position) === String(targetTicket)
+            String(p.position ?? p.ticket) === String(focusedTicket)
           );
           if (hit) {
             setSelectedTicketRow(hit);
@@ -646,8 +716,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             // Fallback: synthesize a minimal row so buttons still work for
             // Orders / Deals where the popup doesn't fetch its own list.
             setSelectedTicketRow({
-              position: targetTicket,
-              ticket: targetTicket,
+              position: focusedTicket,
+              ticket: focusedTicket,
               symbol: 'EURUSD',
               type: 'buy',
               priceSl: 0,
@@ -659,10 +729,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         if (!active) return;
         console.error("Failed to fetch positions", err);
         setPositionsError(err?.message || 'Unable to load open positions.');
-        if (targetTicket) {
+        if (focusedTicket) {
           setSelectedTicketRow({
-            position: targetTicket,
-            ticket: targetTicket,
+            position: focusedTicket,
+            ticket: focusedTicket,
             symbol: 'EURUSD',
             type: 'buy',
             priceSl: 0,
@@ -679,7 +749,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return () => {
       active = false;
     };
-  }, [loginId, targetTicket, positionSyncRevision]);
+  }, [loginId, focusedTicket, positionSyncRevision]);
 
   useEffect(() => {
     if (activeTab !== 'History' || !loginId) return;
@@ -1105,7 +1175,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     {/* Header and rows share one scroll area to keep columns aligned. */}
                     <div className="account-positions-body custom-scrollbar">
                     {(() => {
-                      const displayPositions = targetTicket ? positions.filter(p => p.position === targetTicket) : positions;
+                      const displayPositions = focusedTicket ? positions.filter(p => String(p.position) === String(focusedTicket)) : positions;
                       if (positionsLoading && displayPositions.length === 0) {
                         return (
                           <div className="account-positions-state is-loading" role="status" aria-live="polite">
@@ -1194,12 +1264,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                             </div>
                             <div className="p-2 flex items-center justify-center">
                               <button
+                                type="button"
                                 onClick={() => requestTradeClose(pos)}
                                 disabled={isDeleting || !canCloseTrades}
                                 title={!canCloseTrades ? TRADE_CLOSE_DENIED_MESSAGE : undefined}
                                 className="account-position-close-button"
                               >
-                                CLOSE
+                                Close
                               </button>
                             </div>
                           </div>
@@ -1363,7 +1434,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 <section className="account-settings-card">
                   <div className="account-settings-card-title">
                     <h3>Account assignment</h3>
-                    <span className={`ui-badge ${statusValue === 'active' ? 'ui-badge-success' : 'ui-badge-danger'}`}>{statusLabel}</span>
+                    <span className={`ui-status ${statusValue === 'active' ? 'ui-status-ok' : 'ui-status-danger'}`}>{statusLabel}</span>
                   </div>
                   <div className="account-settings-grid">
                     <label className="account-settings-field account-settings-span-full">
@@ -1652,24 +1723,41 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       )}
 
       {pendingTradeClose && (
-        <div className="trade-close-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="trade-close-confirmation-title" aria-describedby="trade-close-confirmation-description">
-          <div className="trade-close-confirmation-card">
+        <div className="trade-close-confirmation">
+          <div ref={tradeConfirmationRef} className="trade-close-confirmation-card" role="alertdialog" aria-modal="true" aria-busy={isDeleting} aria-labelledby="trade-close-confirmation-title" aria-describedby="trade-close-confirmation-description" tabIndex={-1}>
             <div className="trade-close-confirmation-header">
               <div>
-                <p className="trade-close-confirmation-eyebrow">Trade confirmation</p>
-                <h2 id="trade-close-confirmation-title">Close this position?</h2>
+                <h2 id="trade-close-confirmation-title">{isOrderCancellation ? 'Cancel order' : 'Close position'}</h2>
+                <p className="trade-close-confirmation-subtitle">Review the trade details before confirming.</p>
               </div>
-              <button type="button" onClick={() => setPendingTradeClose(null)} aria-label="Cancel closing position" className="trade-close-confirmation-dismiss">
+              <button type="button" onClick={() => setPendingTradeClose(null)} disabled={isDeleting} aria-label="Dismiss trade confirmation" className="trade-close-confirmation-dismiss">
                 <X size={18} />
               </button>
             </div>
-            <p id="trade-close-confirmation-description" className="trade-close-confirmation-message">
-              Close {pendingTradeClose.type ? `${String(pendingTradeClose.type).toUpperCase()} ` : ''}{pendingTradeClose.symbol || 'this'} position #{pendingTradeClose.position} at the current market price? This action cannot be undone.
-            </p>
+            <div className="trade-close-confirmation-body">
+              <section className="trade-close-confirmation-details" aria-label="Trade details">
+                <div className="trade-close-confirmation-instrument">
+                  <div><span>Symbol</span><strong>{pendingTradeClose.symbol || '—'}</strong></div>
+                  <span className="trade-close-confirmation-side" aria-label={`Side: ${pendingTradeClose.type || 'Unavailable'}`}>{pendingTradeClose.type || '—'}</span>
+                </div>
+                <dl className="trade-close-confirmation-summary">
+                  <div><dt>{isOrderCancellation ? 'Order' : 'Position'}</dt><dd>#{pendingTradeClose.position}</dd></div>
+                  <div><dt>Action</dt><dd>{isOrderCancellation ? 'Cancel order' : 'Market close'}</dd></div>
+                </dl>
+              </section>
+              <div className="trade-close-confirmation-notice">
+                <CircleAlert size={16} aria-hidden="true" />
+                <p id="trade-close-confirmation-description" className="trade-close-confirmation-message">
+                  <strong>This action cannot be undone.</strong>
+                  <span>{isOrderCancellation ? 'This will cancel the selected pending order.' : 'This position will close at the current market price.'}</span>
+                </p>
+              </div>
+            </div>
             <div className="trade-close-confirmation-actions">
-              <button type="button" onClick={() => setPendingTradeClose(null)} className="trade-close-confirmation-cancel">Cancel</button>
-              <button type="button" onClick={() => handleDeleteTrade(pendingTradeClose.position)} disabled={isDeleting} className="trade-close-confirmation-confirm">
-                {isDeleting ? 'Closing…' : 'Close position'}
+              <button type="button" onClick={() => setPendingTradeClose(null)} disabled={isDeleting} className="trade-close-confirmation-cancel">{isOrderCancellation ? 'Keep order' : 'Cancel'}</button>
+              <button type="button" onClick={() => handleDeleteTrade(pendingTradeClose.position)} disabled={isDeleting} aria-busy={isDeleting} className="trade-close-confirmation-confirm">
+                {isDeleting && <Loader size={14} className="animate-spin" aria-hidden="true" />}
+                {isDeleting ? (isOrderCancellation ? 'Cancelling…' : 'Closing…') : (isOrderCancellation ? 'Cancel order' : 'Close position')}
               </button>
             </div>
           </div>

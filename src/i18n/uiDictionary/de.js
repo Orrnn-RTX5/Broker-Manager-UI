@@ -10,7 +10,7 @@ export default {
   "Account detail sections": "Kontodetail-Bereiche",
   "Account Details": "Kontodetails",
   "Account financial snapshot": "Finanzübersicht des Kontos",
-  "Account Groups": "Kontogruppen",
+  "Groups": "Gruppen",
   "Account information": "Kontoinformationen",
   "Account Limit Status": "Kontolimit-Status",
   "Account limits": "Kontolimits",

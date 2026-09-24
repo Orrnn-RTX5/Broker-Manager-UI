@@ -1,0 +1,20 @@
+.cc-trade-comment { width:100%; min-width:0; font-size:11px; font-weight:400; }
+.cc-trade-comment-trigger { display:flex; align-items:center; gap:6px; width:100%; min-height:20px; padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:text; }
+.cc-trade-comment-trigger span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.cc-trade-comment-trigger.is-empty { opacity:.6; }
+.cc-trade-comment-trigger svg { flex-shrink:0; opacity:0; }
+.cc-trade-comment-trigger:hover, .cc-trade-comment-trigger:focus-visible { opacity:1; }
+.cc-trade-comment-trigger:hover svg, .cc-trade-comment-trigger:focus-visible svg { opacity:.8; }
+.cc-trade-comment-trigger:focus-visible { outline:1px solid var(--accent); outline-offset:-1px; border-radius:3px; }
+.cc-trade-comment-form { padding:2px 0; }
+.cc-trade-comment-editor { display:flex; align-items:center; min-width:0; border:1px solid var(--accent); border-radius:4px; background:var(--bg); color:var(--text); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); overflow:hidden; }
+.cc-trade-comment-editor input { flex:1; width:0; min-width:0; height:24px; padding:0 6px; border:0; outline:none; background:transparent; color:var(--text); font:inherit; }
+.cc-trade-comment-editor input::placeholder { color:var(--text-tertiary); }
+.cc-trade-comment-editor button { display:grid; place-items:center; flex:0 0 23px; width:23px; height:24px; padding:0; border:0; background:transparent; color:var(--text-secondary); cursor:pointer; }
+.cc-trade-comment-editor button:hover, .cc-trade-comment-editor button:focus-visible { background:var(--bg-hover); color:var(--accent-text); outline:none; }
+.cc-trade-comment-editor button:disabled { opacity:.5; cursor:wait; }
+.cc-trade-comment-editor.has-error { border-color:var(--danger); }
+.cc-trade-comment-error { padding:4px 0; color:var(--danger-text); white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
+.cc-trade-comment .is-spinning { animation:comment-saving-spin 1s linear infinite; }
+@keyframes comment-saving-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .cc-trade-comment .is-spinning { animation:none; } }

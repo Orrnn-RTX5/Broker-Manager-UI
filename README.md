@@ -72,6 +72,10 @@ Supported desktop fields include `desktop_backend_url`, `desktop_api_url`, `loca
 
 ### Env Modes
 
+The manager app's `dev`, `build`, and Electron scripts all load `.env.terminal` (`vite --mode terminal`). Keep the active broker in that one file. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. If the new feed requires a token, set `VITE_FEED_BROKER_TOKEN`, `VITE_FEED_AUTH_REQUIRED=true`, and `VITE_FEED_SEND_TOKEN=true` in the same file.
+
+When `VITE_BROKER_ID` is set, the web app uses the configured endpoints and refuses to select another broker if discovery does not return that ID. An existing session for the previous broker is rejected on reload.
+
 Normal web build:
 
 ```bash
@@ -84,14 +88,6 @@ Electron/desktop build:
 ```bash
 npm run build:electron
 npm run build:desktop
-```
-
-Mode files:
-
-```text
-.env.web       -> VITE_BACKEND_TARGET=web
-.env.electron  -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
-.env.desktop   -> VITE_BACKEND_TARGET=desktop, HTTPS backend configured by default
 ```
 
 Electron dev script:

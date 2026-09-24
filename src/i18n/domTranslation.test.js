@@ -308,7 +308,7 @@ test('applyText cleanly translates full UI elements to French in fr mode without
     ['Restricted Accounts', 'Comptes restreints'],
     ['Finance', 'Finance'],
     ['Markets', 'Marchés'],
-    ['Account Groups', 'Groupes de comptes'],
+    ['Groups', 'Groupes'],
     ['System', 'Système'],
 
     // Top action bar

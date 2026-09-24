@@ -31,7 +31,7 @@ const TOP_POPOVERS = {
 
 const NOTIFICATION_IDS = ['connection', 'dealer-operations', 'executive-overview'];
 
-const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusChange }) => {
+const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusChange, toolbar = null }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const t = useT();
@@ -342,6 +342,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           })}
         </div>
       </div>
+
+      {/* Workspace toolbar shares this line, like a desktop trading terminal. */}
+      {toolbar && (
+        <div className="manager-menu-toolbar-slot">
+          <span className="manager-menu-divider" aria-hidden="true" />
+          {toolbar}
+        </div>
+      )}
 
       {/* Right side actions; live telemetry is rendered in the bottom status bar. */}
       <div ref={statusRef} className="manager-menu-status flex items-center h-full gap-2 px-2 text-[12px]" style={{ color: 'var(--text-3)' }}>

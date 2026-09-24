@@ -205,7 +205,7 @@ const VisibilitySection = ({ allSymbols, loadingSymbols, symbolLoadError }) => {
                 <td style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{r.symbol}</td>
                 <td style={{ color: 'var(--text-2)' }}>{r.group}</td>
                 <td>
-                  <span className={`ui-badge text-[10px] ${r.visible ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                  <span className={`ui-status ${r.visible ? 'ui-status-ok' : 'ui-status-danger'}`}>
                     {r.visible ? 'Visible' : 'Hidden'}
                   </span>
                 </td>

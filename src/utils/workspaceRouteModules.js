@@ -4,7 +4,9 @@
  * runtime, so the route renders immediately when the user opens it later.
  */
 export const workspaceRouteLoaders = Object.freeze({
+  exposurePage: () => import('../features/exposure/ExposurePage'),
   dailyReportPage: () => import('../features/reports/DailyReportPage'),
+  analyticsOverviewDashboard: () => import('../features/analytics/AnalyticsOverviewDashboard'),
   tradingAccountsDashboard: () => import('../features/analytics/TradingAccountsDashboard'),
   onlineUsersDashboard: () => import('../features/analytics/OnlineUsersDashboard'),
   advertisingCampaignsDashboard: () => import('../features/analytics/AdvertisingCampaignsDashboard'),
@@ -26,7 +28,9 @@ export const workspaceRouteLoaders = Object.freeze({
 });
 
 const routeLoaderEntries = [
+  ['/exposure', 'exposurePage'],
   ['/reports/daily', 'dailyReportPage'],
+  ['/analytics', 'analyticsOverviewDashboard'],
   ['/analytics/trading-accounts', 'tradingAccountsDashboard'],
   ['/analytics/online-users', 'onlineUsersDashboard'],
   ['/analytics/advertising-campaigns', 'advertisingCampaignsDashboard'],

@@ -1,63 +1,50 @@
-import React from 'react';
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  ZoomableGroup
-} from "react-simple-maps";
-import useThemeStore from '../../../store/themeStore';
+import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
+import worldGeoData from '../countries-110m.json';
 
-const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const countFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
-// The screenshot highlights India and Russia in blue
-const activeCountries = ["India", "Russia"];
-
-const getCountryColor = (countryName, isDarkMode) => {
-  if (countryName === "India") return "#3b82f6"; // Primary blue
-  if (countryName === "Russia") return "#93c5fd"; // Lighter blue
-  return isDarkMode ? "#374151" : "var(--border-2)"; // Shared light-theme border for inactive countries
-};
-
-const OnlineUsersByCountryMap = () => {
-  const isDarkMode = useThemeStore((state) => state.isDarkMode);
+const OnlineUsersByCountryMap = ({ geoCounts, summary = [] }) => {
+  const maxCount = Math.max(0, ...(geoCounts ? geoCounts.values() : []));
 
   return (
-    <div className="bg-white dark:bg-[#1e1e1e] flex flex-col pt-4 h-[300px] overflow-hidden transition-colors">
-      <div className="text-[11px] text-gray-800 dark:text-gray-200 ml-4 mb-2 font-semibold z-10">Online Users by Country</div>
-      
-      <div className="flex-1 w-full relative pt-2 overflow-hidden">
-        <ComposableMap 
-          projection="geoMercator" 
-          projectionConfig={{ scale: 110 }}
-          width={800}
-          height={400}
-          style={{ width: "100%", height: "100%" }}
-        >
-          <ZoomableGroup center={[40, 30]} zoom={1.1}>
-            <Geographies geography={geoUrl}>
-              {({ geographies }) =>
-                geographies.map((geo) => {
-                  const countryName = geo.properties.name;
-                  return (
-                    <Geography
-                      key={geo.rsmKey}
-                      geography={geo}
-                      fill={getCountryColor(countryName, isDarkMode)}
-                      stroke={isDarkMode ? "#1e1e1e" : "var(--surface)"}
-                      strokeWidth={0.5}
-                      style={{
-                        default: { outline: "none" },
-                        hover: { fill: "#2563eb", outline: "none", cursor: "pointer" },
-                        pressed: { outline: "none" },
-                      }}
-                    />
-                  );
-                })
-              }
+    <div className="trading-analytics-map">
+      <div className="trading-analytics-map-canvas">
+        <ComposableMap projection="geoMercator" projectionConfig={{ scale: 120 }} width={800} height={390}>
+          <ZoomableGroup center={[10, 12]} zoom={1.05}>
+            <Geographies geography={worldGeoData}>
+              {({ geographies }) => geographies.map((geo) => {
+                const name = geo.properties.name || '';
+                const count = geoCounts?.get(name.toLowerCase()) || 0;
+                const intensity = count && maxCount ? 0.42 + 0.58 * Math.sqrt(count / maxCount) : 1;
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={count ? 'var(--accent)' : 'var(--cc-map-land-bottom, #3c4140)'}
+                    fillOpacity={count ? intensity : 0.82}
+                    stroke="var(--bg-panel)"
+                    strokeWidth={0.55}
+                    style={{
+                      default: { outline: 'none' },
+                      hover: { fill: count ? 'var(--accent-hover)' : 'var(--cc-map-land-top, #505654)', outline: 'none' },
+                      pressed: { outline: 'none' },
+                    }}
+                  >
+                    <title>{name}: {countFormatter.format(count)} online</title>
+                  </Geography>
+                );
+              })}
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
       </div>
+      {summary.length > 0 && (
+        <div className="trading-analytics-country-summary">
+          {summary.slice(0, 4).map((item) => (
+            <span key={item.name}><i />{item.name}<b>{countFormatter.format(item.count)}</b></span>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

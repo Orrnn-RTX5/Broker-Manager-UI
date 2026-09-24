@@ -34,7 +34,7 @@ const INITIAL_PANELS = {
     defaultPosition: 'left',
     visible: true,
     order: 1,
-    size: { width: 180, height: '100%' },
+    size: { width: 204, height: '100%' },
   },
   [PANEL_ACCOUNTS]: {
     title: 'Accounts',
@@ -50,16 +50,13 @@ const INITIAL_PANELS = {
     visible: true,
     canMaximize: true,
     order: 0,
-    size: { width: 280, height: '100%' },
+    size: { width: 346, height: '100%' },
   },
   [PANEL_OWNER]: {
     title: 'Owner Console',
     icon: 'owner',
     defaultPosition: 'right',
-    visible: true,
-    // The default/reset workspace includes this rail even when the dashboard
-    // is narrower than the automatic overflow guard's preferred width.
-    userPinned: true,
+    visible: false,
     size: { width: 210, height: '100%' },
   },
   [PANEL_TERMINAL]: {
@@ -68,16 +65,23 @@ const INITIAL_PANELS = {
     defaultPosition: 'bottom',
     visible: true,
     canMaximize: true,
-    size: { width: '100%', height: 'clamp(118px, 15vh, 148px)' },
+    size: { width: '100%', height: 'clamp(190px, 26vh, 260px)' },
   },
 };
 
 // ─── Inner layout (needs docking context) ────────────────────────────────────
 function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
-  const { togglePanel, updatePanel, updatePanels, panels, resetLayout } = useDockingContext();
+  const { togglePanel, updatePanels, panels, resetLayout: resetDockLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const resetLayout = useCallback(() => {
+    resetDockLayout();
+    setIsToolBarVisible(true);
+    // Restore tab selections and scroll positions along with the panel geometry.
+    setWorkspaceRevision((revision) => revision + 1);
+  }, [resetDockLayout]);
   const [connectionTelemetry, setConnectionTelemetry] = useState({
     connectionData: null,
     pingMs: null,
@@ -266,25 +270,25 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
         onLogout={onLogout}
         onViewAction={handleViewAction}
         onStatusChange={setConnectionTelemetry}
+        toolbar={isToolBarVisible ? (
+          <ToolBar
+            toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
+            isSidebarOpen={isNavigatorOpen}
+            toggleRightSidebar={toggleAccountsPanel}
+            isRightSidebarOpen={isAccountsOpen}
+            toggleMarketData={toggleMarketWatch}
+            isMarketDataOpen={isMarketDataOpen}
+            toggleOwnerConsole={() => togglePanel(PANEL_OWNER)}
+            isOwnerConsoleOpen={isOwnerConsoleOpen}
+            resetLayout={resetLayout}
+            onLogout={onLogout}
+          />
+        ) : null}
       />
-      {isToolBarVisible && (
-        <ToolBar
-          toggleSidebar={() => togglePanel(PANEL_NAVIGATOR)}
-          isSidebarOpen={isNavigatorOpen}
-          toggleRightSidebar={toggleAccountsPanel}
-          isRightSidebarOpen={isAccountsOpen}
-          toggleMarketData={toggleMarketWatch}
-          isMarketDataOpen={isMarketDataOpen}
-          toggleOwnerConsole={() => togglePanel(PANEL_OWNER)}
-          isOwnerConsoleOpen={isOwnerConsoleOpen}
-          resetLayout={resetLayout}
-          onLogout={onLogout}
-        />
-      )}
 
       {/* ── Main dockable workspace ── */}
       <div className="cc-shell-workspace flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
-        <DockLayout panelContents={panelContents}>
+        <DockLayout key={workspaceRevision} panelContents={panelContents}>
           <div className="cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
             <WorkspaceTabs />
             <div className="cc-route-viewport">

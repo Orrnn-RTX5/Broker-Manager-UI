@@ -9,7 +9,7 @@ export default {
   "Account detail sections": "Разделы сведений о счёте",
   "Account Details": "Детали счёта",
   "Account financial snapshot": "Финансовый снимок счёта",
-  "Account Groups": "Группы счетов",
+  "Groups": "Группы",
   "Account information": "Информация о счёте",
   "Account Limit Status": "Статус лимитов счёта",
   "Account limits": "Лимиты счёта",

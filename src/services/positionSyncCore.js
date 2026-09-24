@@ -35,8 +35,18 @@ export const getPositionUpdateLogin = (payload) => {
   return undefined;
 };
 
+// The OnPositionUpdate channel sends { data: [...] } frames that can cover
+// only part of the open-position book. Preserve empty arrays for the cache
+// reconciler, which decides what the frame means using its scope and metadata.
+export const getPositionSnapshotRows = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const rows = payload.data ?? payload.positions ?? payload.answer;
+  return Array.isArray(rows) ? rows : null;
+};
+
 export const isPositionMutation = (payload) => {
   if (!payload || typeof payload !== 'object') return false;
+  if (getPositionSnapshotRows(payload)) return true;
   const source = payload.data || payload.position || payload.update || payload;
   const action = String(
     source.action || source.event || source.type || source.event_type || source.eventType || ''
@@ -70,10 +80,12 @@ export class PositionSyncClient {
     setIntervalFn = (...args) => globalThis.setInterval(...args),
     clearIntervalFn = (...args) => globalThis.clearInterval(...args),
     pollMs = POSITION_SYNC_POLL_MS,
+    onSnapshot,
   } = {}) {
     this.requestTicket = requestTicket;
     this.createSocket = createSocket;
     this.buildUrl = buildUrl;
+    this.onSnapshot = onSnapshot;
     this.setTimeoutFn = setTimeoutFn;
     this.clearTimeoutFn = clearTimeoutFn;
     this.setIntervalFn = setIntervalFn;
@@ -135,24 +147,42 @@ export class PositionSyncClient {
       if (!this.running || connectionId !== this.connectionId) return;
       const socket = this.createSocket(this.buildUrl(ticket));
       this.socket = socket;
+      const isCurrentConnection = () => (
+        this.running && connectionId === this.connectionId && this.socket === socket
+      );
       socket.onopen = () => {
-        if (!this.running || connectionId !== this.connectionId) return;
+        if (!isCurrentConnection()) return;
         this.reconnectAttempt = 0;
         this.emit({ type: 'snapshot', reason: 'connected' });
       };
       socket.onmessage = (event) => {
+        if (!isCurrentConnection()) return;
         const payload = parseMessage(event.data);
-        if (isPositionMutation(payload)) this.emit({ type: 'position', payload });
+        if (!isPositionMutation(payload)) return;
+        const snapshotRows = getPositionSnapshotRows(payload);
+        if (snapshotRows) {
+          // Warm the shared position caches before subscribers re-read them so
+          // a ~1 Hz snapshot stream never turns into a PositionsAll storm.
+          try {
+            this.onSnapshot?.(snapshotRows);
+          } catch {
+            // Cache writes must never break the socket pump.
+          }
+        }
+        this.emit({ type: 'position', payload, snapshot: Boolean(snapshotRows) });
       };
       socket.onerror = () => {
+        if (!isCurrentConnection()) return;
         if (socket.readyState === 0 || socket.readyState === 1) socket.close();
       };
       socket.onclose = () => {
-        if (this.socket === socket) this.socket = null;
-        if (this.running && connectionId === this.connectionId) this.scheduleReconnect();
+        if (!isCurrentConnection()) return;
+        this.socket = null;
+        this.scheduleReconnect();
       };
     } catch {
-      if (connectionId === this.connectionId) this.socket = null;
+      if (!this.running || connectionId !== this.connectionId) return;
+      this.socket = null;
       this.scheduleReconnect();
     }
   }

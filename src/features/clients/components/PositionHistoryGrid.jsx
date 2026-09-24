@@ -150,7 +150,7 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
                   <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
                   <td style={{ fontWeight: 600 }}>{row.symbol}</td>
                   <td>
-                    <span className={`ui-badge text-[9px] px-1.5 ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                    <span className={`ui-status ${isBuy ? 'ui-status-ok' : 'ui-status-danger'}`}>
                       {row.type.toUpperCase()}
                     </span>
                   </td>

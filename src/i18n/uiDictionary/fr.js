@@ -18,7 +18,6 @@ export default {
   "Account Details": "Détails du compte",
   "Account Equity (USD)": "Fonds propres du compte (USD)",
   "Account financial snapshot": "Aperçu financier du compte",
-  "Account Groups": "Groupes de comptes",
   "Account information": "Informations sur le compte",
   "Account Limit Status": "Statut des limites du compte",
   "Account limits": "Limites de compte",

@@ -123,7 +123,7 @@ const LpMappingsTab = () => {
                   <td style={{ color: 'var(--text-2)' }}>{m.lpSymbol}</td>
                   <td style={{ color: 'var(--text)' }}>{m.internalSymbol}</td>
                   <td>
-                    <span className={`ui-badge text-[10px] ${m.enabled !== false ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                    <span className={`ui-status ${m.enabled !== false ? 'ui-status-ok' : 'ui-status-danger'}`}>
                       {m.enabled !== false ? 'Active' : 'Disabled'}
                     </span>
                   </td>

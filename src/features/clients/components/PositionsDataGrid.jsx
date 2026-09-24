@@ -6,43 +6,12 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GridLoadingState from '../../../components/GridLoadingState';
-import { getPositionUpdateLogin, subscribeToPositionSync } from '../../../services/positionSync';
+import { subscribeToPositionSync } from '../../../services/positionSync';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQueries.js';
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
-import { invalidateGlobalPositionsCache, invalidatePositionsCache } from '../../../services/api.js';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
-
-const POSITIONS_SNAPSHOT_KEY = 'rtx5_open_positions_snapshot_v1';
-
-const getInitialPositionsSnapshot = () => {
-  try {
-    const raw = sessionStorage.getItem(POSITIONS_SNAPSHOT_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.rows) && parsed.rows.length > 0) {
-      return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return undefined;
-};
-
-const savePositionsSnapshot = (pageData) => {
-  if (Array.isArray(pageData?.rows) && pageData.rows.length > 0) {
-    try {
-      sessionStorage.setItem(POSITIONS_SNAPSHOT_KEY, JSON.stringify({
-        rows: pageData.rows.slice(0, 30),
-        total: pageData.total || pageData.rows.length,
-        hasMore: Boolean(pageData.hasMore),
-      }));
-    } catch {
-      // ignore
-    }
-  }
-};
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', grid, onRowsChange, onRowContext }) => {
   const queryClient = useQueryClient();
@@ -66,27 +35,6 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     filters,
   }), [search, sortCol, sortDir, filters]);
 
-  const isDefaultParams = !search
-    && typeFilter === 'All Types'
-    && symbolFilter === 'All Symbols'
-    && reasonFilter === 'All Reasons'
-    && sortCol === 'position'
-    && sortDir === 'asc';
-
-  const initialData = useMemo(() => {
-    if (!isDefaultParams) return undefined;
-    const cached = queryClient.getQueryData(['positions', 'page', {
-      search: '',
-      sort_by: 'position',
-      sort_dir: 'asc',
-      filters: {},
-      limit: 30,
-      offset: 0,
-    }]);
-    if (cached?.rows?.length > 0) return cached;
-    return getInitialPositionsSnapshot();
-  }, [isDefaultParams, queryClient]);
-
   const {
     rows,
     total,
@@ -108,9 +56,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     debounceMs: 150,
     enabled: hasRequestedData,
     staleTime: OPEN_POSITIONS_STALE_MS,
-    initialData,
     placeholderData: (previousData) => {
-      const base = previousData || initialData || getInitialPositionsSnapshot();
+      const base = previousData;
       if (!base?.rows?.length) return undefined;
       const s = String(search || '').trim().toLowerCase();
       if (!s && (!filters || Object.keys(filters).length === 0)) {
@@ -149,12 +96,6 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     return () => clearTimeout(timer);
   }, [isLoading, rows.length]);
 
-  useEffect(() => {
-    if (rows && rows.length > 0 && !search && (!filters || Object.keys(filters).length === 0)) {
-      savePositionsSnapshot({ rows, total, hasMore });
-    }
-  }, [rows, total, hasMore, search, filters]);
-
   const timingMetadata = useMemo(() => ({
     rowCount: rows.length,
     cacheAvailable: dataUpdatedAt > 0,
@@ -178,19 +119,12 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   useEffect(() => subscribeToPositionSync((event) => {
     // Reconnect notifications carry no position change. Refetching on every
     // unstable websocket reconnect can stampede the slow PositionsAll route.
-    if (event?.type === 'snapshot' && event?.reason === 'connected') return;
+    if (event?.type === 'snapshot' && event?.reason !== 'reconciled') return;
+    if (event?.type === 'position' && !event.snapshot) return;
 
-    // Every frame invalidates the global grid snapshot. Account-scoped frames
-    // invalidate only their own modal cache; symbol-only P/L frames must not
-    // cancel an unrelated account's first-page/continuation request.
-    if (event?.type === 'position') {
-      const updateLogin = getPositionUpdateLogin(event.payload);
-      if (updateLogin === undefined) invalidateGlobalPositionsCache();
-      else invalidatePositionsCache(updateLogin);
-    } else {
-      invalidatePositionsCache();
-    }
-    if (hasRequestedData) queryClient.invalidateQueries({ queryKey: ['positions'] });
+    // Read the shared book after a live patch or a completed reconciliation.
+    // Keep an existing request running so a busy stream cannot starve loading.
+    if (hasRequestedData) queryClient.invalidateQueries({ queryKey: ['positions'] }, { cancelRefetch: false });
   }), [hasRequestedData, markDataRequested, queryClient]);
 
   const handleSort = (col) => {
@@ -280,8 +214,9 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
               const rowKey = row.position;
               const isSelected = grid?.selectedIds.has(rowKey) ?? false;
               const isBuy = row.type === 'buy';
-              const swapTone = row.swap < 0 ? 'var(--danger-text)' : 'var(--text-2)';
-              const profitTone = row.profit < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
+              const profitTone = row.profit < 0
+                ? 'var(--open-position-sell-color)'
+                : 'var(--open-position-buy-color)';
               return (
                 <tr
                   key={rowKey}
@@ -294,24 +229,24 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
                   <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
                     <input type="checkbox" aria-label={`Select position ${row.position}`} checked={isSelected} onChange={() => grid?.toggle(rowKey)} />
                   </td>
-                  <td className="tabular" style={{ textAlign: 'center' }}>{row.position}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.login}</td>
-                  <td style={{ textAlign: 'center' }}>{row.name}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.email}</td>
-                  <td style={{ textAlign: 'center' }}>{row.symbol}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span className={`ui-badge ${isBuy ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+                  <td className="open-position-value tabular" style={{ textAlign: 'center' }}>{row.position}</td>
+                  <td className="open-position-value tabular" style={{ textAlign: 'center' }}>{row.login}</td>
+                  <td className="open-position-value" style={{ textAlign: 'center' }}>{row.name}</td>
+                  <td className="open-position-value" style={{ textAlign: 'center' }}>{row.email}</td>
+                  <td className="open-position-value" style={{ textAlign: 'center' }}>{row.symbol}</td>
+                  <td className="open-position-action-cell" style={{ textAlign: 'center' }}>
+                    <span className={`open-position-action ${isBuy ? 'is-buy' : 'is-sell'}`}>
                       {row.type.toUpperCase()}
                     </span>
                   </td>
-                  <td className="tabular" style={{ textAlign: 'center' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceOpen)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceCurrent, 1)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center', color: swapTone }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center', color: profitTone }}>{fmt(row.profit)}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.comment}</td>
+                  <td className="open-position-value tabular" style={{ textAlign: 'center' }}>{row.volume}</td>
+                  <td className="open-position-value tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceOpen)}</td>
+                  <td className="open-position-value tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceCurrent, 1)}</td>
+                  <td className="open-position-value tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl)}</td>
+                  <td className="open-position-value tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp)}</td>
+                  <td className="open-position-value tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.swap)}</td>
+                  <td className="open-position-profit tabular font-mono" style={{ textAlign: 'center', color: profitTone }}>{fmt(row.profit)}</td>
+                  <td className="open-position-value" style={{ textAlign: 'center' }}>{row.comment}</td>
                 </tr>
               );
             })}

@@ -67,14 +67,14 @@ const OpenedOrderCard = ({ order }) => {
   const commission = toFiniteNumber(order.commission);
   const costs = swap + commission;
   const profitTone = profit < 0 ? 'var(--danger-text)' : profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
-  const badgeClass = isBuy ? 'ui-badge-success' : isSell ? 'ui-badge-danger' : 'ui-badge-info';
+  const badgeClass = isBuy ? 'ui-status-ok' : isSell ? 'ui-status-danger' : 'ui-status-info';
   const state = String(order.state || 'active').toUpperCase();
 
   return (
     <div className="opened-order-card ui-card flex flex-col p-5 gap-5 transition-all hover:shadow-md">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pb-4 border-b border-[var(--border-2)]">
         <div className="flex items-start gap-3 min-w-0">
-          <span className={`ui-badge ${badgeClass} px-2 py-1 shrink-0`}>
+          <span className={`ui-status ${badgeClass} shrink-0`}>
             <Activity size={14} />
             <span className="font-bold uppercase tracking-wider">{order.side || 'Order'}</span>
           </span>
@@ -86,7 +86,7 @@ const OpenedOrderCard = ({ order }) => {
               <span className="opened-order-symbol text-[13px] font-semibold" style={{ color: 'var(--accent-text)' }}>
                 {order.symbol || '-'}
               </span>
-              <span className="ui-badge ui-badge-neutral">{state}</span>
+              <span className="ui-status ui-status-neutral">{state}</span>
             </div>
             <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
               Ticket, symbol, direction, and current backend state.

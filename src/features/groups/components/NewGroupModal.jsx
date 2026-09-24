@@ -4,42 +4,7 @@ import SymbolSelector from './SymbolSelector';
 import { fetchManagerApi } from '../../../services/managerFetch';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
-
-const defaultPayload = {
-  name: "",
-  description: "",
-  currency: "",
-  leverage: 0,
-  marginCallLevel: 0,
-  stopOutLevel: 0,
-  commissionRate: 0,
-  commissionType: "",
-  swapMultiplier: 0,
-  spreadMarkup: 0,
-  maxLotPerTrade: 0,
-  maxTotalLots: 0,
-  executionMode: "",
-  bookType: "",
-  negativeBalanceProtection: false,
-  tradeAllowed: false,
-  demo: false,
-  accountType: "",
-  lotDivisor: 0,
-  routingMode: "b_book",
-  symbolsAllowed: [],
-  symbolsBlocked: []
-};
-
-// Only these keys are ever sent to GroupCreate/GroupUpdate. Anything else that
-// ends up in formData (e.g. server-echoed fields like createdAt/updatedAt/enabled
-// when editing, or values injected via dev-tools) is stripped before submit.
-const GROUP_ALLOWED_FIELDS = Object.keys(defaultPayload);
-
-const pickAllowedFields = (source, allowedKeys) =>
-  allowedKeys.reduce((acc, key) => {
-    if (source[key] !== undefined) acc[key] = source[key];
-    return acc;
-  }, {});
+import { GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, pickGroupPayloadFields as pickAllowedFields } from '../groupPayload.js';
 
 const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]" }) => (
   <div className="flex flex-col gap-1">
@@ -82,7 +47,7 @@ const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
   </div>
 );
 
-const NewGroupModal = ({ initialData, duplicateData, onClose, onSuccess }) => {
+const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess }) => {
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
@@ -90,6 +55,8 @@ const NewGroupModal = ({ initialData, duplicateData, onClose, onSuccess }) => {
     const source = initialData || duplicateData;
     const data = { ...defaultPayload, ...(source || {}) };
     if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
+    // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.
+    if (!source && presetName) data.name = presetName;
     if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
     if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
     return data;

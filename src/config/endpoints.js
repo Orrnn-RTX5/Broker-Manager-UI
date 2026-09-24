@@ -20,6 +20,12 @@ const DEFAULTS = {
 };
 
 const WS_FEED_PATH = trimTrailingSlash(getRuntimeConfigValue(['WS_FEED_PATH', 'VITE_WS_FEED_PATH'], '/ws/feed'));
+const getPinnedBrokerId = () => getRuntimeConfigValue(
+  ['BROKER_ID', 'VITE_BROKER_ID', 'FEED_BROKER_ID', 'VITE_FEED_BROKER_ID']
+).toLowerCase();
+const hasPinnedApiHost = () => Boolean(
+  getPinnedBrokerId() && getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST'])
+);
 
 export let API_HOST = DEFAULTS.API_HOST;
 export let WS_HOST = DEFAULTS.WS_HOST;
@@ -31,7 +37,10 @@ const readBrokerInfo = () => {
 
   try {
     const raw = sessionStorage.getItem('broker_info');
-    return raw ? JSON.parse(raw) : null;
+    const brokerInfo = raw ? JSON.parse(raw) : null;
+    const storedBrokerId = String(brokerInfo?.broker_id || brokerInfo?.id || '').toLowerCase();
+    const pinnedBrokerId = getPinnedBrokerId();
+    return pinnedBrokerId && storedBrokerId !== pinnedBrokerId ? null : brokerInfo;
   } catch {
     return null;
   }
@@ -81,6 +90,16 @@ const getWsBaseHost = (wsEndpoint = '') => {
 };
 
 export const updateDynamicEndpoints = () => {
+  const configuredApiHost = trimTrailingSlash(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']));
+  if (getPinnedBrokerId() && configuredApiHost) {
+    const configuredWsHost = trimTrailingSlash(getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']));
+    API_HOST = configuredApiHost;
+    WS_HOST = getWsBaseHost(configuredWsHost) || buildWsHost(configuredApiHost);
+    API_HOST_EXT = trimTrailingSlash(getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT'])) || configuredApiHost;
+    DEFAULT_MT5_SERVER = getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']);
+    return;
+  }
+
   try {
     const storedInfo = readBrokerInfo();
     const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
@@ -117,30 +136,17 @@ const joinUrl = (base, path = '') => {
   return `${trimTrailingSlash(base)}/${normalizedPath.replace(/^\/+/, '')}`;
 };
 
-const isLoopbackHost = (hostname = '') =>
-  /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(String(hostname || '').trim());
-
-const isForwardedDevHost = (hostname = '') => {
-  const host = String(hostname || '').trim().toLowerCase();
-  if (!host) return false;
-  return (
-    host.endsWith('.devtunnels.ms') ||
-    host.endsWith('.github.dev') ||
-    host.endsWith('.app.github.dev') ||
-    host.endsWith('.trycloudflare.com') ||
-    host.endsWith('.ngrok-free.app') ||
-    host.endsWith('.ngrok.app') ||
-    host.endsWith('.ngrok.io') ||
-    host.endsWith('.loca.lt')
-  );
-};
-
+// In Vite dev mode the page is always served by the dev server itself, so the
+// same-origin proxies (/discovery-api, /api, /ext-api, /ws/feed) exist on
+// whatever origin the browser used to open it: localhost, the LAN IP shown as
+// "Network:" by Vite, or any tunnel host (Cloudflare, ngrok, Dev Tunnels, ...).
+// Only non-http(s) origins (e.g. file:// in packaged Electron) cannot proxy.
 const isProxyableDevOrigin = () => {
   if (typeof window === 'undefined' || !window.location?.origin) return false;
   try {
     const url = new URL(window.location.origin);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    return isLoopbackHost(url.hostname) || isForwardedDevHost(url.hostname);
+    return Boolean(url.hostname);
   } catch {
     return false;
   }
@@ -335,6 +341,7 @@ export class FeedWsAuthConfigError extends Error {
 
 export const resolveFeedWsAuth = (brokerInfo = {}) => {
   const brokerID = firstValue(
+    getPinnedBrokerId() && getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID']),
     firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS),
     getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
   );
@@ -458,12 +465,14 @@ export const buildFeedStatusUrl = () => {
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
   const explicit = firstValue(
     getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL']),
-    firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS)
+    hasPinnedApiHost() ? '' : firstBrokerValue(brokerInfo, FEED_STATUS_URL_KEYS)
   );
 
   if (explicit) return toLocalDevFeedProxyUrl(normalizeFeedStatusUrl(explicit));
 
-  const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
+  const wsUrl = hasPinnedApiHost()
+    ? resolveBrokerWsUrl({}, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH)
+    : resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
   return toLocalDevFeedProxyUrl(normalizeFeedStatusUrl(wsUrl));
 };
 
@@ -476,7 +485,9 @@ export const getFeedWsDisabledMessage = (error) => (
 export const buildFeedWsUrl = () => {
   const storedInfo = readBrokerInfo();
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
-  const wsUrl = resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
+  const wsUrl = hasPinnedApiHost()
+    ? resolveBrokerWsUrl({}, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH)
+    : resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
   const auth = resolveFeedWsAuth(brokerInfo);
   const sendToken = getRuntimeConfigValue(
     ['FEED_SEND_TOKEN', 'VITE_FEED_SEND_TOKEN'],

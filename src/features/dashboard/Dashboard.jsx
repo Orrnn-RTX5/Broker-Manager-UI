@@ -20,18 +20,7 @@ const money = (value, compact = false, currency = 'USD') => new Intl.NumberForma
   notation: compact ? 'compact' : 'standard',
 }).format(value);
 
-const Sparkline = ({ points, tone = 'success' }) => {
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const path = points.map((point, index) => {
-    const x = (index / (points.length - 1)) * 92 + 4;
-    const y = 28 - ((point - min) / (max - min || 1)) * 22;
-    return `${index ? 'L' : 'M'} ${x} ${y}`;
-  }).join(' ');
-  return <svg className={`cc-sparkline is-${tone}`} viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><path d={path} /></svg>;
-};
-
-const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', points, placeholder, onClick }) => (
+const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', placeholder, onClick }) => (
   <article className="cc-metric-card" role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? `Show ${label.toLowerCase()}` : undefined} onClick={onClick} onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); } } : undefined} data-placeholder={placeholder || undefined} title={placeholder ? 'This aggregate is supplied by the isolated UI adapter until its API is connected.' : undefined}>
     <span className={`cc-metric-icon is-${tone}`}>{createElement(Icon, { size: 17, strokeWidth: 1.7 })}</span>
     <div className="cc-metric-main">
@@ -39,7 +28,6 @@ const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success'
       <strong className="tabular">{value}</strong>
       <span className={`is-${tone}`}>{tone === 'danger' ? <TrendingDown size={11} /> : <TrendingUp size={11} />}{change || detail}</span>
     </div>
-    {points && <Sparkline points={points} tone={tone} />}
   </article>
 );
 
@@ -85,14 +73,14 @@ export default function Dashboard() {
       {data?.errors?.length > 0 && <div className="cc-data-notice"><Activity size={12} />Some live aggregates are unavailable; cached values and clearly marked UI adapters remain visible.</div>}
 
       <section className="cc-metric-grid" aria-label="Brokerage key metrics">
-        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" onClick={() => showAccounts('real')} value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" points={[3,5,4,8,6,11,9,15]} />
-        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" onClick={() => showAccounts('demo')} value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" points={[8,6,9,5,11,8,14,12]} tone="neutral" />
-        <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? '—' : money(metrics.equity, true)} change="+3.5%" points={[2,5,4,7,6,9,8,13]} />
-        <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? '—' : integer(metrics.openPositions)} change="−6.2%" points={[12,9,11,7,8,5,6,3]} tone="danger" />
-        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? '—' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} points={[4,7,5,11,8,14,10,16]} placeholder={metrics.deposits24h == null} />
-        <MetricCard icon={ShieldCheck} label="MARGIN EXPOSURE" value={`${preview.marginExposure}%`} detail="Used $1.2M / $1.8M" points={[10,8,12,5,9,4,7,3]} tone="danger" placeholder />
-        <MetricCard icon={Server} label="ACTIVE SERVERS" value={`${preview.activeServers} / ${preview.totalServers}`} detail="All systems operational" points={[3,3,4,4,4,5,5,5]} placeholder />
-        <MetricCard icon={CircleGauge} label="RISK SCORE" value={`${preview.riskScore} / 100`} detail="Low Risk" points={[2,3,3,4,5,4,6,7]} placeholder />
+        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" onClick={() => showAccounts('real')} value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" />
+        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" onClick={() => showAccounts('demo')} value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" tone="neutral" />
+        <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? '—' : money(metrics.equity, true)} change="+3.5%" />
+        <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? '—' : integer(metrics.openPositions)} change="−6.2%" tone="danger" />
+        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? '—' : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.reportDate || 'Latest report'} placeholder={metrics.deposits24h == null} />
+        <MetricCard icon={ShieldCheck} label="MARGIN EXPOSURE" value={`${preview.marginExposure}%`} detail="Used $1.2M / $1.8M" tone="danger" placeholder />
+        <MetricCard icon={Server} label="ACTIVE SERVERS" value={`${preview.activeServers} / ${preview.totalServers}`} detail="All systems operational" placeholder />
+        <MetricCard icon={CircleGauge} label="RISK SCORE" value={`${preview.riskScore} / 100`} detail="Low Risk" placeholder />
       </section>
 
       <section className="cc-panel cc-activity-panel">

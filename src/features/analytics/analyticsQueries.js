@@ -5,6 +5,7 @@ import {
   getTradingAccountsPage,
   peekAccountDetailsManyPage,
 } from '../../services/api.js';
+import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../services/onlineUsersSnapshot.js';
 import { preloadWorkspaceRoute } from '../../utils/workspaceRouteModules.js';
 import { loadCompleteReportAccounts } from '../reports/dailyReportData.js';
 import {
@@ -75,11 +76,19 @@ export const getTradingAccountsAnalyticsQueryOptions = (scope = 'anonymous') => 
   queryFn: ({ signal }) => fetchTradingAccountsAnalytics({ signal, scope }),
   initialData: () => loadTradingAccountsAnalyticsCache(scope),
   initialDataUpdatedAt: () => getTradingAccountsAnalyticsCacheTimestamp(scope),
-  staleTime: 60_000,
+  staleTime: 5_000,
+  refetchInterval: 8_000,
+  refetchIntervalInBackground: false,
   gcTime: 300_000,
   retry: false,
   refetchOnWindowFocus: true,
 });
+
+export const invalidateTradingAccountsAnalytics = (queryClient) => {
+  if (queryClient?.invalidateQueries) {
+    return queryClient.invalidateQueries({ queryKey: ['analytics', 'trading-accounts'] });
+  }
+};
 
 export const fetchOnlineUsersAnalyticsPage = (params, options = {}) => (
   runTrackedRequest(
@@ -111,9 +120,17 @@ export const fetchOpenedOrdersAnalytics = (login, options = {}) => (
   )
 );
 
-export const getOnlineUsersAnalyticsQueryOptions = (params) => (
-  createOnlineUsersQueryOptions({ request: fetchOnlineUsersAnalyticsPage, params })
-);
+export const getOnlineUsersAnalyticsQueryOptions = (params) => {
+  const options = createOnlineUsersQueryOptions({ request: fetchOnlineUsersAnalyticsPage, params });
+  // Render the last shared snapshot on the first frame (click or hard
+  // refresh); React Query refreshes it in the background once it is stale.
+  const snapshotParams = options.queryKey[2];
+  return {
+    ...options,
+    initialData: () => peekOnlineUsersPage(snapshotParams),
+    initialDataUpdatedAt: peekOnlineUsersUpdatedAt,
+  };
+};
 
 export const getOpenPositionsAnalyticsQueryOptions = (params) => (
   createOpenPositionsQueryOptions({ request: fetchOpenPositionsAnalyticsPage, params })

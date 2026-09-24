@@ -147,3 +147,70 @@ test('replaces a cached first page only while that exact snapshot is current', a
   assert.equal(cache.replaceIf('200008', complete, ['stale']), false);
   assert.equal(cache.peek('200008'), undefined);
 });
+
+for (const requestType of ['get', 'adopt']) {
+  const startPendingRequest = () => {
+    let resolveRequest;
+    const source = new Promise((resolve) => { resolveRequest = resolve; });
+    const cache = createKeyedRequestCache({ load: () => source });
+    const request = requestType === 'get'
+      ? cache.get('200008')
+      : cache.adopt('200008', source);
+    return { cache, request, resolveRequest };
+  };
+
+  test(`a live snapshot supersedes an older ${requestType} result for every reader`, async () => {
+    const { cache, request, resolveRequest } = startPendingRequest();
+    const sharedReader = cache.get(200008);
+    await Promise.resolve();
+    const liveRows = [{ position: 42, profit: 25 }];
+    cache.set(200008, liveRows);
+
+    assert.equal(await cache.get('200008'), liveRows);
+    resolveRequest([{ position: 42, profit: 10 }]);
+
+    assert.equal(await request, liveRows);
+    assert.equal(await sharedReader, liveRows);
+    assert.equal(cache.peek('200008'), liveRows);
+    assert.equal(cache.hasPending('200008'), false);
+  });
+
+  test(`an empty live snapshot prevents an older ${requestType} from restoring closed positions`, async () => {
+    const { cache, request, resolveRequest } = startPendingRequest();
+    await Promise.resolve();
+    const emptyRows = [];
+    cache.set('200008', emptyRows);
+    resolveRequest([{ position: 42 }]);
+
+    assert.equal(await request, emptyRows);
+    assert.equal(cache.peek('200008'), emptyRows);
+    assert.equal(await cache.get('200008'), emptyRows);
+  });
+
+  test(`the latest of repeated live writes wins over an older ${requestType}`, async () => {
+    const { cache, request, resolveRequest } = startPendingRequest();
+    await Promise.resolve();
+    cache.set('200008', [{ position: 42, profit: 10 }]);
+    cache.set('200008', []);
+    const latestRows = [{ position: 43, profit: 30 }];
+    cache.set('200008', latestRows);
+    resolveRequest([{ position: 42, profit: 5 }]);
+
+    assert.equal(await request, latestRows);
+    assert.equal(cache.peek('200008'), latestRows);
+  });
+
+  test(`invalidation after a live write still isolates an older ${requestType}`, async () => {
+    const { cache, request, resolveRequest } = startPendingRequest();
+    await Promise.resolve();
+    cache.set('200008', [{ position: 42 }]);
+    cache.invalidate('200008');
+    const currentRows = [{ position: 43 }];
+    cache.set('200008', currentRows);
+    const oldRows = [{ position: 41 }];
+    resolveRequest(oldRows);
+
+    assert.equal(await request, oldRows);
+    assert.equal(cache.peek('200008'), currentRows);
+  });
+}

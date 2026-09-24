@@ -11,7 +11,7 @@ test('workspace and portalled dialogs share the requested dark palette', () => {
   const shell = tokens('./command-center.css', '.dark .rtx5-command-shell');
   const global = tokens('../index.css', '.dark');
   assert.equal(shell['bg-app'], '#181818');
-  assert.equal(shell['text-primary'], '#a9b1d6');
+  assert.equal(shell['text-primary'], 'var(--ink-1)');
   assert.equal(shell['accent-soft'], '#2f2f2f');
   for (const palette of [shell, global]) {
     assert.equal(palette.accent, '#007ecf');

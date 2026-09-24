@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchRoutes } from 'react-router';
-import { getGroupDetailsPath, getGroupNameFromRouteParam } from './groupRoutes.js';
+import { getGroupDetailsPath, getGroupNameFromRouteParam, getGroupsFolderFromSearch, getGroupsFolderPath, getGroupsSelectedFromSearch } from './groupRoutes.js';
 
 const GROUP_DETAILS_ROUTES = [{ path: '/groups/:groupName' }];
 
@@ -37,4 +37,15 @@ test('encoded group detail paths still match the group route', () => {
 test('group route param normalization avoids double-decoding literal percent values', () => {
   assert.equal(getGroupNameFromRouteParam('Percent%25Name'), 'Percent%25Name');
   assert.equal(getGroupNameFromRouteParam(undefined), '');
+});
+
+test('explorer folder paths round-trip backslash names through the query string', () => {
+  assert.equal(getGroupsFolderPath(''), '/groups');
+  assert.equal(getGroupsFolderPath('PREP\\contest'), '/groups?path=PREP%5Ccontest');
+  assert.equal(getGroupsFolderFromSearch('?path=PREP%5Ccontest'), 'PREP\\contest');
+  assert.equal(getGroupsFolderFromSearch(''), '');
+  assert.equal(getGroupsFolderPath('', 'ornn/demo-std'), '/groups?group=ornn%2Fdemo-std');
+  assert.equal(getGroupsFolderPath('PREP\\demo', 'PREP\\demo\\Client 01'), '/groups?path=PREP%5Cdemo&group=PREP%5Cdemo%5CClient%2001');
+  assert.equal(getGroupsSelectedFromSearch('?path=PREP%5Cdemo&group=PREP%5Cdemo%5CClient%2001'), 'PREP\\demo\\Client 01');
+  assert.equal(getGroupsFolderFromSearch('?group=Arijit'), '');
 });

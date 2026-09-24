@@ -10,6 +10,7 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
 
   const cached = new Map();
   const pending = new Map();
+  const superseded = new WeakSet();
   const keyGenerations = new Map();
   let cacheGeneration = 0;
 
@@ -23,6 +24,20 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
     && (keyGenerations.get(key) || 0) === generation.key
   );
 
+  const resolveResult = (key, generation, request, result) => {
+    // Invalidated requests still resolve for their original callers, but must
+    // never repopulate the cache or block a trailing fresh request.
+    if (!generationMatches(key, generation)) return result;
+
+    // A live write wins for both the cache and callers awaiting an older load.
+    // Read the current entry so repeated live writes and empty snapshots win.
+    const latest = cached.get(key);
+    if (superseded.has(request) && latest) return latest.value;
+
+    cached.set(key, { value: result, savedAt: now() });
+    return result;
+  };
+
   const get = (value, options) => {
     const key = normalizeKey(value);
     if (!key) return Promise.resolve([]);
@@ -34,15 +49,7 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
     const generation = getGeneration(key);
     const request = Promise.resolve()
       .then(() => load(key, options))
-      .then((result) => {
-        // An invalidation that happens while the loader is in flight must win.
-        // The old result may still resolve for its original caller, but it must
-        // never repopulate the cache or block the trailing fresh request.
-        if (generationMatches(key, generation)) {
-          cached.set(key, { value: result, savedAt: now() });
-        }
-        return result;
-      })
+      .then((result) => resolveResult(key, generation, request, result))
       .finally(() => {
         if (pending.get(key) === request) pending.delete(key);
       });
@@ -61,12 +68,7 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
 
     const generation = getGeneration(key);
     const request = Promise.resolve(sourcePromise)
-      .then((result) => {
-        if (generationMatches(key, generation)) {
-          cached.set(key, { value: result, savedAt: now() });
-        }
-        return result;
-      })
+      .then((result) => resolveResult(key, generation, request, result))
       .finally(() => {
         if (pending.get(key) === request) pending.delete(key);
       });
@@ -112,5 +114,15 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
     return true;
   };
 
-  return { adopt, get, hasPending, invalidate, peek, replaceIf };
+  // Directly store a value produced outside the loader (e.g. a websocket
+  // snapshot) and prevent an older in-flight load from restoring stale data.
+  const set = (value, nextValue) => {
+    const key = normalizeKey(value);
+    if (!key) return;
+    const request = pending.get(key);
+    if (request) superseded.add(request);
+    cached.set(key, { value: nextValue, savedAt: now() });
+  };
+
+  return { adopt, get, hasPending, invalidate, peek, replaceIf, set };
 };

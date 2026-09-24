@@ -1,63 +1,23 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCcw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import GridLoadingState from '../../../components/GridLoadingState';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOnlineUsersAnalyticsPage } from '../analyticsQueries.js';
+import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../../services/onlineUsersSnapshot.js';
 import { ANALYTICS_VIEWS, ONLINE_USERS_STALE_MS, ONLINE_USERS_INITIAL_PARAMS } from '../../../utils/analyticsQueryOptions.js';
 
-const ONLINE_USERS_SNAPSHOT_KEY = 'rtx5_online_users_snapshot_v2';
-
-const getInitialOnlineUsersSnapshot = () => {
-  try {
-    const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(ONLINE_USERS_SNAPSHOT_KEY) : null;
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-      return parsed;
-    }
-  } catch {
-    // Ignore storage parse errors
-  }
-  return undefined;
-};
-
-const saveOnlineUsersSnapshot = (data) => {
-  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
-  try {
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem(ONLINE_USERS_SNAPSHOT_KEY, JSON.stringify({
-        rows: data.rows.slice(0, ONLINE_USERS_INITIAL_PARAMS.limit),
-        total: data.total ?? null,
-        hasMore: Boolean(data.hasMore),
-      }));
-    }
-  } catch {
-    // Storage full or private mode
-  }
-};
-
-const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const MONEY_FORMAT = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n) => MONEY_FORMAT.format(n);
 
 const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
-  const queryClient = useQueryClient();
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('analytics-online-users');
   const pageSize = ONLINE_USERS_INITIAL_PARAMS.limit;
-
-  const isDefaultParams = !search && sortCol === 'login' && sortDir === 'asc';
-
-  const initialData = useMemo(() => {
-    if (!isDefaultParams) return undefined;
-    const cached = queryClient.getQueryData(['online-users', 'page', ONLINE_USERS_INITIAL_PARAMS]);
-    if (cached?.rows?.length > 0) return cached;
-    return getInitialOnlineUsersSnapshot();
-  }, [isDefaultParams, queryClient]);
 
   const params = useMemo(() => ({
     search,
@@ -87,15 +47,13 @@ const OnlineUsersDataGrid = ({ search = '', onRowsChange, onRowContext }) => {
     enabled: hasRequestedData,
     refetchInterval: 10_000,
     staleTime: ONLINE_USERS_STALE_MS,
-    initialData,
-    placeholderData: (previousData) => previousData || initialData || getInitialOnlineUsersSnapshot(),
+    // Every page and search renders from the shared snapshot on the first
+    // frame; a stale snapshot refreshes in the background on mount.
+    initialDataForParams: peekOnlineUsersPage,
+    initialDataUpdatedAt: peekOnlineUsersUpdatedAt,
+    refetchOnMount: true,
+    placeholderData: (previousData) => previousData,
   });
-
-  useEffect(() => {
-    if (rows && rows.length > 0 && isDefaultParams && offset === 0) {
-      saveOnlineUsersSnapshot({ rows, total, hasMore });
-    }
-  }, [rows, total, hasMore, isDefaultParams, offset]);
 
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);

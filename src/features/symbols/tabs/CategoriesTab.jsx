@@ -131,7 +131,7 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
         }
         <span className="text-[13px] flex-1" style={{ color: 'var(--text)' }}>{cat.name}</span>
         {cat.path && <span className="text-[11px] mr-2" style={{ color: 'var(--muted)' }}>{cat.path}</span>}
-        <span className={`ui-badge text-[10px] mr-2 ${cat.enabled !== false ? 'ui-badge-success' : 'ui-badge-danger'}`}>
+        <span className={`ui-status mr-2 ${cat.enabled !== false ? 'ui-status-ok' : 'ui-status-danger'}`}>
           {cat.enabled !== false ? 'on' : 'off'}
         </span>
         <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity" onClick={e => e.stopPropagation()}>
@@ -152,10 +152,10 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
           {symbols.map(sym => (
              <div key={sym.symbol} className="flex items-center gap-2 text-[12px] py-1 px-2 rounded" style={{ background: 'var(--surface-hover)' }}>
                <span style={{ color: 'var(--accent-text)', fontWeight: 500 }}>{sym.symbol}</span>
-               <span className={`ui-badge text-[9px] ${sym.symbolType === 'derived' ? 'ui-badge-warning' : 'ui-badge-success'}`}>
+               <span className={`ui-status ${sym.symbolType === 'derived' ? 'ui-status-warn' : 'ui-status-ok'}`}>
                  {sym.symbolType || 'base'}
                </span>
-               {!sym.enabled && <span className="ui-badge ui-badge-danger text-[9px]">Disabled</span>}
+               {!sym.enabled && <span className="ui-status ui-status-danger">Disabled</span>}
              </div>
           ))}
         </div>

@@ -1,0 +1,794 @@
+/* Manager sign-in, shown over a static preview of the workspace. */
+#root .manager-auth-shell {
+  --surface: #252629;
+  --surface-2: #202124;
+  --surface-3: #303238;
+  --border: #3b3d43;
+  --border-2: #34363b;
+  --border-3: #555861;
+  --text: #f1f2f5;
+  --text-2: #d5d7dd;
+  --text-3: #a9acb5;
+  --muted: #999da7;
+  --accent-soft: #1b3653;
+  --accent-text: #72baff;
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #0c0d10;
+  color: var(--text);
+  color-scheme: dark;
+}
+
+/* The preview is deliberately static and out of the keyboard and pointer flow. */
+.manager-auth-shell .manager-dashboard-preview {
+  position: fixed;
+  inset: -6px;
+  z-index: 0;
+  display: flex;
+  min-width: 760px;
+  flex-direction: column;
+  overflow: hidden;
+  background: #111319;
+  color: #acb5c3;
+  filter: blur(2px) saturate(1.08) brightness(1.18);
+  pointer-events: none;
+  transform: scale(1.005);
+  transform-origin: center;
+  user-select: none;
+}
+
+.manager-auth-shell .manager-preview-topbar {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 22px;
+  padding: 0 20px;
+  border-bottom: 1px solid #2a2e37;
+  background: #12151b;
+}
+
+.manager-auth-shell .manager-preview-brand {
+  display: flex;
+  min-width: 125px;
+  align-items: center;
+  gap: 9px;
+  color: #dce3ec;
+  letter-spacing: .09em;
+}
+
+.manager-auth-shell .manager-preview-brand::before {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #469ce5 0%, #1c5d9f 100%);
+  content: '';
+}
+
+.manager-auth-shell .manager-preview-menu {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: #848c9b;
+}
+
+.manager-auth-shell .manager-preview-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: auto;
+  border: 1px solid #39414e;
+  border-radius: 50%;
+  background: #273646;
+  color: #c5daed;
+}
+
+.manager-auth-shell .manager-preview-toolbar {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  border-bottom: 1px solid #2b2f37;
+  background: #191c23;
+  color: #a6afbd;
+}
+
+.manager-auth-shell .manager-preview-toolbar .is-active,
+.manager-auth-shell .manager-preview-tabs .is-active,
+.manager-auth-shell .manager-preview-nav-row.is-active {
+  color: #7cbfff;
+}
+
+.manager-auth-shell .manager-preview-workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(170px, 21%) minmax(0, 1fr) minmax(205px, 23%);
+  grid-template-rows: minmax(0, 56%) minmax(0, 44%);
+  background: #111319;
+}
+
+.manager-auth-shell .manager-preview-watch,
+.manager-auth-shell .manager-preview-navigator,
+.manager-auth-shell .manager-preview-center,
+.manager-auth-shell .manager-preview-side {
+  min-width: 0;
+  border-right: 1px solid #2a2d35;
+}
+
+.manager-auth-shell .manager-preview-watch {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  background: #171a20;
+}
+
+.manager-auth-shell .manager-preview-watch-head,
+.manager-auth-shell .manager-preview-tabs,
+.manager-auth-shell .manager-preview-dashboard-head {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 13px;
+  border-bottom: 1px solid #30343e;
+  color: #c8d0dc;
+}
+
+.manager-auth-shell .manager-preview-watch-row,
+.manager-auth-shell .manager-preview-nav-row {
+  display: flex;
+  min-height: 33px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px;
+  border-bottom: 1px solid #22262e;
+  color: #aab5c3;
+}
+
+.manager-auth-shell .manager-preview-watch-search {
+  margin: 9px 10px;
+  padding: 7px 9px;
+  border: 1px solid #363b45;
+  border-radius: 4px;
+  background: #1d222a;
+  color: #777f8d;
+}
+
+.manager-auth-shell .manager-preview-watch-columns {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 13px;
+  border-bottom: 1px solid #313640;
+  color: #808998;
+}
+
+.manager-auth-shell .is-up { color: #47c68f; }
+.manager-auth-shell .is-down { color: #e27378; }
+
+.manager-auth-shell .manager-preview-watch-row:nth-child(3n + 2) {
+  color: #41c58b;
+}
+
+.manager-auth-shell .manager-preview-watch-row:nth-child(3n) {
+  color: #e07176;
+}
+
+.manager-auth-shell .manager-preview-navigator {
+  grid-column: 1;
+  grid-row: 2;
+  overflow: hidden;
+  border-top: 1px solid #2a2d35;
+  background: #16191f;
+}
+
+.manager-auth-shell .manager-preview-center {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  flex-direction: column;
+  overflow: hidden;
+  background: #111419;
+}
+
+.manager-auth-shell .manager-preview-tabs {
+  justify-content: flex-start;
+  background: #1c2028;
+}
+
+.manager-auth-shell .manager-preview-dashboard {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.manager-auth-shell .manager-preview-dashboard-head {
+  min-height: 32px;
+  padding: 0 0 12px;
+  border-color: #292e36;
+}
+
+.manager-auth-shell .manager-preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 15px 0;
+}
+
+.manager-auth-shell .manager-preview-metric,
+.manager-auth-shell .manager-preview-side-panel {
+  min-height: 62px;
+  padding: 11px;
+  border: 1px solid #30343d;
+  border-radius: 5px;
+  background: #1b1f27;
+}
+
+.manager-auth-shell .manager-preview-metric {
+  display: grid;
+  gap: 6px;
+}
+
+.manager-auth-shell .manager-preview-metric strong {
+  color: #d7e0ed;
+}
+
+.manager-auth-shell .manager-preview-metric i {
+  display: block;
+  width: 60%;
+  height: 3px;
+  border-radius: 3px;
+  background: #3da68e;
+}
+
+.manager-auth-shell .manager-preview-metric i.is-down {
+  background: #d56369;
+}
+
+.manager-auth-shell .manager-preview-chart {
+  position: relative;
+  min-height: 165px;
+  flex: 0 0 clamp(190px, 24vh, 230px);
+  overflow: hidden;
+  border: 1px solid #30343d;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 46px, #272d35 47px 48px),
+    repeating-linear-gradient(90deg, transparent 0 68px, #272d35 69px 70px),
+    #14191e;
+}
+
+.manager-auth-shell .manager-preview-chart > div {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 11px;
+  border-bottom: 1px solid #30343d;
+}
+
+.manager-auth-shell .manager-preview-chart svg {
+  display: block;
+  width: 100%;
+  height: calc(100% - 32px);
+  overflow: visible;
+}
+
+.manager-auth-shell .manager-preview-chart-grid {
+  fill: none;
+  stroke: #36404a;
+  stroke-width: 1;
+}
+
+.manager-auth-shell .manager-preview-chart-bars {
+  fill: none;
+  stroke: #2d775f;
+  stroke-width: 5;
+  opacity: .48;
+}
+
+.manager-auth-shell .manager-preview-chart-line {
+  fill: none;
+  stroke: #4198d0;
+  stroke-width: 2;
+  opacity: .78;
+}
+
+.manager-auth-shell .manager-preview-detail-row {
+  display: grid;
+  min-height: 90px;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.manager-auth-shell .manager-preview-detail-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid #30343d;
+  border-radius: 5px;
+  background: #1b1f27;
+  color: #cbd4df;
+}
+
+.manager-auth-shell .manager-preview-detail-row i {
+  display: block;
+  width: 78%;
+  height: 4px;
+  border-radius: 4px;
+  background: #3a4551;
+}
+
+.manager-auth-shell .manager-preview-detail-row i:nth-of-type(2) { width: 54%; }
+.manager-auth-shell .manager-preview-detail-row i:nth-of-type(3) { width: 67%; }
+
+@media (max-height: 680px) {
+  .manager-auth-shell .manager-preview-detail-row { display: none; }
+  .manager-auth-shell .manager-preview-chart { flex: 1; }
+}
+
+.manager-auth-shell .manager-preview-side {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  flex-direction: column;
+  gap: 11px;
+  padding: 12px;
+  border-right: 0;
+  background: #181b21;
+}
+
+.manager-auth-shell .manager-preview-side-panel p {
+  margin: 11px 0 8px;
+  color: #d0d7e0;
+}
+
+.manager-auth-shell .manager-preview-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.manager-auth-shell .manager-preview-quick-grid span {
+  display: grid;
+  min-height: 29px;
+  place-items: center;
+  border: 1px solid #343a45;
+  border-radius: 4px;
+  background: #242a33;
+}
+
+.manager-auth-shell .manager-preview-terminal {
+  min-height: 87px;
+  flex: 0 0 auto;
+  padding: 11px;
+  border-top: 1px solid #30343d;
+  background: #12161b;
+  color: #6ec89a;
+}
+
+.manager-auth-shell .manager-preview-terminal > div {
+  margin-bottom: 9px;
+  color: #abb6c4;
+}
+
+.manager-auth-shell .manager-auth-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, rgba(4, 8, 14, .28), rgba(4, 8, 14, .34));
+  pointer-events: none;
+}
+
+#root .manager-auth-shell .manager-auth-layout {
+  position: relative;
+  z-index: 2;
+  display: block;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+#root .manager-auth-shell .manager-auth-main {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 16px;
+  background: transparent;
+}
+
+#root .manager-auth-shell .manager-auth-card {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 23px 25px 24px;
+  border: 1px solid rgba(163, 190, 214, .33);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(48, 55, 65, .9), rgba(26, 32, 40, .94) 58%, rgba(22, 28, 36, .96));
+  box-shadow: 0 32px 90px rgba(0, 0, 0, .56), 0 8px 24px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .12);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+
+#root .manager-auth-shell .manager-auth-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 78px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .045), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+#root .manager-auth-shell .manager-auth-visual {
+  display: none;
+}
+
+#root .manager-auth-shell .manager-auth-header {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+#root .manager-auth-shell .manager-brand-mark {
+  width: 105px;
+  height: 30px;
+  justify-content: flex-start;
+  margin: 0 0 9px;
+}
+
+#root .manager-auth-shell .manager-brand-mark img {
+  object-fit: cover;
+  filter: contrast(1.6);
+  mix-blend-mode: screen;
+}
+
+#root .manager-auth-shell .manager-auth-header h1 {
+  margin: 0;
+  color: #f1f2f5;
+  line-height: 1.35;
+  letter-spacing: .07em;
+}
+
+#root .manager-auth-shell .manager-auth-header p {
+  margin: 4px 0 0;
+  color: #aaadb5;
+  line-height: 1.4;
+}
+
+#root .manager-auth-shell .manager-title-rule {
+  height: 1px;
+  margin-top: 14px;
+  background: #3c3e44;
+}
+
+#root .manager-auth-shell .manager-title-rule span {
+  top: -1px;
+  left: 0;
+  width: 44px;
+  height: 2px;
+  transform: none;
+  background: #2c87dd;
+}
+
+#root .manager-auth-shell .manager-login-form {
+  gap: 10px;
+}
+
+#root .manager-auth-shell .manager-broker-group {
+  margin-bottom: 0;
+}
+
+#root .manager-auth-shell .manager-broker-heading {
+  margin-bottom: 5px;
+}
+
+#root .manager-auth-shell .manager-form-label {
+  margin-bottom: 5px;
+  color: #d4d6dc;
+  line-height: 1.3;
+}
+
+#root .manager-auth-shell .manager-broker-label {
+  margin-bottom: 0;
+}
+
+#root .manager-auth-shell .manager-loading-row {
+  min-height: 38px;
+  color: #a9acb4;
+}
+
+#root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity) {
+  min-height: 39px;
+  gap: 9px;
+  padding: 5px 36px 5px 9px;
+  border: 1px solid #57616d;
+  border-radius: 6px;
+  background: rgba(21, 26, 33, .68);
+  color: #eceef2;
+  box-shadow: none;
+}
+
+#root .manager-auth-shell .manager-broker-identity {
+  padding-right: 9px;
+}
+
+#root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity) > span:first-child {
+  width: 27px !important;
+  height: 27px !important;
+  border-radius: 5px !important;
+}
+
+#root .manager-auth-shell .manager-broker-button .absolute.right-3 {
+  right: 10px;
+  width: 15px;
+  height: 15px;
+}
+
+#root .manager-auth-shell .manager-broker-count {
+  gap: 6px;
+  margin: 5px 0 0;
+  color: #9398a2;
+  line-height: 1.2;
+}
+
+#root .manager-auth-shell .manager-broker-count span {
+  width: 5px;
+  height: 5px;
+  background: #3299f2;
+}
+
+#root .manager-auth-shell .manager-input {
+  min-height: 37px;
+  padding: 8px 11px 8px 37px;
+  border: 1px solid #57616d;
+  border-radius: 6px;
+  background: rgba(17, 22, 29, .74);
+  color: #f0f2f6;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .16);
+}
+
+#root .manager-auth-shell .manager-input::placeholder {
+  color: #848892;
+}
+
+#root .manager-auth-shell .manager-input[readonly] {
+  background: rgba(28, 34, 42, .74);
+  color: #b1b5bd;
+}
+
+#root .manager-auth-shell .manager-input:-webkit-autofill,
+#root .manager-auth-shell .manager-input:-webkit-autofill:hover,
+#root .manager-auth-shell .manager-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f0f2f6;
+  caret-color: #f0f2f6;
+  box-shadow: 0 0 0 1000px #1c1d20 inset;
+}
+
+#root .manager-auth-shell .manager-input-with-action {
+  padding-right: 37px;
+}
+
+#root .manager-auth-shell .manager-input-icon {
+  padding-left: 12px;
+  color: #8e939d;
+}
+
+#root .manager-auth-shell .manager-input-icon svg,
+#root .manager-auth-shell .manager-password-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+#root .manager-auth-shell .manager-password-toggle {
+  width: 37px;
+  color: #999da7 !important;
+}
+
+#root .manager-auth-shell .manager-password-toggle:hover {
+  color: #d5d9e1 !important;
+}
+
+#root .manager-auth-shell :is(.manager-broker-button, .manager-input):focus-visible,
+#root .manager-auth-shell .manager-input:focus {
+  border-color: #388fe4;
+  outline: 1px solid rgba(56, 143, 228, .55);
+  outline-offset: 0;
+  box-shadow: 0 0 0 3px rgba(45, 131, 215, .15);
+}
+
+#root .manager-auth-shell .manager-login-options {
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  margin-top: 1px;
+}
+
+#root .manager-auth-shell .manager-remember-control {
+  gap: 7px;
+  color: #c3c6cd;
+}
+
+#root .manager-auth-shell .manager-remember-control input {
+  width: 13px;
+  height: 13px;
+  accent-color: #2f8fdf;
+}
+
+#root .manager-auth-shell .manager-link-button {
+  color: #78b9f6;
+}
+
+#root .manager-auth-shell .manager-link-button:hover {
+  color: #a3d1ff;
+}
+
+#root .manager-auth-shell .manager-submit-button {
+  min-height: 37px;
+  margin-top: 2px;
+  padding: 9px 13px;
+  border: 1px solid #2d87d8;
+  border-radius: 6px;
+  background: #2d87d8;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .24);
+}
+
+#root .manager-auth-shell .manager-submit-button:hover:not(:disabled) {
+  border-color: #379af2;
+  background: #379af2;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .3);
+}
+
+#root .manager-auth-shell .manager-contact-copy {
+  color: #a8abb3;
+  line-height: 1.3;
+}
+
+#root .manager-auth-shell .manager-contact-copy .manager-link-button {
+  margin-left: 3px;
+}
+
+#root .manager-auth-shell .manager-login-form [role='listbox'] {
+  z-index: 10;
+  border-color: #474a50 !important;
+  background: #292b2f !important;
+  color: #f0f2f6;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, .45);
+}
+
+#root .manager-auth-shell .manager-login-form [role='option']:hover {
+  background: #353940;
+}
+
+@media (max-width: 520px) {
+  #root .manager-auth-shell .manager-auth-main {
+    padding: 16px 12px;
+  }
+
+  #root .manager-auth-shell .manager-auth-card {
+    width: min(100%, 420px);
+    padding: 20px 18px 21px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  #root .manager-auth-shell .manager-auth-card {
+    background: #262d36;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (max-height: 570px) {
+  #root .manager-auth-shell .manager-auth-main {
+    align-items: flex-start;
+  }
+}
+
+/* Dark theme: sign-in text uses the graded white ink scale (colour only;
+   sizes and weights come from the rules above). */
+.dark .manager-auth-shell .manager-dashboard-preview {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-brand {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-menu {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-avatar {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-toolbar {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-watch-head,
+.dark .manager-auth-shell .manager-preview-tabs,
+.dark .manager-auth-shell .manager-preview-dashboard-head {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-watch-row,
+.dark .manager-auth-shell .manager-preview-nav-row {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-watch-search {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-watch-columns {
+  color: var(--ink-2);
+}
+.dark .manager-auth-shell .manager-preview-metric strong {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-detail-row > div {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-side-panel p {
+  color: var(--ink-1);
+}
+.dark .manager-auth-shell .manager-preview-terminal > div {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-auth-header h1 {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell .manager-auth-header p {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-form-label {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell .manager-loading-row {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell :is(.manager-broker-button,
+.dark .manager-broker-identity) {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell .manager-broker-count {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-input {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell .manager-input::placeholder {
+  color: var(--ink-placeholder);
+}
+.dark #root .manager-auth-shell .manager-input[readonly] {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-input-icon {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-password-toggle {
+  color: var(--ink-2) !important;
+}
+.dark #root .manager-auth-shell .manager-password-toggle:hover {
+  color: var(--ink-1) !important;
+}
+.dark #root .manager-auth-shell .manager-remember-control {
+  color: var(--ink-1);
+}
+.dark #root .manager-auth-shell .manager-contact-copy {
+  color: var(--ink-2);
+}
+.dark #root .manager-auth-shell .manager-login-form [role='listbox'] {
+  color: var(--ink-1);
+}

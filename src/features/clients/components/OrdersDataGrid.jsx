@@ -156,11 +156,11 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
             ) : rows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
               const side = String(row.side || '').toLowerCase();
-              const typeBadgeClass = side === 'buy'
-                ? 'ui-badge-success'
+              const typeTextClass = side === 'buy'
+                ? 'is-buy'
                 : side === 'sell'
-                  ? 'ui-badge-danger'
-                  : 'ui-badge-info';
+                  ? 'is-sell'
+                  : '';
               return (
                 <tr
                   key={rowKey}
@@ -178,8 +178,8 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                   <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
                   <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.group}</td>
                   <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.symbol}</td>
-                  <td className="capitalize" style={{ textAlign: 'center' }}>
-                    <span className={`ui-badge ${typeBadgeClass}`}>
+                  <td style={{ textAlign: 'center' }}>
+                    <span className={`orders-type-text ${typeTextClass}`}>
                       {row.type}
                     </span>
                   </td>

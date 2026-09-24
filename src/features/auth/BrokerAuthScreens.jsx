@@ -25,7 +25,6 @@ import {
   loginManager,
   rememberBroker,
   resolveBrokerSelection,
-  resolveDefaultBrokerSelectionId,
   resolveInteractiveBrokerSelection,
   setAuthSession,
   setBrokerInfo,
@@ -336,18 +335,85 @@ const BrokerIdentity = ({ broker, variant = 'default' }) => {
   );
 };
 
+// The dashboard is authenticated. This decorative preview keeps the sign-in
+// screen familiar without mounting protected workspace data or its effects.
+const ManagerDashboardPreview = () => (
+  <div className="manager-dashboard-preview" aria-hidden="true">
+    <div className="manager-preview-topbar">
+      <div className="manager-preview-brand"><span>RTX5</span> Manager</div>
+      <div className="manager-preview-menu">File&nbsp;&nbsp;&nbsp; Edit&nbsp;&nbsp;&nbsp; View&nbsp;&nbsp;&nbsp; Tools&nbsp;&nbsp;&nbsp; Window</div>
+      <div className="manager-preview-avatar">M</div>
+    </div>
+    <div className="manager-preview-toolbar">
+      <span>Workspace</span><span className="is-active">Dashboard</span><span>Accounts</span>
+      <span>Market Watch</span><span>Operations</span><span>Analytics</span>
+    </div>
+    <div className="manager-preview-workspace">
+      <div className="manager-preview-watch">
+        <div className="manager-preview-watch-head">Market Watch <span>⌄</span></div>
+        <div className="manager-preview-watch-search">Search symbols...</div>
+        <div className="manager-preview-watch-columns"><span>Symbol</span><span>Bid</span><span>Ask</span></div>
+        {['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD', 'USDCAD', 'NZDUSD', 'EURJPY', 'BTCUSD', 'ETHUSD', 'GER40', 'US500'].map((symbol, index) => (
+          <div className="manager-preview-watch-row" key={symbol}>
+            <span>{symbol}</span><span className={index % 4 === 0 ? 'is-down' : 'is-up'}>1.0842</span><span>1.0845</span>
+          </div>
+        ))}
+      </div>
+      <div className="manager-preview-navigator">
+        <div className="manager-preview-watch-head">Navigator <span>⌄</span></div>
+        {['Servers', 'Analytics', 'Dashboard', 'Reports', 'Trading Analytics', 'Online Users', 'Clients & Orders', 'Trading Accounts', 'Dealing', 'Risk Management'].map((item) => (
+          <div className={`manager-preview-nav-row${item === 'Dashboard' ? ' is-active' : ''}`} key={item}>{item}</div>
+        ))}
+      </div>
+      <div className="manager-preview-center">
+        <div className="manager-preview-tabs"><span className="is-active">Executive Dashboard</span><span>Exposure</span><span>Liquidity</span><span>Risk Monitor</span></div>
+        <div className="manager-preview-dashboard">
+          <div className="manager-preview-dashboard-head"><span>Executive Dashboard</span><span>Last 24 Hours &nbsp; Refresh</span></div>
+          <div className="manager-preview-metrics">
+            {['Real Accounts', 'Demo Accounts', 'Net Equity', 'Open Positions', 'Deposit Flow', 'Margin Exposure'].map((label, index) => (
+              <div className="manager-preview-metric" key={label}>
+                <span>{label}</span><strong>{index === 3 ? '24' : index === 5 ? '68%' : '—'}</strong>
+                <i className={index === 3 ? 'is-down' : ''} />
+              </div>
+            ))}
+          </div>
+          <div className="manager-preview-chart">
+            <div>Trading Activity &amp; Account Equity <span>1H&nbsp;&nbsp; 6H&nbsp;&nbsp; 24H&nbsp;&nbsp; 7D</span></div>
+            <svg viewBox="0 0 600 200" preserveAspectRatio="none" focusable="false">
+              <path className="manager-preview-chart-grid" d="M0 40H600 M0 80H600 M0 120H600 M0 160H600" />
+              <path className="manager-preview-chart-bars" d="M34 145V180 M78 130V180 M122 139V180 M166 112V180 M210 123V180 M254 91V180 M298 116V180 M342 79V180 M386 100V180 M430 65V180 M474 84V180 M518 46V180 M562 70V180" />
+              <path className="manager-preview-chart-line" d="M0 153 C45 151 62 134 92 137 S134 151 170 127 S223 126 260 107 S317 113 350 90 S404 98 446 70 S524 66 600 27" />
+            </svg>
+          </div>
+          <div className="manager-preview-detail-row">
+            <div><span>Top Traded Symbols</span><i /><i /><i /></div>
+            <div><span>Regional Activity</span><i /><i /><i /></div>
+            <div><span>Approval Queue</span><i /><i /><i /></div>
+          </div>
+        </div>
+      </div>
+      <div className="manager-preview-side">
+        <div className="manager-preview-watch-head">Owner Console</div>
+        <div className="manager-preview-side-panel"><span>Insights &nbsp;&nbsp; Alerts &nbsp;&nbsp; Approvals</span><p>Quick Actions</p>
+          <div className="manager-preview-quick-grid"><span>Add New Client</span><span>Manage Accounts</span><span>View Reports</span><span>Risk Settings</span></div>
+        </div>
+        <div className="manager-preview-side-panel"><p>Cash Flow</p><span>Deposits &nbsp;&nbsp;&nbsp; Withdrawals &nbsp;&nbsp;&nbsp; Net Flow</span></div>
+      </div>
+    </div>
+    <div className="manager-preview-terminal"><div>Operations Terminal</div><span>Terminal &nbsp;&nbsp; Audit Trail &nbsp;&nbsp; Notifications &nbsp;&nbsp; Tasks</span></div>
+  </div>
+);
+
 const ManagerLoginShell = ({ children }) => (
   <div className="manager-auth-shell">
+    <ManagerDashboardPreview />
+    <div className="manager-auth-scrim" aria-hidden="true" />
     <div className="manager-auth-layout">
       <main className="manager-auth-main">
-        <section className="manager-auth-card" aria-labelledby="manager-login-title">
+        <section className="manager-auth-card" role="dialog" aria-modal="true" aria-labelledby="manager-login-title">
           {children}
         </section>
       </main>
-      <aside className="manager-auth-visual" aria-hidden="true">
-        <img src={AUTH_HERO_IMAGE} alt="" draggable="false" />
-        <div className="manager-auth-visual-shade" />
-      </aside>
     </div>
   </div>
 );
@@ -355,7 +421,7 @@ const ManagerLoginShell = ({ children }) => (
 const ManagerLoginHeader = () => (
   <header className="manager-auth-header">
     <span className="manager-brand-mark">
-      <img src={BRAND_LOGO} alt="RTX5" draggable="false" />
+      <img src={`${import.meta.env.BASE_URL}rtx5-logo.png`} alt="RTX5" draggable="false" />
     </span>
     <h1 id="manager-login-title">MANAGER LOGIN</h1>
     <p>Sign in to access your manager dashboard</p>
@@ -383,9 +449,15 @@ export const BrokerSelector = () => {
     fetchBrokerList()
       .then((list) => {
         setBrokerList(list);
-        setSelectedId(resolveDefaultBrokerSelectionId(list, {
+        const selection = resolveBrokerSelection(list, {
           storedBrokerId: getBrokerSelectionId(getBrokerInfo() || {}),
-        }));
+        });
+        setSelectedId(selection.brokerId);
+        if (selection.source === 'runtime-broker-missing') {
+          setListError('Configured broker was not found in discovery. Check broker configuration.');
+        } else if (!selection.brokerId) {
+          setListError('No brokers are available from discovery.');
+        }
       })
       .catch((err) => setListError(err.message || 'Failed to load brokers.'))
       .finally(() => setListLoading(false));
@@ -554,6 +626,9 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
         setBrokerList(list);
         setSelectedId(selection.brokerId);
         setBrokerSelectionLocked(selection.locked);
+        if (selection.source === 'runtime-broker-missing') {
+          setListError('Configured broker was not found in discovery. Check broker configuration.');
+        }
       })
       .catch((err) => {
         setBrokerList([]);

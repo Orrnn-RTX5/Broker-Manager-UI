@@ -99,7 +99,7 @@ const ClientsDashboard = () => {
       <div ref={headerRef} className="clients-header flex flex-row items-center justify-between gap-2 shrink-0">
         <div className="clients-heading flex items-center gap-2 min-w-0">
           <div>
-            <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '12px', lineHeight: '18px' }}>Clients</h1>
+            <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '11px', lineHeight: '18px' }}>Clients</h1>
             <p className="clients-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '14px' }}>
               Right-click for actions · Double-click a row for details
             </p>
