@@ -4,6 +4,11 @@ dist-ssr
 .git
 .github
 *.log
-.env
+# The image is configured only by .env, written by CI from the MANAGER_UI_ENV
+# secret. Keep the checked-in per-mode and local env files out of the build so
+# they can never override it (Vite ranks .env.web above .env in --mode web).
+.env.web
+.env.desktop
+.env.electron
 .env.local
 .env.*.local
