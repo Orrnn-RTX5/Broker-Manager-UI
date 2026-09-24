@@ -79,11 +79,14 @@ export const normalizePositionRow = (p = {}) => {
   else if (type.includes('sell') || type.includes('deal_sell')) type = 'sell';
   else if (type === 'unknown') type = 'buy';
 
-  const explicitLots = p.lots !== undefined && p.lots !== null;
-  const extendedVolume = p.volumeExt ?? p.Volume;
-  let volume = Number(explicitLots ? p.lots : (extendedVolume ?? p.volume ?? 0));
-  if (!Number.isFinite(volume)) volume = 0;
-  if (!explicitLots && (extendedVolume !== undefined || volume >= 100)) volume /= 10000;
+  const normalizeLots = (row) => {
+    if (row.lots != null) return Number(row.lots);
+    if (row.volumeExt != null) return Number(row.volumeExt) / 10000;
+    if (row.Volume != null) return Number(row.Volume) / 10000;
+    return Number(row.volume ?? 0);
+  };
+
+  const volume = normalizeLots(p);
 
   const reasonRaw = p.reason ?? p.Reason ?? p.reason_type ?? p.comment ?? p.Comment ?? '';
   let reason = 'Client';
@@ -104,6 +107,8 @@ export const normalizePositionRow = (p = {}) => {
 
   return {
     position: p.positionTicket || p.Position || p.ticket || p.Ticket || p.position || 0,
+    state_version: p.state_version ?? p.stateVersion,
+    price_time_msc: p.price_time_msc,
     login: String(p.login || p.Login || ''),
     name: p.accountName || p.AccountName || p.name || p.Name || '',
     email: p.username || p.Username || p.email || p.Email || '',

@@ -16,6 +16,7 @@ import { createKeyedRequestCache } from './keyedRequestCache';
 import { MANAGER_API } from '../config/managerApiContract.js';
 import { requestReportsSummary } from './reportsSummary.js';
 import { fetchOnlineUsersSnapshot, pageOnlineUsers } from './onlineUsersSnapshot.js';
+import { advanceRealtimeCacheRevision } from './realtimeCacheRevision.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
@@ -171,6 +172,13 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   address: p.address || p.Address || '',
   comment: p.comment || p.Comment || '',
 });
+
+const normalizeLots = (p = {}) => {
+  if (p.lots != null) return Number(p.lots);
+  if (p.volumeExt != null) return Number(p.volumeExt) / 10000;
+  if (p.Volume != null) return Number(p.Volume) / 10000;
+  return Number(p.volume ?? 0);
+};
 
 export const normalizeOrderRow = (p = {}) => {
   let type = 'unknown';

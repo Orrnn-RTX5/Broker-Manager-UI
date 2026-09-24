@@ -71,6 +71,8 @@ export const getPositionSnapshotRows = (payload) => {
 export const isPositionMutation = (payload) => {
   payload = normalizePositionSyncPayload(payload);
   if (!payload || typeof payload !== 'object') return false;
+  if (['position_update', 'position_opened', 'position_closed', 'position_increased', 'position_decreased', 'position_reversed', 'position_modified', 'metrics_update'].includes(payload.type)) return true;
+  if (payload.type === 'state_changed' && payload.data && typeof payload.data === 'object') return true;
   if (getPositionSnapshotRows(payload)) return true;
   const source = payload.data || payload.position || payload.update || payload;
   const action = String(
@@ -182,7 +184,7 @@ export class PositionSyncClient {
       };
       socket.onmessage = (event) => {
         if (!isCurrentConnection()) return;
-        const payload = parseMessage(event.data);
+        const payload = normalizePositionSyncPayload(parseMessage(event.data));
         if (!isPositionMutation(payload)) return;
         const snapshotRows = getPositionSnapshotRows(payload);
         if (snapshotRows) {

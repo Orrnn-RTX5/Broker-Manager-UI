@@ -414,6 +414,24 @@ const normalizeFeedStatusUrl = (value = '') => {
   }
 };
 
+export const appendFeedBrokerIdToWsUrl = (wsUrl, brokerID = '') => {
+  const id = String(brokerID || '').trim();
+
+  try {
+    const url = new URL(wsUrl);
+    url.searchParams.delete('token');
+    if (id && !url.searchParams.has('broker_id')) {
+      url.searchParams.set('broker_id', id);
+    }
+    return url.toString();
+  } catch {
+    const raw = String(wsUrl || '');
+    if (!id || /[?&]broker_id=/.test(raw)) return wsUrl;
+    const glue = raw.includes('?') ? '&' : '?';
+    return `${wsUrl}${glue}broker_id=${encodeURIComponent(id)}`;
+  }
+};
+
 export const buildFeedStatusUrl = () => {
   const storedInfo = readBrokerInfo();
   const brokerInfo = storedInfo ? normalizeBrokerInfo(storedInfo, DEFAULTS.API_HOST) : {};
@@ -440,16 +458,9 @@ export const buildFeedWsUrl = () => {
   const wsUrl = hasPinnedApiHost()
     ? resolveBrokerWsUrl({}, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH)
     : resolveBrokerWsUrl(brokerInfo, DEFAULTS.WS_HOST || API_HOST, WS_FEED_PATH);
-  const auth = resolveFeedWsAuth(brokerInfo);
-  const sendToken = getRuntimeConfigValue(
-    ['FEED_SEND_TOKEN', 'VITE_FEED_SEND_TOKEN'],
-    'true'
-  ).toLowerCase() !== 'false';
-  const token = sendToken ? (auth.token || getExistingFeedQueryToken(wsUrl)) : '';
-  if (!token && resolveFeedAuthRequired(brokerInfo)) {
-    throw new FeedWsAuthConfigError();
-  }
-  const proxiedUrl = toLocalDevFeedProxyUrl(appendFeedAuthToWsUrl(wsUrl, { ...auth, token }));
+  const proxiedUrl = toLocalDevFeedProxyUrl(
+    appendFeedBrokerIdToWsUrl(wsUrl, resolveFeedBrokerId(brokerInfo))
+  );
   try {
     const url = new URL(proxiedUrl);
     if (url.protocol === 'https:') url.protocol = 'wss:';

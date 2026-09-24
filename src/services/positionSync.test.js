@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PositionSyncClient, getPositionSnapshotRows, getPositionUpdateLogin, getWsTicket, isPositionMutation } from './positionSyncCore.js';
+import { PositionSyncClient, getPositionSnapshotRows, getPositionUpdateLogin, getWsTicket, isPositionMutation, requiresPositionReconciliation } from './positionSyncCore.js';
+import { LiveTradingState } from './liveTradingState.js';
 
 class FakeSocket {
   constructor(url) {
