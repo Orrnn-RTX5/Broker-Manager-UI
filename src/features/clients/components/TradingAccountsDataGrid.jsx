@@ -6,7 +6,10 @@ import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPositions } from '../../../services/api';
 import GridLoadingState from '../../../components/GridLoadingState';
-const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+import { prefetchAccountDetails } from '../../../services/accountDetails';
+// A pointer resting this long on a row signals intent to open it.
+const ROW_PREFETCH_INTENT_MS = 120;
+const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 const TRADING_ACCOUNTS_CACHE_KEY = 'rtx5_trading_accounts_cache_v2';
 
@@ -55,6 +58,7 @@ const TradingAccountsDataGrid = ({
   const [selectedRow, setSelectedRow] = useState(null);
   const lastRefreshVersionRef = useRef(refreshVersion);
   const lastTapRef = useRef({ rowKey: null, time: 0 });
+  const prefetchTimerRef = useRef(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('trading-accounts');
   const pageSize = 30;
 
@@ -119,6 +123,8 @@ const TradingAccountsDataGrid = ({
     placeholderData: (previousData) => previousData || initialData,
   });
 
+  useEffect(() => () => clearTimeout(prefetchTimerRef.current), []);
+
   useEffect(() => {
     if (onRowsChange) onRowsChange(rows);
   }, [rows, onRowsChange]);
@@ -170,8 +176,16 @@ const TradingAccountsDataGrid = ({
   const editTitle = typeof onEditAccount !== 'function'
     ? 'Edit unavailable'
     : canEditAccounts ? 'Edit Account' : 'No permission to update accounts';
+  // /AccountDetails is slow server-side; start it before the window opens so
+  // Personal/Account tabs paint from cache instead of waiting on the network.
+  const prefetchAccount = (row) => {
+    clearTimeout(prefetchTimerRef.current);
+    prefetchTimerRef.current = null;
+    void prefetchAccountDetails(row.login);
+  };
   const handleEditAccount = (row) => {
     if (!canUseEditAction) return;
+    prefetchAccount(row);
     void preloadAccountPositions(row.login);
     onEditAccount(row);
   };
@@ -240,8 +254,18 @@ const TradingAccountsDataGrid = ({
               return (
                 <tr
                   key={rowKey}
+                  onPointerEnter={(event) => {
+                    if (!canUseEditAction || event.pointerType !== 'mouse') return;
+                    clearTimeout(prefetchTimerRef.current);
+                    prefetchTimerRef.current = setTimeout(() => prefetchAccount(row), ROW_PREFETCH_INTENT_MS);
+                  }}
+                  onPointerLeave={() => {
+                    clearTimeout(prefetchTimerRef.current);
+                    prefetchTimerRef.current = null;
+                  }}
                   onPointerDown={(event) => {
                     if (!canUseEditAction || (event.pointerType === 'mouse' && event.button !== 0)) return;
+                    prefetchAccount(row);
                     void preloadAccountPositions(row.login);
                   }}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}

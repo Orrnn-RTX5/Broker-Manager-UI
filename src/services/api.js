@@ -474,13 +474,17 @@ export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
   }
   if (accountDetailsFirstPagePromise) return accountDetailsFirstPagePromise;
 
+  // The first page is shared by the grid, dashboard and startup prefetch, so
+  // one caller being cancelled (its abort signal) must not reject it for the
+  // others. React Query still drops a cancelled caller's result on its own.
+  const { signal: _signal, ...requestOptions } = options;
   const generation = accountDetailsCacheGeneration;
   const request = getPaged(
     '/AccountDetailsMany',
     { ...params, limit: params.limit || 30, offset: 0 },
     (row) => row,
     ['accounts'],
-    options,
+    requestOptions,
   ).then((page) => {
     if (generation === accountDetailsCacheGeneration && Array.isArray(page?.rows)) {
       accountDetailsFirstPage = page;

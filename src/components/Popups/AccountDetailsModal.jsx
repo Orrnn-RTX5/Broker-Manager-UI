@@ -3,7 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, CircleAlert } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
-import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync } from '../../services/positionSync';
+import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
+import { useLivePositions, useLiveAccountMetrics } from '../../hooks/useLiveTrading';
+import { liveTradingState } from '../../services/liveTradingState';
 import positionAdapter from './adapters/position';
 import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
@@ -11,6 +13,8 @@ import AccountTradeTab from './AccountTradeTab';
 import DepositDialog from './DepositDialog';
 import { orderDelete } from '../../services/tradeApi';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { loadAccountDetails, peekAccountDetails, updateCachedAccountDetails } from '../../services/accountDetails';
+import { useAccountDetails } from '../../hooks/useAccountDetails';
 import { closeManagerPosition } from '../../services/managerTradeApi';
 import { submitManagerTransaction } from '../../services/managerFinanceApi';
 import { updateManagerAccount } from '../../services/managerAccountApi';
@@ -37,40 +41,6 @@ const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
 });
 const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 50;
 
-
-const pendingAccountDetailsRequests = new Map();
-
-const requestAccountDetails = async (loginId) => {
-  const params = new URLSearchParams({ login: String(loginId) });
-  const response = await fetchManagerApi(`/AccountDetails?${params.toString()}`, {
-    headers: { accept: 'application/json' },
-  });
-  const text = await response.text();
-  let payload;
-
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw new Error(response.ok ? 'Invalid account details response' : text || 'Failed to refresh account balance');
-  }
-
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || 'Failed to refresh account balance');
-  }
-
-  return payload;
-};
-
-const loadAccountDetails = (loginId, { force = false } = {}) => {
-  const key = String(loginId);
-  if (!force && pendingAccountDetailsRequests.has(key)) return pendingAccountDetailsRequests.get(key);
-
-  const request = requestAccountDetails(loginId).finally(() => {
-    if (pendingAccountDetailsRequests.get(key) === request) pendingAccountDetailsRequests.delete(key);
-  });
-  pendingAccountDetailsRequests.set(key, request);
-  return request;
-};
 
 const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHeader, disabled = false }) => (
   <div
@@ -276,7 +246,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const canCloseTrades = canCloseAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [focusedTicket, setFocusedTicket] = useState(targetTicket);
-  const [accountData, setAccountData] = useState(null);
+  const accountData = useAccountDetails(loginId);
   const [detailsLoading, setLoading] = useState(false);
   const [detailsError, setError] = useState(null);
   const [formData, setFormData] = useState({});
@@ -656,17 +626,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let active = true;
 
     let detailsRequest = 0;
-    const fetchDetails = async ({ silent = false } = {}) => {
+    const fetchDetails = async ({ silent = false, force = true } = {}) => {
       const requestId = ++detailsRequest;
       if (!silent) setLoading(true);
       if (!silent) setError(null);
 
       try {
-        const details = await loadAccountDetails(loginId, { force: true });
-        if (active && requestId === detailsRequest) {
-          setAccountData(details);
-          setError(null);
-        }
+        await loadAccountDetails(loginId, { force });
+        if (active && requestId === detailsRequest) setError(null);
       } catch (err) {
         if (active && requestId === detailsRequest && !silent) setError(err.message);
       } finally {
@@ -674,7 +641,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       }
     };
 
-    fetchDetails();
+    // Last-known details (or the grid row) are already on screen, so only a
+    // first-ever open shows the loading status while it revalidates.
+    fetchDetails({ silent: peekAccountDetails(loginId) !== undefined, force: false });
 
     // Metrics arrive on the ticket-authenticated stream; this is recovery only.
     const detailsRefresh = setInterval(() => fetchDetails({ silent: true }), 30_000);
@@ -788,7 +757,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   if (!account) return null;
 
   const rowData = account && typeof account === 'object' ? account : {};
-  const fieldSources = [...getAccountDetailSources(accountData), rowData];
+  const fieldSources = [...getAccountDetailSources(accountData), ...getAccountDetailSources(rowData)];
   const getFieldValue = (field, fallback = '') => {
     const metricField = { Balance: 'balance', Credit: 'credit', Equity: 'equity', Margin: 'used_margin', MarginFree: 'free_margin', FreeMargin: 'free_margin', MarginLevel: 'margin_level', Profit: 'floating_pnl' }[field];
     if (metricField && liveMetrics?.[metricField] != null) return liveMetrics[metricField];
@@ -826,7 +795,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
       await updateManagerAccount(loginId, allowedUpdates);
 
-      setAccountData(prev => ({ ...prev, ...allowedUpdates }));
+      updateCachedAccountDetails(loginId, allowedUpdates);
       setFormData({});
       setUpdateFeedback({ status: 'success', title: 'Update successful', message: `${activeTab === 'Personal' ? 'Personal details' : 'Account details'} for account #${loginId} updated successfully.` });
       // A parent refresh failure does not change the saved update's result.
@@ -970,8 +939,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
       // Do not wait for the next grid/websocket interval after the backend has
       // accepted the transaction: refresh the displayed balance immediately.
-      void loadAccountDetails(loginId)
-        .then((payload) => setAccountData(payload))
+      void loadAccountDetails(loginId, { force: true })
         .catch(() => {
           setDepositSuccess((message) => message
             ? `${message} The balance could not be refreshed. Reopen the account to check it; do not repeat the deposit.`

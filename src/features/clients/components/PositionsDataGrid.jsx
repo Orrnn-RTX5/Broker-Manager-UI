@@ -7,7 +7,7 @@ import { useLivePositions } from '../../../hooks/useLiveTrading';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GridLoadingState from '../../../components/GridLoadingState';
-import { subscribeToPositionSync } from '../../../services/positionSync';
+import { subscribeToPositionSync, requiresPositionReconciliation } from '../../../services/positionSync';
 import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQueries.js';
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';

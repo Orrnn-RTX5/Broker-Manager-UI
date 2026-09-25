@@ -20,6 +20,7 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { startPositionSync, stopPositionSync, subscribeToPositionSync, requiresPositionReconciliation } from '../services/positionSync';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateRealtimeCaches } from '../services/api';
+import { clearAccountDetailsCache } from '../services/accountDetails';
 import { resetWorkspaceLayout, toggleDocumentFullscreen } from '../utils/quickSettingsActions.js';
 import '../styles/command-center.css';
 const PANEL_NAVIGATOR  = 'navigator';
@@ -110,6 +111,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   useEffect(() => {
     if (!isAuthenticated) {
       stopPositionSync();
+      clearAccountDetailsCache();
       return undefined;
     }
 

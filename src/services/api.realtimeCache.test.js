@@ -94,6 +94,22 @@ test('old account completion cannot detach a newer pending request', async () =>
   await Promise.all([fresh, joined]);
 });
 
+test('cancelling the caller that started the shared first page does not fail callers that joined it', async () => {
+  const requests = [];
+  runtime.client.getRaw = (_endpoint, options = {}) => {
+    const pending = deferred(); requests.push({ pending, options }); return pending.promise;
+  };
+  const controller = new AbortController();
+  const starter = api.getAccountDetailsManyPage({}, { signal: controller.signal });
+  const joined = api.getAccountDetailsManyPage();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].options.signal, undefined, 'shared request must not carry one caller\'s signal');
+  controller.abort();
+  requests[0].pending.resolve(accountResponse(40));
+  assert.equal((await joined).rows[0].balance, 40);
+  await starter;
+});
+
 test('late sidebar pagination cannot repopulate invalidated storage', async () => {
   const requests = [];
   runtime.client.getRaw = () => { const pending = deferred(); requests.push(pending); return pending.promise; };
