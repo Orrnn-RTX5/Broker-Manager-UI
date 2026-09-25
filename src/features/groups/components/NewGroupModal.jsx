@@ -5,6 +5,14 @@ import { fetchManagerApi } from '../../../services/managerFetch';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, pickGroupPayloadFields as pickAllowedFields } from '../groupPayload.js';
+import {
+  LEVERAGE_PRESETS,
+  MARGIN_CALL_PRESETS,
+  NEW_GROUP_FINANCIAL_DEFAULTS,
+  SPREAD_MARKUP_PRESETS,
+  STOP_OUT_PRESETS,
+  isPresetValue,
+} from '../groupFinancialPresets.js';
 
 const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]" }) => (
   <div className="flex flex-col gap-1">
@@ -47,13 +55,66 @@ const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
   </div>
 );
 
+const CUSTOM_OPTION = '__custom__';
+
+// Dropdown of standard values with a "Custom…" entry that reveals a free input.
+const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlaceholder }) => {
+  const isPreset = isPresetValue(presets, value);
+  const [customOpen, setCustomOpen] = useState(() => !isPreset && Number(value) > 0);
+  // The typed text is kept as-is so partial decimals like "0." survive while typing.
+  const [draft, setDraft] = useState(() => (Number(value) > 0 ? String(value) : ''));
+  const showCustom = customOpen || (!isPreset && Number(value) > 0);
+  const selectValue = showCustom ? CUSTOM_OPTION : isPreset ? String(Number(value)) : '';
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
+      <select
+        value={selectValue}
+        aria-label={label}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM_OPTION) {
+            setCustomOpen(true);
+            setDraft(Number(value) > 0 ? String(value) : '');
+            return;
+          }
+          setCustomOpen(false);
+          onChange(Number(e.target.value));
+        }}
+        className="w-full h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-1.5 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+      >
+        <option value="" disabled>{placeholder}</option>
+        {presets.map((preset) => <option key={preset.value} value={String(preset.value)}>{preset.label}</option>)}
+        <option value={CUSTOM_OPTION}>Custom…</option>
+      </select>
+      {showCustom && (
+        <input
+          type="text"
+          inputMode="decimal"
+          autoFocus={customOpen}
+          aria-label={`${label} (custom)`}
+          placeholder={customPlaceholder}
+          value={draft}
+          onChange={(e) => {
+            const raw = e.target.value.trim();
+            if (!/^\d*\.?\d*$/.test(raw)) return;
+            setDraft(raw);
+            onChange(raw === '' || raw === '.' ? 0 : Number(raw));
+          }}
+          className="w-full h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-2 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+        />
+      )}
+    </div>
+  );
+};
+
 const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess }) => {
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
   const [formData, setFormData] = useState(() => {
     const source = initialData || duplicateData;
-    const data = { ...defaultPayload, ...(source || {}) };
+    const data = { ...defaultPayload, ...(source ? {} : NEW_GROUP_FINANCIAL_DEFAULTS), ...(source || {}) };
     if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
     // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.
     if (!source && presetName) data.name = presetName;
@@ -185,11 +246,14 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
             <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Financial</h3>
               <div className="grid grid-cols-2 gap-4">
-                <InputGroup label="Leverage" type="number" value={formData.leverage} onChange={(v) => handleChange('leverage', v)} width="w-full" />
-                <InputGroup label="Margin Call Level (%)" type="number" value={formData.marginCallLevel} onChange={(v) => handleChange('marginCallLevel', v)} width="w-full" />
-                <InputGroup label="Stop Out Level (%)" type="number" value={formData.stopOutLevel} onChange={(v) => handleChange('stopOutLevel', v)} width="w-full" />
-                <InputGroup label="Spread Markup" type="number" value={formData.spreadMarkup} onChange={(v) => handleChange('spreadMarkup', v)} width="w-full" />
+                <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage" customPlaceholder="Ratio, e.g. 150 for 1:150" />
+                <PresetSelect label="Margin Call Level (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" />
+                <PresetSelect label="Stop Out Level (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" />
+                <PresetSelect label="Spread Markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
               </div>
+              {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
+                <div className="text-[11px] text-amber-600 dark:text-amber-400">Stop out level is above the margin call level — it should normally be lower.</div>
+              )}
             </div>
 
              {/* Trading Box */}
