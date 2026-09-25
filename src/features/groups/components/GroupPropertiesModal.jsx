@@ -4,9 +4,11 @@ import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { GROUP_DEFAULT_PAYLOAD, pickGroupPayloadFields, submitGroup, toSymbolList } from '../groupPayload.js';
 import { ROUTING_LABELS } from '../groupTree.js';
+import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
+import GroupAccountsTab from './GroupAccountsTab';
 
-// Mirrors the MT5 Manager "Group: <name>" window: Margin / Symbols / Commissions tabs.
-const TABS = ['Margin', 'Symbols', 'Commissions'];
+// Mirrors the MT5 Manager "Group: <name>" window; it opens on the group's accounts.
+const TABS = ['Accounts', 'Margin', 'Symbols', 'Commissions'];
 const ROUTING_OPTIONS = Object.entries(ROUTING_LABELS).map(([value, label]) => ({ value, label }));
 const NO_PERMISSION = 'Your role does not have permission to manage groups.';
 
@@ -16,7 +18,8 @@ const toNumber = (value) => (value === '' ? 0 : Number(value));
 const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
-  const [tab, setTab] = useState('Margin');
+  const [tab, setTab] = useState('Accounts');
+  const [openAccount, setOpenAccount] = useState(null);
   const [form, setForm] = useState(() => ({
     ...GROUP_DEFAULT_PAYLOAD,
     ...group,
@@ -29,11 +32,13 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // While an account window is open on top, Escape belongs to it.
   useEffect(() => {
+    if (openAccount) return undefined;
     const handleKey = (event) => { if (event.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, openAccount]);
 
   const update = (key, value) => setForm((prev) => {
     const next = { ...prev, [key]: value };
@@ -82,6 +87,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const isSelected = (row) => selectedSymbol?.symbol === row.symbol && selectedSymbol?.access === row.access;
 
   return (
+    <>
     <div className="ui-modal-backdrop groups-props-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="ui-modal groups-props" role="dialog" aria-modal="true" aria-labelledby="groups-props-title">
         <div className="ui-modal-header groups-props-header">
@@ -110,6 +116,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
           {error && (
             <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{error}</span></div>
           )}
+
+          {tab === 'Accounts' && <GroupAccountsTab groupName={group?.name} onOpenAccount={setOpenAccount} />}
 
           {tab === 'Margin' && (
             <div className="groups-props-page">
@@ -238,6 +246,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         </div>
       </div>
     </div>
+    {openAccount && <AccountDetailsModal account={openAccount} onClose={() => setOpenAccount(null)} />}
+    </>
   );
 };
 

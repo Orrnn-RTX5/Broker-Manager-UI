@@ -9,6 +9,7 @@ import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import UiTranslator from './i18n/UiTranslator.jsx';
 import RequirePermission from './components/RequirePermission';
 import authService from './services/authService';
+import { startSessionRefreshScheduler } from './services/sessionRefreshScheduler';
 import { clearBrokerInfo } from './services/brokerAuth';
 import { invalidatePositionsCache, invalidateSymbolManagementData, preloadSymbolManagementData } from './services/api';
 import { preloadAllWorkspaceRoutes, preloadFrequentWorkspaceRoutes, preloadWorkspaceRoute, workspaceRouteLoaders } from './utils/workspaceRouteModules';
@@ -223,9 +224,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // expireSession() has already cleared storage. It keeps the shared tokens
+    // when they belong to another tab, so this handler must not clear them.
     const handleSessionExpired = () => {
       invalidatePositionsCache();
-      authService.clearSession();
       queryClient.clear();
       sessionSnapshotRef.current = null;
       setIsAuthenticated(false);
@@ -311,23 +313,13 @@ function App() {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-    if (!validateCurrentSession('expiry_timer_check')) return undefined;
+    if (!validateCurrentSession('refresh_timer_check')) return undefined;
 
-    const expiresAt = authService.getTokenExpiresAt();
-    if (!expiresAt) return undefined;
-
-    const delay = expiresAt - Date.now();
-    if (delay <= 0) {
-      authService.expireSession('token_expired');
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(
-      () => authService.expireSession('token_expired'),
-      Math.min(delay, 2147483647)
-    );
-
-    return () => window.clearTimeout(timeoutId);
+    // The access token lasts about an hour; renew it before it expires instead
+    // of logging out. Restarted on every token update (sessionVersion), which
+    // includes a refresh done by another tab.
+    const scheduler = startSessionRefreshScheduler();
+    return () => scheduler.stop();
   }, [isAuthenticated, sessionVersion, validateCurrentSession]);
 
   const handleLogin = () => {

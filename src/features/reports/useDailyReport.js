@@ -27,7 +27,7 @@ export default function useDailyReport() {
   updateDynamicEndpoints();
   const claims = authService.getSessionClaims();
   const scope = buildPermissionSessionFingerprint({
-    token: authService.getAuthToken(), login: claims.login,
+    token: authService.getSessionScopeKey(), login: claims.login,
     brokerId: `${claims.brokerId || broker?.broker_id || ''}|${API_HOST}`,
   });
   const key = ['daily-report', scope, date];

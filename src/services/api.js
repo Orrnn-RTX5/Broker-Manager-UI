@@ -8,6 +8,7 @@ import apiClient from './apiClient';
 import ibApi from './ibApi';
 import authService from './authService';
 import { fetchManagerApi } from './managerFetch';
+import { sendWithSessionRefresh } from './authRequest.js';
 import { API_HOST, buildBrokerApiUrl, updateDynamicEndpoints } from '../config/endpoints';
 import { normalizeOnlineUserRows } from '../utils/onlineUsers';
 import { buildPagedEndpoint, extractRows, normalizePagedResult, normalizePagedStreamResult, normalizePagedTextResult } from '../utils/pagination';
@@ -20,7 +21,6 @@ import { advanceRealtimeCacheRevision } from './realtimeCacheRevision.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
-const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 const PAGED_RESPONSE_MAX_BYTES = 1_500_000;
 const PAGED_RESPONSE_TOO_LARGE = 'Response is too large for a paged grid request';
 
@@ -54,11 +54,6 @@ const getResponseMessage = (data, fallback) =>
   data?.detail ||
   fallback;
 
-const expireAndThrow = (reason) => {
-  authService.expireSession(reason);
-  throw new Error(SESSION_ERROR_MESSAGE);
-};
-
 const buildBrokerV2Url = (path, params = {}) => {
   const normalizedPath = String(path || '').replace(/^\/+/, '');
   const baseUrl = buildBrokerApiUrl(`/api/v2/${normalizedPath}`);
@@ -77,24 +72,13 @@ const buildBrokerV2Url = (path, params = {}) => {
 
 const getBrokerV2Json = async (path, params = {}) => {
   const url = buildBrokerV2Url(path, params);
-  const prepareHeaders = () => {
-    const sessionStatus = authService.getSessionStatus();
-    if (!sessionStatus.authenticated) {
-      expireAndThrow(sessionStatus.reason || 'session_invalid');
-    }
-
-    return {
+  const response = await sendWithSessionRefresh((token) => fetch(url, {
+    method: 'GET',
+    headers: {
       accept: 'application/json',
-      Authorization: `Bearer ${sessionStatus.snapshot.token}`,
-    };
-  };
-
-  let response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
-  if (response.status === 401) {
-    const nextToken = await authService.refreshSession();
-    if (!nextToken) expireAndThrow('token_rejected');
-    response = await fetch(url, { method: 'GET', headers: prepareHeaders() });
-  }
+      Authorization: `Bearer ${token}`,
+    },
+  }));
 
   const data = await readJson(response);
   if (!response.ok) {
@@ -1207,7 +1191,7 @@ const getSymbolManagementScope = () => {
   updateDynamicEndpoints();
   const claims = authService.getSessionClaims();
   return buildPermissionSessionFingerprint({
-    token: authService.getAuthToken(),
+    token: authService.getSessionScopeKey(),
     login: claims.login,
     brokerId: `${claims.brokerId || ''}|${API_HOST}`,
   });

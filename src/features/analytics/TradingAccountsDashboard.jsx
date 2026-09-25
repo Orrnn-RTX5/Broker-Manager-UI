@@ -75,7 +75,7 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
   const [dateRange, setDateRange] = useState(null);
   const claims = authService.getSessionClaims();
   const scope = buildPermissionSessionFingerprint({
-    token: authService.getAuthToken(),
+    token: authService.getSessionScopeKey(),
     login: claims.login,
     brokerId: claims.brokerId,
   });

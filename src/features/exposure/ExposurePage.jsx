@@ -21,7 +21,7 @@ export default function ExposurePage({ compact = false, needle = '', isAuthentic
   const [sort, setSort] = useState({ key: 'netUsd', descending: true });
   const claims = authService.getSessionClaims();
   const enabled = isAuthenticated ?? authService.getSessionStatus().authenticated;
-  const scope = buildPermissionSessionFingerprint({ token: authService.getAuthToken(), login: claims.login, brokerId: claims.brokerId });
+  const scope = buildPermissionSessionFingerprint({ token: authService.getSessionScopeKey(), login: claims.login, brokerId: claims.brokerId });
   const query = useQuery({ queryKey: ['exposure', scope], queryFn: fetchExposure, enabled,
     staleTime: 10_000, refetchInterval: auto ? 15_000 : false, refetchIntervalInBackground: false, retry: false });
   const rows = query.data?.rows ?? EMPTY;

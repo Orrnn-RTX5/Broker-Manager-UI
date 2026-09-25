@@ -1,9 +1,6 @@
 import { buildManagerApiUrl } from '../config/endpoints.js';
-import authService from './authService.js';
 import { desktopFetch } from './desktopHttp.js';
-import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
-
-const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
+import { sendWithSessionRefresh } from './authRequest.js';
 
 const isLoginEndpoint = (endpoint) =>
   endpoint.startsWith('/Connect') || endpoint.includes('/Connect?');
@@ -34,29 +31,15 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
     headers: optionHeaders,
     ...fetchOptions
   } = options || {};
-  const sessionStatus = authService.getSessionStatus();
-  if (!sessionStatus.authenticated) {
-    authService.expireSession(sessionStatus.reason || 'session_invalid');
-    throw new Error(SESSION_ERROR_MESSAGE);
-  }
 
-  const token = sessionStatus.snapshot.token;
-  const headers = { accept: 'application/json', ...optionHeaders };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
-    ...fetchOptions,
-    headers,
+  // Renews a stale token before sending, and once after a rejected token
+  // (401, or 403 "Not authenticated") before retrying; see authRequest.js.
+  return sendWithSessionRefresh((token) => {
+    const headers = { accept: 'application/json', ...optionHeaders };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
+      ...fetchOptions,
+      headers,
+    });
   });
-
-  if (isAuthExpiredStatus(response.status)) {
-    authService.expireSession('token_rejected');
-  } else if (response.status === 403) {
-    const errorText = await response.clone().text().catch(() => '');
-    if (isAuthExpiredResponse(response.status, errorText)) {
-      authService.expireSession('token_rejected');
-    }
-  }
-
-  return response;
 };

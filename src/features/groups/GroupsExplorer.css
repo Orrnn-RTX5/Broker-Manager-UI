@@ -235,3 +235,9 @@
 .groups-props-add-row .ui-input { width: 190px; }
 .groups-props-empty { margin: 0; padding: 12px; font-size: 11px; font-weight: 400; color: var(--muted); }
 .groups-props-commission { padding: 12px; border-top: 1px solid var(--border); background: var(--surface-2); }
+
+.groups-accounts-tools { justify-content: space-between; }
+.groups-accounts-count { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--text-3); }
+.groups-accounts-list { max-height: 300px; overflow: auto; }
+.groups-accounts-list thead th { position: sticky; top: 0; z-index: 1; }
+.groups-accounts-list tbody tr { cursor: pointer; }

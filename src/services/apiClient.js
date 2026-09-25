@@ -1,8 +1,9 @@
-import authService from './authService';
+import authService from './authService.js';
 import { desktopFetch } from './desktopHttp.js';
-import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints';
-import { isAuthExpiredResponse, isAuthExpiredStatus } from './authHttpStatus.js';
-import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction';
+import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints.js';
+import { isAuthExpiredResponse } from './authHttpStatus.js';
+import { sendWithSessionRefresh } from './authRequest.js';
+import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction.js';
 
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 const RESPONSE_TOO_LARGE_MESSAGE =
@@ -88,7 +89,7 @@ const notifyResponseReceived = (callback, response, text) => {
  * Fetch wrapper that handles:
  * 1. Authorization header attachment
  * 2. Standardized error handling
- * 3. Silent token refresh on 401 Unauthorized
+ * 3. Silent token refresh on 401, or 403 "Not authenticated"
  * 4. Automatic retry after refresh
  */
 const apiClient = {
@@ -102,52 +103,21 @@ const apiClient = {
     const url = endpoint.startsWith('/ext-api')
       ? buildExtApiUrl(endpoint)
       : buildManagerApiUrl(endpoint);
+    const finalUrl = withoutQueryToken(url);
 
-    const prepareRequest = () => {
-      const sessionStatus = authService.getSessionStatus();
-      if (!sessionStatus.authenticated) {
-        expireAndThrow(sessionStatus.reason || 'session_invalid');
-      }
-
-      const token = sessionStatus.snapshot.token;
+    return sendWithSessionRefresh((token) => {
       const headers = { accept: 'application/json', ...requestOptions.headers };
-      const finalUrl = withoutQueryToken(url);
+      if (token) headers.Authorization = `Bearer ${token}`;
 
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
+      if (API_DEBUG_ENABLED) {
+        console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
+          headers: redactHeaders(headers),
+          body: redactSensitive(safeRequestBody(requestOptions.body)),
+          responseType: 'raw',
+        });
       }
-      return { finalUrl, headers };
-    };
-
-    const { finalUrl, headers } = prepareRequest();
-
-    if (API_DEBUG_ENABLED) {
-      console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
-        headers: redactHeaders(headers),
-        body: redactSensitive(safeRequestBody(requestOptions.body)),
-        responseType: 'raw',
-      });
-    }
-
-    const response = await desktopFetch(finalUrl, { ...requestOptions, headers });
-
-    if (isAuthExpiredStatus(response.status)) {
-      console.warn('Authentication expired. Attempting silent refresh...');
-
-      const sessionStatus = authService.getSessionStatus();
-      if (!sessionStatus.authenticated) {
-        expireAndThrow(sessionStatus.reason || 'token_rejected');
-      }
-
-      const newToken = await authService.refreshSession();
-      if (newToken) {
-        const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
-        return desktopFetch(retryUrl, { ...requestOptions, headers: retryHeaders });
-      }
-      expireAndThrow('refresh_failed');
-    }
-
-    return response;
+      return desktopFetch(finalUrl, { ...requestOptions, headers });
+    });
   },
 
   async request(endpoint, options = {}) {
@@ -160,52 +130,23 @@ const apiClient = {
     const url = endpoint.startsWith('/ext-api')
       ? buildExtApiUrl(endpoint)
       : buildManagerApiUrl(endpoint);
-
-    const prepareRequest = () => {
-      const sessionStatus = authService.getSessionStatus();
-      if (!sessionStatus.authenticated) {
-        expireAndThrow(sessionStatus.reason || 'session_invalid');
-      }
-
-      const token = sessionStatus.snapshot.token;
-      const headers = { accept: 'application/json', ...requestOptions.headers };
-      const finalUrl = withoutQueryToken(url);
-
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-      return { finalUrl, headers };
-    };
-
-    const { finalUrl, headers } = prepareRequest();
-
-    if (API_DEBUG_ENABLED) {
-      console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
-        headers: redactHeaders(headers),
-        body: redactSensitive(safeRequestBody(requestOptions.body)),
-      });
-    }
+    const finalUrl = withoutQueryToken(url);
 
     try {
-      const response = await desktopFetch(finalUrl, { ...requestOptions, headers });
+      // Refreshes ahead of a stale local expiry, and once on a rejected token
+      // (401 or 403 "Not authenticated") before retrying the request.
+      const response = await sendWithSessionRefresh((token) => {
+        const headers = { accept: 'application/json', ...requestOptions.headers };
+        if (token) headers.Authorization = `Bearer ${token}`;
 
-      if (isAuthExpiredStatus(response.status)) {
-        console.warn('Authentication expired. Attempting silent refresh...');
-
-        const sessionStatus = authService.getSessionStatus();
-        if (!sessionStatus.authenticated) {
-          expireAndThrow(sessionStatus.reason || 'token_rejected');
+        if (API_DEBUG_ENABLED) {
+          console.debug(`[API REQUEST] ${requestOptions.method || 'GET'} ${redactUrl(finalUrl)}`, {
+            headers: redactHeaders(headers),
+            body: redactSensitive(safeRequestBody(requestOptions.body)),
+          });
         }
-
-        const newToken = await authService.refreshSession();
-
-        if (newToken) {
-          const { finalUrl: retryUrl, headers: retryHeaders } = prepareRequest();
-          return await desktopFetch(retryUrl, { ...requestOptions, headers: retryHeaders })
-            .then((res) => this.handleResponse(res, { maxResponseBytes, responseType, onResponseReceived }));
-        }
-        expireAndThrow('refresh_failed');
-      }
+        return desktopFetch(finalUrl, { ...requestOptions, headers });
+      });
 
       return await this.handleResponse(response, { maxResponseBytes, responseType, onResponseReceived });
     } catch (error) {

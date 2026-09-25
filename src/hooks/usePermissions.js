@@ -41,7 +41,8 @@ export const usePermissions = () => {
   const claims = authService.getSessionClaims();
   const snapshot = authService.getAuthSnapshot();
   const queryKey = getPermissionSessionQueryKey({
-    token: snapshot.token,
+    // Stable across token refreshes, so permissions are not reloaded hourly.
+    token: authService.getSessionScopeKey(),
     login: claims.login,
     brokerId: claims.brokerId,
   });
