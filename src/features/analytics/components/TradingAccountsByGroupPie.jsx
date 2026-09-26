@@ -22,7 +22,7 @@ const TradingAccountsByGroupPie = () => {
       </div>
 
       <div className="flex-1 w-full relative flex items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
           <PieChart>
             <Pie
               data={data}

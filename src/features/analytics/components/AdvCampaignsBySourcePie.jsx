@@ -24,7 +24,7 @@ const AdvCampaignsBySourcePie = () => {
           <span className="text-[11px] text-gray-800 dark:text-gray-200">None</span>
         </div>
 
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
           <PieChart>
             <Pie
               data={data}

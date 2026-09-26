@@ -11,6 +11,8 @@ import {
   joinGroupPath,
   listGroupContainerPaths,
   listGroupsUnder,
+  nestGroupName,
+  separatorForContainer,
 } from './groupTree.js';
 
 const SERVER_GROUPS = [
@@ -77,6 +79,35 @@ test('the navigator tree lists folders with their group counts, then the groups'
 test('container paths include groups and implied folders, parents before children', () => {
   const containers = listGroupContainerPaths([{ name: 'A\\b\\c' }, { name: 'a' }, { name: 'B' }]);
   assert.deepEqual(containers, ['a', 'A\\b', 'A\\b\\c', 'B']);
+});
+
+test('slash-separated names become folders and keep the slash', () => {
+  const groups = [
+    { name: 'Arijit' },
+    { name: 'dipannita' },
+    { name: 'ormn/demo-std' },
+    { name: 'YoPips Demo' },
+    { name: 'YoPips real' },
+    { name: 'Yopips/demo' },
+    { name: 'Yopips/real' },
+  ];
+  const rows = getGroupFolderRows(groups, '');
+  assert.deepEqual(rows.map((row) => [row.label, row.type, row.count]), [
+    ['ormn', 'folder', 1],
+    ['Yopips', 'folder', 2],
+    ['Arijit', 'group', 0],
+    ['dipannita', 'group', 0],
+    ['YoPips Demo', 'group', 0],
+    ['YoPips real', 'group', 0],
+  ]);
+  assert.deepEqual(getGroupFolderRows(groups, 'Yopips').map((row) => [row.label, row.name]), [
+    ['demo', 'Yopips/demo'],
+    ['real', 'Yopips/real'],
+  ]);
+  assert.equal(getGroupParentPath('Yopips/demo'), 'Yopips');
+  assert.equal(separatorForContainer(groups, 'Yopips'), '/');
+  assert.equal(nestGroupName('Yopips', 'vip', separatorForContainer(groups, 'Yopips')), 'Yopips/vip');
+  assert.equal(separatorForContainer(SERVER_GROUPS, 'PREP'), '\\');
 });
 
 test('row text mirrors the MT5 columns', () => {

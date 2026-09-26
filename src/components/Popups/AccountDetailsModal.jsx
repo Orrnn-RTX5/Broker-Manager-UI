@@ -12,7 +12,7 @@ import dealAdapter from './adapters/deal';
 import AccountTradeTab from './AccountTradeTab';
 import DepositDialog from './DepositDialog';
 import { orderDelete } from '../../services/tradeApi';
-import { fetchManagerApi } from '../../services/managerFetch';
+import { changeManagerPassword, checkManagerPassword } from '../../services/managerPasswordApi';
 import { loadAccountDetails, peekAccountDetails, updateCachedAccountDetails } from '../../services/accountDetails';
 import { useAccountDetails } from '../../hooks/useAccountDetails';
 import { closeManagerPosition } from '../../services/managerTradeApi';
@@ -820,16 +820,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
     setCheckingPassword(type);
     try {
-      // POST the cleartext password in a JSON body (mirrors UserPasswordChange)
-      // so it never appears in the request URL, server access logs, or browser
-      // history (fe-manager-ui-03 / fe-manager-ui-08). Backend exposes POST JSON.
-      const res = await fetchManagerApi('/UserPasswordCheck', {
-        method: 'POST',
-        headers: { 'accept': 'text/plain', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: loginId, type, password })
-      });
-      const text = await res.text();
-      showResult(text, { title: 'Password check result', type: res.ok ? undefined : 'error' });
+      // POST keeps the cleartext password out of the request URL.
+      const { ok, text } = await checkManagerPassword({ login: loginId, type, password });
+      showResult(text, { title: 'Password check result', type: ok ? undefined : 'error' });
     } catch (err) {
       showResult.error(`Error checking password: ${err.message}`);
     } finally {
@@ -849,16 +842,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     }
     setChangingPassword(type);
     try {
-      // Send the new password in a POST JSON body. The backend exposes both GET
-      // and POST for /UserPasswordChange; POST keeps the cleartext password out
-      // of the request URL, server access logs, and browser history.
-      const res = await fetchManagerApi('/UserPasswordChange', {
-        method: 'POST',
-        headers: { 'accept': 'text/plain', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: loginId, type, password })
-      });
-      const text = await res.text();
-      showResult(text, { title: 'Password change result', type: res.ok ? undefined : 'error' });
+      // POST keeps the cleartext password out of the request URL.
+      const { ok, text } = await changeManagerPassword({ login: loginId, type, password });
+      showResult(text, { title: 'Password change result', type: ok ? undefined : 'error' });
     } catch (err) {
       showResult.error(`Error changing password: ${err.message}`);
     } finally {

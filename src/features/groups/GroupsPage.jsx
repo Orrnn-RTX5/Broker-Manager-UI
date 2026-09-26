@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
 import NewGroupModal from './components/NewGroupModal';
 import GroupPropertiesModal from './components/GroupPropertiesModal';
+import GroupPermissionNotice from './components/GroupPermissionNotice';
 import { fetchManagerApi } from '../../services/managerFetch';
+import { getSidebarAccountsQueryOptions } from '../../services/sidebarAccounts.js';
 import { usePermissions } from '../../hooks/usePermissions';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
 import { useAllGroups } from '../../hooks/useAllGroups';
@@ -14,18 +16,22 @@ import { copyToClipboard, rowsToTSV } from '../../utils/gridUtils';
 import { EDIT_MENU_ACTION_EVENT, isEditableElement, publishEditMenuContext } from '../../utils/editMenuActions';
 import { getGroupsFolderFromSearch, getGroupsFolderPath, getGroupsSelectedFromSearch } from './groupRoutes';
 import {
-  GROUP_PATH_SEPARATOR,
   countGroupsUnder,
   getGroupFolderRows,
+  getGroupLeafName,
   getGroupParentPath,
   getGroupRowText,
   groupRowNode,
   isGroupBranch,
-  joinGroupPath,
   listGroupContainerPaths,
   listGroupsUnder,
+  nestGroupName,
+  pathSeparatorOf,
+  separatorForContainer,
   splitGroupPath,
 } from './groupTree.js';
+import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup } from './groupAccountRows.js';
+import { describeGroupSave } from './groupAccountRows.js';
 import './GroupsExplorer.css';
 
 // Folder view columns match the MT5 Manager group list; "All Groups" adds Type and Leverage.
@@ -44,8 +50,6 @@ const ALL_GROUPS_COLUMNS = [
   { key: 'currency', label: 'Currency' },
 ];
 const EMPTY_TEXT = { type: '', risk: '', margin: '', leverage: '', currency: '' };
-const NO_PERMISSION = 'Your role does not have permission to manage groups.';
-
 const rowValues = (node, showFullName) => ({
   group: showFullName ? node.name : node.label,
   ...(node.group ? getGroupRowText(node.group) : EMPTY_TEXT),
@@ -61,6 +65,11 @@ const GroupsPage = () => {
   const navigatorGroup = getGroupsSelectedFromSearch(location.search);
   const isRoot = !folder;
   const { groups, loading, fetching, error, refetch } = useAllGroups();
+  const accountsQuery = useQuery(getSidebarAccountsQueryOptions(''));
+  const accountCounts = useMemo(
+    () => countAccountsByGroup(accountsQuery.data?.rows),
+    [accountsQuery.data],
+  );
 
   const [allGroups, setAllGroups] = useState(false);
   const [search, setSearch] = useState('');
@@ -69,13 +78,18 @@ const GroupsPage = () => {
   const [newGroup, setNewGroup] = useState(null);
   const [subgroupDraft, setSubgroupDraft] = useState(null);
   const [propertiesGroup, setPropertiesGroup] = useState(null);
+  const [openedGroup, setOpenedGroup] = useState(null);
+  const [selectedLogin, setSelectedLogin] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [permissionAction, setPermissionAction] = useState(null);
   const searchInputRef = useRef(null);
   const handlersRef = useRef({});
 
   // Opening another folder clears the selection and returns to the folder tab.
   useEffect(() => {
     setSelectedId(null);
+    setSelectedLogin(null);
+    setOpenedGroup(null);
     setAllGroups(false);
     setContextMenu(null);
   }, [folder]);
@@ -100,6 +114,19 @@ const GroupsPage = () => {
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, [navigatorGroup, groups, location.state, location.pathname, location.search, navigate]);
 
+  // A leaf group chosen in the Navigator opens its account list, same as the folder view.
+  useEffect(() => {
+    if (!navigatorGroup || !location.state?.openGroupAccounts) return;
+    const group = groups.find((item) => groupRowNode(item).name === navigatorGroup);
+    if (!group) return;
+    setAllGroups(false);
+    setOpenedGroup(group);
+    setSelectedId(null);
+    setSelectedLogin(null);
+    setSearch('');
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [navigatorGroup, groups, location.state, location.pathname, location.search, navigate]);
+
   const folderRows = useMemo(() => getGroupFolderRows(groups, folder), [groups, folder]);
   const allRows = useMemo(() => groups.map(groupRowNode), [groups]);
   const rows = allGroups ? allRows : folderRows;
@@ -107,56 +134,89 @@ const GroupsPage = () => {
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
-    return rows.filter((node) => Object.values(rowValues(node, !rowIsBranch(node))).some((value) => String(value).toLowerCase().includes(query)));
-  }, [rows, search, rowIsBranch]);
+    return rows.filter((node) => {
+      const values = rowValues(node, true);
+      return [node.name, node.label, ...Object.values(values)].some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [rows, search]);
   const columns = allGroups ? ALL_GROUPS_COLUMNS : FOLDER_COLUMNS;
   const selectedNode = visibleRows.find((node) => node.id === selectedId) ?? null;
   const folderCount = countGroupsUnder(groups, folder);
   const segments = splitGroupPath(folder);
   const containers = useMemo(() => listGroupContainerPaths(groups), [groups]);
+  const accountRows = useMemo(
+    () => (openedGroup ? accountsInGroup(accountsQuery.data?.rows, openedGroup.name, openedGroup) : []),
+    [accountsQuery.data, openedGroup],
+  );
+  const visibleAccounts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return accountRows;
+    return accountRows.filter((row) => GROUP_ACCOUNT_COLUMNS.some((column) => String(row[column.key]).toLowerCase().includes(query)));
+  }, [accountRows, search]);
 
   const invalidateGroups = () => queryClient.invalidateQueries({ queryKey: ['groups'] });
   const openFolder = useCallback((path) => navigate(getGroupsFolderPath(path)), [navigate]);
-  const goUp = () => { if (!isRoot && !allGroups) openFolder(getGroupParentPath(folder)); };
-  const openProperties = (node) => { if (node?.group) setPropertiesGroup(node.group); };
-  // Folders and main groups open on double-click; a client group opens its properties.
+  const goUp = () => {
+    if (openedGroup) {
+      setOpenedGroup(null);
+      setSelectedLogin(null);
+      return;
+    }
+    if (!isRoot && !allGroups) openFolder(getGroupParentPath(folder));
+  };
+  const openProperties = (node) => {
+    if (!node) return;
+    if (!requireManage('change')) return;
+    if (node.group) setPropertiesGroup(node.group);
+    else setPropertiesGroup({ name: node.path || node.name, isNew: true });
+  };
+  const openGroupAccounts = (group) => {
+    if (!group) return;
+    setOpenedGroup(group);
+    setSelectedId(null);
+    setSelectedLogin(null);
+    setSearch('');
+  };
+  // A folder with subgroups opens. A group that holds accounts directly lists those accounts.
   const activate = (node) => {
     if (!node) return;
     if (rowIsBranch(node)) openFolder(node.path);
-    else openProperties(node);
+    else openGroupAccounts(node.group);
   };
+  const openAccountWindow = () => { if (openedGroup) setPropertiesGroup(openedGroup); };
 
-  const requireManage = () => {
+  const requireManage = (action = 'change') => {
     if (canManageGroups) return true;
-    showResult.error(NO_PERMISSION);
+    setPermissionAction(action);
     return false;
   };
   const containerOf = (node) => (rowIsBranch(node) ? node.path : getGroupParentPath(node.name));
   // The selected row wins over the open folder, so "Add group" lands inside what the user picked.
   const targetContainer = selectedNode ? containerOf(selectedNode) : allGroups ? '' : folder;
   const addGroup = (container = targetContainer) => {
-    if (!requireManage()) return;
-    setNewGroup({ presetName: container ? `${container}${GROUP_PATH_SEPARATOR}` : '' });
+    if (!requireManage('create')) return;
+    const separator = separatorForContainer(groups, container);
+    setNewGroup({ presetName: container ? `${container}${separator}` : '' });
   };
   const askSubgroup = (container = targetContainer) => {
-    if (!requireManage()) return;
+    if (!requireManage('create')) return;
     setSubgroupDraft({ parent: container, name: 'New subgroup' });
   };
   const submitSubgroup = (event) => {
     event.preventDefault();
     const name = subgroupDraft?.name.trim();
     if (!name) return;
-    const presetName = joinGroupPath(subgroupDraft.parent, name);
+    const presetName = nestGroupName(subgroupDraft.parent, name, separatorForContainer(groups, subgroupDraft.parent));
     setSubgroupDraft(null);
     setNewGroup({ presetName });
   };
   const duplicateGroup = (node) => {
-    if (!node?.group || !requireManage()) return;
+    if (!node?.group || !requireManage('create')) return;
     setNewGroup({ duplicateData: node.group });
   };
 
   const deleteGroups = async (names, label) => {
-    if (!requireManage() || names.length === 0) return;
+    if (!requireManage('delete') || names.length === 0) return;
     const message = names.length === 1
       ? `Are you sure you want to delete group '${names[0]}'?`
       : `Delete '${label}' and the ${names.length} groups inside it?\n\n${names.join('\n')}`;
@@ -164,7 +224,7 @@ const GroupsPage = () => {
     setDeleting(true);
     const failed = [];
     // Deepest names first, so a parent group never disappears before its subgroups.
-    const ordered = [...names].sort((left, right) => right.split(GROUP_PATH_SEPARATOR).length - left.split(GROUP_PATH_SEPARATOR).length);
+    const ordered = [...names].sort((left, right) => splitGroupPath(right).length - splitGroupPath(left).length);
     for (const name of ordered) {
       try {
         const res = await fetchManagerApi(`/GroupDelete?${new URLSearchParams({ group: name }).toString()}`);
@@ -201,6 +261,24 @@ const GroupsPage = () => {
 
   const handleKeyDown = (event) => {
     if (isEditableElement()) return;
+    if (openedGroup) {
+      const index = visibleAccounts.findIndex((row) => row.login === selectedLogin);
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        goUp();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        if (selectedLogin) openAccountWindow();
+      } else if (event.key === 'Escape') {
+        setSelectedLogin(null);
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const next = visibleAccounts[Math.min(Math.max(index + step, 0), Math.max(visibleAccounts.length - 1, 0))];
+        if (next) setSelectedLogin(next.login);
+      }
+      return;
+    }
     const index = visibleRows.findIndex((node) => node.id === selectedId);
     if (event.key === 'Backspace') {
       if (!allGroups) { event.preventDefault(); goUp(); }
@@ -291,29 +369,38 @@ const GroupsPage = () => {
             className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm"
             title="Up one folder (Backspace)"
             aria-label="Up one folder"
-            disabled={isRoot || allGroups}
+            disabled={(isRoot && !openedGroup) || allGroups}
             onClick={goUp}
           >
             <ArrowUp size={13} />
           </button>
           <nav aria-label="Group folder path" className="groups-explorer-crumbs">
-            <button type="button" className={`groups-crumb${isRoot && !allGroups ? ' is-current' : ''}`} onClick={() => openFolder('')}>
+            <button type="button" className={`groups-crumb${isRoot && !allGroups && !openedGroup ? ' is-current' : ''}`} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); openFolder(''); }}>
               <Users size={13} className="groups-icon-group" />
               <span>Groups</span>
             </button>
             {segments.map((part, index) => {
-              const path = segments.slice(0, index + 1).join(GROUP_PATH_SEPARATOR);
-              const current = index === segments.length - 1 && !allGroups;
+              const path = segments.slice(0, index + 1).join(pathSeparatorOf(folder));
+              const current = index === segments.length - 1 && !allGroups && !openedGroup;
               return (
                 <span key={path} className="groups-crumb-segment">
                   <ChevronRight size={11} className="groups-crumb-sep" />
-                  <button type="button" className={`groups-crumb${current ? ' is-current' : ''}`} aria-current={current ? 'page' : undefined} onClick={() => openFolder(path)}>
-                    <Folder size={13} className="groups-icon-folder" />
+                  <button type="button" className={`groups-crumb${current ? ' is-current' : ''}`} aria-current={current ? 'page' : undefined} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); openFolder(path); }}>
+                    <Folder size={13} className="groups-icon-folder" fill="currentColor" strokeWidth={1.25} />
                     <span>{part}</span>
                   </button>
                 </span>
               );
             })}
+            {openedGroup && (
+              <span className="groups-crumb-segment">
+                <ChevronRight size={11} className="groups-crumb-sep" />
+                <button type="button" className="groups-crumb is-current" aria-current="page">
+                  <Folder size={13} className="groups-icon-folder" fill="currentColor" strokeWidth={1.25} />
+                  <span>{getGroupLeafName(openedGroup.name)}</span>
+                </button>
+              </span>
+            )}
           </nav>
         </div>
 
@@ -330,16 +417,16 @@ const GroupsPage = () => {
               className="ui-input ui-input-sm groups-search"
             />
           </div>
-          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={!canManageGroups} title={canManageGroups ? 'Create a group inside the selected folder' : NO_PERMISSION} onClick={() => addGroup()}>
+          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" title="Create a group inside the selected folder" onClick={() => addGroup()}>
             <Plus size={13} /> Add group
           </button>
-          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!canManageGroups} title={canManageGroups ? 'Create a subgroup inside a chosen group' : NO_PERMISSION} onClick={() => askSubgroup()}>
+          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" title="Create a subgroup inside a chosen group" onClick={() => askSubgroup()}>
             <FolderPlus size={13} /> Add subgroup
           </button>
-          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!selectedNode?.group} title="Group properties" onClick={() => openProperties(selectedNode)}>
+          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!selectedNode && !openedGroup} title="Group properties" onClick={() => (openedGroup ? openAccountWindow() : openProperties(selectedNode))}>
             <Pencil size={12} /> Settings
           </button>
-          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={!selectedNode || deleting || !canManageGroups} title={canManageGroups ? 'Delete the selected group or folder' : NO_PERMISSION} onClick={() => deleteNode(selectedNode)}>
+          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={!selectedNode || deleting} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode)}>
             <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
@@ -352,47 +439,124 @@ const GroupsPage = () => {
             <button type="button" onClick={() => refetch()}>Retry</button>
           </div>
         )}
-        <table className="ui-grid groups-explorer-grid" aria-label={allGroups ? 'All groups' : isRoot ? 'Groups' : `Groups in ${folder}`}>
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th key={column.key} scope="col" style={column.numeric ? { textAlign: 'right' } : undefined}>{column.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((node) => {
-              const branch = rowIsBranch(node);
-              const values = rowValues(node, !branch);
-              const selected = node.id === selectedId;
-              const Icon = branch ? Folder : Users;
-              return (
-                <tr
-                  key={node.id}
-                  className={selected ? 'is-selected' : ''}
-                  aria-selected={selected}
-                  data-node-id={node.id}
-                  onClick={() => setSelectedId(node.id)}
-                  onDoubleClick={() => activate(node)}
-                  onContextMenu={(event) => openContextMenu(event, node)}
-                >
-                  {columns.map((column, index) => (
-                    <td key={column.key} style={column.numeric ? { textAlign: 'right' } : undefined}>
-                      {index === 0 ? (
-                        <span className="groups-row-name">
-                          <Icon size={14} className={branch ? 'groups-icon-folder' : 'groups-icon-group'} />
-                          <span>{values.group}</span>
-                          {branch && node.count > 0 && <span className="groups-row-count">{node.count}</span>}
-                        </span>
-                      ) : values[column.key] !== '' ? values[column.key] : <span className="groups-cell-empty">—</span>}
+        {openedGroup ? (
+          <table className="ui-grid groups-explorer-grid groups-account-grid" aria-label={`Accounts in ${openedGroup.name}`}>
+            <thead>
+              <tr>
+                {GROUP_ACCOUNT_COLUMNS.map((column) => (
+                  <th key={column.key} scope="col" style={column.numeric ? { textAlign: 'right' } : undefined}>{column.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleAccounts.map((row) => {
+                const selected = row.login === selectedLogin;
+                return (
+                  <tr
+                    key={row.login}
+                    className={selected ? 'is-selected is-account' : 'is-account'}
+                    aria-selected={selected}
+                    onClick={() => { setSelectedLogin(row.login); openAccountWindow(); }}
+                    onDoubleClick={openAccountWindow}
+                  >
+                    {GROUP_ACCOUNT_COLUMNS.map((column, index) => (
+                      <td key={column.key} style={column.numeric ? { textAlign: 'right' } : undefined}>
+                        {index === 0 ? (
+                          <span className="groups-row-name is-account">
+                            <span className="groups-row-glyph" aria-hidden="true">
+                              <Users size={14} className="groups-icon-group" />
+                            </span>
+                            <span className="groups-row-label">{row.login}</span>
+                          </span>
+                        ) : row[column.key] !== '' ? row[column.key] : <span className="groups-cell-empty">—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <table className="ui-grid groups-explorer-grid" aria-label={allGroups ? 'All groups' : isRoot ? 'Groups' : `Groups in ${folder}`}>
+            <thead>
+              <tr>
+                {columns.map((column) => (
+                  <th key={column.key} scope="col">{column.label}</th>
+                ))}
+                <th scope="col" className="groups-row-actions-head">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((node) => {
+                const branch = rowIsBranch(node);
+                const asFolder = !allGroups;
+                const values = rowValues(node, !branch);
+                const selected = node.id === selectedId;
+                const nestedCount = branch ? node.count : (accountCounts.get(String(node.name || '').trim().toLowerCase()) || 0);
+                return (
+                  <tr
+                    key={node.id}
+                    className={`${selected ? 'is-selected' : ''}${asFolder ? ' is-folder' : ' is-group'}`}
+                    aria-selected={selected}
+                    data-node-id={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                    onDoubleClick={() => activate(node)}
+                    onContextMenu={(event) => openContextMenu(event, node)}
+                  >
+                    {columns.map((column, index) => (
+                      <td key={column.key}>
+                        {index === 0 ? (
+                          <span className={`groups-row-name${asFolder ? ' is-folder' : ' is-group'}`}>
+                            {asFolder
+                              ? <ChevronRight size={12} className="groups-row-chevron" aria-hidden="true" />
+                              : <span className="groups-row-chevron" aria-hidden="true" />}
+                            <span className="groups-row-glyph" aria-hidden="true">
+                              {asFolder
+                                ? <Folder size={14} className="groups-icon-folder" fill="currentColor" strokeWidth={1.25} />
+                                : <Users size={14} className="groups-icon-group" />}
+                            </span>
+                            <span className="groups-row-label">{allGroups ? node.name : node.label}</span>
+                            {asFolder && nestedCount > 0 && <span className="groups-row-count">({nestedCount})</span>}
+                          </span>
+                        ) : values[column.key] !== '' ? values[column.key] : asFolder && branch ? null : <span className="groups-cell-empty">—</span>}
+                      </td>
+                    ))}
+                    <td className="groups-row-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="groups-row-action"
+                        aria-label={`Edit ${node.label}`}
+                        title="Edit group"
+                        onClick={() => openProperties(node)}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="groups-row-action is-danger"
+                        aria-label={`Delete ${node.label}`}
+                        title="Delete"
+                        disabled={deleting}
+                        onClick={() => deleteNode(node)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {loading ? (
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        {openedGroup ? (
+          accountsQuery.isLoading ? (
+            <p className="groups-explorer-empty" role="status">Loading accounts...</p>
+          ) : accountsQuery.error ? (
+            <p className="groups-explorer-empty" role="status">{accountsQuery.error.message || 'Failed to load accounts.'}</p>
+          ) : visibleAccounts.length === 0 ? (
+            <p className="groups-explorer-empty" role="status">{search.trim() ? 'No accounts match your search.' : 'There are no accounts in this group.'}</p>
+          ) : null
+        ) : loading ? (
           <p className="groups-explorer-empty" role="status">Loading groups...</p>
         ) : !error && visibleRows.length === 0 ? (
           <p className="groups-explorer-empty" role="status">{emptyMessage}</p>
@@ -401,16 +565,20 @@ const GroupsPage = () => {
 
       <div className="groups-explorer-footer">
         <div role="tablist" aria-label="Group list views" className="groups-explorer-tabs">
-          <button type="button" role="tab" aria-selected={!allGroups} className={allGroups ? '' : 'is-active'} onClick={() => setAllGroups(false)}>
+          <button type="button" role="tab" aria-selected={!allGroups} className={allGroups ? '' : 'is-active'} onClick={() => { setAllGroups(false); }}>
             Groups {folder ? `${folder} ` : ''}({folderCount})
           </button>
-          <button type="button" role="tab" aria-selected={allGroups} className={allGroups ? 'is-active' : ''} onClick={() => { setAllGroups(true); setSelectedId(null); }}>
+          <button type="button" role="tab" aria-selected={allGroups} className={allGroups ? 'is-active' : ''} onClick={() => { setAllGroups(true); setOpenedGroup(null); setSelectedLogin(null); setSelectedId(null); }}>
             All Groups ({groups.length})
           </button>
         </div>
         <div className="groups-explorer-tip" role="status">
           <Info size={12} />
-          <span>{allGroups ? 'Double-click a group to open its properties.' : 'Double-click a folder to open it, or a group for its properties. Backspace goes up one level.'}</span>
+          <span>{openedGroup
+            ? 'Click an account to open its group window. Backspace returns to the folder.'
+            : allGroups
+              ? 'Double-click a group to open its accounts.'
+              : 'Double-click a folder to open it. A group with no subgroups opens its accounts. Backspace goes up one level.'}</span>
         </div>
       </div>
 
@@ -422,16 +590,18 @@ const GroupsPage = () => {
           onMouseDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          {rowIsBranch(contextMenu.node) && (
+          {rowIsBranch(contextMenu.node) ? (
             <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => openFolder(contextMenu.node.path))}>
               <FolderOpen size={14} className="groups-icon-folder" /><span className="flex-1">Open</span>
             </div>
-          )}
-          {contextMenu.node.group && (
-            <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => openProperties(contextMenu.node))}>
-              <Pencil size={14} /><span className="flex-1">Settings</span>
+          ) : contextMenu.node.group && (
+            <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => openGroupAccounts(contextMenu.node.group))}>
+              <FolderOpen size={14} className="groups-icon-folder" /><span className="flex-1">Open accounts</span>
             </div>
           )}
+          <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => openProperties(contextMenu.node))}>
+            <Pencil size={14} /><span className="flex-1">Settings</span>
+          </div>
           <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => copyNode(contextMenu.node))}>
             <Copy size={14} /><span className="flex-1">Copy</span><span className="kbd">Ctrl+C</span>
           </div>
@@ -439,19 +609,19 @@ const GroupsPage = () => {
             <Search size={14} /><span className="flex-1">Find</span><span className="kbd">Ctrl+F</span>
           </div>
           <div className="ui-ctxmenu-sep" />
-          <div className={`ui-ctxmenu-item${canManageGroups ? '' : ' is-disabled'}`} role="menuitem" onClick={menuAction(() => addGroup(containerOf(contextMenu.node)))}>
+          <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => addGroup(containerOf(contextMenu.node)))}>
             <Plus size={14} /><span className="flex-1">Add group</span>
           </div>
-          <div className={`ui-ctxmenu-item${canManageGroups ? '' : ' is-disabled'}`} role="menuitem" onClick={menuAction(() => askSubgroup(containerOf(contextMenu.node)))}>
+          <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => askSubgroup(containerOf(contextMenu.node)))}>
             <FolderPlus size={14} /><span className="flex-1">Add subgroup</span>
           </div>
           {contextMenu.node.group && (
-            <div className={`ui-ctxmenu-item${canManageGroups ? '' : ' is-disabled'}`} role="menuitem" onClick={menuAction(() => duplicateGroup(contextMenu.node))}>
+            <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => duplicateGroup(contextMenu.node))}>
               <Copy size={14} /><span className="flex-1">Duplicate group</span>
             </div>
           )}
           <div className="ui-ctxmenu-sep" />
-          <div className={`ui-ctxmenu-item is-danger${canManageGroups && !deleting ? '' : ' is-disabled'}`} role="menuitem" onClick={menuAction(() => deleteNode(contextMenu.node))}>
+          <div className={`ui-ctxmenu-item is-danger${deleting ? ' is-disabled' : ''}`} role="menuitem" onClick={menuAction(() => deleteNode(contextMenu.node))}>
             <Trash2 size={14} /><span className="flex-1">{rowIsBranch(contextMenu.node) ? 'Delete with subgroups' : 'Delete group'}</span>
           </div>
         </div>
@@ -462,7 +632,7 @@ const GroupsPage = () => {
           <form className="ui-modal groups-subgroup-dialog" role="dialog" aria-modal="true" aria-labelledby="groups-subgroup-title" onSubmit={submitSubgroup}>
             <div className="ui-modal-header" id="groups-subgroup-title">Add subgroup</div>
             <div className="ui-modal-body">
-              <p>Choose the group that will contain the new subgroup, then name it. The full name joins both with a backslash.</p>
+              <p>Choose the folder that will contain the new subgroup, then name it. The full group name keeps that folder's separator.</p>
               <label>
                 Inside group
                 <select className="ui-input ui-input-sm" value={subgroupDraft.parent} onChange={(event) => setSubgroupDraft((draft) => ({ ...draft, parent: event.target.value }))}>
@@ -488,20 +658,25 @@ const GroupsPage = () => {
           presetName={newGroup.presetName}
           duplicateData={newGroup.duplicateData}
           onClose={() => setNewGroup(null)}
-          onSuccess={() => {
-            showResult.success('Group Created Successfully!');
+          onSuccess={(saved) => {
+            const notice = describeGroupSave(saved, { created: true });
+            showResult.success(notice.message, { title: notice.title });
             invalidateGroups();
           }}
         />
       )}
 
+      {permissionAction && <GroupPermissionNotice action={permissionAction} onClose={() => setPermissionAction(null)} />}
+
       {propertiesGroup && (
         <GroupPropertiesModal
           group={propertiesGroup}
           onClose={() => setPropertiesGroup(null)}
-          onSaved={() => {
-            showResult.success('Group Updated Successfully!');
+          onSaved={(saved) => {
+            const notice = describeGroupSave(saved);
+            showResult.success(notice.message, { title: notice.title });
             invalidateGroups();
+            queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
           }}
         />
       )}

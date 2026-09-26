@@ -1,4 +1,3 @@
-import ExposurePage from '../exposure/ExposurePage';
 import { Children, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import usePagedData from '../../hooks/usePagedData';
@@ -172,10 +171,6 @@ function SummaryAlerts({ needle, isAuthenticated }) {
   );
 }
 
-function ExposureTab({ needle, isAuthenticated }) {
-  return <ExposurePage compact needle={needle} isAuthenticated={isAuthenticated} />;
-}
-
 function NewsTab({ needle, isAuthenticated }) {
   const [entries, setEntries] = useState(() => getTerminalNewsEntries());
   useEffect(() => subscribeToTerminalNews((next) => setEntries(next)), []);
@@ -290,8 +285,6 @@ export default function TerminalTabContent({ tab, search = '', isAuthenticated =
   switch (tab) {
     case 'summary':
       return <SummaryTab needle={needle} isAuthenticated={isAuthenticated} />;
-    case 'exposure':
-      return <ExposureTab needle={needle} isAuthenticated={isAuthenticated} />;
     case 'dealing':
       return <DealingTab needle={needle} isAuthenticated={isAuthenticated} />;
     case 'search':

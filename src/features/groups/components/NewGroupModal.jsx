@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { X, Save, AlertCircle } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown, X, AlertCircle } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
-import { fetchManagerApi } from '../../../services/managerFetch';
+import GroupPermissionNotice from './GroupPermissionNotice';
+import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
-import { GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, pickGroupPayloadFields as pickAllowedFields } from '../groupPayload.js';
+import { GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, pickGroupPayloadFields as pickAllowedFields, submitGroup } from '../groupPayload.js';
+import { readLeverageRatio } from '../groupAccountRows.js';
 import {
   LEVERAGE_PRESETS,
   MARGIN_CALL_PRESETS,
@@ -14,46 +18,133 @@ import {
   isPresetValue,
 } from '../groupFinancialPresets.js';
 
-const InputGroup = ({ label, type = "text", value, onChange, width = "w-[200px]" }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
-    {type === 'boolean' || type === 'checkbox' ? (
-      <input 
-        type="checkbox" 
-        checked={value} 
-        onChange={(e) => onChange(e.target.checked)} 
-        className="w-4 h-4 mt-1 accent-blue-500"
-      />
-    ) : (
-      <input
-        type={type === 'number' ? 'text' : type}
-        value={type === 'number' && value === 0 ? '' : value}
-        onChange={(e) => {
-          const val = e.target.value;
-          if (type === 'number') {
-            onChange(val === '' ? 0 : Number(val));
-          } else {
-            onChange(val);
-          }
-        }}
-        className={`${width} h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-2 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500`}
-      />
-    )}
-  </div>
+const InputGroup = ({ label, type = 'text', value, onChange }) => (
+  <label className="group-create-field">
+    <span>{label}</span>
+    <input
+      type={type === 'number' ? 'text' : type}
+      inputMode={type === 'number' ? 'decimal' : undefined}
+      value={type === 'number' && value === 0 ? '' : value}
+      onChange={(e) => {
+        const val = e.target.value;
+        if (type === 'number') onChange(val === '' ? 0 : Number(val));
+        else onChange(val);
+      }}
+      className="group-create-control"
+    />
+  </label>
 );
 
-const SelectGroup = ({ label, value, options, onChange, width = "w-full" }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${width} h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-1.5 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 cursor-pointer`}
-    >
-      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-    </select>
-  </div>
+const CheckField = ({ label, checked, onChange }) => (
+  <label className="group-create-check">
+    <input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} />
+    <span>{label}</span>
+  </label>
 );
+
+const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select' }) => {
+  const labelId = useId();
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [box, setBox] = useState(null);
+  const selected = options.find((option) => String(option.value) === String(value));
+
+  const placeMenu = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuHeight = Math.min(options.length * 26 + 8, 188);
+    const below = window.innerHeight - rect.bottom;
+    const upward = below < menuHeight + 8 && rect.top > below;
+    setBox({
+      left: rect.left,
+      width: rect.width,
+      top: upward ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeFromOutside = (event) => {
+      if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const closeFromScroll = (event) => {
+      if (menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    document.addEventListener('mousedown', closeFromOutside);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', closeFromScroll, true);
+    window.addEventListener('resize', closeFromScroll);
+    return () => {
+      document.removeEventListener('mousedown', closeFromOutside);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', closeFromScroll, true);
+      window.removeEventListener('resize', closeFromScroll);
+    };
+  }, [open]);
+
+  const choose = (option) => {
+    onChange(option.value);
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  return (
+    <div className="group-create-field">
+      <span id={labelId}>{label}</span>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`group-create-control group-create-choice${selected ? '' : ' is-empty'}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={labelId}
+        onClick={() => {
+          if (open) setOpen(false);
+          else { placeMenu(); setOpen(true); }
+        }}
+      >
+        <span>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open && box && createPortal(
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-labelledby={labelId}
+          className="group-create-menu"
+          style={{ top: box.top, left: box.left, width: box.width }}
+        >
+          {options.map((option) => {
+            const isSelected = String(option.value) === String(value);
+            return (
+              <button
+                type="button"
+                key={String(option.value)}
+                role="option"
+                aria-selected={isSelected}
+                className={isSelected ? 'is-selected' : ''}
+                onClick={() => choose(option)}
+              >
+                <span>{option.label}</span>
+                {isSelected ? <Check size={12} aria-hidden="true" /> : null}
+              </button>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+};
 
 const CUSTOM_OPTION = '__custom__';
 
@@ -67,26 +158,25 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
   const selectValue = showCustom ? CUSTOM_OPTION : isPreset ? String(Number(value)) : '';
 
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
-      <select
+    <div className="group-create-preset">
+      <GroupChoice
+        label={label}
         value={selectValue}
-        aria-label={label}
-        onChange={(e) => {
-          if (e.target.value === CUSTOM_OPTION) {
+        placeholder={placeholder}
+        options={[
+          ...presets.map((preset) => ({ value: String(preset.value), label: preset.label })),
+          { value: CUSTOM_OPTION, label: 'Custom...' },
+        ]}
+        onChange={(next) => {
+          if (next === CUSTOM_OPTION) {
             setCustomOpen(true);
             setDraft(Number(value) > 0 ? String(value) : '');
             return;
           }
           setCustomOpen(false);
-          onChange(Number(e.target.value));
+          onChange(Number(next));
         }}
-        className="w-full h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-1.5 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-      >
-        <option value="" disabled>{placeholder}</option>
-        {presets.map((preset) => <option key={preset.value} value={String(preset.value)}>{preset.label}</option>)}
-        <option value={CUSTOM_OPTION}>Custom…</option>
-      </select>
+      />
       {showCustom && (
         <input
           type="text"
@@ -101,7 +191,7 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
             setDraft(raw);
             onChange(raw === '' || raw === '.' ? 0 : Number(raw));
           }}
-          className="w-full h-[24px] bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-2 text-[12px] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+          className="group-create-control"
         />
       )}
     </div>
@@ -109,12 +199,14 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
 };
 
 const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess }) => {
+  const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
   const [formData, setFormData] = useState(() => {
     const source = initialData || duplicateData;
     const data = { ...defaultPayload, ...(source ? {} : NEW_GROUP_FINANCIAL_DEFAULTS), ...(source || {}) };
+    if (source) data.leverage = readLeverageRatio(source) ?? data.leverage;
     if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
     // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.
     if (!source && presetName) data.name = presetName;
@@ -124,6 +216,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   const handleChange = (key, val) => {
     setFormData(prev => {
@@ -142,7 +235,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
 
   const handleSubmit = async () => {
     if (!canManageGroups) {
-      setError('Your role does not have permission to manage groups.');
+      setPermissionDenied(true);
       return;
     }
 
@@ -154,12 +247,6 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     try {
       setLoading(true);
       setError(null);
-      const params = isEditing
-        ? new URLSearchParams({ group: String(initialData.name) })
-        : null;
-      const url = isEditing
-        ? `/GroupUpdate?${params.toString()}`
-        : '/GroupCreate';
 
       const payload = pickAllowedFields(formData, GROUP_ALLOWED_FIELDS);
       if (typeof payload.symbolsAllowed === 'string') {
@@ -169,28 +256,14 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
         payload.symbolsBlocked = payload.symbolsBlocked.split(',').map(s => s.trim()).filter(Boolean);
       }
 
-      const res = await fetchManagerApi(url, {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+      // Update writes the group's leverage, margin, and name onto each account in the group.
+      const saved = await submitGroup({
+        originalName: isEditing ? String(initialData.name) : '',
+        payload,
+        queryClient,
       });
 
-      const responseText = await res.text();
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        throw new Error(responseText || "Invalid JSON received from server");
-      }
-
-      if (!res.ok) {
-        throw new Error(responseData.error || responseData.message || 'Failed to create group');
-      }
-
-      if (onSuccess) onSuccess(responseData);
+      if (onSuccess) onSuccess(saved);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -199,124 +272,93 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     }
   };
 
+  const title = isEditing ? `Edit group: ${initialData.name}` : duplicateData ? `Duplicate group: ${duplicateData.name}` : 'Create group';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-[#f0f0f0] dark:bg-[#1e1e1e] w-[700px] border border-[#cccccc] dark:border-[#333333] shadow-2xl flex flex-col font-sans select-none rounded-md overflow-hidden">
-        
-        {/* Header */}
-        <div className="h-8 bg-gradient-to-b from-[#f9f9f9] to-[#e4e4e4] dark:from-[#2d2d30] dark:to-[#252526] border-b border-[#cccccc] dark:border-[#333333] flex justify-between items-center px-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-black dark:text-gray-200 font-semibold tracking-wide">
-               {isEditing ? `Edit Group: ${initialData.name}` : duplicateData ? `Duplicate Group: ${duplicateData.name}` : 'Create New Group'}
-            </span>
+    <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <form className="ui-modal group-create" role="dialog" aria-modal="true" aria-labelledby="group-create-title" onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}>
+        <div className="ui-modal-header group-create-header">
+          <div className="group-create-heading">
+            <span id="group-create-title" className="group-create-title">{title}</span>
+            <span className="group-create-subtitle">Book, margin, commission, and the symbols this group can trade.</span>
           </div>
-          <button onClick={onClose} className="hover:bg-red-500 hover:text-white text-gray-600 dark:text-gray-400 p-0.5 rounded-sm transition-colors mt-0.5">
-            <X size={14} />
-          </button>
+          <button type="button" className="group-create-close" aria-label="Close" onClick={onClose}><X size={14} /></button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 max-h-[70vh] bg-white dark:bg-[#1e1e1e] text-[12px]">
+        <div className="group-create-body">
           {error && (
-            <div className="mb-4 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 dark:text-red-400 flex items-center gap-2">
+            <div className="group-create-error" role="alert">
               <AlertCircle size={14} />
               <span>{error}</span>
             </div>
           )}
-          
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-            
-            {/* Core Box */}
-            <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
-              <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">General</h3>
-              <InputGroup label="Group Name" value={formData.name} onChange={(v) => handleChange('name', v)} width="w-full" />
-              <InputGroup label="Description" value={formData.description} onChange={(v) => handleChange('description', v)} width="w-full" />
-              <div className="flex gap-4">
-                <InputGroup label="Currency" value={formData.currency} onChange={(v) => handleChange('currency', v)} width="w-full" />
-                <InputGroup label="Account Type" value={formData.accountType} onChange={(v) => handleChange('accountType', v)} width="w-full" />
-              </div>
-              <div className="flex gap-6 mt-1">
-                <InputGroup label="Demo Group" type="boolean" value={formData.demo} onChange={(v) => handleChange('demo', v)} />
-                <InputGroup label="Trade Allowed" type="boolean" value={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} />
-                <InputGroup label="Negative Balance Protection" type="boolean" value={formData.negativeBalanceProtection} onChange={(v) => handleChange('negativeBalanceProtection', v)} />
-              </div>
-            </div>
 
-            {/* Finance Limits Box */}
-            <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
-              <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Financial</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage" customPlaceholder="Ratio, e.g. 150 for 1:150" />
-                <PresetSelect label="Margin Call Level (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" />
-                <PresetSelect label="Stop Out Level (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" />
-                <PresetSelect label="Spread Markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
-              </div>
-              {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
-                <div className="text-[11px] text-amber-600 dark:text-amber-400">Stop out level is above the margin call level — it should normally be lower.</div>
-              )}
+          <section className="group-create-panel">
+            <h3>General</h3>
+            <InputGroup label="Group name" value={formData.name} onChange={(v) => handleChange('name', v)} />
+            <InputGroup label="Description" value={formData.description} onChange={(v) => handleChange('description', v)} />
+            <div className="group-create-grid">
+              <InputGroup label="Currency" value={formData.currency} onChange={(v) => handleChange('currency', v)} />
+              <InputGroup label="Account type" value={formData.accountType} onChange={(v) => handleChange('accountType', v)} />
             </div>
-
-             {/* Trading Box */}
-             <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
-              <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Execution & Commission</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <InputGroup label="Execution Mode" value={formData.executionMode} onChange={(v) => handleChange('executionMode', v)} width="w-full" />
-                <SelectGroup 
-                  label="Book Type / Routing" 
-                  value={formData.routingMode} 
-                  options={[
-                    { value: 'b_book', label: 'B-Book' },
-                    { value: 'a_book', label: 'A-Book' },
-                    { value: 'hybrid', label: 'Hybrid' }
-                  ]}
-                  onChange={(v) => handleChange('routingMode', v)} 
-                />
-                <InputGroup label="Commission Rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} width="w-full" />
-                <InputGroup label="Commission Type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} width="w-full" />
-                <InputGroup label="Max Lot Per Trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} width="w-full" />
-                <InputGroup label="Max Total Lots" type="number" value={formData.maxTotalLots} onChange={(v) => handleChange('maxTotalLots', v)} width="w-full" />
-                <InputGroup label="Lot Divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} width="w-full" />
-                <InputGroup label="Swap Multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} width="w-full" />
-              </div>
+            <div className="group-create-checks">
+              <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} />
+              <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} />
+              <CheckField label="Negative balance protection" checked={formData.negativeBalanceProtection} onChange={(v) => handleChange('negativeBalanceProtection', v)} />
             </div>
+          </section>
 
-            {/* Symbols */}
-            <div className="col-span-2 md:col-span-1 p-3 border border-gray-200 dark:border-[#333] rounded-sm bg-gray-50 dark:bg-[#252526] flex flex-col gap-3">
-              <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-[#333] pb-1 mb-1">Symbols</h3>
-              <SymbolSelector
-                 label="Allowed Symbols" 
-                 value={formData.symbolsAllowed} 
-                 onChange={(v) => handleArrayChange('symbolsAllowed', v)} 
+          <section className="group-create-panel">
+            <h3>Financial</h3>
+            <div className="group-create-grid">
+              <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage" customPlaceholder="Ratio, e.g. 150 for 1:150" />
+              <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" />
+              <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" />
+              <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
+            </div>
+            {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
+              <p className="group-create-note">Stop out is above the margin call. It is normally lower.</p>
+            )}
+          </section>
+
+          <section className="group-create-panel">
+            <h3>Execution and commission</h3>
+            <div className="group-create-grid">
+              <InputGroup label="Execution mode" value={formData.executionMode} onChange={(v) => handleChange('executionMode', v)} />
+              <GroupChoice
+                label="Book"
+                value={formData.routingMode}
+                options={[
+                  { value: 'b_book', label: 'B-Book' },
+                  { value: 'a_book', label: 'A-Book' },
+                  { value: 'hybrid', label: 'Hybrid' },
+                ]}
+                onChange={(v) => handleChange('routingMode', v)}
               />
-              <SymbolSelector
-                 label="Blocked Symbols" 
-                 value={formData.symbolsBlocked} 
-                 onChange={(v) => handleArrayChange('symbolsBlocked', v)} 
-              />
+              <InputGroup label="Commission rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} />
+              <InputGroup label="Commission type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} />
+              <InputGroup label="Max lot per trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} />
+              <InputGroup label="Max total lots" type="number" value={formData.maxTotalLots} onChange={(v) => handleChange('maxTotalLots', v)} />
+              <InputGroup label="Lot divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} />
+              <InputGroup label="Swap multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} />
             </div>
+          </section>
 
-          </div>
+          <section className="group-create-panel">
+            <h3>Symbols</h3>
+            <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} />
+            <SymbolSelector label="Blocked symbols" value={formData.symbolsBlocked} onChange={(v) => handleArrayChange('symbolsBlocked', v)} />
+          </section>
         </div>
 
-        {/* Footer */}
-        <div className="h-12 bg-[#f0f0f0] dark:bg-[#2d2d30] border-t border-[#cccccc] dark:border-[#333333] flex justify-end items-center px-4 gap-3">
-          <button 
-            onClick={onClose}
-            className="px-4 py-1.5 min-w-[80px] text-[12px] bg-[#e1e1e1] dark:bg-[#3e3e42] hover:bg-[#d1d1d1] dark:hover:bg-[#4a4a4f] text-black dark:text-gray-200 border border-[#cccccc] dark:border-[#555] rounded-sm transition-colors"
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={handleSubmit} 
-            disabled={loading || !canManageGroups}
-            title={!canManageGroups ? 'No permission to manage groups' : undefined}
-            className="px-4 py-1.5 min-w-[80px] text-[12px] bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 rounded-sm flex justify-center items-center gap-2 transition-colors disabled:opacity-50"
-          >
-            <Save size={13} />
+        <div className="group-create-footer">
+          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Cancel</button>
+          <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={loading}>
             {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update' : 'Create')}
           </button>
         </div>
-      </div>
+      </form>
+      {permissionDenied && <GroupPermissionNotice action={isEditing ? 'change' : 'create'} onClose={() => setPermissionDenied(false)} />}
     </div>
   );
 };

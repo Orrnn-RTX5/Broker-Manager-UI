@@ -20,7 +20,7 @@ const RealAccountsChart = () => {
     <div className="ui-card p-5 h-96 flex flex-col">
       <div className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>Real Accounts</div>
       <div className="flex-1 w-full relative">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
           <LineChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-3)' }} />

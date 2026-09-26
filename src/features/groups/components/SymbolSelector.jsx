@@ -91,23 +91,19 @@ const SymbolSelector = ({ label, value = '', onChange }) => {
   }, []);
 
   return (
-    <div className="flex flex-col gap-1 w-full relative" ref={containerRef}>
-      <label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
-      
+    <div className="group-create-symbol" ref={containerRef}>
+      <label>{label}</label>
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
-        className="h-8 w-full bg-white dark:bg-[#1a1b1f] border border-gray-300 dark:border-gray-700 rounded-sm px-2 flex items-center justify-between gap-2 text-left hover:border-blue-500 focus:outline-none focus:border-blue-500 transition-colors"
       >
         {selectedList.length === 0 ? (
-          <span className="text-[12px] text-gray-400">Select symbols...</span>
+          <span className="is-empty">Select symbols</span>
         ) : (
-          <span className="text-[11px] font-medium text-blue-700 dark:text-blue-300 truncate">
-            {selectedList.length} symbols selected
-          </span>
+          <span className="is-set">{selectedList.length} selected</span>
         )}
-        {isOpen ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
+        {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
       </button>
 
       {isOpen && (

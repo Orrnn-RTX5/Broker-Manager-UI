@@ -40,9 +40,9 @@ const sideRowClass = (side, isSelected) => [
   isSelected ? 'is-selected' : '',
 ].filter(Boolean).join(' ') || undefined;
 
-// Bottom tab strip mirrors the MetaTrader manager terminal: the open-trades
-// grid is the panel's default view, so it is not a tab. Clicking the active
-// tab toggles it off and returns to the trades grid.
+// The open-trades grid is the panel's default view and the Exposure tab.
+// Exposure shows that grid on the first click. Alerts stays on its list.
+// Other tabs toggle off when clicked again and return to the trades grid.
 const TERMINAL_TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'exposure', label: 'Exposure' },
@@ -56,7 +56,6 @@ const TERMINAL_TABS = [
 
 const TAB_STATUS = {
   summary: 'Account summary',
-  exposure: 'Client and hedge exposure',
   news: 'News',
   calendar: 'Economic calendar',
   dealing: 'Dealer queue · auto-refresh',
@@ -181,6 +180,7 @@ function TerminalDock({ isAuthenticated = false }) {
   };
 
   const searchNeedle = terminalSearch.trim().toLowerCase();
+  const showingTrades = activeTab === 'trades' || activeTab === 'exposure';
   const visibleRows = searchNeedle
     ? rows.filter((row) => tradeCells(row).join(' ').toLowerCase().includes(searchNeedle))
     : rows;
@@ -195,15 +195,15 @@ function TerminalDock({ isAuthenticated = false }) {
         <span className="cc-trade-status" role="status">
           {activeTab === 'journal'
             ? (!isAuthenticated ? 'Sign in to view trade requests' : 'Trade requests · live feed')
-            : activeTab !== 'trades'
-              ? (!isAuthenticated ? 'Sign in to view the terminal' : (TAB_STATUS[activeTab] || 'Terminal'))
-              : (isError
+            : showingTrades
+              ? (isError
                 ? 'Trade refresh failed — retry'
                 : (isFetching && rows.length === 0)
                   ? 'Synchronizing trades…'
-                  : 'Open trades · auto-refresh')}
+                  : 'Open trades · auto-refresh')
+              : (!isAuthenticated ? 'Sign in to view the terminal' : (TAB_STATUS[activeTab] || 'Terminal'))}
         </span>
-        {activeTab === 'trades' ? (
+        {showingTrades ? (
           <>
             <button type="button" onClick={handleManualRefresh} disabled={!isAuthenticated || isFetching}>Refresh</button>
             <button type="button" aria-label="Previous trades" onClick={prevPage} disabled={!isAuthenticated || page === 0 || isFetching}>Previous</button>
@@ -258,7 +258,7 @@ function TerminalDock({ isAuthenticated = false }) {
             </tbody>
           </table>
         </div>
-      ) : activeTab === 'trades' ? (
+      ) : showingTrades ? (
         <div className="cc-terminal-table-wrap">
           <table className="cc-terminal-table cc-terminal-trades" aria-label="Synchronized open trades" aria-busy={isFetching}>
             <thead><tr>{TRADE_COLUMNS.map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
@@ -315,7 +315,10 @@ function TerminalDock({ isAuthenticated = false }) {
             role="tab"
             aria-selected={activeTab === tab.id}
             className={activeTab === tab.id ? 'is-active' : ''}
-            onClick={() => setActiveTab((prev) => (prev === tab.id ? 'trades' : tab.id))}
+            onClick={() => setActiveTab((prev) => {
+              if (tab.id === 'exposure' || tab.id === 'alerts') return tab.id;
+              return prev === tab.id ? 'trades' : tab.id;
+            })}
           >
             {tab.label}
             {tab.id === 'summary' && marginAlerts.length > 0 && (

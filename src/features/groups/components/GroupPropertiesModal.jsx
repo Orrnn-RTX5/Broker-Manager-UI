@@ -1,28 +1,34 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Plus, Trash2, Users, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, Loader2, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { GROUP_DEFAULT_PAYLOAD, pickGroupPayloadFields, submitGroup, toSymbolList } from '../groupPayload.js';
+import { readLeverageRatio } from '../groupAccountRows.js';
+import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { ROUTING_LABELS } from '../groupTree.js';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GroupAccountsTab from './GroupAccountsTab';
+import GroupPermissionNotice from './GroupPermissionNotice';
+import NewGroupModal from './NewGroupModal';
 
 // Mirrors the MT5 Manager "Group: <name>" window; it opens on the group's accounts.
 const TABS = ['Accounts', 'Margin', 'Symbols', 'Commissions'];
 const ROUTING_OPTIONS = Object.entries(ROUTING_LABELS).map(([value, label]) => ({ value, label }));
-const NO_PERMISSION = 'Your role does not have permission to manage groups.';
-
 const numberValue = (value) => (value === '' || value === null || value === undefined ? '' : String(value));
 const toNumber = (value) => (value === '' ? 0 : Number(value));
 
 const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
+  const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [tab, setTab] = useState('Accounts');
   const [openAccount, setOpenAccount] = useState(null);
   const [form, setForm] = useState(() => ({
     ...GROUP_DEFAULT_PAYLOAD,
+    ...(group?.isNew ? NEW_GROUP_FINANCIAL_DEFAULTS : {}),
     ...group,
+    leverage: readLeverageRatio(group) || (group?.isNew ? NEW_GROUP_FINANCIAL_DEFAULTS.leverage : 0),
     name: String(group?.name ?? ''),
     symbolsAllowed: toSymbolList(group?.symbolsAllowed),
     symbolsBlocked: toSymbolList(group?.symbolsBlocked),
@@ -31,6 +37,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // While an account window is open on top, Escape belongs to it.
   useEffect(() => {
@@ -70,12 +78,12 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   };
 
   const handleSave = async () => {
-    if (!canManageGroups) { setError(NO_PERMISSION); return; }
+    if (!canManageGroups) { setPermissionDenied(true); return; }
     setSaving(true);
     setError(null);
     try {
-      await submitGroup({ originalName: group.name, payload: pickGroupPayloadFields(form) });
-      onSaved?.();
+      const saved = await submitGroup({ originalName: group.isNew ? '' : group.name, payload: pickGroupPayloadFields(form), queryClient });
+      onSaved?.(saved);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -110,6 +118,10 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
               {item}
             </button>
           ))}
+          <button type="button" className="groups-props-edit" onClick={() => { if (canManageGroups) setEditing(true); else setPermissionDenied(true); }}>
+            <Pencil size={12} />
+            Edit
+          </button>
         </div>
 
         <div id="groups-props-panel" role="tabpanel" aria-labelledby={`groups-props-tab-${tab.toLowerCase()}`} className="ui-modal-body groups-props-body">
@@ -117,7 +129,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
             <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{error}</span></div>
           )}
 
-          {tab === 'Accounts' && <GroupAccountsTab groupName={group?.name} onOpenAccount={setOpenAccount} />}
+          {tab === 'Accounts' && <GroupAccountsTab groupName={group?.name} groupLeverage={form.leverage} onOpenAccount={setOpenAccount} />}
 
           {tab === 'Margin' && (
             <div className="groups-props-page">
@@ -238,7 +250,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         </div>
 
         <div className="ui-modal-footer">
-          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving || !canManageGroups} title={canManageGroups ? undefined : NO_PERMISSION} onClick={handleSave}>
+          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving} onClick={handleSave}>
             {saving ? <Loader2 size={13} className="animate-spin" /> : null}
             OK
           </button>
@@ -247,6 +259,29 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
       </div>
     </div>
     {openAccount && <AccountDetailsModal account={openAccount} onClose={() => setOpenAccount(null)} />}
+    {permissionDenied && <GroupPermissionNotice action="change" onClose={() => setPermissionDenied(false)} />}
+    {editing && (
+      <NewGroupModal
+        initialData={group?.isNew ? undefined : form}
+        presetName={group?.isNew ? form.name : undefined}
+        onClose={() => setEditing(false)}
+        onSuccess={(saved) => {
+          const submitted = saved?.submitted;
+          if (submitted && typeof submitted === 'object') {
+            setForm((current) => ({
+              ...current,
+              ...submitted,
+              leverage: readLeverageRatio(submitted) || current.leverage,
+              name: submitted.name || current.name,
+              symbolsAllowed: toSymbolList(submitted.symbolsAllowed ?? current.symbolsAllowed),
+              symbolsBlocked: toSymbolList(submitted.symbolsBlocked ?? current.symbolsBlocked),
+            }));
+          }
+          setEditing(false);
+          onSaved?.(saved);
+        }}
+      />
+    )}
     </>
   );
 };

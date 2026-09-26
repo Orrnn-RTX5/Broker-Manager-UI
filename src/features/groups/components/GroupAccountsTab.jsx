@@ -1,61 +1,65 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Search, Users } from 'lucide-react';
 import { getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
-
-const pick = (account, keys) => {
-  for (const key of keys) {
-    const value = account[key];
-    if (value !== undefined && value !== null && value !== '') return value;
-  }
-  return '';
-};
-
-const money = (value) => {
-  const number = Number(value);
-  return value === '' || !Number.isFinite(number)
-    ? ''
-    : number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-const COLUMNS = [
-  { key: 'login', label: 'Login' },
-  { key: 'name', label: 'Name' },
-  { key: 'email', label: 'Email' },
-  { key: 'leverage', label: 'Leverage' },
-  { key: 'balance', label: 'Balance', numeric: true },
-  { key: 'equity', label: 'Equity', numeric: true },
-];
-
-const toRow = (account) => {
-  const leverage = pick(account, ['leverage', 'Leverage']);
-  return {
-    account,
-    login: account.login,
-    name: account.Name || '',
-    email: pick(account, ['email', 'Email', 'username', 'Username']),
-    leverage: leverage === '' ? '' : `1 : ${leverage}`,
-    balance: money(pick(account, ['balance', 'Balance'])),
-    equity: money(pick(account, ['equity', 'Equity'])),
-  };
-};
-
-const sameGroup = (left, right) => String(left ?? '').trim().toLowerCase() === String(right ?? '').trim().toLowerCase();
+import { updateManagerAccount } from '../../../services/managerAccountApi.js';
+import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio, sameGroupName } from '../groupAccountRows.js';
 
 // Lists the trading accounts that belong to one group, from the shared account list.
-const GroupAccountsTab = ({ groupName, onOpenAccount }) => {
+const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
+  const queryClient = useQueryClient();
   const { data, isLoading, isFetching, error, refetch } = useQuery(getSidebarAccountsQueryOptions(''));
   const [search, setSearch] = useState('');
   const [selectedLogin, setSelectedLogin] = useState(null);
+  const syncedKey = useRef('');
+
+  // The group is the source of leverage. Push it onto any account in the group
+  // that still has a different ratio, then refresh the rows in place.
+  useEffect(() => {
+    const leverage = readLeverageRatio({ leverage: groupLeverage });
+    if (!groupName || !leverage || isLoading) return undefined;
+    const key = `${groupName}:${leverage}`;
+    if (syncedKey.current === key) return undefined;
+    const stale = (data?.rows || []).filter((account) => {
+      const name = account.group ?? account.Group ?? account.accountGroup ?? account.AccountGroup;
+      return sameGroupName(name, groupName) && readLeverageRatio(account) !== leverage;
+    });
+    syncedKey.current = key;
+    if (!stale.length) return undefined;
+    let cancelled = false;
+    (async () => {
+      let updated = 0;
+      for (const account of stale) {
+        try {
+          await updateManagerAccount(account.login, { Leverage: leverage });
+          updated += 1;
+        } catch {
+          // A rejected account stays as returned by the server.
+        }
+      }
+      if (cancelled || !updated) return;
+      queryClient.setQueriesData({ queryKey: ['sidebar-accounts'] }, (current) => {
+        if (!current?.rows) return current;
+        return {
+          ...current,
+          rows: current.rows.map((account) => {
+            const name = account.group ?? account.Group ?? account.accountGroup ?? account.AccountGroup;
+            return sameGroupName(name, groupName) ? { ...account, leverage, Leverage: leverage } : account;
+          }),
+        };
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [groupName, groupLeverage, isLoading, data, queryClient]);
 
   const rows = useMemo(
-    () => (data?.rows || []).filter((account) => sameGroup(account.group, groupName)).map(toRow),
-    [data, groupName],
+    () => accountsInGroup(data?.rows, groupName, { leverage: groupLeverage }),
+    [data, groupName, groupLeverage],
   );
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
-    return rows.filter((row) => COLUMNS.some((column) => String(row[column.key]).toLowerCase().includes(query)));
+    return rows.filter((row) => GROUP_ACCOUNT_COLUMNS.some((column) => String(row[column.key]).toLowerCase().includes(query)));
   }, [rows, search]);
 
   const emptyMessage = error
@@ -99,7 +103,7 @@ const GroupAccountsTab = ({ groupName, onOpenAccount }) => {
         <table className="ui-grid groups-props-grid" aria-label={`Accounts in ${groupName}`}>
           <thead>
             <tr>
-              {COLUMNS.map((column) => (
+              {GROUP_ACCOUNT_COLUMNS.map((column) => (
                 <th key={column.key} scope="col" style={column.numeric ? { textAlign: 'right' } : undefined}>{column.label}</th>
               ))}
             </tr>
@@ -115,7 +119,7 @@ const GroupAccountsTab = ({ groupName, onOpenAccount }) => {
                   onClick={() => setSelectedLogin(row.login)}
                   onDoubleClick={() => onOpenAccount?.(row.account)}
                 >
-                  {COLUMNS.map((column) => (
+                  {GROUP_ACCOUNT_COLUMNS.map((column) => (
                     <td key={column.key} style={column.numeric ? { textAlign: 'right' } : undefined}>
                       {row[column.key] !== '' ? row[column.key] : <span className="groups-cell-empty">—</span>}
                     </td>

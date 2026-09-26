@@ -1,4 +1,9 @@
-import { fetchManagerApi } from '../../services/managerFetch';
+import { fetchManagerApi } from '../../services/managerFetch.js';
+import { updateManagerAccount } from '../../services/managerAccountApi.js';
+import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
+import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, sameGroupName } from './groupAccountRows.js';
+
+export { buildAccountPatchFromGroup, describeGroupSave };
 
 export const GROUP_DEFAULT_PAYLOAD = Object.freeze({
   name: '',
@@ -42,8 +47,58 @@ export const toSymbolList = (value) => {
   return [];
 };
 
+const accountGroupName = (account) => account?.group ?? account?.Group ?? account?.accountGroup ?? account?.AccountGroup;
+
+const writeAccountCache = (queryClient, groupName, originalName, patch) => {
+  if (!queryClient) return;
+  queryClient.setQueriesData({ queryKey: ['sidebar-accounts'] }, (data) => {
+    if (!data?.rows) return data;
+    return {
+      ...data,
+      rows: data.rows.map((account) => {
+        const name = accountGroupName(account);
+        if (!sameGroupName(name, groupName) && !sameGroupName(name, originalName)) return account;
+        return {
+          ...account,
+          ...(patch.Leverage ? { leverage: patch.Leverage, Leverage: patch.Leverage } : {}),
+          ...(patch.MarginCallLevel ? { marginCallLevel: patch.MarginCallLevel, MarginCallLevel: patch.MarginCallLevel } : {}),
+          ...(patch.StopOutLevel ? { stopOutLevel: patch.StopOutLevel, StopOutLevel: patch.StopOutLevel } : {}),
+          ...(patch.Group ? { group: patch.Group, Group: patch.Group } : {}),
+        };
+      }),
+    };
+  });
+};
+
+/** Write the group's leverage, margin, and name onto every account in that group. */
+export const applyGroupSettingsToAccounts = async (groupName, payload, originalName = groupName, queryClient) => {
+  const patch = buildAccountPatchFromGroup(payload, originalName);
+  if (Object.keys(patch).length === 0) return { accountsUpdated: 0, accountErrors: [] };
+  const cachedRows = queryClient
+    ? queryClient.getQueriesData({ queryKey: ['sidebar-accounts'] }).flatMap(([, data]) => data?.rows || [])
+    : [];
+  const page = cachedRows.length ? { rows: cachedRows } : await fetchAllSidebarAccounts({});
+  const seen = new Set();
+  const rows = accountsInGroup(page?.rows, groupName).filter((row) => {
+    const login = String(row.login);
+    if (seen.has(login)) return false;
+    seen.add(login);
+    return true;
+  });
+  const accountErrors = [];
+  for (const row of rows) {
+    try {
+      await updateManagerAccount(row.login, patch);
+    } catch (err) {
+      accountErrors.push(`${row.login}: ${err.message}`);
+    }
+  }
+  if (rows.length > accountErrors.length) writeAccountCache(queryClient, groupName, originalName, patch);
+  return { accountsUpdated: rows.length - accountErrors.length, accountErrors };
+};
+
 /** POST a group to /GroupCreate, or to /GroupUpdate when `originalName` names an existing group. */
-export const submitGroup = async ({ originalName, payload }) => {
+export const submitGroup = async ({ originalName, payload, queryClient }) => {
   const url = originalName
     ? `/GroupUpdate?${new URLSearchParams({ group: String(originalName) }).toString()}`
     : '/GroupCreate';
@@ -60,5 +115,12 @@ export const submitGroup = async ({ originalName, payload }) => {
     throw new Error(responseText || 'Invalid JSON received from server');
   }
   if (!res.ok) throw new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
-  return responseData;
+  if (!originalName) return { ...(responseData && typeof responseData === 'object' ? responseData : {}), submitted: payload };
+  const saved = responseData && typeof responseData === 'object' ? responseData : {};
+  try {
+    const applied = await applyGroupSettingsToAccounts(originalName, payload, originalName, queryClient);
+    return { ...saved, ...applied, submitted: payload };
+  } catch (err) {
+    return { ...saved, accountsUpdated: 0, accountErrors: [err.message], submitted: payload };
+  }
 };

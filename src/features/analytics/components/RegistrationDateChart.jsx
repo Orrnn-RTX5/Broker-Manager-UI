@@ -75,7 +75,7 @@ const RegistrationDateChart = () => {
           </>
         )}
 
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
           <ScatterChart margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#374151' : 'var(--border-2)'} />
             <XAxis dataKey="time" type="category" allowDuplicatedCategory={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: isDarkMode ? '#9ca3af' : 'var(--muted)' }} />

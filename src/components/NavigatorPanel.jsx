@@ -1,6 +1,6 @@
 import { Children, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import {
   Activity, BarChart2, ChevronDown, ChevronRight, CircleDollarSign, ClipboardCheck,
@@ -14,8 +14,11 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
+import GroupPermissionNotice from '../features/groups/components/GroupPermissionNotice';
 import { getGroupsFolderPath } from '../features/groups/groupRoutes';
 import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
+import { countAccountsByGroup } from '../features/groups/groupAccountRows.js';
+import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { PERMISSIONS } from '../utils/permissions';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
 import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
@@ -320,6 +323,7 @@ const TreeNode = ({
   onDelete,
   onAddFile,
   onAddFolder,
+  iconClassName,
 }) => {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const isControlled = expandedProp !== undefined;
@@ -383,7 +387,7 @@ const TreeNode = ({
         }}
       >
         <span className="cc-tree-chevron">{hasChildren ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : null}</span>
-        <span className="cc-tree-icon">{Icon && <Icon size={13} strokeWidth={1.65} />}</span>
+        <span className="cc-tree-icon">{Icon && <Icon size={13} strokeWidth={iconClassName ? 1.25 : 1.65} className={iconClassName} fill={iconClassName ? 'currentColor' : 'none'} />}</span>
         {isEditing ? (
           <RenameInput initialValue={label} onCommit={onRenameCommit} onCancel={onRenameCancel} />
         ) : (
@@ -402,7 +406,10 @@ export default function NavigatorPanel() {
   const navigate = useWorkspaceNavigation();
   const [loadGroups, setLoadGroups] = useState(false);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [groupPermissionDenied, setGroupPermissionDenied] = useState(false);
   const { groups, loading } = useAllGroups({ enabled: loadGroups });
+  const accountsQuery = useQuery({ ...getSidebarAccountsQueryOptions(''), enabled: loadGroups });
+  const accountCounts = useMemo(() => countAccountsByGroup(accountsQuery.data?.rows), [accountsQuery.data]);
   const groupTree = useMemo(() => buildGroupNavigatorTree(groups), [groups]);
   const currentWorkspacePath = `${location.pathname}${location.search}`;
   const { canAct, manager } = usePermissions();
@@ -412,25 +419,27 @@ export default function NavigatorPanel() {
   const managerLogin = String(manager.login ?? '').trim();
   const dailyReportLabel = managerLogin ? `(${managerLogin})- Daily Report` : 'Daily Report';
   const go = (path) => () => navigate(path);
-  // The Groups tree drops down to container folders (with their group counts)
-  // and every group name. A folder opens in the Groups explorer; a group opens
-  // its folder with the row selected and shows its properties.
+  // Every group is a folder. Ones with subgroups show how many groups are inside.
+  // Ones that hold accounts directly show how many accounts, and open that list.
   const renderGroupTreeNode = (node) => {
     if (node.type === 'group') {
       const groupPath = getGroupsFolderPath(getGroupParentPath(node.path), node.path);
+      const accountCount = accountCounts.get(String(node.group?.name || node.path).trim().toLowerCase()) || 0;
       return (
         <TreeNode
           key={node.id}
           label={node.label}
-          icon={Users}
+          icon={Folder}
+          iconClassName="groups-icon-folder"
+          count={accountCount > 0 ? accountCount : null}
           path={groupPath}
           activePath={currentWorkspacePath}
-          onClickNode={() => navigate(groupPath, { state: { openGroupProperties: true } })}
+          onClickNode={() => navigate(groupPath, { state: { openGroupAccounts: true } })}
         />
       );
     }
     return (
-      <TreeNode key={node.id} label={node.label} icon={Folder} count={node.count} path={getGroupsFolderPath(node.path)} activePath={currentWorkspacePath} onClickNode={go(getGroupsFolderPath(node.path))}>
+      <TreeNode key={node.id} label={node.label} icon={Folder} iconClassName="groups-icon-folder" count={node.count} path={getGroupsFolderPath(node.path)} activePath={currentWorkspacePath} onClickNode={go(getGroupsFolderPath(node.path))}>
         {node.children.map((child) => renderGroupTreeNode(child))}
       </TreeNode>
     );
@@ -891,7 +900,7 @@ export default function NavigatorPanel() {
 
         <TreeNode label="Groups" icon={Users2} count={loadGroups ? (loading ? '…' : groups.length) : null} path="/groups" activePath={location.search ? currentWorkspacePath : location.pathname} onClickNode={go('/groups')} onExpandedChange={(open) => open && setLoadGroups(true)}>
           {groupTree.map((node) => renderGroupTreeNode(node))}
-          {canManageGroups && <TreeNode label="New Group" icon={Plus} onClickNode={() => setNewGroupOpen(true)} />}
+          <TreeNode label="New Group" icon={Plus} onClickNode={() => { if (canManageGroups) setNewGroupOpen(true); else setGroupPermissionDenied(true); }} />
         </TreeNode>
 
         <TreeNode label="Mailbox" icon={Mail} disabled disabledReason="Mailbox not available yet" />
@@ -950,6 +959,7 @@ export default function NavigatorPanel() {
         />
       )}
       {newGroupOpen && canManageGroups && <NewGroupModal onClose={() => setNewGroupOpen(false)} onSuccess={() => setNewGroupOpen(false)} />}
+      {groupPermissionDenied && <GroupPermissionNotice action="create" onClose={() => setGroupPermissionDenied(false)} />}
       {deleteConfirmItem && (
         <DeleteConfirmModal
           item={deleteConfirmItem}

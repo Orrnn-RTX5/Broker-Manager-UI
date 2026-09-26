@@ -41,7 +41,7 @@ const ByCountryLanguagePie = () => {
 
         {/* The Pie Chart positioned to the right */}
         <div className="flex-1 h-full pr-10">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
             <PieChart>
               <Pie
                 data={data}

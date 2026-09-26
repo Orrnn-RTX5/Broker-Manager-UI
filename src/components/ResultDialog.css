@@ -1,25 +1,25 @@
 .result-dialog {
-  --result-surface: #ffffff;
-  --result-raised: #f6f7f9;
-  --result-text: #20252e;
-  --result-muted: #616975;
-  --result-border: #dfe3e8;
-  --result-status: #006bb3;
-  --result-status-bg: #edf5ff;
-  --result-status-border: #c8dff5;
-  --result-action: #006fb9;
-  --result-action-hover: #005d9c;
+  --result-surface: var(--surface, #ffffff);
+  --result-raised: var(--surface-2, #f6f7f9);
+  --result-text: var(--text, #20252e);
+  --result-muted: var(--text-3, #616975);
+  --result-border: var(--border, #dfe3e8);
+  --result-status: var(--accent, #006bb3);
+  --result-status-bg: var(--surface-3, #edf5ff);
+  --result-status-border: var(--border-3, #c8dff5);
+  --result-action: var(--accent, #006fb9);
+  --result-action-hover: var(--accent-hover, #005d9c);
   box-sizing: border-box;
-  width: min(460px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
   max-height: calc(100dvh - 40px);
   margin: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--result-border);
-  border-radius: 12px;
+  border: 1px solid var(--result-status-border);
+  border-radius: var(--radius-md, 8px);
   background: var(--result-surface);
   color: var(--result-text);
-  box-shadow: 0 20px 64px rgb(0 0 0 / 28%);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 35%);
   font-family: var(--sans);
   font-size: 11px;
   font-weight: 400;
@@ -44,18 +44,16 @@
 .dark .result-dialog.is-success { --result-status: #9ed3b1; --result-status-bg: #22342a; --result-status-border: #36513f; }
 .dark .result-dialog.is-error { --result-status: #f2b0a8; --result-status-bg: #382726; --result-status-border: #60413f; }
 
-.result-dialog-header { display: flex; flex-shrink: 0; align-items: center; gap: 12px; padding: 22px 24px 0; }
-.result-dialog-icon { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; border: 1px solid var(--result-status-border); border-radius: 6px; background: var(--result-surface); color: var(--result-status); }
-.result-dialog h2 { flex: 1; min-width: 0; margin: 0; color: var(--result-text); font-size: 11px; font-weight: 400; line-height: 1.4; letter-spacing: 0; overflow-wrap: anywhere; }
-.result-dialog:is(.is-success, .is-error) h2 { color: var(--result-status); }
+.result-dialog-header { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding: 14px 14px 0; }
+.result-dialog-icon { display: grid; flex: 0 0 26px; width: 26px; height: 26px; place-items: center; border: 1px solid var(--result-status-border); border-radius: 4px; background: var(--result-status-bg); color: var(--result-status); }
+.result-dialog h2 { flex: 1; min-width: 0; margin: 0; color: var(--result-text); font-size: 11px; font-weight: 400; line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; overflow-wrap: anywhere; }
 .result-dialog button { font: inherit; cursor: pointer; }
-.result-dialog-close { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; color: var(--result-muted); background: transparent; transition: background-color 120ms ease, color 120ms ease; }
+.result-dialog-close { display: grid; flex: 0 0 24px; width: 24px; height: 24px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 4px; color: var(--result-muted); background: transparent; }
 .result-dialog-close:hover { background: var(--result-raised); color: var(--result-text); }
 
-.result-dialog-body { min-height: 0; padding: 18px 24px 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-.result-dialog-status-panel { display: flex; align-items: flex-start; gap: 11px; padding: 14px; border: 1px solid var(--result-status-border); border-radius: 8px; background: var(--result-status-bg); }
-.result-dialog-copy { min-width: 0; align-self: center; }
-.result-dialog-message { margin: 0; color: var(--result-status); font-size: inherit; font-weight: 400; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.result-dialog-body { min-height: 0; padding: 12px 14px 14px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.result-dialog-copy { min-width: 0; }
+.result-dialog-message { margin: 0; color: var(--result-text); font-size: inherit; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .result-dialog-guidance { margin: 6px 0 0; color: var(--result-muted); font-size: inherit; font-weight: 400; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .result-dialog-details { margin-top: 16px; border: 1px solid var(--result-border); border-radius: 8px; background: var(--result-raised); }
 .result-dialog-details > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border-radius: 7px; color: var(--result-muted); font-weight: 400; line-height: 1.5; list-style: none; cursor: pointer; }
@@ -73,8 +71,8 @@
 .result-dialog-code + .result-dialog-details-copy { border-top: 1px solid var(--result-border); }
 .result-dialog-details p { margin: 0; color: var(--result-text); font-size: inherit; font-weight: 400; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.result-dialog footer { display: flex; flex-shrink: 0; justify-content: flex-end; margin: 0 24px; padding: 16px 0 20px; border-top: 1px solid var(--result-border); }
-.result-dialog .result-dialog-done { min-width: 88px; min-height: 36px; padding: 8px 20px; border: 1px solid var(--result-action); border-radius: 6px; background: var(--result-action); color: #fff; font-weight: 400; line-height: 1.25; transition: background-color 120ms ease, border-color 120ms ease; }
+.result-dialog footer { display: flex; flex-shrink: 0; justify-content: flex-end; margin: 0 14px; padding: 12px 0 14px; border-top: 1px solid var(--result-border); }
+.result-dialog .result-dialog-done { min-width: 72px; min-height: 28px; padding: 0 14px; border: 1px solid var(--result-action); border-radius: 4px; background: var(--result-action); color: #fff; font-size: 11px; font-weight: 400; line-height: 1.25; }
 .result-dialog-done:hover { background: var(--result-action-hover); border-color: var(--result-action-hover); }
 .result-dialog-done:active { background: #004d82; border-color: #004d82; }
 .result-dialog :is(button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }

@@ -92,7 +92,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="cc-chart-area">
-          <ResponsiveContainer width="100%" height="100%" debounce={0}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 192 }} debounce={0}>
             <ComposedChart data={preview.activity} margin={{ top: 8, right: 10, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="var(--cc-grid)" vertical={false} />
               <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval={1} />

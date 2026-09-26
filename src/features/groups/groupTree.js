@@ -1,21 +1,61 @@
-// Group names nest on backslashes (PREP\contest\4540\Grp01), exactly like the
-// MetaTrader 5 Manager. These helpers turn the flat server group list into the
-// folder rows of the Groups explorer and the container tree of the Navigator.
+// Group names nest on backslashes (PREP\contest\4540\Grp01), the MetaTrader 5
+// Manager form, and on slashes (Yopips/demo) when the server stores them that way.
+// These helpers turn the flat server group list into the folder rows of the
+// Groups explorer and the container tree of the Navigator.
 export const GROUP_PATH_SEPARATOR = '\\';
+const PATH_SEPARATORS = /[/\\]/;
 
 const lower = (value) => String(value ?? '').toLowerCase();
 const nameOf = (group) => String(group?.name ?? '');
 const compareLabels = (left, right) => String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+const canonicalPath = (path = '') => lower(path).split(PATH_SEPARATORS).join('\u0001');
 
-export const isSamePath = (left, right) => lower(left) === lower(right);
-export const isBelowPath = (candidate, parent) => Boolean(parent) && lower(candidate).startsWith(`${lower(parent)}${GROUP_PATH_SEPARATOR}`);
-export const splitGroupPath = (path = '') => (path ? String(path).split(GROUP_PATH_SEPARATOR) : []);
+/** Separator already used by a stored group name. Mixed names keep the backslash. */
+export const pathSeparatorOf = (path = '') => (
+  String(path).includes('/') && !String(path).includes('\\') ? '/' : GROUP_PATH_SEPARATOR
+);
+
+/**
+ * Separator for a new name inside a container. A path that already contains one
+ * keeps it; otherwise the groups under that container decide, so Yopips/demo
+ * stays in the Yopips folder instead of becoming Yopips\demo.
+ */
+export const separatorForContainer = (groups, container = '') => {
+  if (PATH_SEPARATORS.test(container)) return pathSeparatorOf(container);
+  let slash = 0;
+  let backslash = 0;
+  for (const group of groups || []) {
+    const name = nameOf(group);
+    if (container && !isSamePath(name, container) && !isBelowPath(name, container)) continue;
+    if (name.includes('\\')) backslash += 1;
+    else if (name.includes('/')) slash += 1;
+  }
+  return slash > backslash ? '/' : GROUP_PATH_SEPARATOR;
+};
+
+export const isSamePath = (left, right) => canonicalPath(left) === canonicalPath(right);
+export const isBelowPath = (candidate, parent) => {
+  if (!parent) return false;
+  return canonicalPath(candidate).startsWith(`${canonicalPath(parent)}\u0001`);
+};
+export const splitGroupPath = (path = '') => (path ? String(path).split(PATH_SEPARATORS) : []);
 export const joinGroupPath = (...parts) => parts.filter(Boolean).join(GROUP_PATH_SEPARATOR);
+
+/** Join a parent folder and a new subgroup with the separator that folder already uses. */
+export const nestGroupName = (parent, leaf, separator = GROUP_PATH_SEPARATOR) => {
+  const base = String(parent ?? '');
+  const segments = splitGroupPath(leaf).filter((segment) => segment !== '');
+  if (!base) return segments.join(separator);
+  if (segments.length === 0) return base;
+  return `${base}${separator}${segments.join(separator)}`;
+};
+
 export const getGroupLeafName = (path = '') => splitGroupPath(path).at(-1) ?? '';
 
 export const getGroupParentPath = (path = '') => {
-  const position = String(path).lastIndexOf(GROUP_PATH_SEPARATOR);
-  return position < 0 ? '' : String(path).slice(0, position);
+  const text = String(path ?? '');
+  const position = Math.max(text.lastIndexOf('\\'), text.lastIndexOf('/'));
+  return position < 0 ? '' : text.slice(0, position);
 };
 
 /** A folder, or a group whose name also prefixes other group names, opens like a folder. */
@@ -46,9 +86,9 @@ export const getGroupFolderRows = (groups, path = '') => {
   for (const group of groups) {
     const name = nameOf(group);
     if (!name || (path && !isBelowPath(name, path))) continue;
-    const parts = name.split(GROUP_PATH_SEPARATOR);
+    const parts = splitGroupPath(name);
     if (parts.length <= depth) continue;
-    const childPath = parts.slice(0, depth + 1).join(GROUP_PATH_SEPARATOR);
+    const childPath = parts.slice(0, depth + 1).join(pathSeparatorOf(name));
     const key = lower(childPath);
     const node = nodes.get(key) || { id: `folder:${childPath}`, type: 'folder', label: parts[depth], name: childPath, path: childPath, count: 0, group: null };
     if (parts.length === depth + 1) Object.assign(node, { id: `group:${name}`, type: 'group', name, group });
@@ -69,9 +109,10 @@ export const listGroupContainerPaths = (groups) => {
   for (const group of groups) {
     const name = nameOf(group);
     if (!name) continue;
-    const parts = name.split(GROUP_PATH_SEPARATOR);
+    const parts = splitGroupPath(name);
+    const separator = pathSeparatorOf(name);
     for (let depth = 1; depth <= parts.length; depth += 1) {
-      const candidate = parts.slice(0, depth).join(GROUP_PATH_SEPARATOR);
+      const candidate = parts.slice(0, depth).join(separator);
       // A real group's spelling wins over a folder merely implied by a nested name.
       if (depth === parts.length || !paths.has(lower(candidate))) paths.set(lower(candidate), candidate);
     }
@@ -89,10 +130,11 @@ export const buildGroupNavigatorTree = (groups) => {
   for (const group of groups) {
     const name = nameOf(group);
     if (!name) continue;
-    const parts = name.split(GROUP_PATH_SEPARATOR);
+    const parts = splitGroupPath(name);
+    const separator = pathSeparatorOf(name);
     let node = root;
     for (let depth = 0; depth < parts.length; depth += 1) {
-      const childPath = parts.slice(0, depth + 1).join(GROUP_PATH_SEPARATOR);
+      const childPath = parts.slice(0, depth + 1).join(separator);
       const key = lower(childPath);
       let child = node.children.get(key);
       if (!child) {

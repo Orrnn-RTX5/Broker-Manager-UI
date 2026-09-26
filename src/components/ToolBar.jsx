@@ -46,6 +46,7 @@ function ActionMenu({
   id,
   label,
   title,
+  icon: Icon,
   actions,
   pathname,
   onPrefetch,
@@ -80,6 +81,7 @@ function ActionMenu({
           onOpenChange(isOpen ? null : id);
         }}
       >
+        {Icon ? <Icon size={15} strokeWidth={1.8} aria-hidden="true" /> : null}
         {hasLabel && <span>{label}</span>}
         <ChevronDown size={14} className={`manager-toolbar-chevron ${isOpen ? 'is-open' : ''}`} />
       </button>
@@ -118,6 +120,7 @@ const PrimaryLink = ({ action, pathname, onPrefetch }) => {
   const active = typeof action.active === 'boolean'
     ? action.active
     : matchesRoute(pathname, action);
+  const Icon = action.icon;
   const handleIntent = () => {
     action.onPrefetch?.();
     if (action.path) onPrefetch?.(action.path);
@@ -135,6 +138,7 @@ const PrimaryLink = ({ action, pathname, onPrefetch }) => {
       aria-label={action.label}
       aria-pressed={typeof action.active === 'boolean' ? active : undefined}
     >
+      {Icon ? <Icon size={16} strokeWidth={1.8} aria-hidden="true" /> : null}
       <span>{action.label}</span>
     </button>
   );
@@ -375,15 +379,15 @@ const ToolBar = ({
     <>
       <nav className="manager-toolbar workspace-ui" aria-label="Primary workspace navigation">
         <div className="manager-toolbar-left">
-          <ActionMenu id="workspace" label="Workspace" actions={workspaceActions} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="workspace" label="Workspace" icon={LayoutGrid} actions={workspaceActions} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
           <span className="manager-toolbar-divider" />
           <div className="manager-primary-navigation">
             {primaryActions.map((action) => (
               <PrimaryLink key={action.id} action={action} pathname={location.pathname} onPrefetch={navigate.preload} />
             ))}
           </div>
-          <ActionMenu id="operations" label="Operations" actions={operations} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
-          <ActionMenu id="management" label="Management" title="Management" actions={management} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="operations" label="Operations" icon={Activity} actions={operations} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
+          <ActionMenu id="management" label="Management" title="Management" icon={Settings2} actions={management} pathname={location.pathname} onPrefetch={navigate.preload} openId={openToolbarMenu} onOpenChange={setOpenToolbarMenu} />
         </div>
 
         <div className="manager-toolbar-right">

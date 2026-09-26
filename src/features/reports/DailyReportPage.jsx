@@ -51,7 +51,7 @@ function Metric({ label, value, detail }) {
 function TrendChart({ data, cash = false }) {
   return <div className="daily-report-chart" role="img"
     aria-label={cash ? 'Observed daily deposit and withdrawal totals over time' : 'Observed real account count over time'}>
-    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 220 }}>
       <LineChart data={data} margin={{ top: 15, right: 12, bottom: 2, left: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']}
@@ -152,7 +152,7 @@ export default function DailyReportPage() {
         <p className="daily-report-description">Acquisition source · All accounts visible to this manager</p>
         {hasSources ? <>
           <div className="daily-report-chart daily-report-donut" role="img" aria-label={`Account sources for ${number(sourceData.total)} accounts`}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 220 }}>
               <PieChart>
                 <Pie data={sourceData.items} dataKey="value" nameKey="name" innerRadius="57%" outerRadius="80%"
                   stroke="var(--surface)" strokeWidth={2} isAnimationActive={false}>

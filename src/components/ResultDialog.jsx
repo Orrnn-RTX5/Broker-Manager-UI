@@ -37,16 +37,14 @@ function Result({ result, dismiss }) {
   const Icon = result.type === 'success' ? Check : result.type === 'error' ? X : Info;
   return <dialog ref={ref} className={`result-dialog is-${result.type}`} role="alertdialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-message`} onKeyDown={keepFocusInside} onCancel={event => { event.preventDefault(); dismiss(); }}>
     <header className="result-dialog-header">
+      <div className="result-dialog-icon" aria-hidden="true"><Icon size={16} strokeWidth={2} /></div>
       <h2 id={`${id}-title`}>{result.title}</h2>
-      <button type="button" className="result-dialog-close" aria-label="Close result" onClick={dismiss}><X size={18} /></button>
+      <button type="button" className="result-dialog-close" aria-label="Close result" onClick={dismiss}><X size={14} /></button>
     </header>
     <div className="result-dialog-body" tabIndex={0} role="region" aria-label="Result message">
-      <div className="result-dialog-status-panel">
-        <div className="result-dialog-icon" aria-hidden="true"><Icon size={18} strokeWidth={2} /></div>
-        <div id={`${id}-message`} className="result-dialog-copy">
-          <p className="result-dialog-message">{message}</p>
-          {guidance && <p className="result-dialog-guidance">{guidance}</p>}
-        </div>
+      <div id={`${id}-message`} className="result-dialog-copy">
+        <p className="result-dialog-message">{message}</p>
+        {guidance && <p className="result-dialog-guidance">{guidance}</p>}
       </div>
       {(technicalMessage || result.code) && <details className="result-dialog-details">
         <summary><span>Technical details</span><ChevronDown size={15} aria-hidden="true" /></summary>

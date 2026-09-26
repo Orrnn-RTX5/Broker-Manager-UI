@@ -91,7 +91,7 @@ const OrdersBySentimentChart = () => {
           </>
         )}
 
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 320, height: 180 }}>
           <BarChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke={isDarkMode ? "#374151" : "var(--border-2)"} opacity={isDarkMode ? 0.3 : 1} />
             <XAxis dataKey="symbol" axisLine={true} stroke={isDarkMode ? "#4b5563" : "var(--border)"} tickLine={true} tick={{ fontSize: 9, fill: isDarkMode ? '#9ca3af' : 'var(--muted)' }} interval={0} angle={0} />
