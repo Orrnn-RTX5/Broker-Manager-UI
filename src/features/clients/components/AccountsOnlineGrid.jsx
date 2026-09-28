@@ -89,13 +89,14 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
 
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);
+  const shouldShowLoadingState = isLoading && rows.length === 0;
   useEffect(() => {
-    if (isLoading && rows.length === 0) {
-      const timer = setTimeout(() => setShowLoadingState(true), 120);
-      return () => clearTimeout(timer);
-    }
-    setShowLoadingState(false);
-  }, [isLoading, rows.length]);
+    const timer = setTimeout(
+      () => setShowLoadingState(shouldShowLoadingState),
+      shouldShowLoadingState ? 120 : 0
+    );
+    return () => clearTimeout(timer);
+  }, [shouldShowLoadingState]);
 
   useEffect(() => {
     if (onRowsChange) onRowsChange(rows);
@@ -146,7 +147,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
         </button>
       </div>
 
-      {isLoading && rows.length === 0 && showLoadingState ? (
+      {shouldShowLoadingState && showLoadingState ? (
         <GridLoadingState label="Loading active sessions…" />
       ) : (
       <div className="w-full overflow-x-auto flex-1">

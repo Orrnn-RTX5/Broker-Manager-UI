@@ -1,15 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { useDockingContext } from '../components/docking/DockingContext';
+import { useContext, useEffect, useRef } from 'react';
+import { DockingContext } from '../components/docking/DockingContext';
 
 export default function useOwnerConsoleAutoCollapse(filterSelector) {
   const headerRef = useRef(null);
   const autoCollapsedOwner = useRef(false);
-  let ctx = null;
-  try {
-    ctx = useDockingContext();
-  } catch {
-    // Outside of DockingProvider
-  }
+  const ctx = useContext(DockingContext);
   const panels = ctx?.panels || {};
   const updatePanel = ctx?.updatePanel;
   const ownerVisible = panels.owner_console?.visible;

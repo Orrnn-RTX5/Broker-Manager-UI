@@ -79,7 +79,7 @@ The default `bridge` mode continues to use the configured `/ws/feed` connection.
 
 ### Build modes
 
-The manager app's `dev`, `build`, and Electron scripts use Vite's `terminal` mode. For local work, copy `.env.example` to `.env.terminal` and keep the active broker in that file. Git ignores `.env.terminal`, and Docker excludes it. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. If the new feed requires a token, set `VITE_FEED_BROKER_TOKEN`, `VITE_FEED_AUTH_REQUIRED=true`, and `VITE_FEED_SEND_TOKEN=true` in the same file.
+The manager app's `dev`, `build`, and Electron scripts use Vite's `terminal` mode. For local work, copy `.env.example` to `.env.terminal` and keep the active broker in that file. Git ignores `.env.terminal`, and Docker excludes it. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. The bridge feed URL uses the broker ID and strips legacy token query parameters. Do not put feed credentials in a `VITE_` variable; Vite embeds those values in the browser bundle.
 
 In CI, `MANAGER_UI_ENV` is written to `.env` before the build. The Docker build excludes local `.env.*` files so the deployed bundle uses the CI configuration.
 
@@ -133,7 +133,7 @@ window.__RTX_RUNTIME_CONFIG__
 
 On pull requests to `main`, `.github/workflows/deploy.yml` installs dependencies, runs tests, and validates the build. On pushes to `main`, it also builds and publishes `ghcr.io/orrnn-rtx5/broker-manager-ui` and deploys one `broker-manager-ui` container to the configured server on port 8082. The workflow uses `MANAGER_UI_ENV` for build configuration and the server-side `broker-manager-ui.env` file for runtime configuration. It requires `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`, `GHCR_USERNAME`, and `GHCR_TOKEN` secrets for deployment.
 
-The current workflow does not read `brokers.json`, configure host Nginx, or request TLS certificates. The separate `.github/scripts/deploy-broker-ui.sh` helper may still be used manually; it is not called by this workflow.
+The current workflow does not configure host Nginx or request TLS certificates. The separate `.github/scripts/deploy-broker-ui.sh` helper may still be used manually; it is not called by this workflow.
 
 ### Validation
 

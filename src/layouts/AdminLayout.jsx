@@ -14,7 +14,6 @@ import useSymbolStore from '../store/symbolStore';
 import { DockingProvider } from '../components/docking/index.js';
 import DockLayout from '../components/docking/DockLayout';
 import { useDockingContext } from '../components/docking/DockingContext';
-import GlobalLoader from '../components/GlobalLoader';
 import ToastContainer from '../components/ToastContainer';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { startPositionSync, stopPositionSync, subscribeToPositionSync, requiresPositionReconciliation } from '../services/positionSync';
@@ -294,7 +293,6 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       className="rtx5-command-shell flex flex-col h-screen overflow-hidden"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
-      <GlobalLoader />
       <ToastContainer />
       {/* ── Top bars ── */}
       <MenuBar

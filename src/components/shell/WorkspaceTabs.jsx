@@ -52,38 +52,47 @@ const findKnownTab = (pathname) => {
   return null;
 };
 
+const insertKnownTab = (current, pathname) => {
+  const matchingKnown = findKnownTab(pathname);
+  if (!matchingKnown || current.some((tab) => tab.path === matchingKnown.path)) return current;
+  // Re-insert closed defaults at their original position, append new ones at end.
+  const defaultIndex = DEFAULT_WORKSPACE_TABS.findIndex((tab) => tab.path === matchingKnown.path);
+  if (defaultIndex === -1) return [...current, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path }];
+  const next = [...current];
+  let insertAt = next.length;
+  for (let i = defaultIndex + 1; i < DEFAULT_WORKSPACE_TABS.length; i += 1) {
+    const siblingIndex = next.findIndex((tab) => tab.path === DEFAULT_WORKSPACE_TABS[i].path);
+    if (siblingIndex !== -1) {
+      insertAt = siblingIndex;
+      break;
+    }
+  }
+  next.splice(insertAt, 0, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path });
+  return next;
+};
+
 export default function WorkspaceTabs() {
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
   const t = useT();
-  const [tabs, setTabs] = useState(DEFAULT_WORKSPACE_TABS);
+  const [tabState, setTabState] = useState(() => ({
+    pathname: location.pathname,
+    key: location.key,
+    tabs: insertKnownTab(DEFAULT_WORKSPACE_TABS, location.pathname),
+  }));
   const [isQuickNavOpen, setIsQuickNavOpen] = useState(false);
   const tabsRef = useRef(null);
-  const visibleTabs = tabs;
+  const visibleTabs = tabState.tabs;
 
   // If the user navigates (sidebar, deep-link, etc.) to a known workspace
   // that is not currently in the tab strip, pin it at the end (just before +).
-  useEffect(() => {
-    const matchingKnown = findKnownTab(location.pathname);
-    if (!matchingKnown) return;
-    setTabs((current) => {
-      if (current.some((tab) => tab.path === matchingKnown.path)) return current;
-      // Re-insert closed defaults at their original position, append new ones at end.
-      const defaultIndex = DEFAULT_WORKSPACE_TABS.findIndex((tab) => tab.path === matchingKnown.path);
-      if (defaultIndex === -1) return [...current, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path }];
-      const next = [...current];
-      let insertAt = next.length;
-      for (let i = defaultIndex + 1; i < DEFAULT_WORKSPACE_TABS.length; i += 1) {
-        const siblingIndex = next.findIndex((tab) => tab.path === DEFAULT_WORKSPACE_TABS[i].path);
-        if (siblingIndex !== -1) {
-          insertAt = siblingIndex;
-          break;
-        }
-      }
-      next.splice(insertAt, 0, { label: matchingKnown.label, labelKey: matchingKnown.labelKey, path: matchingKnown.path });
-      return next;
-    });
-  }, [location.pathname, location.key]);
+  if (tabState.pathname !== location.pathname || tabState.key !== location.key) {
+    setTabState((current) => ({
+      pathname: location.pathname,
+      key: location.key,
+      tabs: insertKnownTab(current.tabs, location.pathname),
+    }));
+  }
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -101,16 +110,21 @@ export default function WorkspaceTabs() {
   }, []);
 
   const closeTab = (tabToClose) => {
-    setTabs((current) => current.filter((tab) => tab.path !== tabToClose.path));
+    setTabState((current) => ({
+      ...current,
+      tabs: current.tabs.filter((tab) => tab.path !== tabToClose.path),
+    }));
   };
 
   const openQuickNavigation = (item) => {
     // Pin the selected heading at the end of the strip (just before +),
     // then move + after it. Navigating triggers the active state.
-    setTabs((current) => {
-      if (current.some((tab) => tab.path === item.path)) return current;
-      return [...current, { labelKey: item.labelKey, path: item.path }];
-    });
+    setTabState((current) => ({
+      ...current,
+      tabs: current.tabs.some((tab) => tab.path === item.path)
+        ? current.tabs
+        : [...current.tabs, { labelKey: item.labelKey, path: item.path }],
+    }));
     setIsQuickNavOpen(false);
     navigate(item.path);
   };

@@ -3,7 +3,6 @@ import {
   getOpenedOrders,
   getPositionsPage,
   getTradingAccountsPage,
-  peekAccountDetailsManyPage,
 } from '../../services/api.js';
 import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../services/onlineUsersSnapshot.js';
 import { preloadWorkspaceRoute } from '../../utils/workspaceRouteModules.js';

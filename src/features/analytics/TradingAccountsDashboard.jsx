@@ -7,7 +7,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { AlertTriangle, ArrowUpRight, RotateCw } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { DonutChart } from '../../components/ui/donut-chart';
 import DateRangePicker from '../../components/Popups/DateRangePicker';
 import FilterDropdown from '../../components/FilterDropdown';
@@ -40,27 +40,6 @@ const tooltipStyle = {
 const createOptions = (allLabel, values) => [allLabel, ...values];
 const activeFilter = (value, allLabel) => value === allLabel ? '' : value;
 const percentage = (value, total) => total ? `${((value / total) * 100).toFixed(2)}%` : '0.00%';
-const RADIAN = Math.PI / 180;
-const renderGroupLabel = ({ cx, cy, midAngle, outerRadius, name, percent }) => {
-  if (!Number.isFinite(percent) || percent < .04) return null;
-  const cosine = Math.cos(-midAngle * RADIAN);
-  const sine = Math.sin(-midAngle * RADIAN);
-  const startX = cx + (outerRadius + 2) * cosine;
-  const startY = cy + (outerRadius + 2) * sine;
-  const middleX = cx + (outerRadius + 13) * cosine;
-  const middleY = cy + (outerRadius + 13) * sine;
-  const endX = middleX + (cosine >= 0 ? 18 : -18);
-  const textX = endX + (cosine >= 0 ? 4 : -4);
-  return (
-    <g className="trading-analytics-pie-label">
-      <path d={`M${startX},${startY}L${middleX},${middleY}L${endX},${middleY}`} />
-      <text x={textX} y={middleY} textAnchor={cosine >= 0 ? 'start' : 'end'} dominantBaseline="central">
-        {name}: {(percent * 100).toFixed(2)}%
-      </text>
-    </g>
-  );
-};
-
 const EmptyReport = ({ children }) => (
   <div className="trading-analytics-empty"><span>{children}</span></div>
 );
@@ -265,7 +244,7 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                             onSegmentHover={setHoveredGroup}
                             centerContent={
                               <AnimatePresence mode="wait">
-                                <motion.div
+                                <Motion.div
                                   key={activeGroupSegment ? activeGroupSegment.label : 'total'}
                                   initial={{ opacity: 0, scale: 0.92 }}
                                   animate={{ opacity: 1, scale: 1 }}
@@ -284,7 +263,7 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                                       {percentage(activeGroupSegment.value, report.total)}
                                     </span>
                                   )}
-                                </motion.div>
+                                </Motion.div>
                               </AnimatePresence>
                             }
                           />

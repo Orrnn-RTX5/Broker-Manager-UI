@@ -265,6 +265,18 @@ test('feed websocket URL preserves an explicit broker_id and strips any legacy t
   assert.equal(out.includes('legacy-secret'), false);
 });
 
+test('relative feed routes strip legacy tokens and keep broker labels and fragments', () => {
+  assert.equal(
+    appendFeedBrokerIdToWsUrl('/ws/feed?subscribe=all&token=legacy#updates', 'broker a'),
+    '/ws/feed?subscribe=all&broker_id=broker+a#updates'
+  );
+  assert.equal(
+    appendFeedBrokerIdToWsUrl('/ws/feed?token=legacy&broker_id=existing#updates', 'ignored'),
+    '/ws/feed?broker_id=existing#updates'
+  );
+  assert.equal(appendFeedBrokerIdToWsUrl('/ws/feed?token=legacy', ''), '/ws/feed');
+});
+
 test('feed status URL uses explicit secure discovery status URL', () => {
   sessionStorage.setItem('broker_info', JSON.stringify({
     broker_id: 'myprop-trade',

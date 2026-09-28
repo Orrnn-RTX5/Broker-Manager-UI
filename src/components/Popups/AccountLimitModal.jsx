@@ -32,7 +32,6 @@ const AccountLimitModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) fetchLimits();
     else { setData(null); setError(null); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const fetchLimits = async () => {

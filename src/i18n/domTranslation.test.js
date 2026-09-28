@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyText, applyAttributes, textOriginals, attributeOriginals } from './domTranslation.js';
+import { applyText, applyAttributes } from './domTranslation.js';
 import { UI_DICTIONARIES } from './uiDictionary/index.js';
 
 test('applyText preserves dynamic React text toggles in English', () => {

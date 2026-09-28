@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
+import { Buffer } from 'node:buffer';
 
 test('visible accounts share scoped one-time-ticket sockets, reference counts, and teardown', async () => {
   const requests = [], connections = [];

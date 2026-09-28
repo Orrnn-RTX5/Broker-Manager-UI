@@ -206,7 +206,7 @@ const matchesFilterValue = (rawVal, expected) => {
 
 const rowMatchesFilters = (row, filters = {}) => {
   if (!filters || typeof filters !== 'object') return true;
-  const filterEntries = Object.entries(filters).filter(([_, expected]) => isPresent(expected));
+  const filterEntries = Object.entries(filters).filter(([, expected]) => isPresent(expected));
   if (filterEntries.length === 0) return true;
 
   return filterEntries.every(([key, expected]) => {

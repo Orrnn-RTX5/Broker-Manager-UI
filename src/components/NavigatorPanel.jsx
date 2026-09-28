@@ -71,9 +71,7 @@ const DAILY_REPORT_CONTEXT_MENU_ITEMS = [
 
 const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu }) => {
   const menuRef = useRef(null);
-  const [position, setPosition] = useState({ left: x, top: y });
   const [activeSubmenu, setActiveSubmenu] = useState(null);
-  const [flipSubmenuLeft, setFlipSubmenuLeft] = useState(false);
 
   useLayoutEffect(() => {
     const menu = menuRef.current;
@@ -83,13 +81,11 @@ const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu
     const menuHeight = menu.offsetHeight || 360;
     const clampedLeft = Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin));
     const clampedTop = Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin));
-    setPosition({
-      left: clampedLeft,
-      top: clampedTop,
-    });
-    setFlipSubmenuLeft(clampedLeft + menuWidth + 200 > window.innerWidth);
+    menu.style.left = `${clampedLeft}px`;
+    menu.style.top = `${clampedTop}px`;
+    menu.classList.toggle('flip-submenu-left', clampedLeft + menuWidth + 200 > window.innerWidth);
     menu.querySelector('[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true });
-  }, [x, y]);
+  }, [x, y, isAnalyticsMenu]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -170,7 +166,7 @@ const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu
       className={`cc-server-context-menu ${isAnalyticsMenu ? 'is-analytics-menu' : ''}`}
       role="menu"
       aria-label={ariaLabel}
-      style={position}
+      style={{ left: x, top: y }}
       onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
     >
       {items.map((item) => {
@@ -219,7 +215,7 @@ const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu
             </button>
             {item.hasSubmenu && isSubmenuOpen && item.submenuItems && (
               <div
-                className={`cc-context-submenu ${flipSubmenuLeft ? 'flip-left' : ''}`}
+                className="cc-context-submenu"
                 role="menu"
                 aria-label={item.label}
               >
@@ -555,25 +551,23 @@ export default function NavigatorPanel() {
       deletedItem: itemToDelete,
       canUndo: true,
     });
-  }, [deleteConfirmItem, analyticsTree, location.pathname, navigate]);
+  }, [deleteConfirmItem, analyticsTree, location.pathname, navigate, setUndoToast]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirmItem(null);
   }, []);
 
   const handleUndo = useCallback(() => {
-    setUndoStack((prev) => {
-      if (!prev.length) return prev;
-      const last = prev[prev.length - 1];
-      setAnalyticsTree(last.tree);
-      saveAnalyticsTree(last.tree);
-      setUndoToast({
-        message: `Restored "${last.deletedItem?.label || 'item'}".`,
-        canUndo: false,
-      });
-      return prev.slice(0, prev.length - 1);
+    if (!undoStack.length) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setAnalyticsTree(last.tree);
+    saveAnalyticsTree(last.tree);
+    setUndoToast({
+      message: `Restored "${last.deletedItem?.label || 'item'}".`,
+      canUndo: false,
     });
-  }, []);
+  }, [undoStack, setUndoToast]);
 
   // Auto-heal / restore Trading Analytics if it was accidentally deleted and is missing in current active tree
   useEffect(() => {
@@ -588,17 +582,20 @@ export default function NavigatorPanel() {
         type: 'file',
         isDefault: true,
       };
-      setAnalyticsTree((prev) => {
-        const clone = JSON.parse(JSON.stringify(prev));
-        const dashIdx = clone.findIndex((item) => item.id === 'analytics-dashboard');
-        if (dashIdx !== -1) {
-          clone.splice(dashIdx + 1, 0, tradingItem);
-        } else {
-          clone.unshift(tradingItem);
-        }
-        saveAnalyticsTree(clone);
-        return clone;
-      });
+      const timer = window.setTimeout(() => {
+        setAnalyticsTree((prev) => {
+          const clone = JSON.parse(JSON.stringify(prev));
+          const dashIdx = clone.findIndex((item) => item.id === 'analytics-dashboard');
+          if (dashIdx !== -1) {
+            clone.splice(dashIdx + 1, 0, tradingItem);
+          } else {
+            clone.unshift(tradingItem);
+          }
+          saveAnalyticsTree(clone);
+          return clone;
+        });
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [analyticsTree]);
 
@@ -627,7 +624,7 @@ export default function NavigatorPanel() {
       canUndo: false,
     });
     navigate('/analytics/trading-accounts');
-  }, [navigate]);
+  }, [navigate, setUndoToast]);
 
   const handlePreset = useCallback((action, defaultPath) => {
     const presetDef = PRESET_ANALYTICS_DEFINITIONS[action];
@@ -728,9 +725,9 @@ export default function NavigatorPanel() {
         { action: 'finteza-roi', label: 'Cost & ROI Tracking', onClick: () => navigate('/analytics/advertising-campaigns?view=roi') },
       ],
     },
-  ], [currentAnalyticsTarget, handleAddFile, handleAddFolder, handleRename, requestDelete, handlePreset, navigate]);
+  ], [currentAnalyticsTarget, handleAddFile, handleAddFolder, handleRename, requestDelete, handleRestoreDefaults, handlePreset, navigate]);
 
-  const renderAnalyticsItem = useCallback((item) => {
+  function renderAnalyticsItem(item) {
     const isFolder = item.type === 'folder';
     const Icon = getIconComponent(item.iconName, isFolder);
     const isEditing = editingNodeId === item.id;
@@ -799,7 +796,7 @@ export default function NavigatorPanel() {
         onAddFolder={() => handleAddFolder(item)}
       />
     );
-  }, [editingNodeId, expandedFolderIds, location.pathname, openTradingAnalyticsContextMenu, requestDelete, handleAddFile, handleAddFolder, queryClient, navigate]);
+  }
 
   const node = (label, icon, path, preload = 'workspace', onContextMenu) => (
     <TreeNode key={label} label={label} icon={icon} path={path} activePath={location.pathname} onIntent={() => preload === 'analytics' ? preloadAnalyticsDestination(queryClient, path) : preloadWorkspaceDestination(queryClient, path)} onClickNode={go(path)} onContextMenu={onContextMenu} />

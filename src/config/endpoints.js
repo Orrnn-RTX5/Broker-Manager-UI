@@ -306,63 +306,6 @@ export const resolveFeedBrokerId = (brokerInfo = {}) => firstValue(
   getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
 );
 
-export class FeedWsAuthConfigError extends Error {
-  constructor(message = FEED_WS_AUTH_NOT_CONFIGURED_MESSAGE) {
-    super(message);
-    this.name = 'FeedWsAuthConfigError';
-    this.code = FEED_WS_AUTH_NOT_CONFIGURED;
-  }
-}
-
-export const resolveFeedWsAuth = (brokerInfo = {}) => {
-  const brokerID = firstValue(
-    getPinnedBrokerId() && getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID']),
-    firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS),
-    getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
-  );
-
-  const token = firstValue(
-    firstBrokerValue(brokerInfo, FEED_TOKEN_KEYS),
-    getRuntimeConfigValue([
-      'FEED_BROKER_TOKEN',
-      'VITE_FEED_BROKER_TOKEN',
-      'BROKER_FEED_TOKEN',
-      'VITE_BROKER_FEED_TOKEN',
-      'WS_FEED_TOKEN',
-      'VITE_WS_FEED_TOKEN',
-    ])
-  );
-
-  return { brokerID, token };
-};
-
-const isTruthyConfigValue = (value = '') => /^(1|true|yes|on|required)$/i.test(String(value || '').trim());
-
-export const resolveFeedAuthRequired = (brokerInfo = {}) => {
-  const runtimeOverride = getRuntimeConfigValue(['FEED_AUTH_REQUIRED', 'VITE_FEED_AUTH_REQUIRED']);
-  return isTruthyConfigValue(runtimeOverride || firstBrokerValue(brokerInfo, FEED_AUTH_REQUIRED_KEYS));
-};
-
-export const appendFeedAuthToWsUrl = (wsUrl, auth = {}) => {
-  const token = String(auth.token || '').trim();
-  const brokerID = String(auth.brokerID || auth.broker_id || '').trim();
-  if (!brokerID && !token) return wsUrl;
-
-  try {
-    const url = new URL(wsUrl);
-    url.searchParams.delete('token');
-    if (id && !url.searchParams.has('broker_id')) {
-      url.searchParams.set('broker_id', id);
-    }
-    return url.toString();
-  } catch {
-    const raw = String(wsUrl || '');
-    if (!id || /[?&]broker_id=/.test(raw)) return wsUrl;
-    const glue = raw.includes('?') ? '&' : '?';
-    return `${wsUrl}${glue}broker_id=${encodeURIComponent(id)}`;
-  }
-};
-
 export const shouldUseFeedDevProxy = (
   isDev = import.meta.env?.DEV === true,
   isProxyableOrigin = isProxyableDevOrigin()
@@ -426,9 +369,16 @@ export const appendFeedBrokerIdToWsUrl = (wsUrl, brokerID = '') => {
     return url.toString();
   } catch {
     const raw = String(wsUrl || '');
-    if (!id || /[?&]broker_id=/.test(raw)) return wsUrl;
-    const glue = raw.includes('?') ? '&' : '?';
-    return `${wsUrl}${glue}broker_id=${encodeURIComponent(id)}`;
+    const hashIndex = raw.indexOf('#');
+    const fragment = hashIndex < 0 ? '' : raw.slice(hashIndex);
+    const withoutFragment = hashIndex < 0 ? raw : raw.slice(0, hashIndex);
+    const queryIndex = withoutFragment.indexOf('?');
+    const path = queryIndex < 0 ? withoutFragment : withoutFragment.slice(0, queryIndex);
+    const params = new URLSearchParams(queryIndex < 0 ? '' : withoutFragment.slice(queryIndex + 1));
+    params.delete('token');
+    if (id && !params.has('broker_id')) params.set('broker_id', id);
+    const query = params.toString();
+    return `${path}${query ? `?${query}` : ''}${fragment}`;
   }
 };
 

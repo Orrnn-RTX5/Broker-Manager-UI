@@ -1,7 +1,6 @@
 import React from 'react';
 import useNotificationStore from '../store/notificationStore';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
-import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 const Toast = ({ notification }) => {

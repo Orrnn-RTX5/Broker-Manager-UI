@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import {
   loadTradingAccountsAnalyticsCache,
   saveTradingAccountsAnalyticsCache,
-  getTradingAccountsAnalyticsCacheTimestamp,
   DEFAULT_PREWARMED_ACCOUNTS,
 } from '../../utils/tradingAccountsCache.js';
 import {
@@ -61,6 +60,7 @@ test('cache hydration and full report computation completes in under 20ms', () =
   const elapsed = performance.now() - start;
 
   assert.equal(report.total, 2);
+  assert.deepEqual(filterOptions.groups, ['demo', 'Real']);
   assert.equal(report.countries.length, 1);
   assert.equal(report.countries[0].name, 'India');
   assert.equal(report.groups.length, 2);

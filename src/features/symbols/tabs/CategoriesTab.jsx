@@ -102,7 +102,7 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
         const { symbolsByCategory } = await import('../../../services/api');
         const data = await symbolsByCategory(cat.name);
         setSymbols(Array.isArray(data) ? data : []);
-      } catch (e) {
+      } catch {
         setSymbols([]);
       } finally {
         setLoadingSymbols(false);
@@ -121,7 +121,7 @@ const CategoryTreeNode = ({ cat, allCategories, depth = 0, onEdit, onDelete }) =
       >
         <div
           className="w-4 h-4 flex items-center justify-center shrink-0"
-          style={{ color: 'var(--muted)', visibility: (children.length > 0 || true) ? 'visible' : 'hidden' }}
+          style={{ color: 'var(--muted)' }}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </div>
@@ -175,14 +175,13 @@ const CategoriesTab = () => {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
-  const [deleting, setDeleting] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const data = await symbolCategoryList();
       setCategories(Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch {
       setCategories([]);
     } finally {
       setLoading(false);
@@ -193,14 +192,11 @@ const CategoriesTab = () => {
 
   const handleDelete = async (cat) => {
     if (!window.confirm(`Delete category "${cat.name}"? This will fail if symbols are still assigned to it.`)) return;
-    setDeleting(cat.name);
     try {
       await symbolCategoryDelete(cat.name);
       load();
     } catch (e) {
       showResult.error('Delete failed: ' + e.message);
-    } finally {
-      setDeleting(null);
     }
   };
 

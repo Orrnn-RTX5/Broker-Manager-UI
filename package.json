@@ -79,7 +79,6 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
     "clsx": "^2.1.1",
-    "d3-scale": "^4.0.2",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "framer-motion": "^13.3.0",
@@ -101,7 +100,6 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
-    "autoprefixer": "^10.4.27",
     "concurrently": "^10.0.3",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",

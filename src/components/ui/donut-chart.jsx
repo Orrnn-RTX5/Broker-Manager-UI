@@ -3,7 +3,18 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+
+const buildVisibleSegments = (data, totalValue) => {
+  let offset = 0;
+  return data.reduce((segments, segment, index) => {
+    if (!segment.value) return segments;
+    const percentage = totalValue === 0 ? 0 : (segment.value / totalValue) * 100;
+    segments.push({ segment, index, percentage, offset });
+    offset += percentage;
+    return segments;
+  }, []);
+};
 
 const DonutChart = React.forwardRef(
   (
@@ -33,7 +44,10 @@ const DonutChart = React.forwardRef(
 
     const radius = size / 2 - strokeWidth / 2;
     const circumference = 2 * Math.PI * radius;
-    let cumulativePercentage = 0;
+    const visibleSegments = React.useMemo(
+      () => buildVisibleSegments(data, internalTotalValue),
+      [data, internalTotalValue]
+    );
 
     React.useEffect(() => {
       onSegmentHover?.(hoveredSegment);
@@ -69,23 +83,14 @@ const DonutChart = React.forwardRef(
           
           {/* Data Segments */}
           <AnimatePresence>
-            {data.map((segment, index) => {
-              if (!segment.value) return null;
-
-              const percentage =
-                internalTotalValue === 0
-                  ? 0
-                  : (segment.value / internalTotalValue) * 100;
-              
+            {visibleSegments.map(({ segment, index, percentage, offset }) => {
               const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
-              const strokeDashoffset = (cumulativePercentage / 100) * circumference;
+              const strokeDashoffset = (offset / 100) * circumference;
               
               const isActive = hoveredSegment?.label === segment.label;
-              
-              cumulativePercentage += percentage;
 
               return (
-                <motion.circle
+                <Motion.circle
                   key={segment.label || index}
                   cx={size / 2}
                   cy={size / 2}

@@ -1,4 +1,5 @@
 import { X, User, Mail, Phone, MapPin, Globe, Tag, BadgeCheck, Target } from 'lucide-react';
+import { createElement } from 'react';
 
 const STATUS_BADGE = {
   Active:       'ui-status-ok',
@@ -13,7 +14,7 @@ const Row = ({ icon: Icon, label, value, mono }) => (
       className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
       style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}
     >
-      <Icon size={14} />
+      {createElement(Icon, { size: 14 })}
     </span>
     <div className="flex-1 min-w-0">
       <div className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-3)' }}>{label}</div>

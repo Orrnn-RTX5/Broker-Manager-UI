@@ -862,7 +862,7 @@
   user-select: none;
   animation: cc-server-context-menu-open 100ms ease-out;
 }
-.cc-context-submenu.flip-left {
+.cc-server-context-menu.flip-submenu-left .cc-context-submenu {
   left: auto;
   right: calc(100% - 2px);
 }

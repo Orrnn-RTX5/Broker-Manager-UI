@@ -50,7 +50,7 @@ class GlobalErrorBoundary extends React.Component {
               </button>
             </div>
             
-            {process.env.NODE_ENV === 'development' && (
+            {import.meta.env.DEV && (
               <div className="mt-8 text-left border-t border-[#f1f5f9] pt-6">
                 <p className="text-[10px] text-[#94a3b8] uppercase tracking-widest font-bold mb-2">Technical Details</p>
                 <div className="bg-[#f8fafc] rounded-lg p-4 border border-[#e2e8f0]">

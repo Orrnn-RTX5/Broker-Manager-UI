@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test, beforeEach, after } from 'node:test';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
+import { Buffer } from 'node:buffer';
 
 // Bundle the real API module (including its real keyed-cache implementation)
 // with controlled network dependencies. This exercises out-of-order completion,

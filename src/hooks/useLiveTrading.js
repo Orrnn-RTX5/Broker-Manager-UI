@@ -4,7 +4,11 @@ import { watchAccountMetrics } from '../services/accountMetricsSync.js';
 
 export function useLivePositions(rows, login, includeNew = false, snapshotRevision = 0) {
   const revision = useSyncExternalStore(liveTradingState.subscribe, liveTradingState.snapshot);
-  return useMemo(() => liveTradingState.overlayRows(rows, login, includeNew, snapshotRevision), [rows, login, includeNew, snapshotRevision, revision]);
+  return useMemo(() => {
+    // A store update during render will trigger another render with its new revision.
+    if (revision !== liveTradingState.snapshot()) return rows;
+    return liveTradingState.overlayRows(rows, login, includeNew, snapshotRevision);
+  }, [rows, login, includeNew, snapshotRevision, revision]);
 }
 export function useLiveAccountMetrics(login) {
   useSyncExternalStore(liveTradingState.subscribe, liveTradingState.snapshot);
@@ -18,11 +22,14 @@ export function useLiveAccountRows(rows) {
     const releases = scope ? scope.split(',').map(watchAccountMetrics) : [];
     return () => releases.forEach((release) => release());
   }, [scope]);
-  return useMemo(() => rows.map((row) => {
-    const live = liveTradingState.account(row.login);
-    if (!live || !('equity' in row || 'balance' in row)) return row;
-    return { ...row, balance: live.balance, credit: live.credit, equity: live.equity,
-      profit: live.floating_pnl, margin: live.used_margin, marginFree: live.free_margin,
-      marginLevel: live.margin_level };
-  }), [rows, revision]);
+  return useMemo(() => {
+    if (revision !== liveTradingState.snapshot()) return rows;
+    return rows.map((row) => {
+      const live = liveTradingState.account(row.login);
+      if (!live || !('equity' in row || 'balance' in row)) return row;
+      return { ...row, balance: live.balance, credit: live.credit, equity: live.equity,
+        profit: live.floating_pnl, margin: live.used_margin, marginFree: live.free_margin,
+        marginLevel: live.margin_level };
+    });
+  }, [rows, revision]);
 }

@@ -1,5 +1,6 @@
 import { showResult } from '../store/resultDialogStore.js';
 import { AlertCircle, Download, FileSpreadsheet, FileText, X } from 'lucide-react';
+import { createElement } from 'react';
 import { exportCurrentView, getCurrentViewExportData } from '../utils/currentViewExport';
 
 const exportFormats = [
@@ -46,7 +47,7 @@ const ExportCurrentViewDialog = ({ isOpen, onClose }) => {
         <div className="mt-4 grid gap-2">
           {exportFormats.map(({ id, label, detail, icon: Icon }) => (
             <button key={id} type="button" disabled={!rows} onClick={() => handleExport(id)} className="ui-btn ui-btn-secondary flex items-center gap-3 px-3 py-3 text-left disabled:cursor-not-allowed">
-              <Icon size={18} style={{ color: 'var(--accent)' }} />
+              {createElement(Icon, { size: 18, style: { color: 'var(--accent)' } })}
               <span className="flex flex-col">
                 <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</span>
                 <span className="text-xs" style={{ color: 'var(--text-3)' }}>{detail}</span>
