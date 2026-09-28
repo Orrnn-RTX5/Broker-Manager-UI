@@ -247,6 +247,7 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
   const rowOffset = options.serverPaged ? 0 : offset;
   const arrayStart = findArrayStart(text, preferredKeys);
   if (arrayStart < 0) {
+    if (options.requireRowsArray) throw new Error('Invalid paged response: rows array is missing');
     return normalizePagedResult(JSON.parse(text), query, normalizeRow, preferredKeys);
   }
 
@@ -298,6 +299,10 @@ export const normalizePagedTextResult = async (text, query = {}, normalizeRow = 
     }
   }
 
+  if (options.requireRowsArray && rows.length < limit && !reachedEnd) {
+    throw new Error('Invalid paged response: rows array is incomplete');
+  }
+
   const total = readTotalFromText(text);
   const hasKnownTotal = total !== null;
   const hasMore = hasKnownTotal
@@ -332,7 +337,11 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
     } catch {
       // Keep the raw text as the fallback message below.
     }
-    throw new Error(errorPayload?.error || errorPayload?.message || text || `HTTP ${response.status}`);
+    const candidates = [errorPayload?.error?.message, errorPayload?.error, errorPayload?.message];
+    const serverMessage = candidates.find((value) => typeof value === 'string' && value.trim());
+    const error = new Error(serverMessage?.trim().slice(0, 300) || (errorPayload ? `HTTP ${response.status}` : text || `HTTP ${response.status}`));
+    error.status = response.status;
+    throw error;
   }
 
   if (!response.body) {
@@ -470,6 +479,10 @@ export const normalizePagedStreamResult = async (response, query = {}, normalize
 
   if (!arrayFound) {
     return normalizePagedTextResult(buffer, query, normalizeRow, preferredKeys, options);
+  }
+
+  if (options.requireRowsArray && rows.length < limit && !reachedEnd) {
+    throw new Error('Invalid paged response: rows array is incomplete');
   }
 
   // APIs commonly place `total` after the rows array. When the terminal page

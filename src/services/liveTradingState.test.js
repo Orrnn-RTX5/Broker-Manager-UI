@@ -61,11 +61,40 @@ test('metrics preserve exact large token ordering and account scope; session res
 test('new snapshots appear immediately but a later recovery snapshot can remove missed closes', () => {
   const state = new LiveTradingState();
   const beforeRequest = state.snapshot();
-  state.ingest(frame({ update_kind: 'snapshot', state_version: '1', symbol: 'EURUSD', side: 'buy', lots: 100 }, 'position_opened'));
-  assert.equal(state.overlayRows([], '1001', true, beforeRequest).length, 1);
+  state.ingest(frame({ update_kind: 'snapshot', state_version: '1', symbol: 'EURUSD', side: 'buy', lots: 100,
+    price_open: 1.2, account_name: 'Trader', account_email: 'trader@example.test' }, 'position_opened'));
+  const [opened] = state.overlayRows([], '1001', true, beforeRequest);
+  assert.equal(opened.name, 'Trader');
+  assert.equal(opened.email, 'trader@example.test');
   assert.equal(state.overlayRows([], '1002', true, beforeRequest).length, 0);
   const afterEvent = state.snapshot();
   assert.equal(state.overlayRows([], '1001', true, afterEvent).length, 0);
+});
+test('incomplete live snapshots cannot fabricate open trade rows', () => {
+  for (const missing of ['symbol', 'lots', 'price_open', 'account_name', 'account_email']) {
+    const state = new LiveTradingState();
+    const snapshot = { update_kind: 'snapshot', state_version: '1', symbol: 'BTCUSD', lots: 0.01,
+      price_open: 83150.25, price_current: 83152.07, profit: -6.92,
+      account_name: 'Trader', account_email: 'trader@example.test' };
+    delete snapshot[missing];
+    state.ingest(frame(snapshot));
+    assert.deepEqual(state.overlayRows([], '1001', true), [], `missing ${missing}`);
+  }
+
+  const state = new LiveTradingState();
+  state.ingest(frame({ update_kind: 'snapshot', state_version: '1', symbol: 'BTCUSD', lots: 0,
+    price_open: 83150.25, price_current: 83152.07, profit: -6.92 }));
+  assert.deepEqual(state.overlayRows([], '1001', true), [], 'zero lots');
+});
+test('incomplete live snapshots still update matching HTTP rows', () => {
+  const state = new LiveTradingState();
+  state.ingest(frame({ update_kind: 'snapshot', state_version: '1', price_current: 83152.07, profit: -6.92 }));
+  const httpRow = { login: '1001', position: 42, symbol: 'BTCUSD', volume: 0.01,
+    priceOpen: 83150.25, priceCurrent: 83151, profit: -7 };
+
+  assert.deepEqual(state.overlayRows([httpRow], '1001', true), [
+    { ...httpRow, priceCurrent: 83152.07, profit: -6.92 },
+  ]);
 });
 test('duplicate structural snapshot preserves same-version PnL, new versions await repricing', () => {
   const state = new LiveTradingState();

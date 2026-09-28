@@ -1,5 +1,5 @@
 export const getPositionTicket = (row) => String(
-  row?.positionTicket ?? row?.Position ?? row?.ticket ?? row?.Ticket ?? row?.position ?? '',
+  row?.positionTicket ?? row?.position_ticket ?? row?.Position ?? row?.ticket ?? row?.Ticket ?? row?.position ?? '',
 );
 
 // Stream frames can contain only one ticket. Missing fields mean unchanged;
@@ -7,11 +7,11 @@ export const getPositionTicket = (row) => String(
 const mergePositionRecord = (previous, row) => {
   const record = { ...previous };
   const fields = {
-    positionTicket: previous?.positionTicket ?? previous?.Position ?? previous?.ticket ?? previous?.Ticket ?? previous?.position
-      ?? row.positionTicket ?? row.Position ?? row.ticket ?? row.Ticket ?? row.position,
+    positionTicket: previous?.positionTicket ?? previous?.position_ticket ?? previous?.Position ?? previous?.ticket ?? previous?.Ticket ?? previous?.position
+      ?? row.positionTicket ?? row.position_ticket ?? row.Position ?? row.ticket ?? row.Ticket ?? row.position,
     login: row.account_login ?? row.accountLogin ?? row.login ?? row.Login,
-    username: row.username ?? row.Username ?? row.email ?? row.Email,
-    accountName: row.accountName ?? row.AccountName ?? row.name ?? row.Name,
+    username: row.username ?? row.Username ?? row.account_email ?? row.accountEmail ?? row.email ?? row.Email,
+    accountName: row.accountName ?? row.AccountName ?? row.account_name ?? row.name ?? row.Name,
     accountGroup: row.accountGroup ?? row.AccountGroup ?? row.group ?? row.Group,
     symbol: row.symbol ?? row.Symbol,
     action: row.side ?? row.action ?? row.Action ?? row.type ?? row.Type,
@@ -29,7 +29,7 @@ const mergePositionRecord = (previous, row) => {
   Object.entries(fields).forEach(([key, value]) => {
     if (value !== undefined && value !== null) record[key] = value;
   });
-  const lots = row.lots ?? row.volume;
+  const lots = row.lots ?? row.volume_lots ?? row.volume;
   const volumeExt = row.volumeExt ?? row.Volume;
   if (lots !== undefined && lots !== null) {
     record.lots = Number(lots);
@@ -81,6 +81,7 @@ export const normalizePositionRow = (p = {}) => {
 
   const normalizeLots = (row) => {
     if (row.lots != null) return Number(row.lots);
+    if (row.volume_lots != null) return Number(row.volume_lots);
     if (row.volumeExt != null) return Number(row.volumeExt) / 10000;
     if (row.Volume != null) return Number(row.Volume) / 10000;
     return Number(row.volume ?? 0);
@@ -106,21 +107,21 @@ export const normalizePositionRow = (p = {}) => {
   }
 
   return {
-    position: p.positionTicket || p.Position || p.ticket || p.Ticket || p.position || 0,
+    position: p.positionTicket || p.position_ticket || p.Position || p.ticket || p.Ticket || p.position || 0,
     state_version: p.state_version ?? p.stateVersion,
     price_time_msc: p.price_time_msc,
-    login: String(p.login || p.Login || ''),
-    name: p.accountName || p.AccountName || p.name || p.Name || '',
-    email: p.username || p.Username || p.email || p.Email || '',
+    login: String(p.login || p.Login || p.account_login || p.accountLogin || ''),
+    name: p.accountName || p.AccountName || p.account_name || p.name || p.Name || '',
+    email: p.username || p.Username || p.account_email || p.accountEmail || p.email || p.Email || '',
     group: p.accountGroup || p.AccountGroup || p.group || p.Group || '',
     symbol: p.symbol || p.Symbol || '',
     type,
     volume,
     reason,
-    priceOpen: p.priceOpen ?? p.PriceOpen ?? p.openPrice ?? p.OpenPrice ?? p.Price ?? p.price ?? 0,
-    priceCurrent: p.priceCurrent ?? p.PriceCurrent ?? p.closePrice ?? p.ClosePrice ?? 0,
-    priceSl: p.priceSl ?? p.PriceSl ?? p.sl ?? p.SL ?? 0,
-    priceTp: p.priceTp ?? p.PriceTp ?? p.tp ?? p.TP ?? 0,
+    priceOpen: p.priceOpen ?? p.price_open ?? p.PriceOpen ?? p.openPrice ?? p.OpenPrice ?? p.Price ?? p.price ?? 0,
+    priceCurrent: p.priceCurrent ?? p.price_current ?? p.PriceCurrent ?? p.closePrice ?? p.ClosePrice ?? 0,
+    priceSl: p.priceSl ?? p.price_sl ?? p.PriceSl ?? p.sl ?? p.SL ?? 0,
+    priceTp: p.priceTp ?? p.price_tp ?? p.PriceTp ?? p.tp ?? p.TP ?? 0,
     profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
     comment: String(p.comment || p.Comment || ''),
     swap: p.storage ?? p.Storage ?? p.swap ?? p.Swap ?? 0,

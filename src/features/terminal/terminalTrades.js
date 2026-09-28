@@ -5,40 +5,71 @@ export const TRADE_COLUMNS = [
 
 export const TERMINAL_POSITIONS_QUERY_KEY = Object.freeze(['terminal-positions']);
 export const TERMINAL_POSITIONS_PARAMS = Object.freeze({ sort_by: 'position', sort_dir: 'desc' });
-export const TERMINAL_STORAGE_KEY = 'rtx5:terminal-positions:v1';
+export const TERMINAL_STORAGE_KEY = 'rtx5:terminal-positions:v2';
+const LEGACY_TERMINAL_STORAGE_KEY = 'rtx5:terminal-positions:v1';
+const TERMINAL_STORAGE_MAX_AGE_MS = 60_000;
 
 let memoryTerminalCache = null;
 
-export const readStoredTerminalPage = () => {
-  if (memoryTerminalCache) return memoryTerminalCache;
+const isRecent = (timestamp) => Number.isFinite(timestamp)
+  && timestamp > 0
+  && Date.now() >= timestamp
+  && Date.now() - timestamp <= TERMINAL_STORAGE_MAX_AGE_MS;
+
+const isCompleteTrade = (row) => String(row?.position ?? '').trim() !== ''
+  && String(row.position) !== '0'
+  && String(row.login ?? '').trim() !== ''
+  && String(row.login) !== '0'
+  && String(row.symbol || '').trim() !== ''
+  && Number(row.volume) > 0
+  && Number(row.priceOpen) > 0;
+
+const clearLegacyStorage = () => {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(LEGACY_TERMINAL_STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(LEGACY_TERMINAL_STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable.
+  }
+};
+
+export const readStoredTerminalPage = (scope) => {
+  clearLegacyStorage();
+  if (!scope) return undefined;
+  if (memoryTerminalCache?.scope === scope && isRecent(memoryTerminalCache.timestamp)) return memoryTerminalCache;
+  memoryTerminalCache = null;
   try {
     if (typeof sessionStorage === 'undefined') return undefined;
-    const raw = sessionStorage.getItem(TERMINAL_STORAGE_KEY)
-      || (typeof localStorage !== 'undefined' ? localStorage.getItem(TERMINAL_STORAGE_KEY) : null);
+    const raw = sessionStorage.getItem(TERMINAL_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows)) {
+    if (parsed?.scope === scope && isRecent(Number(parsed.timestamp))
+      && Array.isArray(parsed.rows) && parsed.rows.every(isCompleteTrade)) {
       memoryTerminalCache = parsed;
       return parsed;
     }
+    sessionStorage.removeItem(TERMINAL_STORAGE_KEY);
   } catch {
     // Ignore storage parse errors
   }
   return undefined;
 };
 
-export const writeStoredTerminalPage = (page) => {
+export const writeStoredTerminalPage = (page, scope) => {
+  clearLegacyStorage();
   try {
-    if (!page || !Array.isArray(page.rows)) return;
-    memoryTerminalCache = page;
-    const payload = JSON.stringify({
+    if (!scope || !page || !Array.isArray(page.rows) || !page.rows.every(isCompleteTrade)) return;
+    const timestamp = Number(page.timestamp) || Date.now();
+    if (!isRecent(timestamp)) return;
+    const stored = {
       rows: page.rows,
       total: page.total ?? page.rows.length,
       hasMore: Boolean(page.hasMore),
-      timestamp: Date.now(),
-    });
-    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TERMINAL_STORAGE_KEY, payload);
-    if (typeof localStorage !== 'undefined') localStorage.setItem(TERMINAL_STORAGE_KEY, payload);
+      timestamp,
+      scope,
+    };
+    memoryTerminalCache = stored;
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TERMINAL_STORAGE_KEY, JSON.stringify(stored));
   } catch {
     // Storage full or private mode
   }
@@ -48,10 +79,10 @@ export const clearStoredTerminalPage = () => {
   memoryTerminalCache = null;
   try {
     if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(TERMINAL_STORAGE_KEY);
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(TERMINAL_STORAGE_KEY);
   } catch {
     // ignore
   }
+  clearLegacyStorage();
 };
 
 const value = (input) => input === undefined || input === null || input === '' ? '—' : input;

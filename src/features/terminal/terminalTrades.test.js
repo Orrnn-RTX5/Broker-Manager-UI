@@ -26,7 +26,7 @@ test('TERMINAL_POSITIONS query key and default parameters', () => {
   assert.deepEqual(TERMINAL_POSITIONS_QUERY_KEY, ['terminal-positions']);
   assert.equal(TERMINAL_POSITIONS_PARAMS.sort_by, 'position');
   assert.equal(TERMINAL_POSITIONS_PARAMS.sort_dir, 'desc');
-  assert.equal(TERMINAL_STORAGE_KEY, 'rtx5:terminal-positions:v1');
+  assert.equal(TERMINAL_STORAGE_KEY, 'rtx5:terminal-positions:v2');
 });
 
 test('readStoredTerminalPage and writeStoredTerminalPage persist and retrieve rows', () => {
@@ -42,26 +42,53 @@ test('readStoredTerminalPage and writeStoredTerminalPage persist and retrieve ro
 
     const mockPage = {
       rows: [
-        { position: 24345, login: 200001, symbol: 'BTCUSD', type: 'buy', volume: 1.0 },
-        { position: 24337, login: 200001, symbol: 'BTCUSD', type: 'buy', volume: 0.01 },
+        { position: 24345, login: 200001, symbol: 'BTCUSD', type: 'buy', volume: 1.0, priceOpen: 79_689.8 },
+        { position: 24337, login: 200001, symbol: 'BTCUSD', type: 'buy', volume: 0.01, priceOpen: 79_689.8 },
       ],
       total: 2,
       hasMore: false,
     };
 
-    writeStoredTerminalPage(mockPage);
+    writeStoredTerminalPage(mockPage, 'manager@broker-a');
 
-    const restored = readStoredTerminalPage();
+    const restored = readStoredTerminalPage('manager@broker-a');
     assert.ok(restored);
     assert.equal(restored.rows.length, 2);
     assert.equal(restored.rows[0].position, 24345);
     assert.equal(restored.total, 2);
     assert.equal(restored.hasMore, false);
+    assert.equal(readStoredTerminalPage('manager@broker-b'), undefined);
+    assert.equal(globalThis.localStorage.getItem(TERMINAL_STORAGE_KEY), null);
 
     // Clear storage
     clearStoredTerminalPage();
-    assert.equal(readStoredTerminalPage(), undefined);
+    assert.equal(readStoredTerminalPage('manager@broker-a'), undefined);
   } finally {
+    globalThis.sessionStorage = originalSession;
+    globalThis.localStorage = originalLocal;
+  }
+});
+
+test('terminal cache rejects old and incomplete trades and clears legacy local storage', () => {
+  const originalSession = globalThis.sessionStorage;
+  const originalLocal = globalThis.localStorage;
+  globalThis.sessionStorage = createMockStorage();
+  globalThis.localStorage = createMockStorage();
+  try {
+    globalThis.localStorage.setItem('rtx5:terminal-positions:v1', JSON.stringify({ rows: [{ position: 1 }] }));
+    readStoredTerminalPage('manager@broker-a');
+    assert.equal(globalThis.localStorage.getItem('rtx5:terminal-positions:v1'), null);
+
+    writeStoredTerminalPage({ rows: [{ position: 1, login: 2, symbol: '', volume: 0, priceOpen: 0 }] }, 'manager@broker-a');
+    assert.equal(readStoredTerminalPage('manager@broker-a'), undefined);
+
+    globalThis.sessionStorage.setItem(TERMINAL_STORAGE_KEY, JSON.stringify({
+      scope: 'manager@broker-a', timestamp: Date.now() - 61_000,
+      rows: [{ position: 1, login: 2, symbol: 'EURUSD', volume: 1, priceOpen: 1.1 }],
+    }));
+    assert.equal(readStoredTerminalPage('manager@broker-a'), undefined);
+  } finally {
+    clearStoredTerminalPage();
     globalThis.sessionStorage = originalSession;
     globalThis.localStorage = originalLocal;
   }

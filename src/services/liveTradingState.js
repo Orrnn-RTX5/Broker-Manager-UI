@@ -75,10 +75,16 @@ export class LiveTradingState {
     if (includeNew) for (const live of this.positions.values()) {
       if (!live.hasSnapshot || live.closed || live.snapshotRevision <= snapshotRevision || (login && String(login) !== live.login)) continue;
       if (source.some((row) => String(row.login || login) === live.login && String(row.position || row.ticket) === live.ticket)) continue;
+      // A sparse price frame cannot stand in for a complete open trade. Wait
+      // for a structural snapshot or HTTP row before creating a grid entry.
+      if (!String(live.symbol || '').trim() || !(Number(live.patch.volume) > 0) || !(Number(live.patch.priceOpen) > 0)) continue;
       const raw = live.raw;
+      const name = raw.account_name || raw.accountName || raw.name || '';
+      const email = raw.account_email || raw.accountEmail || raw.email || '';
+      if (!String(name).trim() || !String(email).trim()) continue;
       // Snapshot events have sufficient identity; tick-only records never create rows.
       source.push({ login: live.login, position: live.ticket, symbol: live.symbol,
-        type: live.side, name: raw.account_name || raw.name || '', email: raw.email || '',
+        type: live.side, name, email,
         state_version: live.version, ...live.patch });
     }
     return source.flatMap((row) => {

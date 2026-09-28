@@ -2,10 +2,13 @@ import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { API_HOST } from '../../config/endpoints.js';
 import usePagedData from '../../hooks/usePagedData';
+import { getSessionClaims, getSessionScopeKey } from '../../services/authService.js';
 import { getPositionsPage, invalidateGlobalPositionsCache } from '../../services/api';
 import { subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
 import { useLivePositions } from '../../hooks/useLiveTrading';
+import { buildPermissionSessionFingerprint } from '../../utils/sessionFingerprint.js';
 import {
   TRADE_COLUMNS,
   tradeCells,
@@ -13,6 +16,7 @@ import {
   TERMINAL_POSITIONS_PARAMS,
   readStoredTerminalPage,
   writeStoredTerminalPage,
+  clearStoredTerminalPage,
 } from './terminalTrades.js';
 import {
   JOURNAL_COLUMNS,
@@ -80,7 +84,12 @@ const journalDetailText = (entry) => {
 function TerminalDock({ isAuthenticated = false }) {
   const titleSlot = useContext(DockTitleSlotContext);
   const queryClient = useQueryClient();
-  const cachedInitial = useMemo(() => readStoredTerminalPage(), []);
+  const { login, brokerId } = getSessionClaims();
+  const sessionScope = getSessionScopeKey();
+  const terminalScope = !String(login ?? '').trim() || !String(brokerId ?? '').trim() || !sessionScope
+    ? ''
+    : buildPermissionSessionFingerprint({ token: sessionScope, login, brokerId: `${brokerId}|${API_HOST}` });
+  const cachedInitial = useMemo(() => readStoredTerminalPage(terminalScope), [terminalScope]);
   const [activeTab, setActiveTab] = useState('trades');
   const [journalEntries, setJournalEntries] = useState(() => getTradeJournalEntries());
   const [selectedTradeKey, setSelectedTradeKey] = useState(null);
@@ -101,8 +110,8 @@ function TerminalDock({ isAuthenticated = false }) {
     document.addEventListener('pointerdown', clearSelectionOutsideTerminal, true);
     return () => document.removeEventListener('pointerdown', clearSelectionOutsideTerminal, true);
   }, [selectedTradeKey]);
-  const { rows: snapshotRows, data, page, offset, hasMore, total, isLoading, isFetching, isError, refetch, nextPage, prevPage } = usePagedData({
-    queryKey: TERMINAL_POSITIONS_QUERY_KEY,
+  const { rows: snapshotRows, data, dataUpdatedAt, isFetchedAfterMount, page, offset, hasMore, total, isLoading, isFetching, isError, error, refetch, nextPage, prevPage } = usePagedData({
+    queryKey: [...TERMINAL_POSITIONS_QUERY_KEY, terminalScope],
     queryFn: fetchTrades,
     params: TERMINAL_POSITIONS_PARAMS,
     pageSize: 30,
@@ -110,16 +119,24 @@ function TerminalDock({ isAuthenticated = false }) {
     refetchOnMount: 'always',
     refetchOnReconnect: true,
     initialData: cachedInitial,
+    initialDataUpdatedAt: cachedInitial?.timestamp,
     placeholderData: (previousData) => previousData || cachedInitial,
   });
 
+  const missingViewPositions = /\bview_positions\b/i.test(String(error?.message || ''));
+  const positionsAccessDenied = isError && (Number(error?.status) === 403 || missingViewPositions);
   const liveRows = useLivePositions(snapshotRows, undefined, page === 0, data?.liveRevision || 0);
   const rows = useMemo(() => [...liveRows].sort((a, b) => Number(b.position) - Number(a.position)).slice(0, 30), [liveRows]);
+  const presentedRows = positionsAccessDenied ? [] : rows;
   useEffect(() => {
-    if (page === 0 && !isLoading) {
-      writeStoredTerminalPage({ rows, total, hasMore });
+    if (!positionsAccessDenied) return;
+    clearStoredTerminalPage();
+  }, [positionsAccessDenied]);
+  useEffect(() => {
+    if (page === 0 && isFetchedAfterMount && !isLoading && !isError) {
+      writeStoredTerminalPage({ rows: snapshotRows, total, hasMore, timestamp: dataUpdatedAt }, terminalScope);
     }
-  }, [rows, total, hasMore, page, isLoading]);
+  }, [snapshotRows, total, hasMore, page, isFetchedAfterMount, isLoading, isError, dataUpdatedAt, terminalScope]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -182,8 +199,8 @@ function TerminalDock({ isAuthenticated = false }) {
   const searchNeedle = terminalSearch.trim().toLowerCase();
   const showingTrades = activeTab === 'trades' || activeTab === 'exposure';
   const visibleRows = searchNeedle
-    ? rows.filter((row) => tradeCells(row).join(' ').toLowerCase().includes(searchNeedle))
-    : rows;
+    ? presentedRows.filter((row) => tradeCells(row).join(' ').toLowerCase().includes(searchNeedle))
+    : presentedRows;
   const visibleJournal = searchNeedle
     ? journalEntries.filter((entry) => [
         entry.time, entry.dealer, entry.login, entry.request, entry.answer, entry.detail?.symbol,
@@ -197,8 +214,8 @@ function TerminalDock({ isAuthenticated = false }) {
             ? (!isAuthenticated ? 'Sign in to view trade requests' : 'Trade requests · live feed')
             : showingTrades
               ? (isError
-                ? 'Trade refresh failed — retry'
-                : (isFetching && rows.length === 0)
+                ? (positionsAccessDenied ? 'Positions access denied - contact broker administrator' : 'Trade refresh failed — retry')
+                : (isFetching && presentedRows.length === 0)
                   ? 'Synchronizing trades…'
                   : 'Open trades · auto-refresh')
               : (!isAuthenticated ? 'Sign in to view the terminal' : (TAB_STATUS[activeTab] || 'Terminal'))}
@@ -206,9 +223,9 @@ function TerminalDock({ isAuthenticated = false }) {
         {showingTrades ? (
           <>
             <button type="button" onClick={handleManualRefresh} disabled={!isAuthenticated || isFetching}>Refresh</button>
-            <button type="button" aria-label="Previous trades" onClick={prevPage} disabled={!isAuthenticated || page === 0 || isFetching}>Previous</button>
-            <span className="cc-trade-page">{rows.length ? `${offset + 1}–${offset + rows.length}` : `Page ${page + 1}`}</span>
-            <button type="button" aria-label="Next trades" onClick={nextPage} disabled={!isAuthenticated || !hasMore || isFetching}>Next</button>
+            <button type="button" aria-label="Previous trades" onClick={prevPage} disabled={!isAuthenticated || positionsAccessDenied || page === 0 || isFetching}>Previous</button>
+            <span className="cc-trade-page">{presentedRows.length ? `${offset + 1}–${offset + presentedRows.length}` : `Page ${page + 1}`}</span>
+            <button type="button" aria-label="Next trades" onClick={nextPage} disabled={!isAuthenticated || positionsAccessDenied || !hasMore || isFetching}>Next</button>
           </>
         ) : activeTab === 'journal' ? (
           <button type="button" onClick={clearTradeJournal} disabled={!journalEntries.length}>Clear</button>
@@ -296,8 +313,12 @@ function TerminalDock({ isAuthenticated = false }) {
                   : isLoading
                     ? 'Loading trades…'
                     : isError
-                      ? 'Unable to load trades. Use Refresh to try again.'
-                      : rows.length
+                      ? (positionsAccessDenied
+                        ? (missingViewPositions
+                          ? 'This manager account needs View Positions permission. Ask a broker administrator to enable it.'
+                          : 'This manager account cannot access positions. Ask a broker administrator to check its permissions.')
+                        : 'Unable to load trades. Use Refresh to try again.')
+                      : presentedRows.length
                         ? 'No trades match the search.'
                         : 'No open trades on this page.'}
               </td></tr>}

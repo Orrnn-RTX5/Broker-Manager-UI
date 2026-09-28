@@ -56,6 +56,72 @@ test('sparse live prices preserve volume, entry price, account details, and stop
   assert.equal(visible.name, 'Account owner');
 });
 
+test('normalizes a snake_case PositionsAll record without losing account or trade details', () => {
+  const raw = {
+    position_ticket: 202465,
+    account_login: 200004,
+    account_name: 'Trader One',
+    account_email: 'trader@example.test',
+    symbol: 'BTCUSD',
+    side: 'buy',
+    volume_lots: '0.01',
+    price_open: 83150.25,
+    price_current: 83152.07,
+    price_sl: 83000,
+    price_tp: 83500,
+    profit: -6.92,
+  };
+
+  assert.equal(getPositionTicket(raw), '202465');
+  assert.deepEqual(normalizePositionRow(raw), {
+    position: 202465,
+    state_version: undefined,
+    price_time_msc: undefined,
+    login: '200004',
+    name: 'Trader One',
+    email: 'trader@example.test',
+    group: '',
+    symbol: 'BTCUSD',
+    type: 'buy',
+    volume: 0.01,
+    reason: 'Client',
+    priceOpen: 83150.25,
+    priceCurrent: 83152.07,
+    priceSl: 83000,
+    priceTp: 83500,
+    profit: -6.92,
+    comment: '',
+    swap: 0,
+    timeCreate: 0,
+    timeUpdate: 0,
+  });
+});
+
+test('sparse live updates retain snake_case HTTP identity and fields', () => {
+  const raw = {
+    position_ticket: 202465,
+    account_login: 200004,
+    account_name: 'Trader One',
+    account_email: 'trader@example.test',
+    symbol: 'BTCUSD',
+    volume_lots: 0.01,
+    price_open: 83150.25,
+    profit: -6.92,
+  };
+  const [merged] = mergePositionUpdates([raw], [{ ticket: '202465', price_current: 83152.07, profit: -6.5 }]);
+  const visible = normalizePositionRow(merged);
+
+  assert.equal(visible.position, 202465);
+  assert.equal(visible.login, '200004');
+  assert.equal(visible.name, 'Trader One');
+  assert.equal(visible.email, 'trader@example.test');
+  assert.equal(visible.symbol, 'BTCUSD');
+  assert.equal(visible.volume, 0.01);
+  assert.equal(visible.priceOpen, 83150.25);
+  assert.equal(visible.priceCurrent, 83152.07);
+  assert.equal(visible.profit, -6.5);
+});
+
 test('accepts explicit zero stops, profit, swap, and volume from live updates', () => {
   const [merged] = mergePositionUpdates([{
     positionTicket: '101',

@@ -285,7 +285,7 @@ const mapAccountDetailsPage = (page, normalizeRow) => {
 };
 
 const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options = {}) => {
-  const { stream = false, ...requestOptions } = options;
+  const { stream = false, requireRowsArray = false, ...requestOptions } = options;
   const pagedEndpoint = buildPagedEndpoint(endpoint, params);
 
   // AccountDetailsMany and explicit lightweight callers use the streamed
@@ -293,9 +293,13 @@ const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options =
   // large response that a manager endpoint may have returned in full.
   if (endpoint === '/AccountDetailsMany' || stream) {
     const response = await apiClient.getRaw(pagedEndpoint, requestOptions);
+    if (endpoint === '/PositionsAll' && (response.status === 401 || response.status === 403)) {
+      invalidatePositionsCache();
+    }
     return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, {
       ...requestOptions,
       serverPaged: true,
+      requireRowsArray,
     });
   }
 
@@ -510,29 +514,63 @@ let positionsCacheGeneration = 0;
 let positionsDatasetRevision = 0;
 let positionsDatasetComplete = false;
 const positionUpdateRevisions = new Map();
+const pendingNewPositions = new Map();
+const MAX_PENDING_NEW_POSITIONS = 5_000;
 const POSITIONS_CACHE_TTL_MS = 20_000;
-const POSITIONS_DATASET_CACHE_KEY = 'rtx5_positions_dataset_v2';
+const POSITIONS_DATASET_CACHE_KEY = 'rtx5_positions_dataset_v3';
+const LEGACY_POSITIONS_DATASET_CACHE_KEY = 'rtx5_positions_dataset_v2';
 const POSITIONS_STORAGE_MAX_AGE_MS = 60_000;
 const ACCOUNT_POSITIONS_CACHE_TTL_MS = 5_000;
 const ACCOUNT_POSITIONS_PRIORITY_WAIT_MS = 1_000;
 const ACCOUNT_POSITIONS_PAINT_GRACE_MS = 150;
 const ACCOUNT_POSITIONS_INITIAL_LIMIT = 30;
 
+const getPositionsDatasetScope = () => {
+  const { login, brokerId } = authService.getSessionClaims();
+  const sessionScope = authService.getSessionScopeKey();
+  if (!String(login ?? '').trim() || !String(brokerId ?? '').trim() || !String(sessionScope ?? '').trim()) return null;
+  updateDynamicEndpoints();
+  return buildPermissionSessionFingerprint({
+    token: sessionScope,
+    login,
+    brokerId: `${brokerId}|${API_HOST}`,
+  });
+};
+
+const positionsStorage = () => [
+  typeof sessionStorage === 'undefined' ? null : sessionStorage,
+  typeof localStorage === 'undefined' ? null : localStorage,
+].filter(Boolean);
+
+const clearLegacyPositionsStorage = () => {
+  positionsStorage().forEach((storage) => {
+    try { storage.removeItem(LEGACY_POSITIONS_DATASET_CACHE_KEY); } catch { /* Storage may be unavailable. */ }
+  });
+};
+
 const readStoredPositionsDataset = () => {
-  try {
-    const raw = typeof sessionStorage === 'undefined'
-      ? null
-      : (sessionStorage.getItem(POSITIONS_DATASET_CACHE_KEY) || localStorage.getItem(POSITIONS_DATASET_CACHE_KEY));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    // Stored snapshots must expire: without a timestamp check a dataset from a
-    // previous session is re-served forever and newly opened trades never show.
-    if (!Array.isArray(parsed?.records) || parsed.records.length === 0) return null;
-    const savedAt = Number(parsed.timestamp) || 0;
-    if (savedAt <= 0 || Date.now() - savedAt > POSITIONS_STORAGE_MAX_AGE_MS) return null;
-    return parsed.records;
-  } catch {
-    // Ignore storage parse errors
+  clearLegacyPositionsStorage();
+  const scope = getPositionsDatasetScope();
+  if (!scope) return null;
+  for (const storage of positionsStorage()) {
+    try {
+      const raw = storage.getItem(POSITIONS_DATASET_CACHE_KEY);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const savedAt = Number(parsed?.timestamp) || 0;
+      const ageMs = Date.now() - savedAt;
+      if (
+        parsed?.scope === scope
+        && Array.isArray(parsed.records)
+        && parsed.records.length > 0
+        && savedAt > 0
+        && ageMs >= 0
+        && ageMs <= POSITIONS_STORAGE_MAX_AGE_MS
+      ) return parsed.records;
+      storage.removeItem(POSITIONS_DATASET_CACHE_KEY);
+    } catch {
+      // Malformed or unavailable storage must not become a position snapshot.
+    }
   }
   return null;
 };
@@ -543,8 +581,10 @@ const writeStoredPositionsDataset = (records) => {
     clearPositionsStorageCache();
     return;
   }
+  const scope = getPositionsDatasetScope();
+  if (!scope) return;
   try {
-    const payload = JSON.stringify({ records, timestamp: Date.now() });
+    const payload = JSON.stringify({ records, timestamp: Date.now(), scope });
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(POSITIONS_DATASET_CACHE_KEY, payload);
     if (typeof localStorage !== 'undefined') localStorage.setItem(POSITIONS_DATASET_CACHE_KEY, payload);
   } catch {
@@ -558,12 +598,14 @@ export const peekStoredPositionsDataset = () => {
 };
 
 export const clearPositionsStorageCache = () => {
-  try {
-    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(POSITIONS_DATASET_CACHE_KEY);
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(POSITIONS_DATASET_CACHE_KEY);
-  } catch {
-    // Ignore storage error
-  }
+  positionsStorage().forEach((storage) => {
+    try {
+      storage.removeItem(POSITIONS_DATASET_CACHE_KEY);
+      storage.removeItem(LEGACY_POSITIONS_DATASET_CACHE_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
+  });
 };
 
 const buildAccountPositionsEndpoint = (logins, { offset = 0 } = {}) => {
@@ -826,6 +868,7 @@ export const invalidateGlobalPositionsCache = () => {
   positionsDatasetRevision += 1;
   positionsDatasetComplete = false;
   positionUpdateRevisions.clear();
+  pendingNewPositions.clear();
   clearPositionsStorageCache();
 };
 
@@ -847,14 +890,57 @@ export const invalidatePositionsCache = (login) => {
   }
 };
 
-const reconcileLivePositions = (records, revision) => reconcilePositionSnapshot(
-  records,
-  Array.isArray(cachedPositionsDataset) ? cachedPositionsDataset : [],
-  (ticket, field) => {
-    const update = positionUpdateRevisions.get(ticket);
-    return (field === undefined ? update?.revision : update?.fields.get(field)) > revision;
-  },
-);
+const reconcileLivePositions = (records, revision) => {
+  const httpTickets = new Set(records.map(getPositionTicket));
+  const trustedTickets = positionsDatasetComplete && Array.isArray(cachedPositionsDataset)
+    ? new Set(cachedPositionsDataset.map(getPositionTicket))
+    : new Set();
+  return reconcilePositionSnapshot(
+    records,
+    Array.isArray(cachedPositionsDataset) ? cachedPositionsDataset : [],
+    (ticket, field) => {
+      const update = positionUpdateRevisions.get(ticket);
+      return (field === undefined ? update?.revision : update?.fields.get(field)) > revision;
+    },
+  ).filter((row) => {
+    const ticket = getPositionTicket(row);
+    return httpTickets.has(ticket) || trustedTickets.has(ticket) || hasCompleteNewLivePosition(row);
+  });
+};
+
+const hasCompletePositionFields = (record) => {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+  const row = normalizePositionRow(record);
+  return Number.isFinite(Number(row.position)) && Number(row.position) > 0
+    && Number.isFinite(Number(row.login)) && Number(row.login) > 0
+    && Boolean(String(row.symbol).trim())
+    && Number.isFinite(Number(row.volume)) && Number(row.volume) > 0
+    && Number.isFinite(Number(row.priceOpen)) && Number(row.priceOpen) > 0;
+};
+
+const hasCompleteNewLivePosition = (record) => {
+  if (!hasCompletePositionFields(record)) return false;
+  const row = normalizePositionRow(record);
+  return Boolean(String(row.name).trim() && String(row.email).trim());
+};
+
+const validateCompletePositions = (records) => {
+  const incompleteIndex = records.findIndex((record) => !hasCompletePositionFields(record));
+  if (incompleteIndex >= 0) {
+    throw new Error(`Incomplete PositionsAll trade row at index ${incompleteIndex}`);
+  }
+};
+
+const rememberPendingNewPosition = (ticket, record) => {
+  pendingNewPositions.delete(ticket);
+  pendingNewPositions.set(ticket, record);
+  if (pendingNewPositions.size > MAX_PENDING_NEW_POSITIONS) {
+    pendingNewPositions.delete(pendingNewPositions.keys().next().value);
+  }
+};
+
+const isClosedPositionUpdate = (row) => [row?.status, row?.Status, row?.update_kind, row?.action, row?.operation]
+  .some((value) => ['closed', 'deleted', 'delete', 'position_closed'].includes(String(value ?? '').toLowerCase()));
 
 const publishCompletePositionsDataset = (records) => {
   const previous = cachedPositionsDataset || [];
@@ -864,6 +950,7 @@ const publishCompletePositionsDataset = (records) => {
   positionsDatasetComplete = true;
   writeStoredPositionsDataset(records);
   const retainedTickets = new Set(records.map(getPositionTicket));
+  retainedTickets.forEach((ticket) => pendingNewPositions.delete(ticket));
   for (const ticket of positionUpdateRevisions.keys()) {
     if (!retainedTickets.has(ticket)) positionUpdateRevisions.delete(ticket);
   }
@@ -880,10 +967,41 @@ const publishCompletePositionsDataset = (records) => {
 export const applyPositionsSnapshot = (rows) => {
   if (!Array.isArray(rows) || rows.length === 0) return;
   const previous = Array.isArray(cachedPositionsDataset) ? cachedPositionsDataset : [];
-  const mergedRecords = mergePositionUpdates(previous, rows);
+  const previousByTicket = new Map(previous.map((row) => [getPositionTicket(row), row]));
+  const knownTickets = new Set(previousByTicket.keys());
+  const acceptedRows = [];
+  rows.forEach((row) => {
+    const ticket = getPositionTicket(row);
+    if (!ticket || ticket === '0') return;
+    if (isClosedPositionUpdate(row)) {
+      pendingNewPositions.delete(ticket);
+      if (!positionsDatasetComplete || !knownTickets.has(ticket)) return;
+    }
+    if (positionsDatasetComplete && knownTickets.has(ticket)) {
+      pendingNewPositions.delete(ticket);
+      acceptedRows.push(row);
+      return;
+    }
+
+    const prior = pendingNewPositions.get(ticket)
+      || (!positionsDatasetComplete ? previousByTicket.get(ticket) : undefined);
+    const [candidate] = mergePositionUpdates(prior ? [prior] : [], [row]);
+    if (hasCompleteNewLivePosition(candidate)) {
+      pendingNewPositions.delete(ticket);
+      knownTickets.add(ticket);
+      acceptedRows.push(candidate);
+    } else {
+      rememberPendingNewPosition(ticket, candidate);
+      // Before the HTTP baseline, these rows remain provisional. The complete
+      // dataset reconciler will exclude them unless their details arrive.
+      if (!positionsDatasetComplete) acceptedRows.push(row);
+    }
+  });
+  if (acceptedRows.length === 0) return;
+  const mergedRecords = mergePositionUpdates(previous, acceptedRows);
   const revision = ++positionsDatasetRevision;
-  const changedTickets = new Set(rows.map(getPositionTicket).filter((ticket) => ticket && ticket !== '0'));
-  const updatesByTicket = new Map(mergePositionUpdates([], rows).map((row) => [getPositionTicket(row), row]));
+  const changedTickets = new Set(acceptedRows.map(getPositionTicket));
+  const updatesByTicket = new Map(mergePositionUpdates([], acceptedRows).map((row) => [getPositionTicket(row), row]));
   updatesByTicket.forEach((row) => {
     const ticket = getPositionTicket(row);
     const fields = positionUpdateRevisions.get(ticket)?.fields || new Map();
@@ -906,6 +1024,7 @@ export const applyPositionsSnapshot = (rows) => {
     accountUpdates.forEach((raw) => {
       const ticket = getPositionTicket(raw);
       const existing = byTicket.get(ticket);
+      if (!existing && !hasCompleteNewLivePosition(raw)) return;
       const base = existing ? { ...existing, lots: existing.volume } : undefined;
       // An account request may be newer than the global baseline. Patch only
       // fields present in this frame so its volume/stops cannot roll back.
@@ -926,12 +1045,39 @@ export const fetchAllPositionsDataset = async ({ force = false, ...options } = {
 
   const requestGeneration = positionsCacheGeneration;
   const revisionAtStart = positionsDatasetRevision;
+  let allowCachedFallback = false;
   let datasetRequest;
   datasetRequest = (async () => {
     try {
-      const response = await apiClient.getRaw('/PositionsAll', options);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await response.text();
+      let response;
+      try {
+        response = await apiClient.getRaw('/PositionsAll', options);
+      } catch (error) {
+        allowCachedFallback = error?.name !== 'AbortError';
+        throw error;
+      }
+      if (!response.ok) {
+        allowCachedFallback = response.status >= 500;
+        let serverMessage = '';
+        try {
+          const payload = JSON.parse(await response.text());
+          const message = payload?.message ?? payload?.error?.message;
+          if (typeof message === 'string') serverMessage = message.trim().slice(0, 300);
+        } catch {
+          // Non-JSON responses use the status without exposing the raw body.
+        }
+        if (response.status === 401 || response.status === 403) invalidatePositionsCache();
+        const error = new Error(serverMessage || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      let text;
+      try {
+        text = await response.text();
+      } catch (error) {
+        allowCachedFallback = error?.name !== 'AbortError';
+        throw error;
+      }
       let parsed;
       try {
         parsed = JSON.parse(text);
@@ -942,6 +1088,7 @@ export const fetchAllPositionsDataset = async ({ force = false, ...options } = {
       if (!Array.isArray(parsed) && !['positions', 'rows', 'data', 'answer', 'records', 'items'].some((key) => Array.isArray(parsed?.[key]))) {
         throw new Error('Invalid PositionsAll snapshot');
       }
+      validateCompletePositions(records);
       if (positionsCacheGeneration !== requestGeneration) {
         throw new Error('Positions request was invalidated.');
       }
@@ -950,7 +1097,12 @@ export const fetchAllPositionsDataset = async ({ force = false, ...options } = {
       publishCompletePositionsDataset(reconciled);
       return reconciled;
     } catch (error) {
-      if (positionsCacheGeneration === requestGeneration && Array.isArray(cachedPositionsDataset)) {
+      if (
+        allowCachedFallback
+        && positionsCacheGeneration === requestGeneration
+        && positionsDatasetComplete
+        && Array.isArray(cachedPositionsDataset)
+      ) {
         return cachedPositionsDataset;
       }
       throw error;
@@ -1011,11 +1163,13 @@ export const getPositionsPage = async (params = {}, options = {}) => {
   const pagedResult = await getPaged('/PositionsAll', params, normalizePositionRow, ['positions'], {
     stream: true,
     ...options,
+    requireRowsArray: true,
     onRow: (row) => {
       collectedRows.push(row);
       options.onRow?.(row);
     },
   });
+  validateCompletePositions(pagedResult.rows);
 
   // A websocket snapshot that landed while PositionsAll streamed is fresher
   // than this response. Serve the newer dataset so the grid never repaints
@@ -1036,7 +1190,9 @@ export const getPositionsPage = async (params = {}, options = {}) => {
   // A filtered or truncated page is not a complete global dataset. Caching it
   // as one can incorrectly make another account appear to have no positions.
   if (isCompleteUnfilteredSnapshot && positionsCacheGeneration === requestGeneration) {
-    const reconciled = reconcileLivePositions(collectedRows, revisionAtStart);
+    const snapshotRows = collectedRows.length ? collectedRows : pagedResult.rows;
+    validateCompletePositions(snapshotRows);
+    const reconciled = reconcileLivePositions(snapshotRows, revisionAtStart);
     publishCompletePositionsDataset(reconciled);
     return normalizePagedResult(reconciled, params, normalizePositionRow, ['positions']);
   }
