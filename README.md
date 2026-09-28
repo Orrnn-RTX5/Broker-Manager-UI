@@ -1,19 +1,15 @@
-# React + Vite
+# RTX-5 Broker Manager UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The manager UI is a Vite/React application with web and Electron builds.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm ci
+npm run dev
+```
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Copy `.env.example` to `.env.terminal` and set the local broker endpoints before starting the dev server. This file is kept outside Git. Run `npm test` for unit tests and `npm run build` to compile the renderer.
 
 ## Broker Target Routing
 
@@ -83,7 +79,9 @@ The default `bridge` mode continues to use the configured `/ws/feed` connection.
 
 ### Build modes
 
-The manager app's `dev`, `build`, and Electron scripts all load `.env.terminal` (`vite --mode terminal`). Keep the active broker in that one file. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. If the new feed requires a token, set `VITE_FEED_BROKER_TOKEN`, `VITE_FEED_AUTH_REQUIRED=true`, and `VITE_FEED_SEND_TOKEN=true` in the same file.
+The manager app's `dev`, `build`, and Electron scripts use Vite's `terminal` mode. For local work, copy `.env.example` to `.env.terminal` and keep the active broker in that file. Git ignores `.env.terminal`, and Docker excludes it. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. If the new feed requires a token, set `VITE_FEED_BROKER_TOKEN`, `VITE_FEED_AUTH_REQUIRED=true`, and `VITE_FEED_SEND_TOKEN=true` in the same file.
+
+In CI, `MANAGER_UI_ENV` is written to `.env` before the build. The Docker build excludes local `.env.*` files so the deployed bundle uses the CI configuration.
 
 When `VITE_BROKER_ID` is set, the web app uses the configured endpoints and refuses to select another broker if discovery does not return that ID. An existing session for the previous broker is rejected on reload.
 
@@ -133,28 +131,9 @@ window.__RTX_RUNTIME_CONFIG__
 
 ### CI/CD
 
-`brokers.json` contains deploy metadata. GitHub Actions can also use a `BROKERS_JSON` secret with the same shape.
+On pull requests to `main`, `.github/workflows/deploy.yml` installs dependencies, runs tests, and validates the build. On pushes to `main`, it also builds and publishes `ghcr.io/orrnn-rtx5/broker-manager-ui` and deploys one `broker-manager-ui` container to the configured server on port 8082. The workflow uses `MANAGER_UI_ENV` for build configuration and the server-side `broker-manager-ui.env` file for runtime configuration. It requires `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`, `GHCR_USERNAME`, and `GHCR_TOKEN` secrets for deployment.
 
-Required deployment secret:
-
-```text
-BROKER_SSH_PRIVATE_KEY
-GHCR_USERNAME
-```
-
-On push to `main`, `.github/workflows/deploy.yml`:
-
-```text
-1. runs npm ci
-2. runs npm run build
-3. builds and pushes a Docker image to GHCR
-4. deploys enabled broker entries over SSH
-5. passes BACKEND_TARGET, API_HOST, API_HOST_EXT, WS_HOST, DEFAULT_MT5_SERVER, DISCOVERY_BASE_URL, and USE_MOCK_DISCOVERY into the container
-6. configures nginx for the broker `domain`
-7. issues or renews SSL with certbot when `https` is true
-```
-
-The checked-in GTA deployment uses `manager.growtradingacademy.com` as the UI host and proxies nginx to the local Docker app port `127.0.0.1:8082`. Nginx setup is idempotent: once the active vhost, certificate, and proxy target are correct, CI/CD updates only the Docker container and skips nginx/certbot. The backend services domain must have its own valid SSL certificate. Do not use HTTPS directly against broker IP addresses.
+The current workflow does not read `brokers.json`, configure host Nginx, or request TLS certificates. The separate `.github/scripts/deploy-broker-ui.sh` helper may still be used manually; it is not called by this workflow.
 
 ### Validation
 

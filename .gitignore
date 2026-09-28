@@ -25,6 +25,8 @@ release
 *.sln
 *.sw?
 .env
+.env.*
+!.env.example
 
 /tmp/
 /artifacts/

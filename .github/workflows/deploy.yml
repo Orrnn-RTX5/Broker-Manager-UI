@@ -1,4 +1,4 @@
-name: CI - Build and Publish Admin UI Image
+name: CI - Build and Publish Manager UI Image
 
 on:
   push:
@@ -73,8 +73,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The image is built from .env (this secret) only; .dockerignore keeps
-      # the checked-in .env.web/.env.desktop/.env.electron out of the build.
+      # The image is built from .env (this secret); .dockerignore excludes
+      # local mode-specific env files from the Docker build context.
       - name: Create .env
         env:
           MANAGER_UI_ENV: ${{ secrets.MANAGER_UI_ENV }}
