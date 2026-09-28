@@ -16,6 +16,8 @@ import DockLayout from '../components/docking/DockLayout';
 import { useDockingContext } from '../components/docking/DockingContext';
 import ToastContainer from '../components/ToastContainer';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
+import { usePermissions } from '../hooks/usePermissions.js';
+import { PERMISSIONS } from '../utils/permissions.js';
 import { startPositionSync, stopPositionSync, subscribeToPositionSync, requiresPositionReconciliation } from '../services/positionSync';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateRealtimeCaches } from '../services/api';
@@ -77,6 +79,8 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const isDarkMode = useThemeStore((state) => state.isDarkMode);
   const { togglePanel, updatePanels, panels, resetLayout: resetDockLayout } = useDockingContext();
   const navigate = useWorkspaceNavigation();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const resetLayout = useCallback(() => {
@@ -108,9 +112,9 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !canViewPositions) {
       stopPositionSync();
-      clearAccountDetailsCache();
+      if (!isAuthenticated) clearAccountDetailsCache();
       return undefined;
     }
 
@@ -142,7 +146,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       refreshTimer = setTimeout(refresh, 50);
     });
     return () => { stopped = true; clearTimeout(refreshTimer); unsubscribe(); stopPositionSync(); };
-  }, [isAuthenticated, queryClient]);
+  }, [canViewPositions, isAuthenticated, queryClient]);
 
   const toggleFullscreen = useCallback(() => toggleDocumentFullscreen(document), []);
 
@@ -264,7 +268,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
             navigate('/clients/orders');
             break;
           case 'p':
-            navigate('/clients/positions');
+            if (canViewPositions) navigate('/clients/positions');
             break;
           default:
             break;
@@ -276,7 +280,7 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
     // Ctrl+Q and Ctrl+T do not trigger their browser-level behaviours.
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [handleViewAction, navigate]);
+  }, [canViewPositions, handleViewAction, navigate]);
 
   // ── panel content map ──────────────────────────────────────────────────────
   const panelContents = {

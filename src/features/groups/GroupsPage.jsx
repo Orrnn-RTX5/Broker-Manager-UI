@@ -32,6 +32,7 @@ import {
 } from './groupTree.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup } from './groupAccountRows.js';
 import { describeGroupSave } from './groupAccountRows.js';
+import { AccountMark, GroupFolderIcon } from './groupMarks.jsx';
 import './GroupsExplorer.css';
 
 // Folder view columns match the MT5 Manager group list; "All Groups" adds Type and Leverage.
@@ -120,10 +121,12 @@ const GroupsPage = () => {
     const group = groups.find((item) => groupRowNode(item).name === navigatorGroup);
     if (!group) return;
     setAllGroups(false);
+    const login = location.state.openAccountLogin ? String(location.state.openAccountLogin) : null;
     setOpenedGroup(group);
     setSelectedId(null);
-    setSelectedLogin(null);
+    setSelectedLogin(login);
     setSearch('');
+    if (login) setPropertiesGroup(group);
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, [navigatorGroup, groups, location.state, location.pathname, location.search, navigate]);
 
@@ -464,7 +467,7 @@ const GroupsPage = () => {
                         {index === 0 ? (
                           <span className="groups-row-name is-account">
                             <span className="groups-row-glyph" aria-hidden="true">
-                              <Users size={14} className="groups-icon-group" />
+                              <AccountMark />
                             </span>
                             <span className="groups-row-label">{row.login}</span>
                           </span>
@@ -477,11 +480,11 @@ const GroupsPage = () => {
             </tbody>
           </table>
         ) : (
-          <table className="ui-grid groups-explorer-grid" aria-label={allGroups ? 'All groups' : isRoot ? 'Groups' : `Groups in ${folder}`}>
+          <table className={`ui-grid groups-explorer-grid${allGroups ? ' is-all-groups' : ''}`} aria-label={allGroups ? 'All groups' : isRoot ? 'Groups' : `Groups in ${folder}`}>
             <thead>
               <tr>
                 {columns.map((column) => (
-                  <th key={column.key} scope="col">{column.label}</th>
+                  <th key={column.key} scope="col" className={column.key === 'group' ? 'is-name' : 'is-center'}>{column.label}</th>
                 ))}
                 <th scope="col" className="groups-row-actions-head">Actions</th>
               </tr>
@@ -504,16 +507,12 @@ const GroupsPage = () => {
                     onContextMenu={(event) => openContextMenu(event, node)}
                   >
                     {columns.map((column, index) => (
-                      <td key={column.key}>
+                      <td key={column.key} className={column.key === 'group' ? 'is-name' : 'is-center'}>
                         {index === 0 ? (
                           <span className={`groups-row-name${asFolder ? ' is-folder' : ' is-group'}`}>
-                            {asFolder
-                              ? <ChevronRight size={12} className="groups-row-chevron" aria-hidden="true" />
-                              : <span className="groups-row-chevron" aria-hidden="true" />}
+                            {asFolder && <ChevronRight size={12} className="groups-row-chevron" aria-hidden="true" />}
                             <span className="groups-row-glyph" aria-hidden="true">
-                              {asFolder
-                                ? <Folder size={14} className="groups-icon-folder" fill="currentColor" strokeWidth={1.25} />
-                                : <Users size={14} className="groups-icon-group" />}
+                              <GroupFolderIcon />
                             </span>
                             <span className="groups-row-label">{allGroups ? node.name : node.label}</span>
                             {asFolder && nestedCount > 0 && <span className="groups-row-count">({nestedCount})</span>}

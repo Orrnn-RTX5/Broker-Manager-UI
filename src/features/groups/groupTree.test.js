@@ -122,4 +122,13 @@ test('row text mirrors the MT5 columns', () => {
     currency: 'USD',
   });
   assert.equal(getGroupRowText({ riskManagement: 'Retail Forex', bookType: 'B-Book' }).risk, 'Retail Forex');
+  assert.deepEqual(getGroupRowText({
+    accountType: 'REAL', type: 'standard', currency: 'usd', leverage: '1:25', routingMode: 'b_book',
+  }), {
+    type: 'Real',
+    risk: 'B-Book',
+    margin: '',
+    leverage: '1:25',
+    currency: 'USD',
+  });
 });

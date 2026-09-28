@@ -82,8 +82,8 @@ const matchesNeedle = (needle, values) => (
   !needle || values.join(' ').toLowerCase().includes(needle)
 );
 
-function SummaryTab({ needle, isAuthenticated }) {
-  const { data = [], isLoading, isError } = usePositionsBook(isAuthenticated);
+function SummaryTab({ needle, isAuthenticated, canViewPositions }) {
+  const { data = [], isLoading, isError } = usePositionsBook(isAuthenticated && canViewPositions);
   const rows = useMemo(() => {
     const byLogin = new Map();
     data.forEach((record) => {
@@ -102,7 +102,7 @@ function SummaryTab({ needle, isAuthenticated }) {
 
   return (
     <div className="cc-terminal-summary">
-      <section className="cc-terminal-summary-pane" aria-label="Account summary">
+      {canViewPositions && <section className="cc-terminal-summary-pane" aria-label="Account summary">
         <header className="cc-terminal-summary-title">
           Accounts<span>{rows.length}</span>
         </header>
@@ -126,7 +126,7 @@ function SummaryTab({ needle, isAuthenticated }) {
             </tr>
           ))}
         </TerminalTable>
-      </section>
+      </section>}
       <SummaryAlerts needle={needle} isAuthenticated={isAuthenticated} />
     </div>
   );
@@ -280,15 +280,15 @@ function PlaceholderTab({ label, columns, message }) {
   return <TerminalTable label={label} columns={columns} empty={message} />;
 }
 
-export default function TerminalTabContent({ tab, search = '', isAuthenticated = false }) {
+export default function TerminalTabContent({ tab, search = '', isAuthenticated = false, canViewPositions = false }) {
   const needle = search.trim().toLowerCase();
   switch (tab) {
     case 'summary':
-      return <SummaryTab needle={needle} isAuthenticated={isAuthenticated} />;
+      return <SummaryTab needle={needle} isAuthenticated={isAuthenticated} canViewPositions={canViewPositions} />;
     case 'dealing':
       return <DealingTab needle={needle} isAuthenticated={isAuthenticated} />;
     case 'search':
-      return <SearchTab search={search} isAuthenticated={isAuthenticated} />;
+      return canViewPositions ? <SearchTab search={search} isAuthenticated={isAuthenticated} /> : null;
     case 'news':
       return <NewsTab needle={needle} isAuthenticated={isAuthenticated} />;
     case 'calendar':

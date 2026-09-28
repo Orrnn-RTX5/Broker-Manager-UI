@@ -159,6 +159,7 @@ export const normalizeTradingAccountRow = (p = {}) => ({
 
 const normalizeLots = (p = {}) => {
   if (p.lots != null) return Number(p.lots);
+  if (p.volume_lots != null) return Number(p.volume_lots);
   if (p.volumeExt != null) return Number(p.volumeExt) / 10000;
   if (p.Volume != null) return Number(p.Volume) / 10000;
   return Number(p.volume ?? 0);
@@ -201,15 +202,15 @@ export const normalizeDealRow = (p = {}) => ({
   accountName: p.accountName || '',
   accountGroup: p.accountGroup || '',
   symbol: p.symbol || '',
-  action: p.action || '',
+  action: p.action ?? '',
   entry: p.entry || '',
-  volume: p.volume !== undefined ? p.volume : 0,
+  volume: normalizeLots(p),
   price: p.price || 0,
   profit: p.profit || 0,
   commission: p.commission || 0,
   swap: p.swap || 0,
   fee: p.fee || 0,
-  time: p.time || 0,
+  time: p.time || p.Time || p.timeDone || p.timeCreate || p.timestamp || 0,
   comment: String(p.comment || ''),
 });
 
@@ -1320,7 +1321,6 @@ export const ibStats = (params) => ibApi.stats(params);
 export const ibTree = (login) => ibApi.tree(login);
 
 // ─── Symbol Management ────────────────────────────────────────────────────────
-export const symbolsList = () => apiClient.get('/SymbolsList');
 export const symbolGet = (symbol) => apiClient.get(`/SymbolGet?${query({ symbol })}`);
 export const symbolsParams = async (symbols) => {
   const batches = chunkSymbolNames(symbols);
@@ -1336,6 +1336,14 @@ export const symbolsParams = async (symbols) => {
 const SYMBOL_MANAGEMENT_CACHE_KEY = 'rtx5_symbol_management_v2';
 const SYMBOL_MANAGEMENT_CACHE_FRESH_MS = 60_000;
 const SYMBOL_MANAGEMENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const SYMBOLS_LIST_CACHE_KEY = 'rtx5_symbols_list_v1';
+const SYMBOLS_LIST_CACHE_FRESH_MS = 60_000;
+const SYMBOLS_LIST_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+
+let symbolsListCache = null;
+let symbolsListRequest = null;
+let symbolsListScope = '';
+let symbolsListGeneration = 0;
 
 let symbolManagementCache = null;
 let symbolManagementRequest = null;
@@ -1351,6 +1359,106 @@ const getSymbolManagementScope = () => {
     login: claims.login,
     brokerId: `${claims.brokerId || ''}|${API_HOST}`,
   });
+};
+
+const readStoredSymbolsList = (scope) => {
+  try {
+    const raw = typeof sessionStorage === 'undefined'
+      ? null
+      : sessionStorage.getItem(SYMBOLS_LIST_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    const savedAt = Number(cached?.savedAt);
+    const age = Date.now() - savedAt;
+    return Array.isArray(cached?.symbols)
+      && cached.scope === scope
+      && Number.isFinite(savedAt)
+      && savedAt > 0
+      && age >= 0
+      && age <= SYMBOLS_LIST_CACHE_MAX_AGE_MS
+      ? cached : null;
+  } catch {
+    return null;
+  }
+};
+
+const currentSymbolsListScope = () => {
+  const scope = getSymbolManagementScope();
+  if (scope !== symbolsListScope) {
+    symbolsListGeneration += 1;
+    symbolsListScope = scope;
+    symbolsListCache = null;
+    symbolsListRequest = null;
+  }
+  return scope;
+};
+
+const invalidateSymbolsListCache = () => {
+  symbolsListGeneration += 1;
+  symbolsListCache = null;
+  symbolsListRequest = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(SYMBOLS_LIST_CACHE_KEY);
+  } catch {
+    // Storage is optional; in-memory invalidation is still authoritative.
+  }
+};
+
+const awaitSymbolsListWithSignal = (request, signal) => {
+  if (!signal) return request;
+  const abortError = () => new DOMException('The operation was aborted.', 'AbortError');
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    request.then(
+      (result) => { signal.removeEventListener('abort', onAbort); resolve(result); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+};
+
+export const peekSymbolsList = () => {
+  const scope = currentSymbolsListScope();
+  if (symbolsListCache) {
+    const age = Date.now() - Number(symbolsListCache.savedAt);
+    if (age < 0 || age > SYMBOLS_LIST_CACHE_MAX_AGE_MS) symbolsListCache = null;
+  }
+  if (!symbolsListCache) symbolsListCache = readStoredSymbolsList(scope);
+  return symbolsListCache
+    ? { symbols: symbolsListCache.symbols, savedAt: symbolsListCache.savedAt }
+    : null;
+};
+
+export const symbolsList = ({ force = false, signal } = {}) => {
+  const scope = currentSymbolsListScope();
+  const cached = peekSymbolsList();
+  if (!force && cached && Date.now() - cached.savedAt < SYMBOLS_LIST_CACHE_FRESH_MS) {
+    return awaitSymbolsListWithSignal(Promise.resolve(cached.symbols), signal);
+  }
+  if (!symbolsListRequest) {
+    const generation = symbolsListGeneration;
+    const request = apiClient.get('/SymbolsList', { signal: AbortSignal.timeout(15_000) }).then((symbols) => {
+      if (generation !== symbolsListGeneration || scope !== getSymbolManagementScope()) {
+        throw new Error('The symbol list request was invalidated.');
+      }
+      if (!Array.isArray(symbols)) throw new Error('The server returned an invalid symbol list.');
+      const next = { symbols, savedAt: Date.now(), scope };
+      symbolsListCache = next;
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(SYMBOLS_LIST_CACHE_KEY, JSON.stringify(next));
+        }
+      } catch {
+        // A full or unavailable browser cache must not hide live symbols.
+      }
+      return symbols;
+    }).finally(() => {
+      if (symbolsListRequest === request) symbolsListRequest = null;
+    });
+    symbolsListRequest = request;
+  }
+  return awaitSymbolsListWithSignal(symbolsListRequest, signal);
 };
 
 const readStoredSymbolManagementData = () => {
@@ -1408,6 +1516,7 @@ export const peekSymbolManagementData = () => {
 };
 
 export const invalidateSymbolManagementData = () => {
+  invalidateSymbolsListCache();
   symbolManagementGeneration += 1;
   symbolManagementRequest = null;
   symbolManagementCache = null;
@@ -1440,7 +1549,7 @@ const fetchSymbolManagementData = async () => {
   // Bound stalled requests while completed rows remain available for review.
   const signal = AbortSignal.timeout(15_000);
   const data = await loadSymbolManagement({
-    getNames: () => apiClient.get('/SymbolsList', { signal }),
+    getNames: () => symbolsList({ signal }),
     getAvailableNames: () => fetchAvailableSymbolNames({ signal }),
     getCategories: () => apiClient.get('/SymbolCategoryList', { signal }),
     getParams: async batch => {

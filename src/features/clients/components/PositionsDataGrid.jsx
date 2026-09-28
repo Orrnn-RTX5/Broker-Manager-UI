@@ -13,6 +13,7 @@ import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQuerie
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
 
 const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
+const EMPTY_ROWS = Object.freeze([]);
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', grid, onRowsChange, onRowContext }) => {
   const queryClient = useQueryClient();
@@ -89,7 +90,11 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
     },
   });
 
-  const rows = useLivePositions(snapshotRows);
+  const positionsAccessDenied = isError && (
+    Number(error?.status) === 403 || /\bview_positions\b/i.test(String(error?.message || ''))
+  );
+  const liveRows = useLivePositions(positionsAccessDenied ? EMPTY_ROWS : snapshotRows);
+  const rows = positionsAccessDenied ? EMPTY_ROWS : liveRows;
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);
   useEffect(() => {
@@ -127,8 +132,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
 
     // Read the shared book after a live patch or a completed reconciliation.
     // Keep an existing request running so a busy stream cannot starve loading.
-    if (hasRequestedData) queryClient.invalidateQueries({ queryKey: ['positions'] }, { cancelRefetch: false });
-  }), [hasRequestedData, markDataRequested, queryClient]);
+    if (hasRequestedData && !positionsAccessDenied) queryClient.invalidateQueries({ queryKey: ['positions'] }, { cancelRefetch: false });
+  }), [hasRequestedData, positionsAccessDenied, queryClient]);
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
@@ -163,6 +168,16 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
   const pageSells = rows.filter((row) => row.type === 'sell').length;
   const isIdle = !hasRequestedData;
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
+
+  if (positionsAccessDenied) {
+    return (
+      <div className="open-positions-grid ui-card flex flex-1 items-center justify-center p-6" role="status">
+        <span style={{ color: 'var(--text-3)', fontSize: 11, fontWeight: 400 }}>
+          This manager does not have permission to view positions.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="open-positions-grid ui-card flex flex-col flex-1 min-h-0 w-full overflow-hidden">

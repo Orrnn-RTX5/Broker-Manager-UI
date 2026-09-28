@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { Keyboard, X } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions.js';
+import { PERMISSIONS } from '../../utils/permissions.js';
 
 const SHORTCUT_GROUPS = [
   {
@@ -29,7 +31,7 @@ const SHORTCUT_GROUPS = [
     shortcuts: [
       { keys: [['C']], label: 'Open Clients' },
       { keys: [['O']], label: 'Open Orders' },
-      { keys: [['P']], label: 'Open Positions' },
+      { keys: [['P']], label: 'Open Positions', permission: PERMISSIONS.VIEW_POSITIONS },
     ],
   },
   {
@@ -56,6 +58,8 @@ const KeyCombination = ({ alternatives }) => (
 );
 
 const KeyboardShortcutsModal = ({ onClose }) => {
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
     const previousDocumentOverflow = document.documentElement.style.overflow;
@@ -101,7 +105,7 @@ const KeyboardShortcutsModal = ({ onClose }) => {
                 {group.description && <p>{group.description}</p>}
               </div>
               <div>
-                {group.shortcuts.map((shortcut) => (
+                {group.shortcuts.filter((shortcut) => !shortcut.permission || canViewPositions).map((shortcut) => (
                   <div key={`${group.title}-${shortcut.label}`} className="keyboard-shortcuts-row">
                     <span>{shortcut.label}</span>
                     <KeyCombination alternatives={shortcut.keys} />

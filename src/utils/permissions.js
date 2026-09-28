@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   MANAGE_GROUPS: 'manage_groups',
   MANAGE_IB: 'manage_ib',                 // IB create/update/delete, commission payout, plans, links
   VIEW_ACCOUNTS: 'view_accounts',
+  VIEW_POSITIONS: 'view_positions',
   DEALER_QUEUE: 'dealer_queue',
 };
 

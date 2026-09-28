@@ -54,6 +54,23 @@ const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountG
 export const accountsInGroup = (accounts, groupName, groupSettings) =>
   (accounts || []).filter((account) => sameGroupName(accountGroupName(account), groupName)).map((account) => toGroupAccountRow(account, groupSettings));
 
+/** Logins under each group name, for the navigator tree. */
+export const accountsByGroupName = (accounts) => {
+  const map = new Map();
+  for (const account of accounts || []) {
+    const key = String(accountGroupName(account) ?? '').trim().toLowerCase();
+    const login = String(account?.login ?? '').trim();
+    if (!key || !login) continue;
+    const list = map.get(key) || [];
+    list.push({ login, name: account.Name || account.name || '' });
+    map.set(key, list);
+  }
+  for (const list of map.values()) {
+    list.sort((left, right) => left.login.localeCompare(right.login, undefined, { numeric: true }));
+  }
+  return map;
+};
+
 /** Account fields that follow the group when a manager edits it. */
 export const buildAccountPatchFromGroup = (payload, originalName) => {
   const patch = {};

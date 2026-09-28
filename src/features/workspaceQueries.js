@@ -3,9 +3,7 @@ import { preloadWorkspaceRoute } from '../utils/workspaceRouteModules.js';
 import { normalizeAccount } from '../utils/sidebarAccountRows.js';
 import {
   DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY,
-  DASHBOARD_SUMMARY_QUERY_KEY,
   loadDashboardAccountLimits,
-  loadDashboardMetrics,
 } from './dashboard/useDashboardMetrics.js';
 import {
   WORKSPACE_DATA_PATHS,
@@ -129,37 +127,15 @@ export const preloadWorkspaceDestination = (queryClient, path) => Promise.all([
   prefetchWorkspaceData(queryClient, path),
 ]).then(() => undefined);
 
-export const TERMINAL_POSITIONS_PAGED_PARAMS = Object.freeze({
-  sort_by: 'position',
-  sort_dir: 'desc',
-  search: '',
-  limit: 30,
-  offset: 0,
-});
-
-export const TERMINAL_POSITIONS_INITIAL_QUERY_KEY = Object.freeze([
-  'terminal-positions',
-  TERMINAL_POSITIONS_PAGED_PARAMS,
-]);
-
 export const prefetchInitialWorkspaceData = async (queryClient) => {
   if (!queryClient) return;
   queryClient.prefetchQuery({ queryKey: DASHBOARD_ACCOUNT_LIMITS_QUERY_KEY, queryFn: loadDashboardAccountLimits }).catch(() => undefined);
-  queryClient.prefetchQuery({ queryKey: DASHBOARD_SUMMARY_QUERY_KEY, queryFn: loadDashboardMetrics }).catch(() => undefined);
-
   const accountsPromise = getAccountDetailsManyPage({ limit: 30, offset: 0 })
     .then((page) => seedSharedAccountPages(queryClient, page))
     .catch(() => undefined);
 
-  const terminalPromise = queryClient.prefetchQuery({
-    queryKey: TERMINAL_POSITIONS_INITIAL_QUERY_KEY,
-    queryFn: () => getPositionsPage(TERMINAL_POSITIONS_PAGED_PARAMS),
-    staleTime: 30_000,
-  }).catch(() => undefined);
-
   return Promise.allSettled([
     accountsPromise,
-    terminalPromise,
     // Destination-specific intent warmers fetch online users, orders, groups,
     // deals and global positions when those screens are actually approached.
     // Starting all of them during login starves the account panel's interactive

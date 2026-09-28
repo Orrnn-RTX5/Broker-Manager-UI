@@ -9,9 +9,11 @@ import {
 import DateRangePicker from '../../components/Popups/DateRangePicker';
 import FilterDropdown from '../../components/FilterDropdown';
 import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
+import usePermissions from '../../hooks/usePermissions';
 import authService from '../../services/authService';
 import { getOrdersPage } from '../../services/api';
 import { buildPermissionSessionFingerprint } from '../../utils/sessionFingerprint';
+import { PERMISSIONS } from '../../utils/permissions';
 import { ANALYTICS_QUERY_META } from '../../utils/analyticsQueryOptions';
 import {
   buildTradingAccountFilterOptions,
@@ -233,6 +235,8 @@ const OverviewPanel = ({ title, meta, onOpen, children }) => (
 
 export default function AnalyticsOverviewDashboard() {
   const navigate = useNavigate();
+  const { resolved, hasPermission } = usePermissions();
+  const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
   const toolbarRef = useOwnerConsoleAutoCollapse(':scope > :last-child');
   const [campaign, setCampaign] = useState(ALL_CAMPAIGNS);
   const [source, setSource] = useState(ALL_SOURCES);
@@ -248,7 +252,10 @@ export default function AnalyticsOverviewDashboard() {
 
   const accountQuery = useQuery(getTradingAccountsAnalyticsQueryOptions(scope));
   const onlineUsersQuery = useQuery(getOnlineUsersAnalyticsQueryOptions(OVERVIEW_ONLINE_USERS_PARAMS));
-  const positionsQuery = useQuery(getOpenPositionsAnalyticsQueryOptions(OVERVIEW_POSITIONS_PARAMS));
+  const positionsQuery = useQuery({
+    ...getOpenPositionsAnalyticsQueryOptions(OVERVIEW_POSITIONS_PARAMS),
+    enabled: canViewPositions,
+  });
   const ordersQuery = useQuery({
     ...OVERVIEW_ORDERS_QUERY,
     queryFn: ({ signal }) => getOrdersPage({ limit: 100000, offset: 0 }, { signal }),
@@ -287,7 +294,7 @@ export default function AnalyticsOverviewDashboard() {
     () => buildOnlineUserAnalytics(onlineUserRows, { country: activeFilter(country, ALL_COUNTRIES) }),
     [onlineUserRows, country],
   );
-  const positionRows = positionsQuery.data?.rows || EMPTY_PAGE.rows;
+  const positionRows = canViewPositions ? positionsQuery.data?.rows || EMPTY_PAGE.rows : EMPTY_PAGE.rows;
   const orderRows = ordersQuery.data?.rows || EMPTY_PAGE.rows;
   const positionBars = useMemo(() => buildSentimentBars(positionRows), [positionRows]);
   const orderBars = useMemo(() => buildSentimentBars(orderRows), [orderRows]);
@@ -334,12 +341,12 @@ export default function AnalyticsOverviewDashboard() {
                   : <OnlineUsersFallback groups={onlineAnalytics.groups} total={onlineAnalytics.total} />}
         </OverviewPanel>
 
-        <OverviewPanel title="Open Positions" meta={`${countFormatter.format(positionRows.length)} positions`} onOpen={open('/analytics/open-positions')}>
+        {canViewPositions && <OverviewPanel title="Open Positions" meta={`${countFormatter.format(positionRows.length)} positions`} onOpen={open('/analytics/open-positions')}>
           {positionsQuery.isLoading ? <EmptyReport>Loading open positions…</EmptyReport>
             : positionsQuery.isError ? <EmptyReport>Position data is unavailable.</EmptyReport>
               : positionBars.length === 0 ? <EmptyReport>No open positions.</EmptyReport>
                 : <SentimentBars data={positionBars} buyLabel="Buy" sellLabel="Sell" />}
-        </OverviewPanel>
+        </OverviewPanel>}
 
         <OverviewPanel title="Open Orders" meta={`${countFormatter.format(orderRows.length)} orders`} onOpen={open('/analytics/open-orders')}>
           {ordersQuery.isLoading ? <EmptyReport>Loading open orders…</EmptyReport>

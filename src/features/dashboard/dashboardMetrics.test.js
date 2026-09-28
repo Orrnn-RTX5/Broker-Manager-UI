@@ -181,4 +181,30 @@ test('dashboard fallback metrics do not report partial row snapshots as complete
     accountsPage: { rows: [{ login: 1, equity: 100 }], total: null, hasMore: true },
     positionsPage: { rows: [{ position: 1 }], total: null, hasMore: true },
   }), null);
+  assert.equal(buildDashboardFallbackMetrics({
+    accountsPage: { rows: [{ login: 1, equity: 100 }], total: 2, hasMore: false },
+  }), null);
+});
+
+test('dashboard does not show an equity total when a real account has no equity value', () => {
+  assert.deepEqual(buildDashboardFallbackMetrics({
+    accountsPage: {
+      rows: [
+        { login: '1', group: 'Real\\Standard', Equity: 1500 },
+        { login: '2', group: 'Real\\Standard', balance: 500 },
+        { login: '3', group: 'Demo\\Standard', balance: 1000 },
+      ],
+      total: 3,
+      hasMore: false,
+    },
+    positionsPage: { rows: [], total: 0, hasMore: false },
+  }), {
+    realAccounts: 2,
+    demoAccounts: 1,
+    openPositions: 0,
+    equity: null,
+    deposits24h: null,
+    withdrawals24h: null,
+    netFlow24h: null,
+  });
 });

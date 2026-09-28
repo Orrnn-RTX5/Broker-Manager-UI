@@ -14,6 +14,7 @@ const GroupDetailsPage = () => {
   const navigate = useNavigate();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const { groups, loading, error } = useGroupList({
     limit: 20,
     offset: 0,
@@ -299,8 +300,8 @@ const GroupDetailsPage = () => {
           ) : stats ? (
             <>
               <DetailRow label="Account Count"    value={stats.accountCount} />
-              <DetailRow label="Active Positions" value={stats.activePositions} />
-              <DetailRow label="Total Volume"     value={stats.totalVolume} />
+              {canViewPositions && <DetailRow label="Active Positions" value={stats.activePositions} />}
+              {canViewPositions && <DetailRow label="Total Volume" value={stats.totalVolume} />}
               <DetailRow label="Total Equity"     value={stats.totalEquity  != null ? Number(stats.totalEquity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : undefined} highlight />
               <DetailRow label="Total Balance"    value={stats.totalBalance != null ? Number(stats.totalBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : undefined} highlight />
             </>

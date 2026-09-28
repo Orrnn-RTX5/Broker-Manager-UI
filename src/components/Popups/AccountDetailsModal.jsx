@@ -237,14 +237,18 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
 const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position', onAccountUpdated }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
   const loginId = account && typeof account === 'object' ? account.login : account;
-  const initialPositions = peekAccountPositions(loginId);
-  const { canAct } = usePermissions();
+  const { canAct, resolved, hasPermission } = usePermissions();
+  const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
+  const initialPositions = canViewPositions ? peekAccountPositions(loginId) : undefined;
   const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
   const canManageFinances = canAct(PERMISSIONS.MANAGE_FINANCES);
   const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
   const canManipulateTrades = canMutateAccountTrades(canAct);
   const canCloseTrades = canCloseAccountTrades(canAct);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [positionsDeniedLogin, setPositionsDeniedLogin] = useState(null);
+  const showPositions = canViewPositions && positionsDeniedLogin !== String(loginId);
+  const visibleTab = activeTab === 'History' && !showPositions ? 'Overview' : activeTab;
   const [focusedTicket, setFocusedTicket] = useState(targetTicket);
   const accountData = useAccountDetails(loginId);
   const [detailsLoading, setLoading] = useState(false);
@@ -276,7 +280,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [snapshotPositions, setPositions] = useState(() => initialPositions || []);
   const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
-  const positions = useLivePositions(snapshotPositions, loginId, true, positionsSnapshotRevision);
+  const positions = useLivePositions(showPositions ? snapshotPositions : [], loginId, showPositions, positionsSnapshotRevision);
   const liveMetrics = useLiveAccountMetrics(loginId);
   const [positionsLoading, setPositionsLoading] = useState(() => initialPositions === undefined);
   const [positionsError, setPositionsError] = useState('');
@@ -288,7 +292,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const lastPositionsRequestAtRef = useRef(0);
   const pendingPositionsRefreshTimerRef = useRef(null);
   const [selectedTicketSnapshot, setSelectedTicketRow] = useState(null);
-  const selectedTicketRow = useLivePositions(selectedTicketSnapshot ? [selectedTicketSnapshot] : [], loginId)[0] || null;
+  const selectedTicketRow = useLivePositions(showPositions && selectedTicketSnapshot ? [selectedTicketSnapshot] : [], loginId)[0] || null;
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
   const tradeConfirmationRef = useRef(null);
@@ -518,6 +522,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   };
 
   useEffect(() => {
+    if (!showPositions) return undefined;
     const refreshPositions = () => {
       const runRefresh = () => {
         pendingPositionsRefreshTimerRef.current = null;
@@ -582,7 +587,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         pendingPositionsRefreshTimerRef.current = null;
       }
     };
-  }, [loginId]);
+  }, [loginId, showPositions]);
 
   const handleModifySLTP = (pos) => {
     setSelectedTicketRow(pos);
@@ -658,7 +663,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   }, [loginId]);
 
   useEffect(() => {
-    if (!loginId) return;
+    if (!loginId || !showPositions) return;
 
     let active = true;
 
@@ -709,6 +714,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         if (!active) return;
         console.error("Failed to fetch positions", err);
         setPositionsError(err?.message || 'Unable to load open positions.');
+        if (Number(err?.status) === 403 || /\bview_positions\b/i.test(String(err?.message || ''))) {
+          setPositionsDeniedLogin(String(loginId));
+          setPositions([]);
+          setSelectedTicketRow(null);
+          return;
+        }
         if (focusedTicket) {
           setSelectedTicketRow({
             position: focusedTicket,
@@ -729,10 +740,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return () => {
       active = false;
     };
-  }, [loginId, focusedTicket, positionSyncRevision]);
+  }, [loginId, focusedTicket, positionSyncRevision, showPositions]);
 
   useEffect(() => {
-    if (activeTab !== 'History' || !loginId) return;
+    if (activeTab !== 'History' || !loginId || !showPositions) return;
 
     let active = true;
     setHistoryLoading(true);
@@ -751,7 +762,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       });
 
     return () => { active = false; };
-  }, [activeTab, loginId, historyRefreshRevision]);
+  }, [activeTab, loginId, historyRefreshRevision, showPositions]);
 
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
@@ -1051,15 +1062,15 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         <>
           {/* Tab Bar */}
           <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections">
-            {TABS.map(tab => (
+            {TABS.filter(tab => showPositions || tab !== 'History').map(tab => (
               <button
                 type="button"
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`account-details-tab ${activeTab === tab ? 'is-active' : ''}`}
+                className={`account-details-tab ${visibleTab === tab ? 'is-active' : ''}`}
                 role="tab"
                 id={`account-tab-${tab.toLowerCase()}`}
-                aria-selected={activeTab === tab}
+                aria-selected={visibleTab === tab}
                 aria-controls="account-details-tabpanel"
               >
                 {tab}
@@ -1071,8 +1082,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           <div
             id="account-details-tabpanel"
             role="tabpanel"
-            aria-labelledby={`account-tab-${activeTab.toLowerCase()}`}
-            className={`account-details-content flex-1 overflow-auto flex flex-col ${activeTab === 'Overview' ? 'is-overview' : ''} ${activeTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
+            aria-labelledby={`account-tab-${visibleTab.toLowerCase()}`}
+            className={`account-details-content flex-1 overflow-auto flex flex-col ${visibleTab === 'Overview' ? 'is-overview' : ''} ${visibleTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
           >
             {activeTab !== 'Trade' && (detailsLoading || detailsError) && (
               <div className={`account-details-status ${detailsError ? 'is-error' : 'is-loading'}`} role={detailsError ? 'alert' : 'status'}>
@@ -1081,7 +1092,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
               </div>
             )}
 
-            {activeTab === 'Overview' ? (
+            {visibleTab === 'Overview' ? (
               <>
                 {/* Top Info Section */}
                 <section className="account-overview-summary">
@@ -1124,7 +1135,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                 {/* Data Grid Section Modernized */}
                 <div className="account-positions-card flex-1 flex flex-col overflow-hidden">
-                  <div className="account-positions-table-shell custom-scrollbar">
+                  {showPositions && <div className="account-positions-table-shell custom-scrollbar">
                     {/* Header */}
                     <div className="account-positions-grid account-positions-header">
                       <div className="p-3 border-r border-[var(--border)]">Symbol</div>
@@ -1249,7 +1260,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       );
                     })()}
                     </div>
-                  </div>
+                  </div>}
 
                   {/* Account financial snapshot */}
                   <div className="account-balance-summary mt-auto" role="group" aria-label="Account financial snapshot">
@@ -1486,8 +1497,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
               <AccountTradeTab
                 loginId={loginId}
                 account={account}
-                positions={positions}
-                selectedTicketRow={selectedTicketRow}
+                positions={showPositions ? positions : []}
+                selectedTicketRow={showPositions ? selectedTicketRow : null}
                 setSelectedTicketRow={setSelectedTicketRow}
                 adapter={adapter}
                 canManipulateTrades={canManipulateTrades}
@@ -1503,7 +1514,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   setPositionSyncRevision((revision) => revision + 1);
                 }}
               />
-            ) : activeTab === 'History' ? (
+            ) : activeTab === 'History' && showPositions ? (
               <div className="account-history-tab">
                 <div className="account-section-heading">
                   <div className="account-section-heading-icon"><FileText size={16} /></div>
@@ -1664,7 +1675,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Footer */}
-          {activeTab !== 'Overview' && (
+          {visibleTab !== 'Overview' && (
           <div className="account-details-footer flex items-center justify-end flex-shrink-0">
             <div className="flex gap-2">
               <button type={activeTab === 'Trade' ? 'submit' : 'button'} form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined} onClick={activeTab === 'Trade' ? undefined : handleUpdate} disabled={activeTab === 'Trade' ? !tradeUpdateState.canUpdate : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={activeTab === 'Trade' ? 'Select an existing position and change its volume, SL or TP to update' : !canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">

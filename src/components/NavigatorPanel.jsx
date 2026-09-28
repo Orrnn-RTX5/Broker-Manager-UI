@@ -15,9 +15,10 @@ import { usePermissions } from '../hooks/usePermissions';
 import { getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import GroupPermissionNotice from '../features/groups/components/GroupPermissionNotice';
-import { getGroupsFolderPath } from '../features/groups/groupRoutes';
+import { getGroupsFolderPath, getGroupsSelectedFromSearch } from '../features/groups/groupRoutes';
 import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
-import { countAccountsByGroup } from '../features/groups/groupAccountRows.js';
+import { accountsByGroupName, countAccountsByGroup } from '../features/groups/groupAccountRows.js';
+import { AccountMark } from '../features/groups/groupMarks.jsx';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { PERMISSIONS } from '../utils/permissions';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
@@ -406,10 +407,13 @@ export default function NavigatorPanel() {
   const { groups, loading } = useAllGroups({ enabled: loadGroups });
   const accountsQuery = useQuery({ ...getSidebarAccountsQueryOptions(''), enabled: loadGroups });
   const accountCounts = useMemo(() => countAccountsByGroup(accountsQuery.data?.rows), [accountsQuery.data]);
+  const accountsByGroup = useMemo(() => accountsByGroupName(accountsQuery.data?.rows), [accountsQuery.data]);
   const groupTree = useMemo(() => buildGroupNavigatorTree(groups), [groups]);
+  const selectedGroup = getGroupsSelectedFromSearch(location.search);
   const currentWorkspacePath = `${location.pathname}${location.search}`;
   const { canAct, manager } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const [brokerInfo] = useState(() => getBrokerInfo());
   const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || 'Broker';
   const managerLogin = String(manager.login ?? '').trim();
@@ -419,8 +423,10 @@ export default function NavigatorPanel() {
   // Ones that hold accounts directly show how many accounts, and open that list.
   const renderGroupTreeNode = (node) => {
     if (node.type === 'group') {
+      const groupKey = String(node.group?.name || node.path).trim().toLowerCase();
       const groupPath = getGroupsFolderPath(getGroupParentPath(node.path), node.path);
-      const accountCount = accountCounts.get(String(node.group?.name || node.path).trim().toLowerCase()) || 0;
+      const accounts = accountsByGroup.get(groupKey) || [];
+      const accountCount = accounts.length || accountCounts.get(groupKey) || 0;
       return (
         <TreeNode
           key={node.id}
@@ -430,8 +436,20 @@ export default function NavigatorPanel() {
           count={accountCount > 0 ? accountCount : null}
           path={groupPath}
           activePath={currentWorkspacePath}
+          defaultExpanded={node.path === selectedGroup}
           onClickNode={() => navigate(groupPath, { state: { openGroupAccounts: true } })}
-        />
+        >
+          {accounts.map((account) => (
+            <TreeNode
+              key={`${node.id}:${account.login}`}
+              label={account.login}
+              icon={AccountMark}
+              iconClassName="groups-nav-account"
+              activePath={currentWorkspacePath}
+              onClickNode={() => navigate(groupPath, { state: { openGroupAccounts: true, openAccountLogin: account.login } })}
+            />
+          ))}
+        </TreeNode>
       );
     }
     return (
@@ -658,7 +676,7 @@ export default function NavigatorPanel() {
     { action: 'add-folder', label: 'Add Folder', icon: Folder, tone: 'folder', shortcut: 'Alt+Insert', plainShortcut: true, onClick: () => handleAddFolder(null) },
     { action: 'preset-trading-accounts', label: 'Add Preset Trading Accounts', icon: TrendingUp, onClick: () => handlePreset('preset-trading-accounts', '/analytics/trading-accounts') },
     { action: 'preset-online-users', label: 'Add Preset Online Users', onClick: () => handlePreset('preset-online-users', '/analytics/online-users') },
-    { action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') },
+    ...(canViewPositions ? [{ action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') }] : []),
     { action: 'preset-open-orders', label: 'Add Preset Open Orders', onClick: () => handlePreset('preset-open-orders', '/analytics/open-orders') },
     { action: 'preset-advertising-campaigns', label: 'Add Preset Advertising Campaigns', onClick: () => handlePreset('preset-advertising-campaigns', '/analytics/advertising-campaigns') },
     { action: 'preset-by-country', label: 'Add Preset By Country', onClick: () => handlePreset('preset-by-country', '/analytics/by-country') },
@@ -686,7 +704,7 @@ export default function NavigatorPanel() {
         { action: 'finteza-roi', label: 'Cost & ROI Tracking', onClick: () => navigate('/analytics/advertising-campaigns?view=roi') },
       ],
     },
-  ], [handleAddFile, handleAddFolder, handlePreset, navigate]);
+  ], [canViewPositions, handleAddFile, handleAddFolder, handlePreset, navigate]);
 
   const analyticsContextMenuItems = useMemo(() => [
     { action: 'add', label: 'Add', icon: Plus, tone: 'add', shortcut: 'Insert', plainShortcut: true, onClick: () => handleAddFile(currentAnalyticsTarget) },
@@ -697,7 +715,7 @@ export default function NavigatorPanel() {
     { action: 'restore-defaults', label: 'Restore Default Analytics', icon: RotateCcw, onClick: handleRestoreDefaults },
     { action: 'preset-trading-accounts', label: 'Restore Trading Analytics', icon: TrendingUp, onClick: () => handlePreset('preset-trading-accounts', '/analytics/trading-accounts') },
     { action: 'preset-online-users', label: 'Add Preset Online Users', onClick: () => handlePreset('preset-online-users', '/analytics/online-users') },
-    { action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') },
+    ...(canViewPositions ? [{ action: 'preset-open-positions', label: 'Add Preset Open Positions', onClick: () => handlePreset('preset-open-positions', '/analytics/open-positions') }] : []),
     { action: 'preset-open-orders', label: 'Add Preset Open Orders', onClick: () => handlePreset('preset-open-orders', '/analytics/open-orders') },
     { action: 'preset-advertising-campaigns', label: 'Add Preset Advertising Campaigns', onClick: () => handlePreset('preset-advertising-campaigns', '/analytics/advertising-campaigns') },
     { action: 'preset-by-country', label: 'Add Preset By Country', onClick: () => handlePreset('preset-by-country', '/analytics/by-country') },
@@ -725,9 +743,10 @@ export default function NavigatorPanel() {
         { action: 'finteza-roi', label: 'Cost & ROI Tracking', onClick: () => navigate('/analytics/advertising-campaigns?view=roi') },
       ],
     },
-  ], [currentAnalyticsTarget, handleAddFile, handleAddFolder, handleRename, requestDelete, handleRestoreDefaults, handlePreset, navigate]);
+  ], [canViewPositions, currentAnalyticsTarget, handleAddFile, handleAddFolder, handleRename, requestDelete, handleRestoreDefaults, handlePreset, navigate]);
 
   function renderAnalyticsItem(item) {
+    if (!canViewPositions && ['/analytics/open-positions', '/clients/positions'].includes(item.path)) return null;
     const isFolder = item.type === 'folder';
     const Icon = getIconComponent(item.iconName, isFolder);
     const isEditing = editingNodeId === item.id;
@@ -850,9 +869,9 @@ export default function NavigatorPanel() {
           {node('Online Users', Users, '/clients/online-users')}
           {node('Clients', User, '/clients')}
           {node('Trading Accounts', User, '/clients/trading-accounts')}
-          {node('Positions', Activity, '/analytics/open-positions', 'analytics')}
+          {canViewPositions && node('Positions', Activity, '/analytics/open-positions', 'analytics')}
           {node('Orders', ClipboardCheck, '/clients/orders')}
-          {node('Position History', FileClock, '/clients/positions')}
+          {canViewPositions && node('Position History', FileClock, '/clients/positions')}
         </TreeNode>
 
         <TreeNode label="Ultency Matching Engine" icon={Network} disabled disabledReason="Matching engine workspace not available yet" />

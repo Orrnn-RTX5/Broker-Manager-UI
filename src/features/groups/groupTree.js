@@ -182,15 +182,48 @@ export const getGroupMarginText = (group) => {
   return parts.length ? `${parts.join(' / ')} %` : '';
 };
 
+const KNOWN_LABELS = Object.freeze({
+  demo: 'Demo',
+  real: 'Real',
+  standard: 'Standard',
+  hybrid: 'Hybrid',
+  'a-book': 'A-Book',
+  'b-book': 'B-Book',
+  a_book: 'A-Book',
+  b_book: 'B-Book',
+});
+
+/** Present mixed server casing ("REAL", "usd", "standard") as desk labels. */
+export const presentGroupLabel = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const known = KNOWN_LABELS[text.toLowerCase()];
+  if (known) return known;
+  if (text === text.toUpperCase() || text === text.toLowerCase()) {
+    return text.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  }
+  return text;
+};
+
+const presentLeverage = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const ratio = text.match(/(\d+(?:\.\d+)?)\s*$/);
+  const number = Number(ratio ? ratio[1] : text);
+  if (!Number.isFinite(number) || number <= 0) return '';
+  return `1:${number}`;
+};
+
 /** Column text for one group row. */
 export const getGroupRowText = (group) => {
   const leverage = readField(group, ['leverage', 'Leverage']);
   const demo = group?.demo;
+  const currency = String(readField(group, ['currency', 'Currency', 'deposit_currency']));
   return {
-    type: String(readField(group, ['accountType', 'account_type', 'type', 'Type']) || (demo === true ? 'Demo' : demo === false ? 'Real' : '')),
-    risk: String(readField(group, ['riskManagement', 'risk_management', 'risk', 'RiskManagement']) || getGroupRoutingLabel(group)),
+    type: presentGroupLabel(readField(group, ['accountType', 'account_type', 'type', 'Type']) || (demo === true ? 'Demo' : demo === false ? 'Real' : '')),
+    risk: presentGroupLabel(readField(group, ['riskManagement', 'risk_management', 'risk', 'RiskManagement']) || getGroupRoutingLabel(group)),
     margin: getGroupMarginText(group),
-    leverage: leverage === '' || Number(leverage) === 0 ? '' : `1:${leverage}`,
-    currency: String(readField(group, ['currency', 'Currency', 'deposit_currency'])),
+    leverage: presentLeverage(leverage),
+    currency: currency ? currency.toUpperCase() : '',
   };
 };

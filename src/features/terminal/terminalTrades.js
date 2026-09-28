@@ -91,10 +91,17 @@ const decimal = (input, digits) => {
   return Number(input).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 };
 
-// Preserve server price precision; storage is the normalized swap/rollover value.
+const fixedPrice = (input) => {
+  if (input === undefined || input === null || String(input).trim() === '') return '—';
+  const price = Number(input);
+  return Number.isFinite(price) ? price.toFixed(9) : '—';
+};
+
+// Only the Open and Current cells use a fixed nine-decimal display. The source
+// price remains numeric for calculations and live updates.
 export const tradeCells = (row) => [
   value(row.position), value(row.login), value(row.name), value(row.email),
   value(row.symbol), row.type ? row.type.toUpperCase() : '—', decimal(row.volume, 2),
-  value(row.priceOpen), value(row.priceCurrent), value(row.priceSl), value(row.priceTp),
+  fixedPrice(row.priceOpen), fixedPrice(row.priceCurrent), value(row.priceSl), value(row.priceTp),
   decimal(row.swap, 2), decimal(row.profit, 2), value(row.comment),
 ];

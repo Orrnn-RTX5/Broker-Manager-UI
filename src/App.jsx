@@ -8,6 +8,7 @@ import DesktopWindowControls from './components/DesktopWindowControls';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import UiTranslator from './i18n/UiTranslator.jsx';
 import RequirePermission from './components/RequirePermission';
+import { PERMISSIONS } from './utils/permissions.js';
 import authService from './services/authService';
 import { startSessionRefreshScheduler } from './services/sessionRefreshScheduler';
 import { clearBrokerInfo } from './services/brokerAuth';
@@ -287,7 +288,7 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
-    // Immediately prefetch essential workspace data (accounts + terminal trades)
+    // Immediately prefetch account data used by the workspace shell.
     prefetchInitialWorkspaceData(queryClient);
     preloadSymbolManagementData();
 
@@ -381,7 +382,7 @@ function App() {
                 <Route path="/analytics" element={<AnalyticsOverviewDashboard />} />
                 <Route path="/analytics/trading-accounts" element={<TradingAccountsDashboard />} />
                 <Route path="/analytics/online-users" element={<OnlineUsersDashboard />} />
-                <Route path="/analytics/open-positions" element={<OpenPositionsPage />} />
+                <Route path="/analytics/open-positions" element={<RequirePermission permission={PERMISSIONS.VIEW_POSITIONS}><OpenPositionsPage /></RequirePermission>} />
                 <Route path="/exposure" element={<ExposurePage />} />
                 <Route path="/analytics/advertising-campaigns" element={<AdvertisingCampaignsDashboard />} />
                 <Route path="/analytics/open-orders" element={<OpenOrdersDashboard />} />
@@ -391,7 +392,7 @@ function App() {
                 <Route path="/clients" element={<ClientsDashboard />} />
                 <Route path="/clients/online-users" element={<OnlineUsersPage />} />
                 <Route path="/clients/trading-accounts" element={<TradingAccountsPage />} />
-                <Route path="/clients/positions" element={<PositionsPage />} />
+                <Route path="/clients/positions" element={<RequirePermission permission={PERMISSIONS.VIEW_POSITIONS}><PositionsPage /></RequirePermission>} />
                 <Route path="/clients/orders" element={<OrdersPage />} />
                 <Route path="/dealing" element={<DealsPage />} />
                 <Route path="/dealer/queue" element={<RequirePermission permission="dealer_queue"><DealerQueuePage /></RequirePermission>} />

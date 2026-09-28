@@ -26,6 +26,14 @@ const bundle = await build({
   } }],
 });
 const api = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+test('deal quantities use normalized lots for dashboard activity', () => {
+  assert.equal(api.normalizeDealRow({ action: 0 }).action, 0);
+  assert.equal(api.normalizeDealRow({ timeDone: 123 }).time, 123);
+  assert.equal(api.normalizeDealRow({ volume: 0.75 }).volume, 0.75);
+  assert.equal(api.normalizeDealRow({ volume_lots: 0.25, volume: 2500 }).volume, 0.25);
+  assert.equal(api.normalizeDealRow({ volumeExt: 2500 }).volume, 0.25);
+  assert.equal(api.normalizeDealRow({ Volume: 2500 }).volume, 0.25);
+});
 test('explicit 100-lot quantities and version tokens retain their units and precision', () => {
   const row = api.normalizePositionRow({ lots: 100, state_version: '18000000000000000001', priceCurrent: 1.12345 });
   assert.equal(row.volume, 100);
@@ -118,10 +126,10 @@ test('late sidebar pagination cannot repopulate invalidated storage', async () =
   api.invalidateRealtimeCaches('accounts');
   const fresh = api.fetchAllSidebarAccounts();
   requests[1].resolve(accountResponse(40)); await fresh;
-  const freshStorage = storage.get('rtx5_sidebar_accounts_cache_v2');
+  const freshStorage = storage.get('rtx5_sidebar_accounts_cache_v3');
   assert.ok(freshStorage, 'fresh sidebar must populate storage');
   requests[0].resolve(accountResponse(10)); await old;
-  assert.equal(storage.get('rtx5_sidebar_accounts_cache_v2'), freshStorage);
+  assert.equal(storage.get('rtx5_sidebar_accounts_cache_v3'), freshStorage);
 });
 
 test('invalidated symbol progress/results cannot replace fresh configuration or listeners', async () => {
@@ -143,4 +151,116 @@ test('invalidated symbol progress/results cannot replace fresh configuration or 
   await fresh;
   assert.equal(api.peekSymbolManagementData().symbols[0].symbol, 'NEW');
   assert.equal(JSON.parse(storage.get('rtx5_symbol_management_v2')).symbols[0].symbol, 'NEW');
+});
+
+test('symbol names share a request and load immediately from the scoped browser cache', async () => {
+  const pending = deferred();
+  let calls = 0;
+  runtime.client.get = endpoint => {
+    assert.equal(endpoint, '/SymbolsList');
+    calls += 1;
+    return pending.promise;
+  };
+  const first = api.symbolsList();
+  const joined = api.symbolsList();
+  assert.equal(calls, 1);
+  pending.resolve(['EURUSD', 'XAUUSD']);
+  assert.deepEqual(await Promise.all([first, joined]), [
+    ['EURUSD', 'XAUUSD'], ['EURUSD', 'XAUUSD'],
+  ]);
+  const snapshot = api.peekSymbolsList();
+  assert.deepEqual(snapshot.symbols, ['EURUSD', 'XAUUSD']);
+  assert.equal(JSON.parse(storage.get('rtx5_symbols_list_v1')).savedAt, snapshot.savedAt);
+  assert.deepEqual(await api.symbolsList(), ['EURUSD', 'XAUUSD']);
+  assert.equal(calls, 1, 'a fresh result should not request the server again');
+
+  // Restore the persisted value after clearing memory, as a hard refresh does.
+  const stored = storage.get('rtx5_symbols_list_v1');
+  api.invalidateSymbolManagementData();
+  storage.set('rtx5_symbols_list_v1', stored);
+  assert.deepEqual(api.peekSymbolsList()?.symbols, ['EURUSD', 'XAUUSD']);
+  assert.equal(calls, 1);
+});
+
+test('symbol cache invalidation discards a late response from an older request', async () => {
+  const requests = [];
+  runtime.client.get = endpoint => {
+    assert.equal(endpoint, '/SymbolsList');
+    const pending = deferred();
+    requests.push(pending);
+    return pending.promise;
+  };
+  const old = api.symbolsList();
+  api.invalidateSymbolManagementData();
+  const fresh = api.symbolsList();
+  assert.equal(requests.length, 2);
+  requests[1].resolve(['NEW']);
+  await fresh;
+  requests[0].resolve(['OLD']);
+  await assert.rejects(old, /invalidated/);
+  assert.deepEqual(api.peekSymbolsList()?.symbols, ['NEW']);
+  assert.deepEqual(JSON.parse(storage.get('rtx5_symbols_list_v1')).symbols, ['NEW']);
+});
+
+test('forced symbol refresh bypasses fresh cache and invalid stored scope is ignored', async () => {
+  const responses = [['EURUSD'], ['GBPUSD']];
+  let calls = 0;
+  runtime.client.get = () => Promise.resolve(responses[calls++]);
+  assert.deepEqual(await api.symbolsList(), ['EURUSD']);
+  assert.deepEqual(await api.symbolsList({ force: true }), ['GBPUSD']);
+  assert.equal(calls, 2);
+  assert.deepEqual(api.peekSymbolsList()?.symbols, ['GBPUSD']);
+
+  const stored = JSON.parse(storage.get('rtx5_symbols_list_v1'));
+  api.invalidateSymbolManagementData();
+  storage.set('rtx5_symbols_list_v1', JSON.stringify({ ...stored, scope: 'different-session' }));
+  assert.equal(api.peekSymbolsList(), null);
+});
+
+test('changing manager session rejects an older symbol response', async () => {
+  const requests = [];
+  runtime.client.get = () => {
+    const pending = deferred();
+    requests.push(pending);
+    return pending.promise;
+  };
+  storage.set('auth', JSON.stringify({ session_scope: 'session-one', login: 1001, broker_id: 'broker' }));
+  const old = api.symbolsList();
+  storage.set('auth', JSON.stringify({ session_scope: 'session-two', login: 1002, broker_id: 'broker' }));
+  const fresh = api.symbolsList();
+  assert.equal(requests.length, 2);
+  requests[1].resolve(['NEW']);
+  await fresh;
+  requests[0].resolve(['OLD']);
+  await assert.rejects(old, /invalidated/);
+  assert.deepEqual(api.peekSymbolsList()?.symbols, ['NEW']);
+});
+
+test('symbol snapshot expires after its bounded storage lifetime', async () => {
+  runtime.client.get = () => Promise.resolve(['EURUSD']);
+  await api.symbolsList();
+  const stored = JSON.parse(storage.get('rtx5_symbols_list_v1'));
+  api.invalidateSymbolManagementData();
+  storage.set('rtx5_symbols_list_v1', JSON.stringify({
+    ...stored, savedAt: Date.now() - 31 * 60 * 1000,
+  }));
+  assert.equal(api.peekSymbolsList(), null);
+});
+
+test('aborting one symbol-list subscriber preserves its shared request', async () => {
+  const pending = deferred();
+  let requestOptions;
+  runtime.client.get = (_endpoint, options) => {
+    requestOptions = options;
+    return pending.promise;
+  };
+  const controller = new AbortController();
+  const aborted = api.symbolsList({ signal: controller.signal });
+  const survivor = api.symbolsList();
+  controller.abort();
+  await assert.rejects(aborted, { name: 'AbortError' });
+  pending.resolve(['GBPUSD']);
+  assert.deepEqual(await survivor, ['GBPUSD']);
+  assert.ok(requestOptions?.signal instanceof AbortSignal, 'the shared fetch has its own timeout');
+  assert.notEqual(requestOptions.signal, controller.signal, 'one subscriber cannot cancel the shared fetch');
 });

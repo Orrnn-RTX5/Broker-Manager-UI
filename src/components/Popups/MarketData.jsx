@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Search, X } from 'lucide-react';
 import useSymbolStore from '../../store/symbolStore';
 import {
   sortMarketWatchQuotes,
@@ -88,6 +88,7 @@ const MarketData = ({ compact = false }) => {
   const symbolClickTimer = useRef(null);
   useEffect(() => () => clearTimeout(symbolClickTimer.current), []);
   const symbolsViewportRef = useRef(null);
+  const searchInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [symbolsViewport, setSymbolsViewport] = useState({ height: 0, scrollTop: 0 });
 
@@ -293,29 +294,37 @@ const MarketData = ({ compact = false }) => {
   }, [activeTab, liveQuotes, selectQuote]);
 
   const renderCompactSearch = () => (
-    <div
-      className="shrink-0 px-2 py-1.5"
-      style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
-    >
-      <div className="relative">
-        <Search
-          size={13}
-          className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-          style={{ color: 'var(--muted)' }}
-          aria-hidden="true"
-        />
+    <div className="market-watch-search-area">
+      <div className="market-watch-search-field">
+        <Search size={14} strokeWidth={1.8} className="market-watch-search-icon" aria-hidden="true" />
         <input
+          ref={searchInputRef}
           type="search"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') handleSearchSymbol();
           }}
-          placeholder="Search symbols…"
+          placeholder="Search symbols"
           aria-label="Search market symbols"
-          className="ui-input ui-input-sm h-7 w-full text-[11px]"
-          style={{ paddingLeft: 29 }}
+          autoComplete="off"
+          spellCheck={false}
+          className="market-watch-search-input"
         />
+        {searchQuery && (
+          <button
+            type="button"
+            className="market-watch-search-clear"
+            aria-label="Clear symbol search"
+            title="Clear search"
+            onClick={() => {
+              setSearchQuery('');
+              searchInputRef.current?.focus();
+            }}
+          >
+            <X size={12} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -591,6 +600,82 @@ const MarketData = ({ compact = false }) => {
           font-weight: 600 !important;
           background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
           color: var(--accent-text);
+        }
+        .market-watch-type .market-watch-search-area {
+          flex: 0 0 auto;
+          padding: 8px;
+          border-bottom: 1px solid var(--border);
+          background: var(--surface);
+        }
+        .market-watch-type .market-watch-search-field {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          min-width: 0;
+          height: 30px;
+          padding: 0 8px 0 9px;
+          border: 1px solid var(--border);
+          border-radius: 5px;
+          background: var(--surface-2);
+          transition: border-color 150ms ease, background-color 150ms ease;
+        }
+        .market-watch-type .market-watch-search-field:hover {
+          border-color: var(--border-3);
+        }
+        .market-watch-type .market-watch-search-field:focus-within {
+          border-color: var(--accent);
+          background: var(--surface);
+        }
+        .market-watch-type .market-watch-search-icon {
+          flex: 0 0 auto;
+          color: var(--muted);
+          pointer-events: none;
+        }
+        .market-watch-type .market-watch-search-field:focus-within .market-watch-search-icon {
+          color: var(--accent);
+        }
+        .market-watch-type .market-watch-search-input {
+          flex: 1 1 auto;
+          width: 100%;
+          min-width: 0;
+          height: 100%;
+          padding: 0;
+          border: 0 !important;
+          border-radius: 0;
+          outline: 0 !important;
+          box-shadow: none !important;
+          appearance: none;
+          background: transparent;
+          color: var(--text);
+          font: inherit;
+          font-size: 11px !important;
+          font-weight: 400 !important;
+        }
+        .market-watch-type .market-watch-search-input::placeholder {
+          color: var(--muted);
+          opacity: 1;
+        }
+        .market-watch-type .market-watch-search-input::-webkit-search-decoration,
+        .market-watch-type .market-watch-search-input::-webkit-search-cancel-button {
+          -webkit-appearance: none;
+        }
+        .market-watch-type .market-watch-search-clear {
+          display: grid;
+          flex: 0 0 18px;
+          place-items: center;
+          width: 18px;
+          height: 18px;
+          padding: 0;
+          border: 0;
+          border-radius: 3px;
+          background: transparent;
+          color: var(--muted);
+          cursor: pointer;
+        }
+        .market-watch-type .market-watch-search-clear:hover {
+          background: var(--surface-3);
+          color: var(--text);
         }
         /* A tick only sets the direction colour: no glow or fade, so every
            price in the grid keeps the same weight and strength. */

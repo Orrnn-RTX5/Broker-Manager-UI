@@ -6,6 +6,8 @@ import {
   ShieldCheck, UserPlus, UserRoundCheck, Users,
 } from 'lucide-react';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
+import { usePermissions } from '../../hooks/usePermissions.js';
+import { PERMISSIONS } from '../../utils/permissions.js';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import {
   OWNER_CONSOLE_ALERTS,
@@ -77,7 +79,12 @@ export default function OwnerConsole() {
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [reviewed, setReviewed] = useState(readOwnerConsoleReviewState);
   const navigate = useWorkspaceNavigation();
-  const alertCount = countUnreviewedOwnerWorkflows(OWNER_CONSOLE_ALERTS, reviewed.alerts);
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
+  const alerts = canViewPositions
+    ? OWNER_CONSOLE_ALERTS
+    : OWNER_CONSOLE_ALERTS.filter((item) => item.id !== 'position-exposure');
+  const alertCount = countUnreviewedOwnerWorkflows(alerts, reviewed.alerts);
   const approvalCount = countUnreviewedOwnerWorkflows(OWNER_CONSOLE_APPROVALS, reviewed.approvals);
   const markReviewed = (collection, id) => {
     // Persist before navigating because this dock can unmount immediately.
@@ -135,7 +142,7 @@ export default function OwnerConsole() {
         <WorkflowPanel
           title="Operational Alerts"
           description="Open the workspaces most likely to need attention."
-          items={OWNER_CONSOLE_ALERTS}
+          items={alerts}
           navigate={navigate}
           panelId="owner-panel-alerts"
           labelledBy="owner-tab-alerts"

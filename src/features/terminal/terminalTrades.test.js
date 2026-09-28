@@ -122,11 +122,35 @@ test('tradeCells accurately maps row properties to column values', () => {
   assert.equal(cells[4], 'BTCUSD'); // Symbol
   assert.equal(cells[5], 'BUY'); // Action
   assert.equal(cells[6], '1.00'); // Lots
-  assert.equal(cells[7], 79689.8); // Open
-  assert.equal(cells[8], 79965.21); // Current
+  assert.equal(cells[7], '79689.800000000'); // Open
+  assert.equal(cells[8], '79965.210000000'); // Current
   assert.equal(cells[9], 0); // S/L
   assert.equal(cells[10], 0); // T/P
   assert.equal(cells[11], '0.00'); // Storage
   assert.equal(cells[12], '550.49'); // Profit
   assert.equal(cells[13], '—'); // Comment
+});
+
+test('open and current prices display exactly nine decimals without floating point tails', () => {
+  const row = {
+    priceOpen: 4177.820000000001,
+    priceCurrent: 82970.76999999999,
+    priceSl: 1.23,
+    priceTp: 2.345,
+  };
+  const cells = tradeCells(row);
+
+  assert.equal(cells[7], '4177.820000000');
+  assert.equal(cells[8], '82970.770000000');
+  assert.equal(cells[9], 1.23);
+  assert.equal(cells[10], 2.345);
+  assert.equal(row.priceOpen, 4177.820000000001);
+  assert.equal(row.priceCurrent, 82970.76999999999);
+
+  const precise = tradeCells({ priceOpen: 83827.275, priceCurrent: '1.123456789' });
+  assert.equal(precise[7], '83827.275000000');
+  assert.equal(precise[8], '1.123456789');
+  const missing = tradeCells({ priceOpen: null, priceCurrent: 'invalid' });
+  assert.equal(missing[7], '—');
+  assert.equal(missing[8], '—');
 });

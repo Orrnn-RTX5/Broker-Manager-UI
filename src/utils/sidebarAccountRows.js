@@ -59,7 +59,6 @@ export const normalizeAccount = (account) => {
     login: login === undefined || login === null ? '' : String(login).trim(),
     Name: name || [source.FirstName || source.firstName, source.LastName || source.lastName].filter(Boolean).join(' ') || '',
     balance,
-    MarginCallLevel: source.marginLevel || source.MarginLevel || source.MarginCallLevel,
   };
 };
 

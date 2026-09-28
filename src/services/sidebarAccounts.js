@@ -8,7 +8,7 @@ import { getRealtimeCacheRevision } from './realtimeCacheRevision.js';
 export { normalizeAccount, normalizeSidebarAccountPage } from '../utils/sidebarAccountRows.js';
 
 export const SIDEBAR_ACCOUNT_PAGE_SIZE = 30;
-const SIDEBAR_CACHE_KEY = 'rtx5_sidebar_accounts_cache_v2';
+const SIDEBAR_CACHE_KEY = 'rtx5_sidebar_accounts_cache_v3';
 
 const isRecordObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)

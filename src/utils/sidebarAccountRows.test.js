@@ -20,3 +20,14 @@ test('a cached account gains its type when account details arrive', () => {
   const details = normalizeAccount({ Login: 200001, Group: 'demo/STD' });
   assert.equal(getSidebarAccountType({ ...cached, ...details }), 'demo');
 });
+
+test('sidebar normalization keeps the live margin level separate from the call threshold', () => {
+  const account = normalizeAccount({
+    raw: { Login: 200005, Margin: 0, MarginLevel: 0, MarginCallLevel: 50 },
+    balance: 150005.04,
+  });
+
+  assert.equal(account.login, '200005');
+  assert.equal(account.MarginLevel, 0);
+  assert.equal(account.MarginCallLevel, 50);
+});

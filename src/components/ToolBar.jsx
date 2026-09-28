@@ -15,6 +15,8 @@ import KeyboardShortcutsModal from './Popups/KeyboardShortcutsModal';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { useI18nStore } from '../i18n/index.js';
+import { usePermissions } from '../hooks/usePermissions.js';
+import { PERMISSIONS } from '../utils/permissions.js';
 
 const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
@@ -258,6 +260,8 @@ const ToolBar = ({
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const go = (path) => () => navigate(path);
 
   const refreshData = useCallback(() => {
@@ -320,9 +324,9 @@ const ToolBar = ({
     { id: 'account-limits', label: 'Account limits', icon: Info, tone: 'info', onClick: () => setIsAccountLimitModalOpen(true) },
     { id: 'dealer-queue', label: 'Dealer queue', icon: Gavel, tone: 'warn', shortcut: 'Ctrl Q', path: '/dealer/queue', onClick: go('/dealer/queue') },
     { id: 'restricted-accounts', label: 'Restricted accounts', icon: Shield, tone: 'danger', path: '/dealer/restrictions', onClick: go('/dealer/restrictions') },
-    { id: 'open-positions', label: 'Open positions', icon: TrendingUp, tone: 'ok', path: '/analytics/open-positions', onClick: go('/analytics/open-positions') },
+    ...(canViewPositions ? [{ id: 'open-positions', label: 'Open positions', icon: TrendingUp, tone: 'ok', path: '/analytics/open-positions', onClick: go('/analytics/open-positions') }] : []),
     { id: 'open-orders', label: 'Open orders', icon: ClipboardList, tone: 'warn', path: '/analytics/open-orders', onClick: go('/analytics/open-orders') },
-    { id: 'position-history', label: 'Position history', icon: History, tone: 'info', path: '/clients/positions', onClick: go('/clients/positions') },
+    ...(canViewPositions ? [{ id: 'position-history', label: 'Position history', icon: History, tone: 'info', path: '/clients/positions', onClick: go('/clients/positions') }] : []),
     { id: 'orders', label: 'Orders', icon: ClipboardList, tone: 'warn', path: '/clients/orders', onClick: go('/clients/orders') },
   ];
   const management = [

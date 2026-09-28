@@ -4,9 +4,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, RefreshCw, Edit2 } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPositions } from '../../../services/api';
 import GridLoadingState from '../../../components/GridLoadingState';
 import { prefetchAccountDetails } from '../../../services/accountDetails';
+import { PERMISSIONS } from '../../../utils/permissions';
 // A pointer resting this long on a row signals intent to open it.
 const ROW_PREFETCH_INTENT_MS = 120;
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -53,6 +55,8 @@ const TradingAccountsDataGrid = ({
   refreshVersion = 0,
 }) => {
   const queryClient = useQueryClient();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -186,7 +190,7 @@ const TradingAccountsDataGrid = ({
   const handleEditAccount = (row) => {
     if (!canUseEditAction) return;
     prefetchAccount(row);
-    void preloadAccountPositions(row.login);
+    if (canViewPositions) void preloadAccountPositions(row.login);
     onEditAccount(row);
   };
   const handleRowTap = (row, rowKey, eventTime) => {
@@ -266,7 +270,7 @@ const TradingAccountsDataGrid = ({
                   onPointerDown={(event) => {
                     if (!canUseEditAction || (event.pointerType === 'mouse' && event.button !== 0)) return;
                     prefetchAccount(row);
-                    void preloadAccountPositions(row.login);
+                    if (canViewPositions) void preloadAccountPositions(row.login);
                   }}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
                   onDoubleClick={() => handleEditAccount(row)}

@@ -5,6 +5,10 @@ import { preloadWorkspaceRoute } from '../utils/workspaceRouteModules';
 import { startAnalyticsNavigationTiming } from '../utils/analyticsPerformance.js';
 import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
+import { usePermissions } from './usePermissions.js';
+import { PERMISSIONS } from '../utils/permissions.js';
+
+const POSITION_ONLY_PATHS = new Set(['/analytics/open-positions', '/clients/positions']);
 
 // React Router's useNavigate subscribes its caller to every location change.
 // The workspace shell only needs to *trigger* navigation, so one bridge inside
@@ -34,12 +38,15 @@ const navigateTo = (path, options) => {
 
 export const useWorkspaceNavigation = () => {
   const queryClient = useQueryClient();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
 
   const preload = useCallback((path) => {
     if (!path) return;
+    if (!canViewPositions && POSITION_ONLY_PATHS.has(String(path).split(/[?#]/)[0])) return;
     preloadWorkspaceDestination(queryClient, path);
     preloadAnalyticsDestination(queryClient, path);
-  }, [queryClient]);
+  }, [canViewPositions, queryClient]);
 
   return useMemo(() => Object.assign((path, options) => {
     if (!path) return;

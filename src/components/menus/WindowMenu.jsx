@@ -22,10 +22,14 @@ import {
 import { MenuItem, MenuDivider } from './MenuItem';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../../i18n/index.js';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PERMISSIONS } from '../../utils/permissions.js';
 
 const WindowMenu = ({ onClose, onViewAction }) => {
   const navigate = useNavigate();
   const t = useT();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
 
   const handleMenuClick = (path) => {
     navigate(path);
@@ -55,7 +59,7 @@ const WindowMenu = ({ onClose, onViewAction }) => {
       <MenuItem icon={Users} text={t('window.onlineUsers')} iconColor="text-blue-600" onClick={() => handleMenuClick('/clients/online-users')} />
       <MenuItem icon={User} text={t('window.accounts')} iconColor="text-blue-500" onClick={() => handleMenuClick('/clients/trading-accounts')} />
       <MenuItem icon={Building2} text={t('window.clients')} iconColor="text-blue-500" onClick={() => handleMenuClick('/clients')} />
-      <MenuItem icon={ListOrdered} text={t('window.positions')} iconColor="text-yellow-500" onClick={() => handleMenuClick('/clients/positions')} />
+      {canViewPositions && <MenuItem icon={ListOrdered} text={t('window.positions')} iconColor="text-yellow-500" onClick={() => handleMenuClick('/clients/positions')} />}
       <MenuItem icon={ShoppingCart} text={t('window.orders')} iconColor="text-yellow-500" onClick={() => handleMenuClick('/clients/orders')} />
       <MenuItem icon={FileText} text={t('window.deals')} iconColor="text-yellow-600" onClick={() => handleMenuClick('/dealing')} />
       <MenuItem icon={UserCog} text={t('window.dealer')} iconColor="text-red-500" onClick={() => handleMenuClick('/dealer/queue')} />

@@ -19,6 +19,8 @@ import { usePermissions } from '../hooks/usePermissions';
 import { PERMISSIONS } from '../utils/permissions';
 import { TRADING_ACCOUNTS_INITIAL_PARAMS } from '../utils/workspaceQueryOptions';
 import { getSidebarAccountType } from '../utils/sidebarAccountRows';
+import { useGroupList } from '../hooks/useGroupList';
+import { buildGroupMarginLevels, buildMarginAlerts } from '../features/terminal/terminalAlerts';
 
 const ACCOUNT_SEARCH_DEBOUNCE_MS = 300;
 const MIN_ACCOUNT_SEARCH_LENGTH = 2;
@@ -53,6 +55,8 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const [restrictLogin, setRestrictLogin] = useState(null);
 
   const { canAct } = usePermissions();
+  const { groups } = useGroupList({ enabled: isAuthenticated });
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
   const canEditRestrictions = canAct(PERMISSIONS.EDIT_ACCOUNTS);
   const canManipulateRestrictionTrades = canAct(PERMISSIONS.MANIPULATE_TRADES);
@@ -161,6 +165,10 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
     }).filter((account) => accountType === 'all' || getSidebarAccountType(account) === accountType);
   }, [balanceDetails, baseAccounts, accountType]);
 
+  const urgentLogins = useMemo(() => new Set(
+    buildMarginAlerts(accounts, buildGroupMarginLevels(groups)).map((alert) => alert.login),
+  ), [accounts, groups]);
+
   const loading = (isInitialLoading || (accountType !== 'all' && isFetchingDetails)) && accounts.length === 0;
   const error = queryError ? (queryError.message || 'Failed to load accounts.') : null;
 
@@ -204,7 +212,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         showResult.error("Error fetching summary: " + err.message);
       }
     } else if (action === 'details') {
-      void preloadAccountPositions(login);
+      if (canViewPositions) void preloadAccountPositions(login);
       setSelectedAccountDetails(acc);
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
@@ -342,14 +350,13 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
                   const isPrimitive = typeof acc === 'number' || typeof acc === 'string';
                   const login = isPrimitive ? acc : acc.login;
                   const bal = isPrimitive ? '—' : balanceDisplay(acc);
-                  const mcl = isPrimitive ? undefined : acc.MarginCallLevel;
-                  const isUrgent = mcl !== undefined && Number(mcl) < 100;
+                  const isUrgent = urgentLogins.has(String(login));
                   return (
                     <tr
                       key={login ?? idx}
                       onPointerDown={(event) => {
                         if (event.pointerType === 'mouse' && event.button !== 0) return;
-                        void preloadAccountPositions(login);
+                        if (canViewPositions) void preloadAccountPositions(login);
                       }}
                       onDoubleClick={() => setSelectedAccountDetails(acc)}
                       onContextMenu={(e) => handleContextMenu(e, acc)}

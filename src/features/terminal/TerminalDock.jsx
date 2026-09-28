@@ -4,11 +4,13 @@ import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotCont
 import { useQueryClient } from '@tanstack/react-query';
 import { API_HOST } from '../../config/endpoints.js';
 import usePagedData from '../../hooks/usePagedData';
+import { usePermissions } from '../../hooks/usePermissions';
 import { getSessionClaims, getSessionScopeKey } from '../../services/authService.js';
 import { getPositionsPage, invalidateGlobalPositionsCache } from '../../services/api';
 import { subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
 import { useLivePositions } from '../../hooks/useLiveTrading';
 import { buildPermissionSessionFingerprint } from '../../utils/sessionFingerprint.js';
+import { PERMISSIONS } from '../../utils/permissions.js';
 import {
   TRADE_COLUMNS,
   tradeCells,
@@ -84,12 +86,17 @@ const journalDetailText = (entry) => {
 function TerminalDock({ isAuthenticated = false }) {
   const titleSlot = useContext(DockTitleSlotContext);
   const queryClient = useQueryClient();
+  const { resolved, hasPermission } = usePermissions();
+  const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
   const { login, brokerId } = getSessionClaims();
   const sessionScope = getSessionScopeKey();
   const terminalScope = !String(login ?? '').trim() || !String(brokerId ?? '').trim() || !sessionScope
     ? ''
     : buildPermissionSessionFingerprint({ token: sessionScope, login, brokerId: `${brokerId}|${API_HOST}` });
-  const cachedInitial = useMemo(() => readStoredTerminalPage(terminalScope), [terminalScope]);
+  const cachedInitial = useMemo(
+    () => canViewPositions ? readStoredTerminalPage(terminalScope) : undefined,
+    [terminalScope, canViewPositions]
+  );
   const [activeTab, setActiveTab] = useState('trades');
   const [journalEntries, setJournalEntries] = useState(() => getTradeJournalEntries());
   const [selectedTradeKey, setSelectedTradeKey] = useState(null);
@@ -115,7 +122,7 @@ function TerminalDock({ isAuthenticated = false }) {
     queryFn: fetchTrades,
     params: TERMINAL_POSITIONS_PARAMS,
     pageSize: 30,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canViewPositions,
     refetchOnMount: 'always',
     refetchOnReconnect: true,
     initialData: cachedInitial,
@@ -124,22 +131,24 @@ function TerminalDock({ isAuthenticated = false }) {
   });
 
   const missingViewPositions = /\bview_positions\b/i.test(String(error?.message || ''));
-  const positionsAccessDenied = isError && (Number(error?.status) === 403 || missingViewPositions);
-  const liveRows = useLivePositions(snapshotRows, undefined, page === 0, data?.liveRevision || 0);
+  const positionsAccessDenied = (resolved && !canViewPositions)
+    || (isError && (Number(error?.status) === 403 || missingViewPositions));
+  const showPositionViews = canViewPositions && !positionsAccessDenied;
+  const liveRows = useLivePositions(snapshotRows, undefined, page === 0 && showPositionViews, data?.liveRevision || 0);
   const rows = useMemo(() => [...liveRows].sort((a, b) => Number(b.position) - Number(a.position)).slice(0, 30), [liveRows]);
-  const presentedRows = positionsAccessDenied ? [] : rows;
+  const presentedRows = showPositionViews ? rows : [];
   useEffect(() => {
     if (!positionsAccessDenied) return;
     clearStoredTerminalPage();
   }, [positionsAccessDenied]);
   useEffect(() => {
-    if (page === 0 && isFetchedAfterMount && !isLoading && !isError) {
+    if (showPositionViews && page === 0 && isFetchedAfterMount && !isLoading && !isError) {
       writeStoredTerminalPage({ rows: snapshotRows, total, hasMore, timestamp: dataUpdatedAt }, terminalScope);
     }
-  }, [snapshotRows, total, hasMore, page, isFetchedAfterMount, isLoading, isError, dataUpdatedAt, terminalScope]);
+  }, [snapshotRows, total, hasMore, page, isFetchedAfterMount, isLoading, isError, dataUpdatedAt, terminalScope, showPositionViews]);
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
+    if (!isAuthenticated || !showPositionViews) return undefined;
     // Coalesce bursts without repeatedly cancelling a slow PositionsAll request.
     // The shared sync service also emits a fallback poll every 30 seconds.
     let timer;
@@ -152,7 +161,7 @@ function TerminalDock({ isAuthenticated = false }) {
       }, 200);
     });
     return () => { unsubscribe(); clearTimeout(timer); };
-  }, [isAuthenticated, queryClient]);
+  }, [isAuthenticated, showPositionViews, queryClient]);
 
   useEffect(() => subscribeToTradeJournal((next) => setJournalEntries(next)), []);
 
@@ -197,7 +206,9 @@ function TerminalDock({ isAuthenticated = false }) {
   };
 
   const searchNeedle = terminalSearch.trim().toLowerCase();
-  const showingTrades = activeTab === 'trades' || activeTab === 'exposure';
+  const visibleTab = !showPositionViews && ['trades', 'exposure', 'search'].includes(activeTab)
+    ? 'summary' : activeTab;
+  const showingTrades = visibleTab === 'trades' || visibleTab === 'exposure';
   const visibleRows = searchNeedle
     ? presentedRows.filter((row) => tradeCells(row).join(' ').toLowerCase().includes(searchNeedle))
     : presentedRows;
@@ -210,7 +221,7 @@ function TerminalDock({ isAuthenticated = false }) {
   const controls = (
       <div className="cc-terminal-tabs cc-terminal-title-controls" role="group" aria-label="Terminal controls">
         <span className="cc-trade-status" role="status">
-          {activeTab === 'journal'
+          {visibleTab === 'journal'
             ? (!isAuthenticated ? 'Sign in to view trade requests' : 'Trade requests · live feed')
             : showingTrades
               ? (isError
@@ -218,7 +229,7 @@ function TerminalDock({ isAuthenticated = false }) {
                 : (isFetching && presentedRows.length === 0)
                   ? 'Synchronizing trades…'
                   : 'Open trades · auto-refresh')
-              : (!isAuthenticated ? 'Sign in to view the terminal' : (TAB_STATUS[activeTab] || 'Terminal'))}
+              : (!isAuthenticated ? 'Sign in to view the terminal' : visibleTab === 'summary' && !showPositionViews ? 'Alerts' : (TAB_STATUS[visibleTab] || 'Terminal'))}
         </span>
         {showingTrades ? (
           <>
@@ -227,7 +238,7 @@ function TerminalDock({ isAuthenticated = false }) {
             <span className="cc-trade-page">{presentedRows.length ? `${offset + 1}–${offset + presentedRows.length}` : `Page ${page + 1}`}</span>
             <button type="button" aria-label="Next trades" onClick={nextPage} disabled={!isAuthenticated || positionsAccessDenied || !hasMore || isFetching}>Next</button>
           </>
-        ) : activeTab === 'journal' ? (
+        ) : visibleTab === 'journal' ? (
           <button type="button" onClick={clearTradeJournal} disabled={!journalEntries.length}>Clear</button>
         ) : null}
       </div>
@@ -236,7 +247,7 @@ function TerminalDock({ isAuthenticated = false }) {
   return (
     <div className="cc-terminal" ref={terminalRef}>
       {titleSlot ? createPortal(controls, titleSlot) : controls}
-      {activeTab === 'journal' ? (
+      {visibleTab === 'journal' ? (
         <div className="cc-terminal-table-wrap" ref={journalWrapRef}>
           <table className="cc-terminal-table cc-journal-table" aria-label="Trade request journal">
             <thead>
@@ -326,19 +337,19 @@ function TerminalDock({ isAuthenticated = false }) {
           </table>
         </div>
       ) : (
-        <TerminalTabContent tab={activeTab} search={terminalSearch} isAuthenticated={isAuthenticated} />
+        <TerminalTabContent tab={visibleTab} search={terminalSearch} isAuthenticated={isAuthenticated} canViewPositions={showPositionViews} />
       )}
       <div className="cc-terminal-tabs cc-terminal-bottom" role="tablist" aria-label="Terminal views">
-        {TERMINAL_TABS.map((tab) => (
+        {TERMINAL_TABS.filter((tab) => showPositionViews || !['exposure', 'search'].includes(tab.id)).map((tab) => (
           <button
             key={tab.id}
             type="button"
             role="tab"
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? 'is-active' : ''}
+            aria-selected={visibleTab === tab.id}
+            className={visibleTab === tab.id ? 'is-active' : ''}
             onClick={() => setActiveTab((prev) => {
               if (tab.id === 'exposure' || tab.id === 'alerts') return tab.id;
-              return prev === tab.id ? 'trades' : tab.id;
+              return prev === tab.id ? (showPositionViews ? 'trades' : 'summary') : tab.id;
             })}
           >
             {tab.label}

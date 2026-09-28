@@ -5,7 +5,11 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useT } from '../../i18n/index.js';
+import { PERMISSIONS } from '../../utils/permissions.js';
+
+const POSITION_ONLY_PATHS = new Set(['/analytics/open-positions', '/clients/positions']);
 
 const DEFAULT_WORKSPACE_TABS = [
   { labelKey: 'tabs.dashboard', path: '/dashboard', match: (path) => ['/', '/dashboard', '/admin-dashboard'].includes(path) },
@@ -75,6 +79,8 @@ export default function WorkspaceTabs() {
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
   const t = useT();
+  const { canAct } = usePermissions();
+  const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
   const [tabState, setTabState] = useState(() => ({
     pathname: location.pathname,
     key: location.key,
@@ -82,7 +88,7 @@ export default function WorkspaceTabs() {
   }));
   const [isQuickNavOpen, setIsQuickNavOpen] = useState(false);
   const tabsRef = useRef(null);
-  const visibleTabs = tabState.tabs;
+  const visibleTabs = tabState.tabs.filter((tab) => canViewPositions || !POSITION_ONLY_PATHS.has(tab.path));
 
   // If the user navigates (sidebar, deep-link, etc.) to a known workspace
   // that is not currently in the tab strip, pin it at the end (just before +).
@@ -131,7 +137,8 @@ export default function WorkspaceTabs() {
 
   // Only offer workspaces that aren't already pinned in the strip.
   const availableQuickNav = QUICK_NAVIGATION.filter(
-    (item) => !visibleTabs.some((tab) => tab.path === item.path),
+    (item) => (canViewPositions || !POSITION_ONLY_PATHS.has(item.path))
+      && !visibleTabs.some((tab) => tab.path === item.path),
   );
 
   return (

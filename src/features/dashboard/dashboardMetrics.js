@@ -152,7 +152,9 @@ export const pagedTotal = (page = {}) => {
 };
 
 const hasCompleteRows = (page = {}) => (
-  Array.isArray(page?.rows) && page.hasMore === false
+  Array.isArray(page?.rows)
+  && page.hasMore === false
+  && (pagedTotal(page) === null || pagedTotal(page) === page.rows.length)
 );
 
 export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage, positionsPage } = {}) => {
@@ -163,10 +165,11 @@ export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage
     accounts: accountsComplete ? accountsPage.rows : [],
     positions: positionsComplete ? positionsPage.rows : [],
   });
+  const hasCompleteEquity = accountsComplete
+    && accountsPage.rows.filter(isRealAccount).every((account) => getAccountEquity(account) !== null);
 
   const realAccounts =
     accountLimit?.realAccounts ??
-    pagedTotal(accountsPage) ??
     (accountsComplete ? rowMetrics.realAccounts : null);
   const demoAccounts =
     accountLimit?.demoAccounts ??
@@ -174,7 +177,7 @@ export const buildDashboardFallbackMetrics = ({ accountLimitStatus, accountsPage
   const openPositions =
     pagedTotal(positionsPage) ??
     (positionsComplete ? rowMetrics.openPositions : null);
-  const equity = accountsComplete ? rowMetrics.equity : null;
+  const equity = hasCompleteEquity ? rowMetrics.equity : null;
 
   if (realAccounts === null && demoAccounts === null && openPositions === null && equity === null) return null;
 

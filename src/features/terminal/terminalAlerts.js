@@ -47,15 +47,17 @@ const accountMarginLevel = (account) => {
   const margin = readNumber(account, ['margin', 'Margin']);
   if (!(margin > 0)) return undefined;
   const level = readNumber(account, ['marginLevel', 'MarginLevel', 'margin_level']);
-  if (level !== undefined) return level;
   const equity = readNumber(account, ['equity', 'Equity']);
+  // Trading-account rows use zero when the server omits margin level. When
+  // equity is available, calculate the live value instead of flagging zero.
+  if (level !== undefined && (level !== 0 || !(equity > 0))) return level;
   return equity === undefined ? undefined : (equity / margin) * 100;
 };
 
 /**
  * Accounts at or below their margin call level, stop outs first and then the
- * lowest margin level. `MarginCallLevel` is not read from accounts because the
- * sidebar account normaliser stores the account's margin level under it.
+ * lowest margin level. The account's configured `MarginCallLevel` is a
+ * threshold; the live `MarginLevel` is read separately.
  */
 export const buildMarginAlerts = (accounts = [], groupLevels = new Map()) => accounts
   .flatMap((account) => {
@@ -65,7 +67,7 @@ export const buildMarginAlerts = (accounts = [], groupLevels = new Map()) => acc
 
     const group = readText(account, ['group', 'Group']);
     const levels = groupLevels.get(groupKey(group)) || {};
-    const call = readNumber(account, ['marginCallLevel', 'margin_call_level']) ?? levels.call ?? DEFAULT_MARGIN_CALL_LEVEL;
+    const call = readNumber(account, ['marginCallLevel', 'MarginCallLevel', 'margin_call_level']) ?? levels.call ?? DEFAULT_MARGIN_CALL_LEVEL;
     const stop = readNumber(account, ['stopOutLevel', 'StopOutLevel', 'stop_out_level']) ?? levels.stop ?? DEFAULT_STOP_OUT_LEVEL;
     if (marginLevel > call) return [];
 

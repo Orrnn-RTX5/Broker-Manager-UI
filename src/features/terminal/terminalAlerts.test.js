@@ -37,6 +37,16 @@ test('group levels override defaults and margin level falls back to equity / mar
   ]);
 });
 
-test('the sidebar MarginCallLevel alias is not treated as a threshold', () => {
-  assert.deepEqual(buildMarginAlerts([{ login: '1', margin: 100, marginLevel: 300, MarginCallLevel: 300 }]), []);
+test('an account threshold below 100 does not mark a healthy account as a margin call', () => {
+  assert.deepEqual(buildMarginAlerts([
+    { login: '200005', margin: 0, MarginLevel: 0, MarginCallLevel: 50 },
+    { login: '200006', margin: 100, MarginLevel: 80, MarginCallLevel: 50 },
+    { login: '200008', margin: 100, equity: 200, marginLevel: 0, MarginCallLevel: 50 },
+  ]), []);
+
+  const alerts = buildMarginAlerts([
+    { login: '200007', margin: 100, MarginLevel: 40, MarginCallLevel: 50 },
+  ]);
+  assert.equal(alerts[0].login, '200007');
+  assert.equal(alerts[0].threshold, 50);
 });
