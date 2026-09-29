@@ -5,8 +5,10 @@ import {
   describeServerJournalError,
   describeServerJournalScope,
   formatServerJournalTime,
+  isServerJournalDenied,
   matchesServerJournalSearch,
   mergeServerJournalPages,
+  serverJournalAccessKey,
   serverJournalDetail,
   severityClass,
 } from './serverJournalCore.js';
@@ -52,4 +54,23 @@ test('rows format, search and page without duplicates', () => {
   assert.equal(matchesServerJournalSearch(entry, 'groupupdate'), true);
   assert.equal(matchesServerJournalSearch(entry, 'btcusd'), false);
   assert.deepEqual(mergeServerJournalPages([entry], [entry, { id: 't2' }]).map((e) => e.id), ['m1', 't2']);
+});
+
+test('a 403 is a revoked journal permission; other failures are not', () => {
+  assert.equal(isServerJournalDenied({ status: 403 }), true);
+  assert.equal(isServerJournalDenied({ status: '403' }), true);
+  assert.equal(isServerJournalDenied({ status: 500 }), false);
+  assert.equal(isServerJournalDenied(new Error('network')), false);
+  assert.equal(isServerJournalDenied(undefined), false);
+});
+
+test('access key changes on grant, revoke, role or revision change, not on list order', () => {
+  const before = serverJournalAccessKey({ role: 'Check', permissions: ['credit', 'view_journal'] });
+  const revoked = serverJournalAccessKey({ role: 'Check', permissions: ['credit'] });
+  assert.notEqual(before, revoked);
+  assert.equal(before, serverJournalAccessKey({ role: 'Check', permissions: ['view_journal', 'credit'] }));
+  assert.notEqual(before, serverJournalAccessKey({ role: 'Dealer', permissions: ['credit', 'view_journal'] }));
+  assert.notEqual(before, serverJournalAccessKey({ role: 'Check', permissions: ['credit', 'view_journal'], revision: '7::' }));
+  assert.notEqual(before, serverJournalAccessKey({ isAdmin: true, role: 'Check', permissions: ['credit', 'view_journal'] }));
+  assert.equal(serverJournalAccessKey(), serverJournalAccessKey({}));
 });

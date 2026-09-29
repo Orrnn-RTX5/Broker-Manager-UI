@@ -82,9 +82,16 @@ export const usePermissions = () => {
     return decidePermission(state, permission);
   };
 
+  // Access revisions from the session snapshot. They change when an administrator
+  // edits this manager's role or access, even if the permission list looks the same.
+  const accessRevision = [data?.access_revision, data?.assignment_revision, data?.policy_revision]
+    .map((value) => (value === undefined || value === null ? '' : String(value)))
+    .join(':');
+
   return {
     isAdmin,
     role: manager.role,
+    accessRevision,
     manager,
     permissions,
     loading: isLoading && !isAdmin,

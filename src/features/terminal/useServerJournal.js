@@ -4,6 +4,7 @@ import {
   SERVER_JOURNAL_PAGE,
   describeServerJournalError,
   fetchServerJournal,
+  isServerJournalDenied,
   mergeServerJournalPages,
 } from './serverJournal.js';
 
@@ -14,8 +15,9 @@ const LIVE_INTERVAL_MS = 5000;
 let memory = null;
 
 // Server journal state for the operations terminal. It loads when the Journal
-// tab opens and when the filter changes; it only polls while Live is on.
-export default function useServerJournal(enabled) {
+// tab opens, when the filter changes and when the manager's access changes
+// (`accessKey`, from the polled session); it only polls while Live is on.
+export default function useServerJournal(enabled, accessKey = '') {
   const owner = getSessionScopeKey() || '';
   const [remembered] = useState(() => (memory?.owner === owner ? memory : null));
   const [filter, setFilterState] = useState(remembered?.filter ?? 'all');
@@ -36,6 +38,13 @@ export default function useServerJournal(enabled) {
     memory = { owner, filter, entries, cursor, scope };
   }, [owner, filter, entries, cursor, scope]);
 
+  const clearRows = useCallback(() => {
+    entriesRef.current = [];
+    setEntries([]);
+    setCursor('');
+    setScope(null);
+  }, []);
+
   const refresh = useCallback(async ({ quiet = false } = {}) => {
     const seq = ++requestSeq.current;
     if (!quiet) setLoading(true);
@@ -48,17 +57,24 @@ export default function useServerJournal(enabled) {
       setError('');
     } catch (err) {
       if (seq !== requestSeq.current) return;
-      setError(describeServerJournalError(err)); // rows already on screen stay
+      // Access revoked: drop what is on screen. Other errors keep the rows.
+      if (isServerJournalDenied(err)) {
+        clearRows();
+        setLive(false);
+      }
+      setError(describeServerJournalError(err));
     } finally {
       if (seq === requestSeq.current && !quiet) setLoading(false);
     }
-  }, [filter]);
+  }, [filter, clearRows]);
 
+  // Also re-runs when accessKey changes, so a grant or revoke shows within one
+  // session poll instead of after a page reload.
   useEffect(() => {
     if (!enabled) return undefined;
     const timer = setTimeout(() => refresh({ quiet: entriesRef.current.length > 0 }), 0);
     return () => clearTimeout(timer);
-  }, [enabled, refresh]);
+  }, [enabled, refresh, accessKey]);
 
   useEffect(() => {
     if (!enabled || !live) return undefined;
@@ -87,11 +103,15 @@ export default function useServerJournal(enabled) {
       setEntries((current) => mergeServerJournalPages(current, Array.isArray(data?.entries) ? data.entries : []));
       setCursor(data?.next_cursor || '');
     } catch (err) {
+      if (isServerJournalDenied(err)) {
+        requestSeq.current++;
+        clearRows();
+      }
       setError(describeServerJournalError(err));
     } finally {
       setLoadingOlder(false);
     }
-  }, [cursor, filter, loadingOlder]);
+  }, [cursor, filter, loadingOlder, clearRows]);
 
   return { filter, setFilter, entries, cursor, scope, loading, loadingOlder, error, live, setLive, refresh, loadOlder };
 }

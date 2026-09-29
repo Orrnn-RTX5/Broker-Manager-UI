@@ -36,6 +36,7 @@ import {
   describeServerJournalScope,
   formatServerJournalTime,
   matchesServerJournalSearch,
+  serverJournalAccessKey,
   serverJournalDetail,
   severityClass,
 } from './serverJournalCore.js';
@@ -96,7 +97,7 @@ const journalDetailText = (entry) => {
 function TerminalDock({ isAuthenticated = false }) {
   const titleSlot = useContext(DockTitleSlotContext);
   const queryClient = useQueryClient();
-  const { resolved, hasPermission } = usePermissions();
+  const { resolved, hasPermission, isAdmin, role, permissions, accessRevision } = usePermissions();
   const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
   const { login, brokerId } = getSessionClaims();
   const sessionScope = getSessionScopeKey();
@@ -118,7 +119,11 @@ function TerminalDock({ isAuthenticated = false }) {
   const [journalMode, setJournalMode] = useState('server');
   const [expandedServerIds, setExpandedServerIds] = useState(() => new Set());
   const [selectedServerId, setSelectedServerId] = useState(null);
-  const serverJournal = useServerJournal(isAuthenticated && activeTab === 'journal' && journalMode === 'server');
+  const journalAccessKey = serverJournalAccessKey({ isAdmin, role, permissions, revision: accessRevision });
+  const serverJournal = useServerJournal(
+    isAuthenticated && activeTab === 'journal' && journalMode === 'server',
+    journalAccessKey,
+  );
   const { alerts: marginAlerts } = useMarginAlerts(isAuthenticated);
   const journalWrapRef = useRef(null);
   const terminalRef = useRef(null);

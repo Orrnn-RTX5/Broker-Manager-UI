@@ -54,9 +54,20 @@ export const describeServerJournalScope = (scope) => {
   }
 };
 
+// A 403 means the manager has lost (or never had) journal access. Rows already
+// on screen must go too, not stay visible under the error.
+export const isServerJournalDenied = (error) => Number(error?.status) === 403;
+
+// Changes whenever the manager's access changes (role edit, permission grant or
+// revoke, admin flag). The manager session is polled every few seconds, so a new
+// key makes the journal re-ask the server, which stays the authority.
+export const serverJournalAccessKey = ({ isAdmin = false, role = '', permissions = [], revision = '' } = {}) => {
+  const list = Array.isArray(permissions) ? [...permissions].map(String).sort() : [];
+  return [isAdmin ? 'admin' : 'staff', role || '', revision || '', list.join(',')].join('|');
+};
+
 export const describeServerJournalError = (error) => {
-  const status = Number(error?.status);
-  if (status === 403) return 'No journal access — ask an administrator for the "View Journal" permission';
+  if (isServerJournalDenied(error)) return 'No journal access — ask an administrator for the "View Journal" permission';
   return `Journal unavailable — ${error?.message || 'request failed'}`;
 };
 
