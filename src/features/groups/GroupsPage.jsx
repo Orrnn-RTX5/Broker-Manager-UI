@@ -5,7 +5,8 @@ import { ArrowUp, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, Info, Penc
 import NewGroupModal from './components/NewGroupModal';
 import GroupPropertiesModal from './components/GroupPropertiesModal';
 import GroupPermissionNotice from './components/GroupPermissionNotice';
-import { fetchManagerApi } from '../../services/managerFetch';
+import GroupOperationModal from './components/GroupOperationModal';
+import { groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
 import { getSidebarAccountsQueryOptions } from '../../services/sidebarAccounts.js';
 import { usePermissions } from '../../hooks/usePermissions';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
@@ -24,7 +25,6 @@ import {
   groupRowNode,
   isGroupBranch,
   listGroupContainerPaths,
-  listGroupsUnder,
   nestGroupName,
   pathSeparatorOf,
   separatorForContainer,
@@ -81,7 +81,9 @@ const GroupsPage = () => {
   const [propertiesGroup, setPropertiesGroup] = useState(null);
   const [openedGroup, setOpenedGroup] = useState(null);
   const [selectedLogin, setSelectedLogin] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deleteSelection, setDeleteSelection] = useState(null);
+  const deleting = Boolean(deleteSelection);
+  const operationsEnabled = groupOperationsEnabled();
   const [permissionAction, setPermissionAction] = useState(null);
   const searchInputRef = useRef(null);
   const handlersRef = useRef({});
@@ -218,34 +220,12 @@ const GroupsPage = () => {
     setNewGroup({ duplicateData: node.group });
   };
 
-  const deleteGroups = async (names, label) => {
-    if (!requireManage('delete') || names.length === 0) return;
-    const message = names.length === 1
-      ? `Are you sure you want to delete group '${names[0]}'?`
-      : `Delete '${label}' and the ${names.length} groups inside it?\n\n${names.join('\n')}`;
-    if (!window.confirm(message)) return;
-    setDeleting(true);
-    const failed = [];
-    // Deepest names first, so a parent group never disappears before its subgroups.
-    const ordered = [...names].sort((left, right) => splitGroupPath(right).length - splitGroupPath(left).length);
-    for (const name of ordered) {
-      try {
-        const res = await fetchManagerApi(`/GroupDelete?${new URLSearchParams({ group: name }).toString()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      } catch (err) {
-        failed.push(`${name} (${err.message})`);
-      }
-    }
-    setDeleting(false);
-    setSelectedId(null);
-    invalidateGroups();
-    if (failed.length) showResult.error(`Could not delete: ${failed.join(', ')}`);
-    else showResult.success(names.length === 1 ? `Group '${names[0]}' deleted successfully!` : `Deleted ${names.length} groups from '${label}'.`);
-  };
   const deleteNode = (node) => {
-    if (!node) return;
-    const names = rowIsBranch(node) ? listGroupsUnder(groups, node.path).map((group) => group.name) : [node.name];
-    deleteGroups(names, node.label);
+    if (!node || !requireManage('delete')) return;
+    const saved = readSavedOperation();
+    if (saved) { setDeleteSelection(saved.selection); return; }
+    if (!operationsEnabled) { showResult.error('Group operations are not enabled for this broker.'); return; }
+    setDeleteSelection(rowIsBranch(node) ? { folder: node.path } : { sources: [node.name] });
   };
 
   const copyNode = async (node) => {
@@ -429,7 +409,8 @@ const GroupsPage = () => {
           <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!selectedNode && !openedGroup} title="Group properties" onClick={() => (openedGroup ? openAccountWindow() : openProperties(selectedNode))}>
             <Pencil size={12} /> Settings
           </button>
-          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={!selectedNode || deleting} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode)}>
+          {readSavedOperation() && <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setDeleteSelection(readSavedOperation().selection)}>Operation progress</button>}
+          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={!selectedNode || deleting || !operationsEnabled} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode)}>
             <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
@@ -666,6 +647,15 @@ const GroupsPage = () => {
       )}
 
       {permissionAction && <GroupPermissionNotice action={permissionAction} onClose={() => setPermissionAction(null)} />}
+      {deleteSelection && <GroupOperationModal
+        selection={deleteSelection}
+        onClose={() => setDeleteSelection(null)}
+        onComplete={() => {
+          setSelectedId(null);
+          invalidateGroups();
+          queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
+        }}
+      />}
 
       {propertiesGroup && (
         <GroupPropertiesModal

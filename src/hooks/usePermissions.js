@@ -1,3 +1,4 @@
+import { getDataAccessIdentity, updateDataAccessScope } from '../services/dataAccessScope.js';
 import { useQuery } from '@tanstack/react-query';
 import { fetchManagerApi } from '../services/managerFetch';
 import authService from '../services/authService';
@@ -23,6 +24,7 @@ import { normalizeManagerSession } from '../utils/managerSession.js';
 // gated permission because the backend remains the authority.
 
 const fetchSessionInfo = async () => {
+  const identity = getDataAccessIdentity();
   const res = await fetchManagerApi(MANAGER_API.session, {
     headers: { accept: 'application/json' },
   });
@@ -34,7 +36,10 @@ const fetchSessionInfo = async () => {
     throw new Error('Invalid manager session response');
   }
   if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to load session info');
-  return data?.data || data?.session || data;
+  const session = data?.data || data?.session || data;
+  if (identity !== getDataAccessIdentity()) throw new DOMException("Session changed", "AbortError");
+  updateDataAccessScope(session, identity);
+  return session;
 };
 
 export const usePermissions = () => {
@@ -51,7 +56,9 @@ export const usePermissions = () => {
     queryKey,
     queryFn: fetchSessionInfo,
     enabled: Boolean(snapshot.token),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 

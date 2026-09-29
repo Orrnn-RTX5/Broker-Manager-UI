@@ -37,11 +37,11 @@ const runtimeConfigSources = () => {
   ].filter((source) => source && typeof source === 'object');
 };
 
-export const getRuntimeConfigValue = (keys = [], fallback = '') => {
+export const getRuntimeConfigValue = (keys = [], fallback = '', { allowEmpty = false } = {}) => {
   for (const source of runtimeConfigSources()) {
     for (const key of keys) {
       const value = source[key];
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
+      if (value !== undefined && value !== null && (allowEmpty || String(value).trim() !== '')) {
         return String(value).trim();
       }
     }
@@ -50,7 +50,7 @@ export const getRuntimeConfigValue = (keys = [], fallback = '') => {
   const buildEnv = getBuildEnv();
   for (const key of keys) {
     const value = buildEnv[key];
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
+    if (value !== undefined && value !== null && (allowEmpty || String(value).trim() !== '')) {
       return String(value).trim();
     }
   }

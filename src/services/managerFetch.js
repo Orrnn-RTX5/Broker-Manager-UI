@@ -1,3 +1,4 @@
+import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 import { buildManagerApiUrl } from '../config/endpoints.js';
 import { desktopFetch } from './desktopHttp.js';
 import { sendWithSessionRefresh } from './authRequest.js';
@@ -21,6 +22,7 @@ const buildAuthenticatedUrl = (endpoint, token, { legacyQueryToken = false, pres
 };
 
 export const fetchManagerApi = async (endpoint, options = {}) => {
+  const accessScope = getDataAccessScope();
   if (isLoginEndpoint(endpoint)) {
     throw new Error('Legacy /Connect login is disabled. Use broker login instead.');
   }
@@ -34,7 +36,7 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
 
   // Renews a stale token before sending, and once after a rejected token
   // (401, or 403 "Not authenticated") before retrying; see authRequest.js.
-  return sendWithSessionRefresh((token) => {
+  const response = await sendWithSessionRefresh((token) => {
     const headers = { accept: 'application/json', ...optionHeaders };
     if (token) headers.Authorization = `Bearer ${token}`;
     return desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
@@ -42,4 +44,6 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
       headers,
     });
   });
+  assertDataAccessScope(accessScope);
+  return response;
 };

@@ -1,3 +1,4 @@
+import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 import authService from './authService.js';
 import { desktopFetch } from './desktopHttp.js';
 import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints.js';
@@ -94,6 +95,7 @@ const notifyResponseReceived = (callback, response, text) => {
  */
 const apiClient = {
   async rawRequest(endpoint, options = {}) {
+    const accessScope = getDataAccessScope();
     const {
       maxResponseBytes: _maxResponseBytes,
       responseType: _responseType,
@@ -105,7 +107,7 @@ const apiClient = {
       : buildManagerApiUrl(endpoint);
     const finalUrl = withoutQueryToken(url);
 
-    return sendWithSessionRefresh((token) => {
+    const response = await sendWithSessionRefresh((token) => {
       const headers = { accept: 'application/json', ...requestOptions.headers };
       if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -118,9 +120,12 @@ const apiClient = {
       }
       return desktopFetch(finalUrl, { ...requestOptions, headers });
     });
+    assertDataAccessScope(accessScope);
+    return response;
   },
 
   async request(endpoint, options = {}) {
+    const accessScope = getDataAccessScope();
     const {
       maxResponseBytes,
       responseType = 'json',
@@ -148,7 +153,9 @@ const apiClient = {
         return desktopFetch(finalUrl, { ...requestOptions, headers });
       });
 
-      return await this.handleResponse(response, { maxResponseBytes, responseType, onResponseReceived });
+      const result = await this.handleResponse(response, { maxResponseBytes, responseType, onResponseReceived });
+      assertDataAccessScope(accessScope);
+      return result;
     } catch (error) {
       console.error('API request failed:', redactSensitive(error));
       throw error;

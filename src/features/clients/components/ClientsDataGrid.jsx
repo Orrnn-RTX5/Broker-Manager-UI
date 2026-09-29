@@ -1,3 +1,4 @@
+import { getDataAccessScope } from '../../../services/dataAccessScope.js';
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,7 +21,7 @@ const getInitialCachedClients = () => {
     const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(CLIENTS_CACHE_KEY) : null;
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) return parsed;
+    if (parsed?.scope === getDataAccessScope() && Array.isArray(parsed.rows)) return parsed;
   } catch {
     // Ignore storage parse errors
   }
@@ -28,9 +29,9 @@ const getInitialCachedClients = () => {
 };
 
 const saveCachedClients = (data) => {
-  if (!data || !Array.isArray(data.rows) || data.rows.length === 0) return;
+  if (!data || !Array.isArray(data.rows)) return;
   try {
-    window.sessionStorage?.setItem(CLIENTS_CACHE_KEY, JSON.stringify(data));
+    window.sessionStorage?.setItem(CLIENTS_CACHE_KEY, JSON.stringify({ ...data, scope: getDataAccessScope() }));
   } catch {
     // Storage full or private mode
   }
@@ -121,7 +122,7 @@ const ClientsDataGrid = ({
     queryKey: ['clients', 'page'],
     queryFn: async (pagedParams, options) => {
       const result = await getClientsPage(pagedParams, options);
-      if (pagedParams.offset === 0 && !pagedParams.search && result?.rows?.length > 0) {
+      if (pagedParams.offset === 0 && !pagedParams.search && Array.isArray(result?.rows)) {
         saveCachedClients(result);
       }
       return result;

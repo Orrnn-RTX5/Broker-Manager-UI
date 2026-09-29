@@ -1,12 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Loader2, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { AlertCircle, Loader2, Pencil, Users, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
+import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
 import { GROUP_DEFAULT_PAYLOAD, pickGroupPayloadFields, submitGroup, toSymbolList } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { ROUTING_LABELS } from '../groupTree.js';
+import {
+  GROUP_SYMBOL_FILTERS,
+  GROUP_SYMBOL_STATUS,
+  applyStagedOverride,
+  buildGroupSymbolOverrideChanges,
+  filterGroupSymbolRows,
+  isGroupSymbolEditable,
+  normalizeGroupSymbolOverrides,
+  summarizeGroupSymbols,
+  toggleStagedOverride,
+} from '../groupSymbolOverrides.js';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GroupAccountsTab from './GroupAccountsTab';
 import GroupPermissionNotice from './GroupPermissionNotice';
@@ -33,8 +45,12 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     symbolsAllowed: toSymbolList(group?.symbolsAllowed),
     symbolsBlocked: toSymbolList(group?.symbolsBlocked),
   }));
-  const [symbolDraft, setSymbolDraft] = useState({ symbol: '', access: 'allowed' });
-  const [selectedSymbol, setSelectedSymbol] = useState(null);
+  const [overridesView, setOverridesView] = useState(null);
+  const [overridesLoading, setOverridesLoading] = useState(false);
+  const [overridesError, setOverridesError] = useState('');
+  const [stagedOverrides, setStagedOverrides] = useState(() => new Map());
+  const [symbolQuery, setSymbolQuery] = useState('');
+  const [symbolFilter, setSymbolFilter] = useState('all');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -54,34 +70,47 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     return next;
   });
 
-  const symbolRows = [
-    ...form.symbolsAllowed.map((symbol) => ({ symbol, access: 'allowed' })),
-    ...form.symbolsBlocked.map((symbol) => ({ symbol, access: 'blocked' })),
-  ];
-  const listKey = (access) => (access === 'blocked' ? 'symbolsBlocked' : 'symbolsAllowed');
+  const symbolRows = useMemo(
+    () => (overridesView ? overridesView.rows.map((row) => applyStagedOverride(row, stagedOverrides)) : []),
+    [overridesView, stagedOverrides]
+  );
+  const visibleSymbolRows = useMemo(
+    () => filterGroupSymbolRows(symbolRows, symbolQuery, symbolFilter),
+    [symbolRows, symbolQuery, symbolFilter]
+  );
+  const symbolSummary = useMemo(() => summarizeGroupSymbols(symbolRows), [symbolRows]);
 
-  const addSymbol = (event) => {
-    event.preventDefault();
-    const symbol = symbolDraft.symbol.trim();
-    if (!symbol) return;
-    const key = listKey(symbolDraft.access);
-    setForm((prev) => (prev[key].includes(symbol) ? prev : { ...prev, [key]: [...prev[key], symbol] }));
-    setSelectedSymbol({ symbol, access: symbolDraft.access });
-    setSymbolDraft((draft) => ({ ...draft, symbol: '' }));
-  };
+  const loadSymbolOverrides = useCallback(async () => {
+    if (!group?.name || group?.isNew) return;
+    setOverridesLoading(true);
+    setOverridesError('');
+    try {
+      setOverridesView(normalizeGroupSymbolOverrides(await groupSymbolOverridesGet(group.name)));
+      setStagedOverrides(new Map());
+    } catch (err) {
+      setOverridesError(err.message || 'Failed to load group symbols.');
+    } finally {
+      setOverridesLoading(false);
+    }
+  }, [group?.isNew, group?.name]);
 
-  const removeSelectedSymbol = () => {
-    if (!selectedSymbol) return;
-    const key = listKey(selectedSymbol.access);
-    setForm((prev) => ({ ...prev, [key]: prev[key].filter((symbol) => symbol !== selectedSymbol.symbol) }));
-    setSelectedSymbol(null);
-  };
+  useEffect(() => {
+    if (tab === 'Symbols' && !overridesView && !overridesLoading) loadSymbolOverrides();
+  }, [loadSymbolOverrides, overridesLoading, overridesView, tab]);
 
   const handleSave = async () => {
     if (!canManageGroups) { setPermissionDenied(true); return; }
     setSaving(true);
     setError(null);
     try {
+      if (stagedOverrides.size > 0 && !group.isNew) {
+        const savedOverrides = await groupSymbolOverridesSave(
+          group.name,
+          buildGroupSymbolOverrideChanges(stagedOverrides)
+        );
+        setOverridesView(normalizeGroupSymbolOverrides(savedOverrides));
+        setStagedOverrides(new Map());
+      }
       const saved = await submitGroup({ originalName: group.isNew ? '' : group.name, payload: pickGroupPayloadFields(form), queryClient });
       onSaved?.(saved);
       onClose();
@@ -91,8 +120,6 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
       setSaving(false);
     }
   };
-
-  const isSelected = (row) => selectedSymbol?.symbol === row.symbol && selectedSymbol?.access === row.access;
 
   return (
     <>
@@ -174,43 +201,64 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
           {tab === 'Symbols' && (
             <div className="groups-props-page">
-              <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Please set up individual parameters of symbols trade for the group.</span></div>
-              <div className="groups-props-list-layout">
-                <div className="groups-props-side">
-                  <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!selectedSymbol} onClick={removeSelectedSymbol}><Trash2 size={12} /> Delete</button>
+              <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Every symbol is shown here. Enable or disable trading for this group.</span></div>
+              {!overridesView?.groupTrading && overridesView && (
+                <div className="groups-symbols-notice is-danger">Trading is disabled for this group, so every symbol is currently off.</div>
+              )}
+              {overridesView?.legacyAllowList && (
+                <div className="groups-symbols-notice">This group has a legacy allowed-symbol list of {overridesView.allowListCount} symbols. Symbols outside that list cannot be enabled here.</div>
+              )}
+              <div className="groups-symbols-toolbar">
+                <input
+                  type="search"
+                  className="ui-input ui-input-sm"
+                  placeholder="Search symbol or category"
+                  aria-label="Search group symbols"
+                  value={symbolQuery}
+                  onChange={(event) => setSymbolQuery(event.target.value)}
+                />
+                <select className="ui-input ui-input-sm" aria-label="Filter group symbols" value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value)}>
+                  {GROUP_SYMBOL_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+              {overridesView && (
+                <div className="groups-symbols-summary">
+                  {symbolSummary.enabled} of {symbolSummary.total} symbols enabled · {symbolSummary.overrides} group override{symbolSummary.overrides === 1 ? '' : 's'}
+                  {visibleSymbolRows.length !== symbolRows.length ? ` · showing ${visibleSymbolRows.length}` : ''}
                 </div>
-                <div className="groups-props-list">
-                  <table className="ui-grid groups-props-grid" aria-label="Group symbols">
-                    <thead><tr><th scope="col">Symbol</th><th scope="col">Access</th></tr></thead>
+              )}
+              <div className="groups-props-list groups-symbols-list">
+                  <table className="ui-grid groups-props-grid" aria-label={`Symbols for ${form.name}`}>
+                    <thead><tr><th scope="col">Symbol</th><th scope="col">Global</th><th scope="col">Group</th><th scope="col">Effective</th><th scope="col">Action</th></tr></thead>
                     <tbody>
-                      {symbolRows.map((row) => (
-                        <tr
-                          key={`${row.access}:${row.symbol}`}
-                          className={isSelected(row) ? 'is-selected' : ''}
-                          aria-selected={isSelected(row)}
-                          onClick={() => setSelectedSymbol(row)}
-                        >
-                          <td>{row.symbol}</td>
-                          <td>{row.access === 'blocked' ? 'Blocked' : 'Allowed'}</td>
-                        </tr>
-                      ))}
-                      <tr className="groups-props-add-row">
-                        <td colSpan={2}>
-                          <form className="groups-props-inline" onSubmit={addSymbol}>
-                            <Plus size={12} />
-                            <input className="ui-input ui-input-sm" placeholder="click to add..." aria-label="Symbol to add" value={symbolDraft.symbol} onChange={(event) => setSymbolDraft((draft) => ({ ...draft, symbol: event.target.value }))} />
-                            <select className="ui-input ui-input-sm" aria-label="Symbol access" value={symbolDraft.access} onChange={(event) => setSymbolDraft((draft) => ({ ...draft, access: event.target.value }))}>
-                              <option value="allowed">Allowed</option>
-                              <option value="blocked">Blocked</option>
-                            </select>
-                            <button type="submit" className="ui-btn ui-btn-secondary ui-btn-xs" disabled={!symbolDraft.symbol.trim()}>Add</button>
-                          </form>
-                        </td>
-                      </tr>
+                      {overridesLoading && <tr><td colSpan={5} className="groups-symbols-state"><Loader2 size={14} className="animate-spin" /> Loading every symbol…</td></tr>}
+                      {!overridesLoading && overridesError && <tr><td colSpan={5} className="groups-symbols-state is-error">{overridesError} <button type="button" onClick={loadSymbolOverrides}>Retry</button></td></tr>}
+                      {!overridesLoading && !overridesError && visibleSymbolRows.map((row) => {
+                        const editable = isGroupSymbolEditable(row);
+                        const status = GROUP_SYMBOL_STATUS[row.status];
+                        return (
+                          <tr key={row.symbol} className={row.staged ? 'groups-symbols-staged' : ''}>
+                            <td title={row.category || undefined}><span>{row.symbol}</span>{row.category ? <small>{row.category}</small> : null}</td>
+                            <td className={row.globalEnabled ? 'is-on' : 'is-off'}>{row.globalEnabled ? 'Enabled' : 'Disabled'}</td>
+                            <td title={status.hint}>{status.label}{row.staged ? ' *' : ''}</td>
+                            <td className={row.effective ? 'is-on' : 'is-off'}>{row.effective ? 'ON' : 'OFF'}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`groups-symbol-toggle ${row.override === 'off' ? 'is-enable' : 'is-disable'}`}
+                                disabled={!editable || !canManageGroups}
+                                title={editable ? (row.override === 'off' ? `Enable ${row.symbol} for this group` : `Disable ${row.symbol} for this group`) : status.hint}
+                                onClick={() => setStagedOverrides((current) => toggleStagedOverride(current, row))}
+                              >
+                                {row.override === 'off' ? 'Enable' : 'Disable'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!overridesLoading && !overridesError && overridesView && visibleSymbolRows.length === 0 && <tr><td colSpan={5} className="groups-symbols-state">No symbols match.</td></tr>}
                     </tbody>
                   </table>
-                  {symbolRows.length === 0 && <p className="groups-props-empty">No symbol rules yet: every symbol is available to this group.</p>}
-                </div>
               </div>
             </div>
           )}

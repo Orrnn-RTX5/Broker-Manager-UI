@@ -372,6 +372,27 @@
 .groups-props-add-row td { padding: 4px 6px; }
 .groups-props-add-row .ui-input { width: 190px; }
 .groups-props-empty { margin: 0; padding: 12px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.groups-symbols-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 8px; }
+.groups-symbols-summary { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.groups-symbols-notice { padding: 7px 9px; font-size: 11px; font-weight: 400; color: #f6c453; background: rgb(245 158 11 / 8%); border: 1px solid rgb(245 158 11 / 35%); border-radius: var(--radius-sm); }
+.groups-symbols-notice.is-danger { color: var(--danger-text); background: var(--danger-soft); border-color: var(--danger-border); }
+.groups-symbols-list { max-height: 272px; overflow: auto; }
+.groups-symbols-list thead th { position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+.groups-symbols-list tbody td { vertical-align: middle; }
+.groups-symbols-list tbody td:first-child { min-width: 150px; }
+.groups-symbols-list tbody td small { display: block; max-width: 180px; overflow: hidden; color: var(--text-3); font-size: 11px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.groups-symbols-list .is-on { color: #40c878; }
+.groups-symbols-list .is-off { color: var(--danger-text); }
+.groups-symbols-staged { background: rgb(245 158 11 / 8%); }
+.groups-symbols-state { height: 64px; text-align: center; color: var(--text-3); }
+.groups-symbols-state svg { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.groups-symbols-state.is-error { color: var(--danger-text); }
+.groups-symbols-state button { margin-left: 5px; color: inherit; text-decoration: underline; }
+.groups-symbol-toggle { min-width: 54px; padding: 3px 7px; font-size: 11px; font-weight: 400; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2); color: var(--text-2); }
+.groups-symbol-toggle:not(:disabled) { cursor: pointer; }
+.groups-symbol-toggle.is-enable:not(:disabled) { color: #40c878; border-color: rgb(64 200 120 / 45%); }
+.groups-symbol-toggle.is-disable:not(:disabled) { color: #f1a5a5; border-color: rgb(239 68 68 / 35%); }
+.groups-symbol-toggle:disabled { cursor: not-allowed; opacity: 0.4; }
 .groups-props-commission { padding: 12px; border-top: 1px solid var(--border); background: var(--surface-2); }
 
 .groups-accounts-tools { justify-content: space-between; }

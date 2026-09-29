@@ -1,5 +1,8 @@
 import { showResult } from '../../store/resultDialogStore.js';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import GroupOperationModal from './components/GroupOperationModal';
+import { groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
 import { ArrowLeft, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
@@ -12,6 +15,7 @@ const GroupDetailsPage = () => {
   const { groupName: groupNameParam } = useParams();
   const groupName = getGroupNameFromRouteParam(groupNameParam);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
@@ -28,10 +32,8 @@ const GroupDetailsPage = () => {
   const [statsError, setStatsError] = useState(null);
   const [statsRefreshTick, setStatsRefreshTick] = useState(0);
 
-  const [showMoveInput, setShowMoveInput] = useState(false);
-  const [toGroupInput, setToGroupInput] = useState('');
-  const [pendingMoveTarget, setPendingMoveTarget] = useState(null);
-  const [isMoving, setIsMoving] = useState(false);
+  const [showOperation, setShowOperation] = useState(false);
+  const selection = useMemo(() => ({ sources: [groupName] }), [groupName]);
 
   useEffect(() => {
     if (!groupName) return;
@@ -55,49 +57,10 @@ const GroupDetailsPage = () => {
   }, [groupName, statsRefreshTick]);
 
   const handleToggleMoveInput = () => {
-    setShowMoveInput(prev => {
-      const next = !prev;
-      if (!next) {
-        setToGroupInput('');
-        setPendingMoveTarget(null);
-      }
-      return next;
-    });
-  };
-
-  const handleMoveRequest = () => {
-    const targetGroup = toGroupInput.trim();
-    if (!targetGroup || !groupName) return;
     if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
-    setPendingMoveTarget(targetGroup);
+    if (!groupOperationsEnabled() && !readSavedOperation()) { showResult.error('Group operations are not enabled for this broker.'); return; }
+    setShowOperation(true);
   };
-
-  const handleMoveAccounts = async () => {
-    if (!pendingMoveTarget || !groupName) return;
-    if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
-    setIsMoving(true);
-    try {
-      const params = new URLSearchParams({
-        from_group: String(groupName),
-        to_group: String(pendingMoveTarget),
-      });
-      const res = await fetchManagerApi(`/GroupMoveAccounts?${params.toString()}`, {
-        headers: { accept: 'application/json' }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await res.json();
-      showResult.success(`Successfully moved accounts from ${groupName} to ${pendingMoveTarget}`);
-      setShowMoveInput(false);
-      setToGroupInput('');
-      setPendingMoveTarget(null);
-      setStatsRefreshTick(value => value + 1);
-    } catch (err) {
-      showResult.error('Error moving accounts: ' + err.message);
-    } finally {
-      setIsMoving(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center gap-2 h-full w-full" style={{ color: 'var(--muted)' }}>
@@ -179,6 +142,11 @@ const GroupDetailsPage = () => {
         </div>
       </div>
 
+      {showOperation && <GroupOperationModal selection={readSavedOperation()?.selection || selection} moveOnly onClose={() => setShowOperation(false)} onComplete={() => {
+        setStatsRefreshTick(value => value + 1);
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
+        queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
+      }} />}
       {/* Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 max-w-5xl">
 
@@ -234,61 +202,6 @@ const GroupDetailsPage = () => {
             </button>
           }
         >
-          {showMoveInput && (
-            <div className="mx-1.5 mb-2 p-2 rounded flex flex-col gap-2"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-              <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>Move accounts to:</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Target group name…"
-                  value={toGroupInput}
-                  onChange={e => {
-                    setToGroupInput(e.target.value);
-                    setPendingMoveTarget(null);
-                  }}
-                  className="ui-input ui-input-sm flex-1"
-                />
-                <button
-                  className="ui-btn ui-btn-primary ui-btn-sm"
-                  onClick={handleMoveRequest}
-                  disabled={isMoving || !toGroupInput.trim() || !canManageGroups}
-                  title={canManageGroups ? undefined : 'No permission to manage groups'}
-                >
-                  Review
-                </button>
-              </div>
-              {pendingMoveTarget && (
-                <div
-                  className="rounded px-2 py-2 flex flex-col gap-2 text-xs"
-                  style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)' }}
-                >
-                  <div className="flex items-center gap-2 font-semibold">
-                    <AlertTriangle size={13} />
-                    Confirm moving all accounts from "{groupName}" to "{pendingMoveTarget}".
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      className="ui-btn ui-btn-secondary ui-btn-sm"
-                      onClick={() => setPendingMoveTarget(null)}
-                      disabled={isMoving}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="ui-btn ui-btn-danger ui-btn-sm"
-                      onClick={handleMoveAccounts}
-                      disabled={isMoving || !canManageGroups}
-                      title={canManageGroups ? undefined : 'No permission to manage groups'}
-                    >
-                      {isMoving ? <Loader size={11} className="animate-spin" /> : 'Confirm Move'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {statsLoading ? (
             <div className="flex items-center gap-2 px-3 py-4 text-xs" style={{ color: 'var(--muted)' }}>
               <Loader size={13} className="animate-spin" style={{ color: 'var(--accent)' }} /> Loading stats…

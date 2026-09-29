@@ -1,6 +1,6 @@
-import { getSessionClaims } from './authService.js';
+import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 
-// /AccountsOnline always returns every connected account, and each Online
+// /AccountsOnline returns only authorized connections, and each Online
 // Users view only pages, searches and sorts that list locally. One shared
 // snapshot serves them all: concurrent callers share a single request, and the
 // last result is kept in memory and in this tab's sessionStorage so a click or
@@ -15,10 +15,7 @@ const REUSE_WINDOW_MS = 2_000;
 let memory = null; // { scope, rows, fetchedAt }
 let inflight = null; // { scope, promise }
 
-const currentScope = () => {
-  const { login, brokerId } = getSessionClaims();
-  return `${login ?? ''}@${brokerId ?? ''}`;
-};
+const currentScope = getDataAccessScope;
 
 const storage = () => {
   try {
@@ -75,6 +72,7 @@ export const fetchOnlineUsersSnapshot = async (load, { maxAgeMs = REUSE_WINDOW_M
         memory = snapshot;
         writeStored(snapshot);
       }
+      assertDataAccessScope(scope);
       return snapshot;
     })
     .finally(() => {

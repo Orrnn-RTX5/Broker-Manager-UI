@@ -1,3 +1,4 @@
+import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 import { normalizePositionRow, getPositionTicket, mergePositionUpdates, reconcilePositionSnapshot } from './positionRecords.js';
 export { normalizePositionRow } from './positionRecords.js';
 
@@ -16,7 +17,7 @@ import { chunkSymbolNames } from '../utils/symbolParams';
 import { createKeyedRequestCache } from './keyedRequestCache';
 import { MANAGER_API } from '../config/managerApiContract.js';
 import { requestReportsSummary } from './reportsSummary.js';
-import { fetchOnlineUsersSnapshot, pageOnlineUsers } from './onlineUsersSnapshot.js';
+import { fetchOnlineUsersSnapshot, pageOnlineUsers, clearOnlineUsersSnapshot } from './onlineUsersSnapshot.js';
 import { advanceRealtimeCacheRevision } from './realtimeCacheRevision.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
@@ -231,6 +232,16 @@ let accountDetailsFirstPage = null;
 let accountDetailsFirstPageAt = 0;
 let accountDetailsFirstPagePromise = null;
 let accountDetailsCacheGeneration = 0;
+let accountDataScope = getDataAccessScope();
+const ensureAccountDataScope = () => {
+  const scope = getDataAccessScope();
+  if (accountDataScope !== scope) {
+    accountDataScope = scope;
+    invalidateRealtimeCaches();
+    clearOnlineUsersSnapshot();
+  }
+  return scope;
+};
 
 const isDefaultAccountDetailsPage = (params = {}) => {
   const offset = Number(params.offset || 0);
@@ -244,7 +255,7 @@ const readStoredAccountDetailsPage = () => {
     const raw = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(ACCOUNT_DETAILS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.rows) && parsed.rows.length > 0) return parsed;
+    if (parsed?.scope === getDataAccessScope() && Array.isArray(parsed.rows)) return parsed;
   } catch {
     // Ignore storage parse errors
   }
@@ -255,6 +266,7 @@ const writeStoredAccountDetailsPage = (page) => {
   if (!Array.isArray(page?.rows)) return;
   try {
     sessionStorage.setItem(ACCOUNT_DETAILS_CACHE_KEY, JSON.stringify({
+      scope: getDataAccessScope(),
       rows: page.rows,
       total: page.total ?? null,
       hasMore: Boolean(page.hasMore),
@@ -266,6 +278,7 @@ const writeStoredAccountDetailsPage = (page) => {
 };
 
 export const peekAccountDetailsManyPage = () => {
+  ensureAccountDataScope();
   if (accountDetailsFirstPage?.rows?.length) return accountDetailsFirstPage;
   return readStoredAccountDetailsPage();
 };
@@ -286,6 +299,7 @@ const mapAccountDetailsPage = (page, normalizeRow) => {
 };
 
 const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options = {}) => {
+  const accessScope = getDataAccessScope();
   const { stream = false, requireRowsArray = false, ...requestOptions } = options;
   const pagedEndpoint = buildPagedEndpoint(endpoint, params);
 
@@ -297,11 +311,13 @@ const getPaged = async (endpoint, params, normalizeRow, preferredKeys, options =
     if (endpoint === '/PositionsAll' && (response.status === 401 || response.status === 403)) {
       invalidatePositionsCache();
     }
-    return normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, {
+    const result = await normalizePagedStreamResult(response, params, normalizeRow, preferredKeys, {
       ...requestOptions,
       serverPaged: true,
       requireRowsArray,
     });
+    assertDataAccessScope(accessScope);
+    return result;
   }
 
   try {
@@ -371,6 +387,9 @@ export const getPositionHistory = async (loginId) => {
   try {
     return await getOrderHistory(loginId);
   } catch (error) {
+    // A scoped account denial is terminal, even though it uses HTTP 404.
+    // Trying another API can bypass scope or expire this manager's session.
+    if (error.code === 'MT_RET_ERR_NOTFOUND') throw error;
     if (error.status && error.status !== 404) throw error;
   }
 
@@ -399,6 +418,7 @@ const getOrderHistory = async (loginId) => {
   if (!response.ok) {
     const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
     error.status = response.status;
+    error.code = data?.code ?? data?.error?.code;
     throw error;
   }
 
@@ -445,6 +465,7 @@ export const getClients = async () => {
 };
 
 export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
+  const scope = ensureAccountDataScope();
   // Full reports need fresh, consistently sorted pages, independent of the
   // account grid's first-page cache (which may use another page size/session).
   if (options.bypassCache) {
@@ -475,6 +496,7 @@ export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
     ['accounts'],
     requestOptions,
   ).then((page) => {
+    assertDataAccessScope(scope);
     if (generation === accountDetailsCacheGeneration && Array.isArray(page?.rows)) {
       accountDetailsFirstPage = page;
       accountDetailsFirstPageAt = Date.now();
@@ -594,6 +616,7 @@ const writeStoredPositionsDataset = (records) => {
 };
 
 export const peekStoredPositionsDataset = () => {
+  ensureAccountDataScope();
   if (Array.isArray(cachedPositionsDataset) && cachedPositionsDataset.length > 0) return cachedPositionsDataset;
   return readStoredPositionsDataset();
 };
@@ -617,6 +640,7 @@ const buildAccountPositionsEndpoint = (logins, { offset = 0 } = {}) => {
 };
 
 const getFreshPositionsDataset = () => {
+  ensureAccountDataScope();
   if (Array.isArray(cachedPositionsDataset)) {
     return Date.now() - cachedPositionsDatasetTime < POSITIONS_CACHE_TTL_MS ? cachedPositionsDataset : null;
   }
@@ -707,12 +731,14 @@ const accountPositionsRequests = createKeyedRequestCache({
 });
 
 export const getAccountPositions = (login, options = {}) => {
+  ensureAccountDataScope();
   const key = String(login ?? '').trim();
   if (key) knownPositionLogins.add(key);
   return accountPositionsRequests.get(login, options);
 };
 export const preloadAccountPositions = (login) => getAccountPositions(login).catch(() => undefined);
 export const preloadAccountPositionsBatch = (logins = []) => {
+  ensureAccountDataScope();
   const normalizedLogins = [...new Set(
     logins.map((login) => String(login ?? '').trim()).filter(Boolean),
   )];
@@ -771,6 +797,7 @@ export const preloadAccountPositionsBatch = (logins = []) => {
     .catch(() => undefined);
 };
 export const peekAccountPositions = (login) => {
+  ensureAccountDataScope();
   return accountPositionsRequests.peek(login);
 };
 export const invalidateAccountPositionsCache = (login) => {
@@ -1038,6 +1065,7 @@ export const applyPositionsSnapshot = (rows) => {
 };
 
 export const fetchAllPositionsDataset = async ({ force = false, ...options } = {}) => {
+  ensureAccountDataScope();
   const freshDataset = getFreshPositionsDataset();
   if (!force && freshDataset !== null && positionsDatasetComplete) return freshDataset;
   if (pendingPositionsDatasetPromise) {
@@ -1124,6 +1152,7 @@ export const getPositions = async () => {
 };
 
 export const getPositionsPage = async (params = {}, options = {}) => {
+  ensureAccountDataScope();
   // 1. If we already have the cached positions in memory, filter and slice in < 1ms
   const freshDataset = getFreshPositionsDataset();
   if (freshDataset !== null) {
@@ -1321,6 +1350,8 @@ export const ibStats = (params) => ibApi.stats(params);
 export const ibTree = (login) => ibApi.tree(login);
 
 // ─── Symbol Management ────────────────────────────────────────────────────────
+export const groupSymbolOverridesGet = (group) => apiClient.get(`/GroupSymbolOverridesGet?${query({ group })}`);
+export const groupSymbolOverridesSave = (group, changes) => apiClient.post('/GroupSymbolOverridesSave', { group, changes });
 export const symbolGet = (symbol) => apiClient.get(`/SymbolGet?${query({ symbol })}`);
 export const symbolsParams = async (symbols) => {
   const batches = chunkSymbolNames(symbols);
@@ -1611,6 +1642,7 @@ export const preloadSymbolManagementData = () => symbolManagementList().catch(()
 // Query-cache invalidation alone cannot bypass these module/storage caches.
 // Detach old in-flight work before any caller starts its authoritative reload.
 export const invalidateRealtimeCaches = (entity = '') => {
+  clearOnlineUsersSnapshot();
   advanceRealtimeCacheRevision();
   accountDetailsCacheGeneration += 1;
   accountDetailsFirstPage = null;

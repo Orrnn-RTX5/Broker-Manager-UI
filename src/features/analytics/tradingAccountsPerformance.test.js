@@ -29,14 +29,14 @@ test('analytics query options provide instant initialData without network delay'
   const duration = performance.now() - start;
 
   assert.ok(Array.isArray(initialAccounts));
-  assert.ok(initialAccounts.length > 0);
+  assert.deepEqual(initialAccounts, []);
   assert.ok(duration < 20, `Query options initialized in ${duration.toFixed(2)}ms (target < 20ms)`);
 });
 
 test('cache hydration and full report computation completes in under 20ms', () => {
-  // Test with mock localStorage
+  // Authorized snapshots are isolated to this tab.
   const mockStorage = new Map();
-  globalThis.localStorage = {
+  globalThis.sessionStorage = {
     getItem: (key) => mockStorage.get(key) || null,
     setItem: (key, val) => mockStorage.set(key, String(val)),
     removeItem: (key) => mockStorage.delete(key),

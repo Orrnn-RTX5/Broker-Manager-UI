@@ -231,6 +231,14 @@ const journalStateSame = (a = {}, b = {}) => (
 
 const journalScopeKey = (record) => `${record.login ?? ''}|${record.symbol ?? ''}`;
 
+const PRICE_ONLY_FRAME_TYPES = new Set(['pnlupdate', 'metricsupdate', 'priceupdate', 'profitupdate']);
+
+export const isPriceOnlyFrame = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const type = String(payload.type ?? payload.event ?? '').toLowerCase().replace(/[\s_-]/g, '');
+  return PRICE_ONLY_FRAME_TYPES.has(type);
+};
+
 // Diff an open-position frame against the tickets seen previously. Frames only
 // cover their own (login, symbol) slices, so the diff runs per covered slice:
 // a ticket absent inside a covered slice closed, while tickets in slices the
@@ -243,7 +251,9 @@ export const recordPositionSnapshot = (rows, now = Date.now()) => {
   const coveredScopes = new Set();
   rows.forEach((row) => {
     const record = normalizeJournalRecord(row);
-    if (record.ticket === undefined) return;
+    // Snapshots are diffed per (login, symbol) slice; a row without a symbol
+    // cannot be placed in a slice and would wrongly close the login's other tickets.
+    if (record.ticket === undefined || record.symbol === undefined) return;
     const scope = journalScopeKey(record);
     coveredScopes.add(scope);
     const key = String(record.ticket);
@@ -292,6 +302,11 @@ export const recordPositionSnapshot = (rows, now = Date.now()) => {
 // reflected them, so a mutation already visible in the mirror is not journaled
 // again.
 export const recordPositionMutation = (payload) => {
+  // Tick P&L frames ({type:'pnl_update', symbol, positions:[{ticket, price_current,
+  // profit}]}) only move prices. They are not trade requests and not snapshots:
+  // their rows carry no symbol, so diffing them made every open ticket of the
+  // account look closed and re-opened on each tick.
+  if (isPriceOnlyFrame(payload)) return;
   const rows = getPositionSnapshotRows(payload);
   if (rows) {
     recordPositionSnapshot(rows);
