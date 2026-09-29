@@ -180,3 +180,31 @@ test('request text and time formatting match the manager journal shape', () => {
   );
   assert.equal(formatJournalTime(new Date(2026, 8, 17, 12, 48, 44)), '2026.09.17 12:48:44');
 });
+
+test('tick P&L frames never journal fake closes and re-opens', () => {
+  // Reproduces the live Nexa feed: account 200048 holds AAVUSD #10602530 and
+  // BTCUSD #10602723; the manager publishes one pnl_update per symbol tick.
+  resetTradeJournal();
+  const t0 = Date.now() - 60_000;
+  recordPositionSnapshot([
+    { ticket: 10602530, account_login: 200048, symbol: 'AAVUSD', side: 'buy', volume: 1 },
+    { ticket: 10602723, account_login: 200048, symbol: 'BTCUSD', side: 'buy', volume: 1 },
+  ], t0);
+  for (let tick = 0; tick < 20; tick++) {
+    recordPositionMutation({ type: 'pnl_update', symbol: 'AAVUSD', login: 200048, positions: [{ ticket: 10602530, price_current: 150.24 + tick / 100, profit: 0.7 }] });
+    recordPositionMutation({ type: 'pnl_update', symbol: 'BTCUSD', login: 200048, positions: [{ ticket: 10602723, price_current: 83693.29 + tick, profit: 338 }] });
+  }
+  assert.equal(getTradeJournalEntries().length, 0);
+});
+
+test('snapshot rows without a symbol cannot close other tickets', () => {
+  resetTradeJournal();
+  const t0 = Date.now() - 60_000;
+  recordPositionSnapshot([
+    { ticket: 1, account_login: 200001, symbol: 'AAVUSD', side: 'buy', volume: 1 },
+    { ticket: 2, account_login: 200001, symbol: 'BTCUSD', side: 'buy', volume: 1 },
+  ], t0);
+  recordPositionSnapshot([{ ticket: 1, account_login: 200001, price_current: 150.3 }], t0 + 20_000);
+  recordPositionSnapshot([{ ticket: 2, account_login: 200001, price_current: 83700 }], t0 + 21_000);
+  assert.equal(getTradeJournalEntries().length, 0);
+});

@@ -1126,3 +1126,14 @@
   .cc-terminal-summary { grid-template-columns:minmax(0, 1fr); grid-template-rows:minmax(0, 1fr) minmax(0, 1fr); }
   .cc-terminal-summary-pane + .cc-terminal-summary-pane { border-top:1px solid var(--border); border-left:0; }
 }
+
+/* Server journal (Journal tab): time, type badge, source, action, login, group, message. */
+.cc-server-journal-table th:nth-child(2) { width:150px; }
+.cc-server-journal-table th:nth-child(3) { width:70px; }
+.cc-server-journal-table th:nth-child(4) { width:75px; }
+.cc-server-journal-table th:nth-child(5) { width:170px; }
+.cc-server-journal-table th:nth-child(6) { width:80px; }
+.cc-server-journal-table th:nth-child(7) { width:90px; }
+.cc-server-journal-table th:nth-child(8) { width:auto; }
+.cc-server-journal-more td { text-align:center; }
+.cc-server-journal-live { display:inline-flex; align-items:center; gap:4px; align-self:center; padding:0 6px; color:var(--text-secondary); white-space:nowrap; }
