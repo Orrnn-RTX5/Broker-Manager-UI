@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, RefreshCw, X, Clock3 } from 'lucide-react';
 import PositionHistoryGrid from './components/PositionHistoryGrid';
 import { getPositionHistory } from '../../services/api';
@@ -38,6 +38,8 @@ const PositionHistoryEmptyState = ({ onSelectAccount }) => (
 
 const PositionsPage = () => {
   const loginInputRef = useRef(null);
+  const searchRevision = useRef(0);
+  useEffect(() => () => { searchRevision.current += 1; }, []);
   const [loginInput, setLoginInput] = useState('');
   const [currentLogin, setCurrentLogin] = useState('');
   const [historyData, setHistoryData] = useState([]);
@@ -49,24 +51,30 @@ const PositionsPage = () => {
     if (e) e.preventDefault();
     const login = loginInput.trim() || currentLogin;
     if (!login) return;
+    const revision = ++searchRevision.current;
 
+    setHistoryData([]);
     setIsLoading(true);
     setError(null);
     setCurrentLogin(login);
 
     try {
       const data = await getPositionHistory(login);
+      if (revision !== searchRevision.current) return;
       setHistoryData(data);
     } catch (err) {
+      if (revision !== searchRevision.current) return;
       console.error('History fetch error:', err);
       setError(err.message || 'Failed to fetch history');
       setHistoryData([]);
     } finally {
-      setIsLoading(false);
+      if (revision === searchRevision.current) setIsLoading(false);
     }
   };
 
   const handleClear = () => {
+    searchRevision.current += 1;
+    setIsLoading(false);
     setLoginInput('');
     setCurrentLogin('');
     setHistoryData([]);

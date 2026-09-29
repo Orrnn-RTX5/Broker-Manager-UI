@@ -1,3 +1,4 @@
+import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 import { fetchManagerApi } from './managerFetch';
 import { getAccountDetailsManyPage } from './api';
 import { normalizePagedStreamResult } from '../utils/pagination';
@@ -33,7 +34,7 @@ export const getInitialCachedSidebarAccounts = () => {
     const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(SIDEBAR_CACHE_KEY) : null;
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+    if (parsed?.scope === getDataAccessScope() && Array.isArray(parsed.rows)) {
       const normalized = normalizeSidebarAccountPage(parsed);
       if (normalized?.rows.length > 0) return normalized;
       window.sessionStorage?.removeItem(SIDEBAR_CACHE_KEY);
@@ -48,7 +49,7 @@ const saveCachedAccounts = (data) => {
   if (!data || !Array.isArray(data.rows)) return;
   try {
     if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem(SIDEBAR_CACHE_KEY, JSON.stringify(data));
+      window.sessionStorage.setItem(SIDEBAR_CACHE_KEY, JSON.stringify({ ...data, scope: getDataAccessScope() }));
     }
   } catch {
     // Storage can be unavailable or full; the in-memory query cache still works.
@@ -146,10 +147,12 @@ export const fetchSidebarAccountDetails = async (login, { signal } = {}) => {
 };
 
 export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
+  const scope = getDataAccessScope();
   const revision = getRealtimeCacheRevision();
   const result = await collectAccountPages((offset) => fetchSidebarAccounts({
     search, offset, limit: 500, signal,
   }), { signal });
+  assertDataAccessScope(scope);
   if (!String(search).trim() && revision === getRealtimeCacheRevision()) saveCachedAccounts(result);
   return result;
 };

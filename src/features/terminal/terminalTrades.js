@@ -1,3 +1,4 @@
+import { getDataAccessScope } from '../../services/dataAccessScope.js';
 export const TRADE_COLUMNS = [
   'Ticket', 'Login', 'User Name', 'Email', 'Symbol', 'Action', 'Lots',
   'Open', 'Current', 'S/L', 'T/P', 'Storage', 'Profit', 'Comment',
@@ -33,17 +34,18 @@ const clearLegacyStorage = () => {
   }
 };
 
-export const readStoredTerminalPage = (scope) => {
+export const readStoredTerminalPage = (scope = getDataAccessScope()) => {
   clearLegacyStorage();
   if (!scope) return undefined;
-  if (memoryTerminalCache?.scope === scope && isRecent(memoryTerminalCache.timestamp)) return memoryTerminalCache;
+  const cacheScope = `${scope}|${getDataAccessScope()}`;
+  if (memoryTerminalCache?.scope === cacheScope && isRecent(memoryTerminalCache.timestamp)) return memoryTerminalCache;
   memoryTerminalCache = null;
   try {
     if (typeof sessionStorage === 'undefined') return undefined;
     const raw = sessionStorage.getItem(TERMINAL_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed?.scope === scope && isRecent(Number(parsed.timestamp))
+    if (parsed?.scope === cacheScope && isRecent(Number(parsed.timestamp))
       && Array.isArray(parsed.rows) && parsed.rows.every(isCompleteTrade)) {
       memoryTerminalCache = parsed;
       return parsed;
@@ -55,18 +57,19 @@ export const readStoredTerminalPage = (scope) => {
   return undefined;
 };
 
-export const writeStoredTerminalPage = (page, scope) => {
+export const writeStoredTerminalPage = (page, scope = getDataAccessScope()) => {
   clearLegacyStorage();
   try {
     if (!scope || !page || !Array.isArray(page.rows) || !page.rows.every(isCompleteTrade)) return;
     const timestamp = Number(page.timestamp) || Date.now();
     if (!isRecent(timestamp)) return;
+    const cacheScope = `${scope}|${getDataAccessScope()}`;
     const stored = {
       rows: page.rows,
       total: page.total ?? page.rows.length,
       hasMore: Boolean(page.hasMore),
       timestamp,
-      scope,
+      scope: cacheScope,
     };
     memoryTerminalCache = stored;
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TERMINAL_STORAGE_KEY, JSON.stringify(stored));

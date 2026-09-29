@@ -9,6 +9,35 @@ import {
 import { useFeedSymbols } from '../../../hooks/useFeedSymbols';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DEFAULT_SESSION_TIMES = {
+  quoteStart: '00:00',
+  quoteEnd: '23:59',
+  tradeStart: '00:00',
+  tradeEnd: '23:59',
+};
+
+const normalizeTime = value => String(value || '').slice(0, 5);
+
+const createSessionRow = (session = {}, dayOfWeek) => ({
+  day_of_week: dayOfWeek,
+  quoteStart: normalizeTime(session.quoteStart ?? session.quote_from) || DEFAULT_SESSION_TIMES.quoteStart,
+  quoteEnd: normalizeTime(session.quoteEnd ?? session.quote_to) || DEFAULT_SESSION_TIMES.quoteEnd,
+  tradeStart: normalizeTime(session.tradeStart ?? session.trade_from) || DEFAULT_SESSION_TIMES.tradeStart,
+  tradeEnd: normalizeTime(session.tradeEnd ?? session.trade_to) || DEFAULT_SESSION_TIMES.tradeEnd,
+});
+
+const serializeSessions = sessions => sessions.map(session => ({
+  day_of_week: session.day_of_week,
+  quote_from: session.quoteStart,
+  quote_to: session.quoteEnd,
+  trade_from: session.tradeStart,
+  trade_to: session.tradeEnd,
+}));
+
+const createDefaultBaseSessions = () => DAYS.map((_, i) => ({
+  day_of_week: i,
+  ...DEFAULT_SESSION_TIMES,
+}));
 
 // ─── Session Row Editor ────────────────────────────────────────────────────────
 const SessionRow = ({ day, session, onChange }) => (
@@ -119,7 +148,7 @@ const OverrideModal = ({ symbol, onClose, onSuccess }) => {
 const SessionsTab = () => {
   const { symbols: allSymbols, loading: loadingSymbols, error: symbolLoadError } = useFeedSymbols();
   const [selectedSymbol, setSelectedSymbol] = useState('');
-  const [baseSessions, setBaseSessions] = useState(DAYS.map((_, i) => ({ day_of_week: i, quoteStart: '', quoteEnd: '', tradeStart: '', tradeEnd: '' })));
+  const [baseSessions, setBaseSessions] = useState(createDefaultBaseSessions);
   const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingBase, setSavingBase] = useState(false);
@@ -133,12 +162,14 @@ const SessionsTab = () => {
       symbolSessionGet(selectedSymbol).catch(() => null),
       sessionOverrideList({ symbol: selectedSymbol }).catch(() => []),
     ]).then(([sessions, ovr]) => {
-      if (sessions && Array.isArray(sessions)) {
-        const mapped = DAYS.map((_, i) => {
-          const s = sessions.find(x => x.day_of_week === i) || {};
-          return { day_of_week: i, quoteStart: s.quoteStart || '', quoteEnd: s.quoteEnd || '', tradeStart: s.tradeStart || '', tradeEnd: s.tradeEnd || '' };
-        });
+      if (Array.isArray(sessions) && sessions.length > 0) {
+        const mapped = DAYS.map((_, i) => createSessionRow(
+          sessions.find(session => Number(session.day_of_week) === i),
+          i,
+        ));
         setBaseSessions(mapped);
+      } else {
+        setBaseSessions(createDefaultBaseSessions());
       }
       setOverrides(Array.isArray(ovr) ? ovr : []);
     }).finally(() => setLoading(false));
@@ -151,7 +182,7 @@ const SessionsTab = () => {
   const handleSaveBase = async () => {
     setSavingBase(true);
     try {
-      await symbolSessionSet({ symbol: selectedSymbol, sessions: baseSessions });
+      await symbolSessionSet(selectedSymbol, serializeSessions(baseSessions));
     } catch (e) {
       showResult.error('Save failed: ' + e.message);
     } finally {

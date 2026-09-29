@@ -10,7 +10,7 @@ import { Buffer } from 'node:buffer';
 const runtime = { client: {}, loadSymbols: null };
 globalThis.__rtxRealtimeCacheTest = runtime;
 const bundle = await build({
-  stdin: { contents: "export * from './api.js'; export * from './sidebarAccounts.js';", resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'js' },
+  stdin: { contents: "export * from './api.js'; export * from './sidebarAccounts.js'; export * from './dataAccessScope.js';", resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'js' },
   bundle: true, write: false, format: 'esm', platform: 'browser',
   define: { 'import.meta.env': '{}' },
   plugins: [{ name: 'controlled-api-network', setup(builder) {
@@ -263,4 +263,29 @@ test('aborting one symbol-list subscriber preserves its shared request', async (
   assert.deepEqual(await survivor, ['GBPUSD']);
   assert.ok(requestOptions?.signal instanceof AbortSignal, 'the shared fetch has its own timeout');
   assert.notEqual(requestOptions.signal, controller.signal, 'one subscriber cannot cancel the shared fetch');
+});
+
+test('account first-page memory and storage cannot cross a manager identity', async () => {
+  sessionStorage.setItem('auth', JSON.stringify({login:9003,broker_id:'A',token:'synthetic-first'}));
+  runtime.client.getRaw = async () => accountResponse(9003);
+  await api.getAccountDetailsManyPage({limit:30,offset:0});
+  assert.equal(api.peekAccountDetailsManyPage().rows[0].balance,9003);
+  sessionStorage.setItem('auth', JSON.stringify({login:9010,broker_id:'A',token:'synthetic-second'}));
+  assert.equal(api.peekAccountDetailsManyPage(),null);
+  runtime.client.getRaw = async () => accountResponse(9010);
+  const page = await api.getAccountDetailsManyPage({limit:30,offset:0});
+  assert.equal(page.rows[0].balance,9010);
+});
+
+test('account response started before assignment revocation cannot repopulate a cache', async () => {
+  sessionStorage.setItem('auth', JSON.stringify({login:9010,broker_id:'A',token:'synthetic-revoke'}));
+  api.updateDataAccessScope({access_fingerprint:'assigned-real'});
+  const stale = deferred();
+  runtime.client.getRaw = () => stale.promise;
+  const pending = api.getAccountDetailsManyPage({limit:30,offset:0});
+  await Promise.resolve();
+  api.updateDataAccessScope({access_fingerprint:'revoked-real'});
+  stale.resolve(accountResponse(10));
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(api.peekAccountDetailsManyPage(),null);
 });

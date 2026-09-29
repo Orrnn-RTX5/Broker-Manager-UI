@@ -119,7 +119,16 @@ WS_HOST=wss://services.growtradingacademy.com
 DEFAULT_MT5_SERVER=103.91.186.142
 DISCOVERY_BASE_URL=https://superbackend.orrnn.com
 USE_MOCK_DISCOVERY=false
+GROUP_OPERATIONS_BROKERS=
 ```
+
+Group migration/deletion is opt-in. After backend migrations 225 and 226 are applied,
+set `GROUP_OPERATIONS_BROKERS` to the same comma-separated broker IDs as the manager
+service's `MANAGER_GROUP_OPERATIONS_BROKERS`. For Vite/Electron builds use
+`VITE_GROUP_OPERATIONS_BROKERS` in the active mode environment and rebuild. An empty
+value keeps new operations disabled. Saved operations remain available through
+**Operation progress**; a lost response retries the same request, while an expired
+preview can be refreshed.
 
 The generated browser global is:
 

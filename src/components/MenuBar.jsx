@@ -12,6 +12,7 @@ import ToolsMenu from './menus/ToolsMenu';
 import WindowMenu from './menus/WindowMenu';
 import HelpMenu from './menus/HelpMenu';
 import HelpCenter from './HelpCenter';
+import BugReportDialog from './BugReportDialog';
 import NewAccountModal from './Popups/NewAccountModal';
 import LoginModal from './Popups/LoginModal';
 import ExportCurrentViewDialog from './ExportCurrentViewDialog';
@@ -40,6 +41,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
   const [helpSection, setHelpSection] = useState(null);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const openHelp = (section) => { setActiveMenu(null); setHelpSection(section); };
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -216,7 +218,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
       case 'View': return <ViewMenu onClose={() => setActiveMenu(null)} onViewAction={onViewAction} />;
       case 'Tools': return <ToolsMenu onClose={() => setActiveMenu(null)} />;
       case 'Window': return <WindowMenu onClose={() => setActiveMenu(null)} onViewAction={onViewAction} />;
-      case 'Help': return <HelpMenu onOpenHelp={openHelp} />;
+      case 'Help': return <HelpMenu onOpenHelp={openHelp} onReportBug={() => { setActiveMenu(null); setBugReportOpen(true); }} />;
       default: return (
         <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[200px] z-50">
           <div className="px-6 py-1.5 text-gray-500 dark:text-gray-400 italic">Menu not implemented yet</div>
@@ -487,6 +489,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
       </div>
       {/* Modals */}
       {helpSection && <HelpCenter key={helpSection} initialSection={helpSection} onClose={() => setHelpSection(null)} />}
+      {bugReportOpen && <BugReportDialog onClose={() => setBugReportOpen(false)} />}
       <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
       <ExportCurrentViewDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={handleLoginSuccess} />

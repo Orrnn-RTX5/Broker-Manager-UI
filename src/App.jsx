@@ -1,3 +1,5 @@
+import { DATA_ACCESS_CHANGED, getDataAccessScope } from './services/dataAccessScope.js';
+import { invalidateRealtimeCaches } from './services/api.js';
 import { lazy, Suspense, useCallback, useRef, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -12,7 +14,7 @@ import { PERMISSIONS } from './utils/permissions.js';
 import authService from './services/authService';
 import { startSessionRefreshScheduler } from './services/sessionRefreshScheduler';
 import { clearBrokerInfo } from './services/brokerAuth';
-import { invalidatePositionsCache, invalidateSymbolManagementData, preloadSymbolManagementData } from './services/api';
+import { invalidateSymbolManagementData, preloadSymbolManagementData } from './services/api';
 import { preloadAllWorkspaceRoutes, preloadFrequentWorkspaceRoutes, preloadWorkspaceRoute, workspaceRouteLoaders } from './utils/workspaceRouteModules';
 import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQueries.js';
 import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
@@ -194,6 +196,7 @@ function App() {
   const [initialSessionStatus] = useState(() => authService.getSessionStatus());
   const [isAuthenticated, setIsAuthenticated] = useState(() => initialSessionStatus.authenticated);
   const [sessionVersion, setSessionVersion] = useState(0);
+  const [dataAccessVersion, setDataAccessVersion] = useState(getDataAccessScope);
   const sessionSnapshotRef = useRef(
     initialSessionStatus.authenticated ? initialSessionStatus.snapshot : null
   );
@@ -228,7 +231,8 @@ function App() {
     // expireSession() has already cleared storage. It keeps the shared tokens
     // when they belong to another tab, so this handler must not clear them.
     const handleSessionExpired = () => {
-      invalidatePositionsCache();
+      invalidateRealtimeCaches();
+      clearStoredTerminalPage();
       queryClient.clear();
       sessionSnapshotRef.current = null;
       setIsAuthenticated(false);
@@ -323,6 +327,21 @@ function App() {
     return () => scheduler.stop();
   }, [isAuthenticated, sessionVersion, validateCurrentSession]);
 
+  useEffect(() => {
+    const handleAccessChanged = () => {
+      invalidateRealtimeCaches();
+      clearStoredTerminalPage();
+      // Keep the just-verified permission snapshot; cancel every data request
+      // so obsolete responses cannot refill queries after an assignment change.
+      const filters = { predicate: (query) => query.queryKey[0] !== 'session-info' };
+      void queryClient.cancelQueries(filters);
+      queryClient.removeQueries(filters);
+      setDataAccessVersion(getDataAccessScope());
+    };
+    window.addEventListener(DATA_ACCESS_CHANGED, handleAccessChanged);
+    return () => window.removeEventListener(DATA_ACCESS_CHANGED, handleAccessChanged);
+  }, [queryClient]);
+
   const handleLogin = () => {
     const status = authService.getSessionStatus();
     if (!status.authenticated) {
@@ -332,7 +351,10 @@ function App() {
     // Module-level request caches outlive route trees. Reset them at every
     // authenticated boundary so another manager or broker never inherits rows
     // (or an in-flight response) from the previous session.
-    invalidatePositionsCache();
+    invalidateRealtimeCaches();
+    clearStoredTerminalPage();
+    queryClient.clear();
+    setDataAccessVersion(getDataAccessScope());
     rememberValidSession(status);
     // Start authenticated data warming before the dashboard transition. React
     // Query deduplicates this with the authenticated effect below.
@@ -343,7 +365,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    invalidatePositionsCache();
+    invalidateRealtimeCaches();
     invalidateSymbolManagementData();
     clearStoredTerminalPage();
     authService.clearSession();
@@ -372,7 +394,7 @@ function App() {
             <Route path="*" element={<Navigate to="/manager-login" replace />} />
           </Routes>
         ) : (
-          <AdminLayout isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
+          <AdminLayout key={dataAccessVersion} isAuthenticated={isAuthenticated} onLogin={handleLogin} onLogout={handleLogout}>
             <Suspense fallback={<WorkspaceRouteFallback />}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
