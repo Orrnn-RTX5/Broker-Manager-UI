@@ -41,6 +41,16 @@ export const pickGroupPayloadFields = (source, allowedKeys = GROUP_ALLOWED_FIELD
     return acc;
   }, {});
 
+// Existing groups accept partial updates. Keep untouched values out of the
+// request so a stale dialog cannot overwrite changes made by another manager.
+export const buildGroupSavePayload = (initial, current, { isNew = false } = {}) => {
+  const payload = pickGroupPayloadFields(current);
+  if (isNew) return payload;
+  return Object.fromEntries(Object.entries(payload).filter(([key, value]) =>
+    JSON.stringify(value) !== JSON.stringify(initial[key])
+  ));
+};
+
 export const toSymbolList = (value) => {
   if (Array.isArray(value)) return value.map((symbol) => String(symbol).trim()).filter(Boolean);
   if (typeof value === 'string') return value.split(',').map((symbol) => symbol.trim()).filter(Boolean);
@@ -99,6 +109,9 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, originalN
 
 /** POST a group to /GroupCreate, or to /GroupUpdate when `originalName` names an existing group. */
 export const submitGroup = async ({ originalName, payload, queryClient }) => {
+  if (originalName && Object.keys(payload).length === 0) {
+    return { submitted: payload, accountsUpdated: 0, accountErrors: [], unchanged: true };
+  }
   const url = originalName
     ? `/GroupUpdate?${new URLSearchParams({ group: String(originalName) }).toString()}`
     : '/GroupCreate';

@@ -4,7 +4,7 @@ import { AlertCircle, Loader2, Pencil, Users, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
-import { GROUP_DEFAULT_PAYLOAD, pickGroupPayloadFields, submitGroup, toSymbolList } from '../groupPayload.js';
+import { GROUP_DEFAULT_PAYLOAD, buildGroupSavePayload, submitGroup, toSymbolList } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { ROUTING_LABELS } from '../groupTree.js';
@@ -36,7 +36,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const [tab, setTab] = useState('Accounts');
   const [openAccount, setOpenAccount] = useState(null);
-  const [form, setForm] = useState(() => ({
+  const [initialForm, setInitialForm] = useState(() => ({
     ...GROUP_DEFAULT_PAYLOAD,
     ...(group?.isNew ? NEW_GROUP_FINANCIAL_DEFAULTS : {}),
     ...group,
@@ -45,6 +45,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     symbolsAllowed: toSymbolList(group?.symbolsAllowed),
     symbolsBlocked: toSymbolList(group?.symbolsBlocked),
   }));
+  const [form, setForm] = useState(initialForm);
   const [overridesView, setOverridesView] = useState(null);
   const [overridesLoading, setOverridesLoading] = useState(false);
   const [overridesError, setOverridesError] = useState('');
@@ -95,8 +96,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   }, [group?.isNew, group?.name]);
 
   useEffect(() => {
-    if (tab === 'Symbols' && !overridesView && !overridesLoading) loadSymbolOverrides();
-  }, [loadSymbolOverrides, overridesLoading, overridesView, tab]);
+    if (tab === 'Symbols' && !overridesView && !overridesLoading && !overridesError) loadSymbolOverrides();
+  }, [loadSymbolOverrides, overridesError, overridesLoading, overridesView, tab]);
 
   const handleSave = async () => {
     if (!canManageGroups) { setPermissionDenied(true); return; }
@@ -111,7 +112,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         setOverridesView(normalizeGroupSymbolOverrides(savedOverrides));
         setStagedOverrides(new Map());
       }
-      const saved = await submitGroup({ originalName: group.isNew ? '' : group.name, payload: pickGroupPayloadFields(form), queryClient });
+      const payload = buildGroupSavePayload(initialForm, form, { isNew: group.isNew });
+      const saved = await submitGroup({ originalName: group.isNew ? '' : group.name, payload, queryClient });
       onSaved?.(saved);
       onClose();
     } catch (err) {
@@ -316,14 +318,16 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         onSuccess={(saved) => {
           const submitted = saved?.submitted;
           if (submitted && typeof submitted === 'object') {
-            setForm((current) => ({
-              ...current,
+            const nextForm = {
+              ...form,
               ...submitted,
-              leverage: readLeverageRatio(submitted) || current.leverage,
-              name: submitted.name || current.name,
-              symbolsAllowed: toSymbolList(submitted.symbolsAllowed ?? current.symbolsAllowed),
-              symbolsBlocked: toSymbolList(submitted.symbolsBlocked ?? current.symbolsBlocked),
-            }));
+              leverage: readLeverageRatio(submitted) || form.leverage,
+              name: submitted.name || form.name,
+              symbolsAllowed: toSymbolList(submitted.symbolsAllowed ?? form.symbolsAllowed),
+              symbolsBlocked: toSymbolList(submitted.symbolsBlocked ?? form.symbolsBlocked),
+            };
+            setForm(nextForm);
+            setInitialForm(nextForm);
           }
           setEditing(false);
           onSaved?.(saved);
