@@ -1,13 +1,14 @@
 // MetaTrader-style server journal for the operations terminal, backed by
-// GET /api/v1/manager/journal. The backend decides visibility: admins see the
-// whole broker, role managers their groups' accounts plus their own actions.
+// GET /api/v1/manager/journal. The shared backend enforces administrator
+// access and confines every response to the authenticated broker.
 // Kept free of service imports so it stays testable under plain node.
 
 export const SERVER_JOURNAL_COLUMNS = ['Time', 'Type', 'Source', 'Action', 'Login', 'Group', 'Message'];
 export const SERVER_JOURNAL_PAGE = 200;
 
 export const SERVER_JOURNAL_FILTERS = [
-  { id: 'all', label: 'All events' },
+  { id: 'all', label: 'Business & terminal' },
+  { id: 'access', label: 'Permission access', params: { access: 'only' } },
   { id: 'errors', label: 'Errors', params: { severity: 'error' } },
   { id: 'warnings', label: 'Warnings', params: { severity: 'warning' } },
   { id: 'security', label: 'Security & logins', params: { category: 'SECURITY,AUTH' } },
@@ -23,6 +24,12 @@ export const buildServerJournalQuery = ({ filter = 'all', cursor = '', limit = S
   const params = new URLSearchParams({ limit: String(limit), ...preset });
   if (cursor) params.set('cursor', cursor);
   return params.toString();
+};
+
+export const serverJournalLogin = (entry = {}) => {
+  const account = entry.account_login;
+  if (account !== null && account !== undefined && Number(account) > 0) return account;
+  return entry.actor_id || '—';
 };
 
 const pad = (value, width = 2) => String(value).padStart(width, '0');
@@ -84,6 +91,8 @@ export const serverJournalDetail = (entry = {}) => {
     entry.result ? `Result ${entry.result}${entry.error_code ? ` (${entry.error_code})` : ''}` : '',
     entry.target_type && entry.target_id !== undefined && entry.target_id !== null ? `Target ${entry.target_type} ${entry.target_id}` : '',
     entry.request_id ? `Request ${entry.request_id}` : '',
+    entry.metadata?.method && entry.metadata?.path ? `${entry.metadata.method} ${entry.metadata.path}` : '',
+    entry.metadata?.permission ? `Permission ${entry.metadata.permission}` : '',
   ];
   const before = entry.before && typeof entry.before === 'object' ? entry.before : {};
   const after = entry.after && typeof entry.after === 'object' ? entry.after : {};

@@ -10,6 +10,7 @@ import {
   mergeServerJournalPages,
   serverJournalAccessKey,
   serverJournalDetail,
+  serverJournalLogin,
   severityClass,
 } from './serverJournalCore.js';
 
@@ -22,6 +23,15 @@ test('filters and paging become journal query parameters', () => {
   assert.equal(all.get('category'), null);
   assert.equal(all.get('limit'), '200');
   assert.equal(new URLSearchParams(buildServerJournalQuery({ filter: 'errors' })).get('severity'), 'error');
+  assert.equal(new URLSearchParams(buildServerJournalQuery({ filter: 'access' })).get('access'), 'only');
+});
+
+test('missing and legacy zero account logins show the actor', () => {
+  assert.equal(serverJournalLogin({ account_login: null, actor_id: '9001' }), '9001');
+  assert.equal(serverJournalLogin({ account_login: 0, actor_id: '9001' }), '9001');
+  assert.equal(serverJournalLogin({ account_login: 200001, actor_id: '9001' }), 200001);
+  assert.equal(serverJournalLogin({ account_login: '200001' }), '200001');
+  assert.equal(serverJournalLogin({ account_login: 0 }), '—');
 });
 
 test('scope text tells a manager what the journal covers', () => {

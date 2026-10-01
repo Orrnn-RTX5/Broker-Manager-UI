@@ -38,6 +38,7 @@ import {
   matchesServerJournalSearch,
   serverJournalAccessKey,
   serverJournalDetail,
+  serverJournalLogin,
   severityClass,
 } from './serverJournalCore.js';
 
@@ -510,7 +511,7 @@ function JournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
 }
 
 function ServerJournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
-  const login = entry.account_login ?? entry.actor_id ?? '—';
+  const login = serverJournalLogin(entry);
   return (
     <>
       <tr className={selected ? 'is-selected' : undefined} onClick={onSelect}>
