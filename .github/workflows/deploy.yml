@@ -7,6 +7,24 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full source SHA of the published and Nexa-tested image (must match this workflow revision)
+        required: true
+        type: string
+      publish_run_id:
+        description: Successful main-push run that published the image identity artifact
+        required: true
+        type: string
+      image_ref:
+        description: Immutable GHCR image reference to promote (repository@sha256:digest)
+        required: true
+        type: string
+      nexa_tested_image_ref:
+        description: Exact immutable image reference deployed and validated on Nexa
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +39,7 @@ concurrency:
 jobs:
   validate:
     name: Validate build
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -103,6 +122,8 @@ jobs:
             '{component: $component, source_sha: $source_sha, image_ref: $image_ref}')"
           echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
           echo "release_record=$release_record" >> "$GITHUB_OUTPUT"
+          mkdir -p release-identity
+          printf '%s\n' "$release_record" > release-identity/manager-image.json
           {
             echo "## Source image release"
             echo "\`\`\`json"
@@ -110,6 +131,103 @@ jobs:
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload immutable image identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-image-${{ github.sha }}
+          path: release-identity/manager-image.json
+          if-no-files-found: error
+          retention-days: 90
+
+  promote-image:
+    name: Verify Nexa-tested image promotion
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      image_ref: ${{ steps.verify_identity.outputs.image_ref }}
+    steps:
+      - name: Verify source revision and successful publish run
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
+        with:
+          script: |
+            const sourceSha = process.env.SOURCE_SHA;
+            const runId = process.env.PUBLISH_RUN_ID;
+            if (!/^[0-9a-f]{40}$/.test(sourceSha) || sourceSha !== context.sha) {
+              throw new Error('Promotion source must be the full SHA of this workflow revision');
+            }
+            if (!/^[1-9][0-9]*$/.test(runId) || !Number.isSafeInteger(Number(runId))) {
+              throw new Error('Invalid publish run ID');
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: Number(runId),
+            });
+            if (run.head_sha !== sourceSha || run.head_branch !== 'main' ||
+                run.event !== 'push' || run.path !== '.github/workflows/deploy.yml' ||
+                run.status !== 'completed' || run.conclusion !== 'success') {
+              throw new Error('Identity must come from a successful same-SHA main push of this workflow');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: Number(runId), filter: 'latest', per_page: 100,
+            });
+            for (const name of ['Validate build', 'Build and publish GHCR image']) {
+              if (!jobs.some(job => job.name === name && job.conclusion === 'success')) {
+                throw new Error(`Required publish gate did not pass: ${name}`);
+              }
+            }
+
+      - name: Download published image identity
+        uses: actions/download-artifact@v4
+        with:
+          name: manager-image-${{ inputs.source_sha }}
+          path: release-identity
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.publish_run_id }}
+
+      - name: Verify immutable image and Nexa validation identity
+        id: verify_identity
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          REQUESTED_IMAGE_REF: ${{ inputs.image_ref }}
+          NEXA_TESTED_IMAGE_REF: ${{ inputs.nexa_tested_image_ref }}
+        run: |
+          set -euo pipefail
+          expected_prefix="${IMAGE_NAME}@sha256:"
+          digest="${REQUESTED_IMAGE_REF#"$expected_prefix"}"
+          if [[ "$REQUESTED_IMAGE_REF" != "$expected_prefix"* || ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Promotion requires an immutable digest in the configured image repository." >&2
+            exit 1
+          fi
+          if [[ "$REQUESTED_IMAGE_REF" != "$NEXA_TESTED_IMAGE_REF" ]]; then
+            echo "Requested image differs from the Nexa-tested image." >&2
+            exit 1
+          fi
+          jq -e --arg source_sha "$SOURCE_SHA" --arg image_ref "$REQUESTED_IMAGE_REF" \
+            '.component == "manager" and .source_sha == $source_sha and .image_ref == $image_ref' \
+            release-identity/manager-image.json > /dev/null
+          echo "image_ref=$REQUESTED_IMAGE_REF" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Nexa-tested image promotion"
+            echo "Source: $SOURCE_SHA"
+            echo "Image: $REQUESTED_IMAGE_REF"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy immutable Manager UI image
+    needs: [publish-image, promote-image]
+    if: >-
+      always() && !cancelled() && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'push' && needs.publish-image.result == 'success' &&
+      vars.MANAGER_AUTO_DEPLOY_PAUSED != 'true') ||
+      (github.event_name == 'workflow_dispatch' && needs.promote-image.result == 'success'))
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -120,7 +238,7 @@ jobs:
             set -e
 
             CONTAINER_NAME="broker-manager-ui"
-            NEW_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}"
+            NEW_IMAGE="${{ needs.promote-image.outputs.image_ref || needs.publish-image.outputs.image_ref }}"
             PREVIOUS_IMAGE=""
             # Runtime config (API_HOST, WS_HOST, BROKER_ID, ...) carried across deploys.
             ENV_FILE="$HOME/broker-manager-ui.env"
@@ -150,7 +268,7 @@ jobs:
             # Capture the currently deployed image before changing anything.
             if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
               PREVIOUS_IMAGE=$(docker inspect \
-                --format '{{.Config.Image}}' \
+                --format '{{.Image}}' \
                 "$CONTAINER_NAME")
 
               echo "Current image: $PREVIOUS_IMAGE"
@@ -175,6 +293,7 @@ jobs:
 
             echo "Pulling new image: $NEW_IMAGE"
             docker pull "$NEW_IMAGE"
+            EXPECTED_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$NEW_IMAGE")
 
             echo "Stopping current container..."
             docker stop "$CONTAINER_NAME" 2>/dev/null || true
@@ -194,6 +313,12 @@ jobs:
 
             if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
               echo "New container is not running."
+              rollback
+              exit 1
+            fi
+            if [ "$(docker inspect -f '{{.Image}}' "$CONTAINER_NAME")" != "$EXPECTED_IMAGE_ID" ]; then
+              echo "Running container does not match the selected immutable image."
+              rollback
               exit 1
             fi
 
