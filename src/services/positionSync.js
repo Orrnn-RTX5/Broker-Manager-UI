@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
 import { applyPositionsSnapshot, fetchAllPositionsDataset } from './api.js';
-import { buildPositionUpdatesWsUrl, getPositionUpdatesWsPath } from '../config/endpoints';
+import { buildPositionUpdatesWsUrl } from '../config/endpoints';
 import { liveTradingState } from './liveTradingState.js';
 import {
   PositionSyncClient,
@@ -15,7 +15,8 @@ import {
 export { PositionSyncClient, POSITION_SYNC_POLL_MS, getWsTicket, getPositionSnapshotRows, getPositionUpdateLogin, isPositionMutation, requiresPositionReconciliation };
 
 const positionSync = new PositionSyncClient({
-  requestTicket: () => apiClient.post('/api/v1/manager/ws-ticket', { path: getPositionUpdatesWsPath() }),
+  // Tickets bind to the backend route; proxy prefixes belong only in the URL.
+  requestTicket: () => apiClient.post('/api/v1/manager/ws-ticket', { path: '/OnPositionUpdate' }),
   buildUrl: buildPositionUpdatesWsUrl,
   onSnapshot: applyPositionsSnapshot,
 });
