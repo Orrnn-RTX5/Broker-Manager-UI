@@ -1,5 +1,6 @@
 import {
   getRuntimeConfigValue,
+  getDeploymentRuntimeConfig,
   normalizeBrokerInfo,
   resolveBrokerDefaultMt5Server,
   resolveBrokerBackendUrl,
@@ -40,7 +41,8 @@ const readBrokerInfo = () => {
     const brokerInfo = raw ? JSON.parse(raw) : null;
     const storedBrokerId = String(brokerInfo?.broker_id || brokerInfo?.id || '').toLowerCase();
     const pinnedBrokerId = getPinnedBrokerId();
-    return pinnedBrokerId && storedBrokerId !== pinnedBrokerId ? null : brokerInfo;
+    return (pinnedBrokerId && storedBrokerId !== pinnedBrokerId)
+      || (getDeploymentRuntimeConfig() && !pinnedBrokerId) ? null : brokerInfo;
   } catch {
     return null;
   }
@@ -65,7 +67,6 @@ const buildWsHost = (backendUrl = '') => {
   try {
     const url = new URL(withProtocol(trimmed));
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.port = '';
     url.pathname = '';
     url.search = '';
     url.hash = '';
@@ -91,7 +92,7 @@ const getWsBaseHost = (wsEndpoint = '') => {
 
 export const updateDynamicEndpoints = () => {
   const configuredApiHost = trimTrailingSlash(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']));
-  if (getPinnedBrokerId() && configuredApiHost) {
+  if (getDeploymentRuntimeConfig() || (getPinnedBrokerId() && configuredApiHost)) {
     const configuredWsHost = trimTrailingSlash(getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST']));
     API_HOST = configuredApiHost;
     WS_HOST = getWsBaseHost(configuredWsHost) || buildWsHost(configuredApiHost);
@@ -301,10 +302,12 @@ const FEED_STATUS_URL_KEYS = [
   'env.VITE_FEED_STATUS_URL',
 ];
 
-export const resolveFeedBrokerId = (brokerInfo = {}) => firstValue(
-  firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS),
-  getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID'])
-);
+export const resolveFeedBrokerId = (brokerInfo = {}) => {
+  const configured = getRuntimeConfigValue(['FEED_BROKER_ID', 'VITE_FEED_BROKER_ID', 'BROKER_ID', 'VITE_BROKER_ID']);
+  return getDeploymentRuntimeConfig()
+    ? configured
+    : firstValue(firstBrokerValue(brokerInfo, FEED_BROKER_ID_KEYS), configured);
+};
 
 export const shouldUseFeedDevProxy = (
   isDev = import.meta.env?.DEV === true,
@@ -421,9 +424,12 @@ export const buildFeedWsUrl = () => {
   }
 };
 
-const getBaseWsHost = () => trimTrailingSlash(
-  getRuntimeConfigValue(['MANAGER_WS_HOST', 'VITE_MANAGER_WS_HOST']) || WS_HOST || buildWsHost(API_HOST)
-);
+const getBaseWsHost = () => {
+  updateDynamicEndpoints();
+  return trimTrailingSlash(
+    getRuntimeConfigValue(['MANAGER_WS_HOST', 'VITE_MANAGER_WS_HOST']) || WS_HOST || buildWsHost(API_HOST)
+  ).replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+};
 
 export const isManagerMarketFeed = () => getRuntimeConfigValue(
   ['MARKET_DATA_SOURCE', 'VITE_MARKET_DATA_SOURCE'], 'bridge'
@@ -441,9 +447,13 @@ export const buildManagerMarketWsUrl = (ticket) => {
 };
 
 export const getPositionUpdatesWsPath = () => {
+  updateDynamicEndpoints();
+  const fallback = getDeploymentRuntimeConfig()
+    ? buildManagerApiPath('/OnPositionUpdate', shouldUseManagerProxyPrefix(API_HOST))
+    : '/OnPositionUpdate';
   const configuredPath = getRuntimeConfigValue(
     ['POSITION_UPDATES_WS_PATH', 'VITE_POSITION_UPDATES_WS_PATH'],
-    '/OnPositionUpdate'
+    fallback
   );
   return configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`;
 };

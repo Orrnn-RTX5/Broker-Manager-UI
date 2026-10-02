@@ -37,7 +37,32 @@ const runtimeConfigSources = () => {
   ].filter((source) => source && typeof source === 'object');
 };
 
+export const getDeploymentRuntimeConfig = () => runtimeConfigSources().find(
+  (source) => source.CONFIG_SOURCE === 'deployment'
+);
+
+// A container's routing profile is complete. An absent optional override must
+// derive from that profile, never resurrect a broker baked into the image.
+const deploymentRoutingKeys = new Set([
+  'BACKEND_TARGET', 'BACKEND_MODE', 'BROKER_ID', 'FEED_BROKER_ID',
+  'API_HOST', 'API_HOST_EXT', 'WS_HOST', 'WS_FEED_PATH',
+  'MANAGER_WS_HOST', 'MARKET_DATA_SOURCE', 'MANAGER_PROXY_STRIP_MANAGER_PREFIX',
+  'POSITION_UPDATES_WS_PATH', 'FEED_WS_URL', 'FEED_STATUS_URL',
+  'DISCOVERY_BASE_URL', 'DEFAULT_MT5_SERVER', 'USE_MOCK_DISCOVERY', 'LOCAL_BACKEND',
+]);
+
 export const getRuntimeConfigValue = (keys = [], fallback = '', { allowEmpty = false } = {}) => {
+  const deployment = getDeploymentRuntimeConfig();
+  if (deployment && keys.some((key) => deploymentRoutingKeys.has(key.replace(/^VITE_/, '')))) {
+    for (const key of keys) {
+      const value = deployment[key];
+      if (value === undefined || value === null) continue;
+      const text = String(value).trim();
+      return (allowEmpty || text !== '') ? text : fallback;
+    }
+    return fallback;
+  }
+
   for (const source of runtimeConfigSources()) {
     for (const key of keys) {
       const value = source[key];
@@ -337,6 +362,9 @@ const DIRECT_HOST_KEYS = ['server_ip', 'host', 'ip'];
 const DIRECT_PORT_KEYS = ['server_port', 'backend_port', 'api_port', 'port'];
 
 const resolveWebBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
+  if (getDeploymentRuntimeConfig()) {
+    return normalizeHttpUrl(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']), 'https', true);
+  }
   if (isTestBrokerInfo(brokerInfo, fallbackUrl)) {
     const explicitCandidates = [
       ...WEB_BACKEND_KEYS.map((key) => getValue(brokerInfo, [key])),
@@ -422,6 +450,13 @@ export const resolveBrokerBackendUrl = (brokerInfo = {}, fallbackUrl = '') => (
 );
 
 export const resolveBrokerExtApiUrl = (brokerInfo = {}, backendUrl = '') => {
+  if (getDeploymentRuntimeConfig()) {
+    return normalizeHttpUrl(
+      getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT'])
+        || getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
+      'https', true
+    );
+  }
   const explicitKeys = isDesktopBackendTarget()
     ? ['desktop_ext_api_url', 'desktopExtApiUrl', 'ext_api_url', 'extApiUrl']
     : ['web_ext_api_url', 'webExtApiUrl', 'ext_api_url', 'extApiUrl', 'env.API_HOST_EXT', 'env.VITE_API_HOST_EXT'];
@@ -536,6 +571,12 @@ const sanitizeWebWsCandidate = (candidate = '', brokerInfo = {}, fallbackUrl = '
 };
 
 export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEFAULT_WS_PATH) => {
+  if (getDeploymentRuntimeConfig()) {
+    const configured = getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL'])
+      || getRuntimeConfigValue(['WS_HOST', 'VITE_WS_HOST'])
+      || getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
+    return configured ? buildWsEndpoint(toWsUrl(configured, 'wss'), path) : '';
+  }
   const explicitKeys = isDesktopBackendTarget()
     ? [
         'desktop_feed_ws_url',
@@ -604,7 +645,10 @@ export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {
 };
 
 export const resolveBrokerDefaultMt5Server = (brokerInfo = {}, backendUrl = '') => (
-  getValue(brokerInfo, ['env.DEFAULT_MT5_SERVER', 'env.VITE_DEFAULT_MT5_SERVER', 'default_mt5_server', 'mt5_server']) ||
+  getDeploymentRuntimeConfig()
+    ? getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER'])
+      || hostnameFromUrl(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']))
+    : getValue(brokerInfo, ['env.DEFAULT_MT5_SERVER', 'env.VITE_DEFAULT_MT5_SERVER', 'default_mt5_server', 'mt5_server']) ||
   getValue(brokerInfo, ['server_ip', 'host', 'ip']) ||
   (isTestBrokerInfo(brokerInfo, backendUrl) ? TEST_BROKER_DEFAULT_MT5_SERVER : '') ||
   hostnameFromUrl(backendUrl) ||
