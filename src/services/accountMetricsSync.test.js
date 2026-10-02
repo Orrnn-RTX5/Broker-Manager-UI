@@ -14,7 +14,7 @@ test('visible accounts share scoped one-time-ticket sockets, reference counts, a
       builder.onResolve({ filter: /(apiClient|endpoints|positionSyncCore)$/ }, ({ path }) => ({ path, namespace: 'mock' }));
       builder.onLoad({ filter: /.*/, namespace: 'mock' }, ({ path }) => ({ loader: 'js', contents:
         path.endsWith('apiClient') ? 'export default {post: (path, body) => {globalThis.__metricsTest.requests.push({path,body}); return Promise.resolve({ticket:"one-use"});}};'
-          : path.endsWith('endpoints') ? 'export const buildPositionUpdatesWsUrl = ticket => "wss://broker.test/OnPositionUpdate?ticket="+ticket;'
+          : path.endsWith('endpoints') ? 'export const buildAccountMetricsWsUrl = ticket => "wss://broker.test/OnAccountMetrics?ticket="+ticket;'
             : 'export class PositionSyncClient { constructor(options){this.options=options;globalThis.__metricsTest.connections.push(this);} subscribe(){} start(){this.options.requestTicket();} stop(){this.stopped=true;} }',
       }));
     } }],

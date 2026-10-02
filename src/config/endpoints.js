@@ -435,16 +435,20 @@ export const isManagerMarketFeed = () => getRuntimeConfigValue(
   ['MARKET_DATA_SOURCE', 'VITE_MARKET_DATA_SOURCE'], 'bridge'
 ).toLowerCase() === 'manager';
 
-export const buildManagerMarketWsUrl = (ticket) => {
+const buildManagerTicketWsUrl = (endpoint, ticket) => {
   if (!ticket) throw new Error('A one-time websocket ticket is required.');
   updateDynamicEndpoints();
-  const path = buildManagerApiPath('/OnTick', shouldUseManagerProxyPrefix(API_HOST, readBrokerInfo() || {}));
+  const path = buildManagerApiPath(endpoint, shouldUseManagerProxyPrefix(API_HOST, readBrokerInfo() || {}));
   const url = new URL(toLocalDevFeedProxyUrl(`${getBaseWsHost()}${path}`, shouldUseManagerDevProxy()));
   if (url.protocol === 'http:') url.protocol = 'ws:';
   if (url.protocol === 'https:') url.protocol = 'wss:';
   url.searchParams.set('ticket', String(ticket));
   return url.toString();
 };
+
+export const buildManagerMarketWsUrl = (ticket) => buildManagerTicketWsUrl('/OnTick', ticket);
+
+export const buildAccountMetricsWsUrl = (ticket) => buildManagerTicketWsUrl('/OnAccountMetrics', ticket);
 
 export const getPositionUpdatesWsPath = () => {
   updateDynamicEndpoints();

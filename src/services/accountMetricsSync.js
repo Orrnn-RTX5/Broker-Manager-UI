@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import { buildPositionUpdatesWsUrl } from '../config/endpoints';
+import { buildAccountMetricsWsUrl } from '../config/endpoints';
 import { PositionSyncClient } from './positionSyncCore';
 import { liveTradingState } from './liveTradingState.js';
 
@@ -21,7 +21,7 @@ function reconcile() {
       if (clients.has(key)) continue;
       const client = new PositionSyncClient({
         requestTicket: () => apiClient.post('/api/v1/manager/ws-ticket', { path: '/OnAccountMetrics', logins: batch.map(Number) }),
-        buildUrl: (ticket) => { const url = new URL(buildPositionUpdatesWsUrl(ticket)); url.pathname = '/OnAccountMetrics'; return url.toString(); },
+        buildUrl: buildAccountMetricsWsUrl,
       });
       client.subscribe((event) => {
         if (event.payload) liveTradingState.ingest(event.payload);

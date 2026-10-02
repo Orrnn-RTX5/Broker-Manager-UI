@@ -70,6 +70,7 @@ for (const [broker, origin] of [
     const { backend, endpoints } = await loadBakedModules();
     assert.equal(endpoints.buildBrokerApiUrl('/api/v2/instruments'), `${origin}/api/v2/instruments`);
     assert.equal(endpoints.buildManagerMarketWsUrl('one-use'), `${wsOrigin}/manager/OnTick?ticket=one-use`);
+    assert.equal(endpoints.buildAccountMetricsWsUrl('one-use'), `${wsOrigin}/manager/OnAccountMetrics?ticket=one-use`);
     assert.equal(endpoints.buildPositionUpdatesWsUrl('one-use'), `${wsOrigin}/manager/OnPositionUpdate?ticket=one-use`);
     assert.equal(endpoints.buildFeedWsUrl(), `${wsOrigin}/bridge/ws/feed?broker_id=${broker}`);
     assert.equal(endpoints.buildFeedStatusUrl(), `${origin}/bridge/ws/feed/status`);
@@ -104,6 +105,7 @@ test('explicit manager and feed URLs and a custom position path remain supported
   };
   const { endpoints } = await loadBakedModules();
   assert.equal(endpoints.buildManagerMarketWsUrl('one-use'), 'wss://manager-api.achiever.example:8443/OnTick?ticket=one-use');
+  assert.equal(endpoints.buildAccountMetricsWsUrl('one-use'), 'wss://manager-api.achiever.example:8443/OnAccountMetrics?ticket=one-use');
   assert.equal(endpoints.buildPositionUpdatesWsUrl('one-use'), 'wss://manager-api.achiever.example:8443/custom/positions?ticket=one-use');
   assert.equal(endpoints.buildFeedWsUrl(), 'wss://quotes.achiever.example/live?broker_id=achiever');
   assert.equal(endpoints.buildFeedStatusUrl(), 'https://quotes.achiever.example/live/status');
