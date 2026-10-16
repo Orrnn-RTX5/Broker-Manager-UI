@@ -9,5 +9,5 @@
 .group-operation-body ul { list-style: disc; padding-left: 20px; }
 .group-operation-body td, .group-operation-body th { padding: 6px; text-align: left; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .group-operation-body table { width: 100%; border-collapse: collapse; }
-.group-operation-error, .group-operation-body [role="alert"] { color: var(--danger-text, #f2a69b); white-space: pre-wrap; }
+.group-operation-error, .group-operation-body [role="alert"] { color: var(--danger-text, #f06464); white-space: pre-wrap; }
 .group-operation-dialog .ui-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }

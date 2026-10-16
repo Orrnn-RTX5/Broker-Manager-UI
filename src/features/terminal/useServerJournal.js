@@ -28,18 +28,20 @@ export default function useServerJournal(enabled, accessKey = '') {
   const [cursor, setCursor] = useState(remembered?.cursor ?? '');
   const [scope, setScope] = useState(remembered?.scope ?? null);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(remembered?.loaded ?? false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState('');
   const [live, setLive] = useState(false);
   const requestSeq = useRef(0);
   const entriesRef = useRef(entries);
   const filterRef = useRef(filter);
+  const loadedRef = useRef(loaded);
 
   useEffect(() => {
     entriesRef.current = entries;
     filterRef.current = filter;
-    memory = { owner, filter, entries, cursor, scope };
-  }, [owner, filter, entries, cursor, scope]);
+    memory = { owner, filter, entries, cursor, scope, loaded };
+  }, [owner, filter, entries, cursor, scope, loaded]);
 
   const clearRows = useCallback(() => {
     entriesRef.current = [];
@@ -67,7 +69,11 @@ export default function useServerJournal(enabled, accessKey = '') {
       }
       setError(describeServerJournalError(err));
     } finally {
-      if (seq === requestSeq.current && !quiet) setLoading(false);
+      if (seq === requestSeq.current) {
+        loadedRef.current = true;
+        setLoaded(true);
+        if (!quiet) setLoading(false);
+      }
     }
   }, [filter, clearRows]);
 
@@ -75,7 +81,7 @@ export default function useServerJournal(enabled, accessKey = '') {
   // session poll instead of after a page reload.
   useEffect(() => {
     if (!enabled) return undefined;
-    const timer = setTimeout(() => refresh({ quiet: entriesRef.current.length > 0 }), 0);
+    const timer = setTimeout(() => refresh({ quiet: loadedRef.current }), 0);
     return () => clearTimeout(timer);
   }, [enabled, refresh, accessKey]);
 
@@ -90,6 +96,9 @@ export default function useServerJournal(enabled, accessKey = '') {
     filterRef.current = next;
     entriesRef.current = [];
     requestSeq.current++; // drop replies for the previous filter
+    loadedRef.current = false;
+    setLoaded(false);
+    setError('');
     setEntries([]);
     setCursor('');
     setFilterState(next);
@@ -116,5 +125,5 @@ export default function useServerJournal(enabled, accessKey = '') {
     }
   }, [cursor, filter, loadingOlder, clearRows]);
 
-  return { filter, setFilter, entries, cursor, scope, loading, loadingOlder, error, live, setLive, refresh, loadOlder };
+  return { filter, setFilter, entries, cursor, scope, loading: loading || (enabled && !loaded), loadingOlder, error, live, setLive, refresh, loadOlder };
 }

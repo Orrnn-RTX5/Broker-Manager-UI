@@ -13,7 +13,6 @@ const ORDER_COLUMNS = [
   { key: 'name',      label: 'User Name' },
   { key: 'group',     label: 'Group' },
   { key: 'symbol',    label: 'Symbol' },
-  { key: 'type',      label: 'Type' },
   { key: 'side',      label: 'Side' },
   { key: 'volume',    label: 'Lots' },
   { key: 'priceOpen', label: 'Open' },
@@ -43,6 +42,23 @@ const OrdersPage = () => {
     },
   });
 
+  const symbolOptions = useMemo(() => {
+    const dynamicSymbols = (ctl.grid?.rows || [])
+      .map((row) => row?.symbol)
+      .filter(Boolean);
+    return Array.from(new Set([
+      'All Symbols',
+      ...dynamicSymbols,
+      'BTCUSD',
+      'EURUSD',
+      'GBPUSD',
+      'XAUUSD',
+      'xauusd.c',
+      'xauusd',
+      'Nubjpy.c',
+    ]));
+  }, [ctl.grid?.rows]);
+
   const { getOrderActions, renderDialog } = useDealerMenu(() => {
     ctl.gridProps.onRowsChange?.([]);
   });
@@ -53,33 +69,26 @@ const OrdersPage = () => {
   }, [ctl.contextMenuProps.selectedRow, getOrderActions]);
 
   return (
-    <div className="orders-page p-3 w-full h-full flex flex-col gap-2 overflow-y-auto" {...ctl.pageProps}>
-      <div className="orders-header grid grid-cols-1 gap-2.5 shrink-0">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0">
-            <h1 className="orders-title text-xl font-semibold" style={{ color: 'var(--text)' }}>Orders</h1>
-            <p className="orders-subtitle text-xs" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to modify</p>
+    <div className="orders-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden" {...ctl.pageProps}>
+      <div className="orders-header flex flex-col md:flex-row items-start md:items-center justify-between pb-0 gap-2 shrink-0">
+        <div className="orders-heading flex items-center gap-2 min-w-0">
+          <h1 className="orders-title" style={{ color: 'var(--text)' }}>Orders</h1>
+        </div>
+        <div className="orders-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <div className="orders-search relative w-[220px] shrink-0">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text)' }} />
+            <input
+              type="text"
+              placeholder="Search login, ticket, symbol…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ui-input ui-input-sm w-full"
+              style={{ paddingLeft: 32 }}
+            />
           </div>
-        </div>
-        <div className="orders-filters grid grid-cols-3 gap-1.5 min-w-0">
-          <FilterDropdown value={typeFilter} className="w-[96px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
-          <FilterDropdown value={symbolFilter} className="w-[112px]" options={['All Symbols', 'xauusd.c', 'xauusd', 'Nubjpy.c']} onChange={setSymbolFilter} />
-          <FilterDropdown value={reasonFilter} className="w-[112px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="orders-search-row flex items-center justify-start shrink-0">
-        <div className="orders-search relative w-full max-w-xs">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-          <input
-            type="text"
-            placeholder="Search login, ticket, symbol…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="ui-input ui-input-sm"
-            style={{ paddingLeft: 32 }}
-          />
+          <FilterDropdown value={typeFilter} className="w-[125px]" options={['All Types', 'Buy', 'Sell']} onChange={setTypeFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[135px]" options={symbolOptions} onChange={setSymbolFilter} />
+          <FilterDropdown value={reasonFilter} className="w-[135px]" options={['All Reasons', 'Mobile', 'Client', 'Expert']} onChange={setReasonFilter} />
         </div>
       </div>
 

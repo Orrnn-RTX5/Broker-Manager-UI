@@ -21,7 +21,7 @@ const getCustomProperty = (css, selector, property) => {
 test('Operations Terminal matches Open Positions value and semantic colors', () => {
   assert.match(source, /const profitClassName = Number\(row\.profit\) < 0 \? 'is-negative' : 'is-positive'/);
   assert.match(source, /column === 'Action'[\s\S]*?className="cc-trade-side"/);
-  assert.match(source, /column === 'Profit'[\s\S]*?cc-trade-profit/);
+  assert.match(source, /column === 'Profit \/ Loss'[\s\S]*?cc-trade-profit/);
 
   const terminalSelector = '.cc-terminal-trades';
   const terminalDarkSelector = '.dark .cc-terminal-trades';
@@ -53,6 +53,6 @@ test('Operations Terminal matches Open Positions value and semantic colors', () 
     getCustomProperty(openPositionsStyles, openPositionsDarkSelector, '--open-position-sell-color'),
   );
   assert.match(styles, /tbody td\s*\{\s*color:\s*var\(--trade-value-text\)/);
-  assert.match(styles, /\.cc-trade-profit\.is-positive\s*\{\s*color:\s*var\(--trade-buy-text\)/);
-  assert.match(styles, /\.cc-trade-profit\.is-negative\s*\{\s*color:\s*var\(--trade-sell-text\)/);
+  assert.match(styles, /\.cc-trade-profit\.is-positive\s*\{\s*color:\s*var\(--trade-profit-text\)/);
+  assert.match(styles, /\.cc-trade-profit\.is-negative\s*\{\s*color:\s*var\(--trade-loss-text\)/);
 });

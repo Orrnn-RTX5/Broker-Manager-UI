@@ -11,7 +11,7 @@ const readNumber = (source, keys) => {
   if (!source) return undefined;
   for (const key of keys) {
     const value = source[key];
-    if (value === undefined || value === null || String(value).trim() === '') continue;
+    if (value === undefined || value === null || typeof value === 'boolean' || String(value).trim() === '') continue;
     const numeric = Number(value);
     if (Number.isFinite(numeric)) return numeric;
   }
@@ -83,3 +83,37 @@ export const buildMarginAlerts = (accounts = [], groupLevels = new Map()) => acc
     }];
   })
   .sort((a, b) => (a.type === b.type ? a.marginLevel - b.marginLevel : a.type === 'stop-out' ? -1 : 1));
+
+// Monitoring requires published broker thresholds; other consumers retain the
+// existing helper's default behavior for compatibility.
+export const assessConfiguredMarginAlerts = (accounts = [], groupLevels = new Map()) => {
+  const alerts = [];
+  const unresolved = [];
+  for (const account of accounts) {
+    const login = readText(account, ['login', 'Login']);
+    if (!login) continue;
+    const name = readText(account, ['Name', 'name']);
+    const group = readText(account, ['group', 'Group']);
+    const margin = readNumber(account, ['margin', 'Margin', 'used_margin']);
+    const unknown = (reason) => unresolved.push({ login, name, group, reason });
+    if (margin === undefined || margin < 0) { unknown('Used margin unavailable'); continue; }
+    if (margin === 0) continue;
+    const marginLevel = accountMarginLevel({ ...account, margin });
+    const equity = readNumber(account, ['equity', 'Equity']);
+    if (marginLevel === undefined || (marginLevel === 0 && equity === undefined)) {
+      unknown('Margin level unavailable'); continue;
+    }
+    const levels = groupLevels.get(groupKey(group)) || {};
+    const call = readNumber(account, ['marginCallLevel', 'MarginCallLevel', 'margin_call_level']) ?? levels.call;
+    const stop = readNumber(account, ['stopOutLevel', 'StopOutLevel', 'stop_out_level']) ?? levels.stop;
+    if (call === undefined || stop === undefined || stop < 0 || call < stop) {
+      unknown('Broker margin thresholds unavailable'); continue;
+    }
+    if (marginLevel > call) continue;
+    const isStopOut = marginLevel <= stop;
+    alerts.push({ login, name, group, type: isStopOut ? 'stop-out' : 'margin-call',
+      label: isStopOut ? 'Stop out' : 'Margin call', marginLevel, threshold: isStopOut ? stop : call });
+  }
+  alerts.sort((a, b) => a.type === b.type ? a.marginLevel - b.marginLevel : a.type === 'stop-out' ? -1 : 1);
+  return { alerts, unresolved };
+};

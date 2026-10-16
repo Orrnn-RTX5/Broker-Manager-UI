@@ -294,7 +294,6 @@ function App() {
 
     // Immediately prefetch account data used by the workspace shell.
     prefetchInitialWorkspaceData(queryClient);
-    preloadSymbolManagementData();
 
     // Prioritize the active route's data query first. Defer background route warming
     // and auxiliary prefetches so they never compete for network connections or CPU
@@ -304,6 +303,7 @@ function App() {
         preloadFrequentWorkspaceRoutes();
         preloadAllWorkspaceRoutes();
         prefetchInitialAnalyticsData(queryClient);
+        preloadSymbolManagementData();
       };
 
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -358,7 +358,6 @@ function App() {
     rememberValidSession(status);
     // Start authenticated data warming before the dashboard transition. React
     // Query deduplicates this with the authenticated effect below.
-    prefetchInitialAnalyticsData(queryClient);
     prefetchInitialWorkspaceData(queryClient);
     setSessionVersion((value) => value + 1);
     setIsAuthenticated(true);

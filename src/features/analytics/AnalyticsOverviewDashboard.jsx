@@ -291,8 +291,8 @@ export default function AnalyticsOverviewDashboard() {
   const accountCountryCounts = useMemo(() => buildCountryCounts(report.countries), [report.countries]);
   const onlineUserRows = onlineUsersQuery.data?.rows || EMPTY_PAGE.rows;
   const onlineAnalytics = useMemo(
-    () => buildOnlineUserAnalytics(onlineUserRows, { country: activeFilter(country, ALL_COUNTRIES) }),
-    [onlineUserRows, country],
+    () => buildOnlineUserAnalytics(onlineUserRows, { country: activeFilter(country, ALL_COUNTRIES) }, accounts),
+    [onlineUserRows, country, accounts],
   );
   const positionRows = canViewPositions ? positionsQuery.data?.rows || EMPTY_PAGE.rows : EMPTY_PAGE.rows;
   const orderRows = ordersQuery.data?.rows || EMPTY_PAGE.rows;

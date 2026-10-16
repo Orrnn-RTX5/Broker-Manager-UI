@@ -163,7 +163,7 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                           <XAxis dataKey="date" axisLine={{ stroke: 'var(--border-3)' }} tickLine={false} minTickGap={40} tick={{ fill: 'var(--text-3)', fontSize: 9 }} />
                           <YAxis allowDecimals={false} width={42} axisLine={{ stroke: 'var(--border-3)' }} tickLine={false} tickFormatter={(value) => compactFormatter.format(value)} tick={{ fill: 'var(--text-3)', fontSize: 9 }} />
                           <Tooltip contentStyle={tooltipStyle} formatter={(value) => [countFormatter.format(value), 'Accounts']} />
-                          <Line type="linear" dataKey="count" name="Accounts" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--accent)', strokeWidth: 2 }} activeDot={{ r: 4 }} isAnimationActive={true} animationDuration={600} />
+                          <Line type="linear" dataKey="count" name="Accounts" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--accent)', strokeWidth: 2 }} activeDot={{ r: 4 }} isAnimationActive={false} />
                         </LineChart>
                       </ResponsiveContainer>
                     )}
@@ -238,8 +238,8 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                             data={donutData}
                             size={180}
                             strokeWidth={22}
-                            animationDuration={0.8}
-                            animationDelayPerSegment={0.05}
+                            animationDuration={0}
+                            animationDelayPerSegment={0}
                             highlightOnHover
                             onSegmentHover={setHoveredGroup}
                             centerContent={

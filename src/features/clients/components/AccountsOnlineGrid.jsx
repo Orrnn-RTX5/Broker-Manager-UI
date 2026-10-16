@@ -1,15 +1,10 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useI18nStore } from '../../../i18n/index.js';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  User, Shield, Laptop, Smartphone, Monitor, Clock,
-  ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, RefreshCcw
-} from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getAccountsOnlinePage } from '../../../services/api';
 import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../../services/onlineUsersSnapshot.js';
-import GridLoadingState from '../../../components/GridLoadingState';
 
 // toLocaleString builds a new formatter per call; reuse one per language.
 const dateTimeFormatters = new Map();
@@ -37,14 +32,7 @@ const formatAge = (seconds) => {
   return `${hrs}h ${rmins}m`;
 };
 
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
-};
-
-const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
+const AccountsOnlineGrid = ({ search = '', searchControl, onRowsChange, onRowContext }) => {
   const language = useI18nStore((state) => state.language);
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
@@ -86,6 +74,7 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
     refetchOnMount: true,
     placeholderData: (previousData) => previousData,
   });
+  const accessDenied = isError && [401, 403].includes(Number(error?.status));
 
   // Prevent brief flash of loading skeleton on sub-120ms network fetches
   const [showLoadingState, setShowLoadingState] = useState(false);
@@ -99,8 +88,8 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
   }, [shouldShowLoadingState]);
 
   useEffect(() => {
-    if (onRowsChange) onRowsChange(rows);
-  }, [rows, onRowsChange]);
+    if (onRowsChange) onRowsChange(accessDenied ? [] : rows);
+  }, [rows, onRowsChange, accessDenied]);
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
@@ -121,8 +110,16 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
   };
 
   const renderHeader = (col, label) => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: 'center' }} className="cursor-pointer">
-      {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    <th scope="col" aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        className="active-sessions-sort"
+        onClick={() => handleSort(col)}
+        title={`Sort by ${label}: ${sortCol === col && sortDir === 'asc' ? 'descending' : 'ascending'}`}
+      >
+        {label}
+        {sortCol === col && <span className="active-sessions-sort-direction" aria-hidden="true">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+      </button>
     </th>
   );
 
@@ -133,25 +130,30 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
   const loadLabel = String(search || '').trim() ? 'Load results' : 'Load first 30';
 
   return (
-    <div className="active-sessions-grid ui-card flex flex-col w-full overflow-hidden min-h-[400px]">
-      <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border-2)' }}>
-        <div className="flex items-center gap-2">
-          <span className="active-sessions-heading font-semibold tabular" style={{ color: 'var(--text-3)' }}>
-            {isIdle ? 'ACTIVE SESSIONS NOT LOADED' : `${total ?? rows.length} ACTIVE SESSIONS`}
-          </span>
-          {isFetching && <RefreshCcw size={12} className="animate-spin" style={{ color: 'var(--accent)' }} />}
+    <div className="active-sessions-grid">
+      <div className="active-sessions-grid-toolbar">
+        <div className="active-sessions-summary">
+          <h1 className="active-sessions-title">Active Sessions</h1>
         </div>
-        <button onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-ghost ui-btn-xs">
-          <RefreshCcw size={11} className={isFetching ? 'animate-spin' : ''} />
-          {isIdle ? 'LOAD' : 'FORCE RELOAD'}
-        </button>
+        <div className="active-sessions-actions">
+          {searchControl}
+        </div>
       </div>
 
-      {shouldShowLoadingState && showLoadingState ? (
-        <GridLoadingState label="Loading active sessions…" />
-      ) : (
-      <div className="w-full overflow-x-auto flex-1">
-        <table className="ui-grid min-w-max">
+      {isError && !accessDenied && rows.length > 0 && <div className="active-sessions-notice" role="alert">
+        <span>Unable to refresh sessions. Showing the last available data.</span>
+        <button type="button" onClick={handleRefresh} disabled={isFetching} className="active-sessions-button">Retry</button>
+      </div>}
+
+      <div className="active-sessions-table-wrap">
+        <table className="active-sessions-table" aria-label="Active sessions" aria-busy={isFetching}>
+          <colgroup>
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '20%' }} />
+          </colgroup>
           <thead>
             <tr>
               {renderHeader('login', 'Login ID')}
@@ -164,11 +166,10 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
           <tbody>
             {isIdle ? (
               <tr>
-                <td colSpan={5} className="text-center py-20">
-                  <div className="flex flex-col items-center gap-3" style={{ color: 'var(--muted)' }}>
-                    <span className="text-sm">Active sessions are not loaded.</span>
-                    <button type="button" onClick={handleLoadData} className="ui-btn ui-btn-primary ui-btn-sm">
-                      <RefreshCcw size={13} />
+                <td colSpan={5} className="active-sessions-empty">
+                  <div className="active-sessions-state">
+                    <span>Active sessions are not loaded.</span>
+                    <button type="button" onClick={handleLoadData} className="active-sessions-button">
                       {loadLabel}
                     </button>
                   </div>
@@ -176,99 +177,74 @@ const AccountsOnlineGrid = ({ search = '', onRowsChange, onRowContext }) => {
               </tr>
             ) : isLoading && rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-20">
-                  <div className="flex flex-col items-center gap-2">
-                    <RefreshCcw size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-                    <span className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>Analyzing online sessions...</span>
+                <td colSpan={5} className="active-sessions-empty">
+                  <div className="active-sessions-state" role="status">
+                    {showLoadingState && <span>Loading active sessions…</span>}
                   </div>
                 </td>
               </tr>
-            ) : isError ? (
+            ) : isError && (rows.length === 0 || accessDenied) ? (
               <tr>
-                <td colSpan={5} className="text-center py-20">
-                  <div className="flex flex-col items-center gap-2 text-red-500">
-                    <AlertTriangle size={24} />
-                    <span className="text-sm font-bold">Failed to load session data</span>
-                    <span className="text-xs opacity-70">{error?.message}</span>
+                <td colSpan={5} className="active-sessions-empty">
+                  <div className="active-sessions-state active-sessions-error" role="alert">
+                    <span>Failed to load session data</span>
+                    <span>{error?.message}</span>
+                    <button type="button" onClick={handleRefresh} disabled={isFetching} className="active-sessions-button">Retry</button>
                   </div>
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-20 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={5} className="active-sessions-empty">
                   No active accounts found online.
                 </td>
               </tr>
-            ) : rows.map((row, idx) => {
-              const rowKey = `${row.login}-${idx}`;
-              const DeviceIcon = row.deviceType?.toLowerCase().includes('manager') ? Monitor :
-                row.deviceType?.toLowerCase().includes('mobile') ? Smartphone : Laptop;
+            ) : rows.map((row) => {
+              const rowKey = `${row.login}-${row.connectedAt}-${row.deviceType}`;
 
               return (
                 <tr
                   key={rowKey}
-                  hide-hover="false"
+                  tabIndex={0}
                   onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
-                  onContextMenu={(e) => onRowContext && onRowContext(e, row)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedRow(selectedRow === rowKey ? null : rowKey);
+                    }
+                  }}
+                  onContextMenu={(e) => { setSelectedRow(rowKey); onRowContext?.(e, row); }}
                   className={selectedRow === rowKey ? 'is-selected' : ''}
-                  style={{ cursor: 'pointer' }}
+                  aria-selected={selectedRow === rowKey}
                 >
-                  <td className="tabular" style={{ textAlign: 'center' }}>
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                      <span className="tabular" style={{ color: 'var(--text)' }}>{row.login}</span>
-                    </div>
-                  </td>
-                  <td className="tabular" style={{ color: 'var(--text-2)', textAlign: 'center' }}>{formatDateTime(row.connectedAt, language)}</td>
-                  <td className="tabular" style={{ textAlign: 'center' }}>
-                    <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-                      <Clock size={12} />
-                      <span>{formatAge(row.sessionAge)}</span>
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    {row.isAdmin ? (
-                      <span className="ui-status ui-status-info">
-                        <Shield size={10} className="mr-1" />
-                        ADMIN
-                      </span>
-                    ) : (
-                      <span className="ui-status ui-status-neutral">USER</span>
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div className="flex items-center justify-center gap-2" style={{ color: 'var(--text-3)' }}>
-                      <DeviceIcon size={14} style={{ color: 'var(--accent)' }} />
-                      <span className="capitalize">{row.deviceType || 'Unknown'}</span>
-                    </div>
-                  </td>
+                  <td>{row.login}</td>
+                  <td>{formatDateTime(row.connectedAt, language)}</td>
+                  <td>{formatAge(row.sessionAge)}</td>
+                  <td>{row.isAdmin ? 'Administrator' : 'User'}</td>
+                  <td className="active-sessions-access">{String(row.deviceType).toLowerCase() === 'api' ? 'API' : row.deviceType || 'Unknown'}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      )}
 
-      <div
-        className="flex items-center justify-between px-4 py-2.5 text-xs shrink-0"
-        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
-      >
+      <div className="active-sessions-pagination">
         <span>
           {isIdle ? (
             'Active sessions not loaded'
           ) : (
             <>
-              Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+              Showing <span className="tabular">{rangeStart}-{rangeEnd}</span>
               {' '}of{' '}
-              <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+              <span className="tabular">{total ?? 'many'}</span>
             </>
           )}
         </span>
-        <div className="flex items-center gap-2">
-          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs">Next</button>
+        <div className="active-sessions-page-controls">
+          <button type="button" onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="active-sessions-button">Prev</button>
+          <span className="tabular">{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
+          <button type="button" onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="active-sessions-button">Next</button>
         </div>
       </div>
     </div>

@@ -137,38 +137,132 @@ export const resolveOnlineUserCountry = (value) => {
 };
 
 export const resolveOnlineUserType = (row = {}) => {
-  const raw = cleanValue(row.type) || cleanValue(row.client) || cleanValue(row.platform);
+  const raw = cleanValue(row.type) || cleanValue(row.deviceType) || cleanValue(row.client) || cleanValue(row.platform);
   if (!raw) return 'Unknown';
   const lowered = raw.toLowerCase();
+  if (lowered === 'api' || lowered.includes('api')) return 'API';
+  if (lowered === 'manager' || lowered.includes('manager')) return 'Manager';
   if (lowered.includes('android')) return 'Android';
   if (lowered.includes('ios') || lowered.includes('iphone') || lowered.includes('ipad')) return 'iOS';
   if (lowered.includes('win')) return 'Windows';
   if (lowered.includes('mac')) return 'macOS';
   if (lowered.includes('linux')) return 'Linux';
   if (lowered.includes('web')) return 'Web';
-  return raw;
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+export const enrichOnlineUserRows = (rows = [], accounts = []) => {
+  const accountList = Array.isArray(accounts) ? accounts : [];
+  const accountsByLogin = new Map();
+  for (const acc of accountList) {
+    const loginKey = cleanValue(acc?.login ?? acc?.Login);
+    if (loginKey) accountsByLogin.set(loginKey, acc);
+  }
+
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const loginKey = cleanValue(row?.login ?? row?.Login);
+    const matched = loginKey ? accountsByLogin.get(loginKey) : null;
+    const resolvedType = resolveOnlineUserType(row);
+    const isManager = resolvedType === 'Manager' || Boolean(row?.isAdmin);
+
+    const rawCountry = cleanValue(row?.country ?? row?.Country) || cleanValue(matched?.country ?? matched?.Country);
+    const { name: normalizedCountry } = resolveOnlineUserCountry(rawCountry);
+
+    const rawGroup = cleanValue(row?.group ?? row?.Group)
+      || cleanValue(matched?.group ?? matched?.Group)
+      || (isManager ? 'Managers' : '');
+
+    const explicitRowName = row?.name && row?.name !== row?.username ? cleanValue(row.name) : '';
+    const rawName = explicitRowName
+      || cleanValue(matched?.name ?? matched?.Name)
+      || cleanValue(row?.name ?? row?.username ?? row?.Username)
+      || (isManager ? `Manager #${loginKey}` : '');
+
+    const rowEquity = Number(row?.equity ?? row?.Equity);
+    const matchedEquity = Number(matched?.equity ?? matched?.Equity);
+    const equity = Number.isFinite(rowEquity) && rowEquity !== 0
+      ? rowEquity
+      : (Number.isFinite(matchedEquity) ? matchedEquity : 0);
+
+    const currency = cleanValue(row?.currency ?? row?.Currency)
+      || cleanValue(matched?.currency ?? matched?.Currency)
+      || (matched ? 'USD' : '');
+
+    return {
+      ...row,
+      login: loginKey,
+      name: rawName,
+      group: rawGroup,
+      country: normalizedCountry || rawCountry,
+      type: resolvedType,
+      equity,
+      currency,
+    };
+  });
 };
 
 const matchesSearch = (row, query) => {
   const needle = cleanValue(query).toLowerCase();
   if (!needle) return true;
-  return [row.login, row.name, row.group, row.client, row.version, row.ip, row.country]
+  return [row.login, row.name, row.group, row.type, row.deviceType, row.client, row.ip, row.country]
     .some((value) => String(value || '').toLowerCase().includes(needle));
 };
 
-export const buildOnlineUserFilterOptions = (rows = []) => ({
-  countries: uniqueValues(rows, 'country'),
-  groups: uniqueValues(rows, 'group'),
-  types: [...new Set(rows.map((row) => resolveOnlineUserType(row)).filter((type) => type !== 'Unknown'))]
-    .sort(stringCompare),
-  builds: uniqueValues(rows, 'version'),
-});
+const DEFAULT_SESSION_TYPES = ['API', 'Manager', 'Web'];
 
-export const buildOnlineUserAnalytics = (rows = [], filters = {}) => {
+export const buildOnlineUserFilterOptions = (rows = [], accounts = [], extraGroups = []) => {
+  const enriched = Array.isArray(accounts) && accounts.length > 0
+    ? enrichOnlineUserRows(rows, accounts)
+    : (Array.isArray(rows) ? rows : []);
+
+  const countrySet = new Set();
+  for (const row of enriched) {
+    const { name } = resolveOnlineUserCountry(row?.country);
+    if (name) countrySet.add(name);
+  }
+  for (const acc of Array.isArray(accounts) ? accounts : []) {
+    const { name } = resolveOnlineUserCountry(acc?.country ?? acc?.Country);
+    if (name) countrySet.add(name);
+  }
+
+  const groupSet = new Set();
+  for (const row of enriched) {
+    const g = cleanValue(row?.group);
+    if (g && g !== 'Unspecified') groupSet.add(g);
+  }
+  for (const acc of Array.isArray(accounts) ? accounts : []) {
+    const g = cleanValue(acc?.group ?? acc?.Group);
+    if (g) groupSet.add(g);
+  }
+  for (const item of Array.isArray(extraGroups) ? extraGroups : []) {
+    const g = cleanValue(typeof item === 'object' ? item?.name : item);
+    if (g) groupSet.add(g);
+  }
+
+  const typeSet = new Set(DEFAULT_SESSION_TYPES);
+  for (const row of enriched) {
+    const t = resolveOnlineUserType(row);
+    if (t && t !== 'Unknown') typeSet.add(t);
+  }
+
+  return {
+    countries: [...countrySet].sort(stringCompare),
+    groups: [...groupSet].sort(stringCompare),
+    types: [...typeSet].sort(stringCompare),
+    builds: uniqueValues(enriched, 'version'),
+  };
+};
+
+export const buildOnlineUserAnalytics = (rows = [], filters = {}, accounts = []) => {
+  const sourceRows = Array.isArray(accounts) && accounts.length > 0
+    ? enrichOnlineUserRows(rows, accounts)
+    : (Array.isArray(rows) ? rows : []);
+
   const group = cleanValue(filters.group);
   const type = cleanValue(filters.type);
   const build = cleanValue(filters.build);
   const country = cleanValue(filters.country);
+  const filterCountryGeo = country ? resolveOnlineUserCountry(country).geoName.toLowerCase() : '';
 
   const countries = new Map();
   const geoCountries = new Map();
@@ -178,17 +272,18 @@ export const buildOnlineUserAnalytics = (rows = [], filters = {}) => {
   let total = 0;
   let totalEquity = 0;
   let adminSessions = 0;
+  let unspecifiedCountries = 0;
 
-  for (const row of Array.isArray(rows) ? rows : []) {
+  for (const row of sourceRows) {
     const rowType = resolveOnlineUserType(row);
     const rowBuild = cleanValue(row.version) || 'Unknown';
     const rowGroup = cleanValue(row.group) || 'Unspecified';
     const { name: rowCountry, geoName } = resolveOnlineUserCountry(row.country);
 
-    if (group && cleanValue(row.group) !== group) continue;
-    if (type && rowType !== type) continue;
+    if (group && rowGroup.toLowerCase() !== group.toLowerCase()) continue;
+    if (type && rowType.toLowerCase() !== type.toLowerCase()) continue;
     if (build && cleanValue(row.version) !== build) continue;
-    if (country && cleanValue(row.country) !== country) continue;
+    if (filterCountryGeo && geoName.toLowerCase() !== filterCountryGeo) continue;
     if (!matchesSearch(row, filters.search)) continue;
 
     total += 1;
@@ -201,15 +296,23 @@ export const buildOnlineUserAnalytics = (rows = [], filters = {}) => {
       countries.set(rowCountry, (countries.get(rowCountry) || 0) + 1);
       const geoKey = geoName.toLowerCase();
       geoCountries.set(geoKey, (geoCountries.get(geoKey) || 0) + 1);
+    } else {
+      unspecifiedCountries += 1;
     }
   }
+
+  const sortedCountries = sortedCounts(countries);
+  const countryBreakdown = unspecifiedCountries > 0
+    ? [...sortedCountries, { name: 'Unspecified', count: unspecifiedCountries }]
+    : sortedCountries;
 
   return {
     total,
     totalEquity,
     adminSessions,
     uniqueGroups: groups.size,
-    countries: sortedCounts(countries),
+    countries: sortedCountries,
+    countryBreakdown,
     geoCountries,
     groups: sortedCounts(groups),
     types: sortedCounts(types),

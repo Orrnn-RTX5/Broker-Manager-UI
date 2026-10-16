@@ -6,6 +6,7 @@ export const DATA_ACCESS_CHANGED = 'auth:data-access-changed';
 const pageEpoch = `${Date.now()}:${Math.random()}`;
 let authorityIdentity = '';
 let authorityFingerprint = '';
+let initialAuthorityFingerprint = '';
 
 export const getDataAccessIdentity = () => {
   const { login, brokerId } = getSessionClaims();
@@ -17,8 +18,30 @@ export const getDataAccessScope = () => {
   return `${identity}:${pageEpoch}:${identity === authorityIdentity ? authorityFingerprint : ''}`;
 };
 
+export const matchesDataAccessScope = (expected) => {
+  const current = getDataAccessScope();
+  if (expected === current) return true;
+  const identity = getDataAccessIdentity();
+  return Boolean(
+    expected
+    && authorityIdentity === identity
+    && authorityFingerprint
+    && authorityFingerprint === initialAuthorityFingerprint
+    && expected === `${identity}:${pageEpoch}:`
+  );
+};
+
+// Saved reports may survive a reload only after this page verifies the same
+// manager session and backend access assignment again.
+export const getVerifiedDataAccessScope = () => {
+  const identity = getDataAccessIdentity();
+  return identity === authorityIdentity && authorityFingerprint
+    ? `${identity}:${authorityFingerprint}`
+    : null;
+};
+
 export const assertDataAccessScope = (expected) => {
-  if (expected !== getDataAccessScope()) {
+  if (!matchesDataAccessScope(expected)) {
     throw new DOMException('Account access changed; reload the data.', 'AbortError');
   }
 };
@@ -31,10 +54,12 @@ export const updateDataAccessScope = (session, expectedIdentity = getDataAccessI
     mode: session?.group_access_mode, version: session?.authorization_version,
     ready: session?.operational_ready,
   }));
-  if (authorityIdentity === expectedIdentity && authorityFingerprint === fingerprint) return false;
+  const wasVerifiedForIdentity = authorityIdentity === expectedIdentity && Boolean(authorityFingerprint);
+  if (wasVerifiedForIdentity && authorityFingerprint === fingerprint) return false;
   authorityIdentity = expectedIdentity;
   authorityFingerprint = fingerprint;
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+  initialAuthorityFingerprint = wasVerifiedForIdentity ? '' : fingerprint;
+  if (wasVerifiedForIdentity && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     queueMicrotask(() => window.dispatchEvent(new CustomEvent(DATA_ACCESS_CHANGED)));
   }
   return true;

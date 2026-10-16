@@ -141,7 +141,7 @@ export default function BugReportDialog({ onClose }) {
   const storageDisabled = options && options.enabled === false;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/60 p-6">
+    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-transparent p-6">
       <div
         ref={dialogRef}
         role="dialog"

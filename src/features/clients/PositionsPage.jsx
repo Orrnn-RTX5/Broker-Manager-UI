@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, RefreshCw, X, Clock3 } from 'lucide-react';
+import { Search, RefreshCw, X } from 'lucide-react';
 import PositionHistoryGrid from './components/PositionHistoryGrid';
 import { getPositionHistory } from '../../services/api';
 
@@ -72,28 +72,15 @@ const PositionsPage = () => {
     }
   };
 
-  const handleClear = () => {
-    searchRevision.current += 1;
-    setIsLoading(false);
-    setLoginInput('');
-    setCurrentLogin('');
-    setHistoryData([]);
-    setError(null);
-  };
-
   return (
     <div className="position-history-page p-6 w-full h-full min-h-0 flex flex-col gap-3 overflow-hidden">
-      <div className="position-history-header shrink-0">
-        <h1 className="position-history-title" style={{ color: 'var(--text)' }}>Position History</h1>
-        <p className="position-history-subtitle" style={{ color: 'var(--text-3)' }}>Search historical records by account login ID</p>
-      </div>
+      <div className="position-history-header flex flex-row items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <h1 className="position-history-title" style={{ color: 'var(--text)' }}>Position History</h1>
+        </div>
 
-      <div
-        className="position-history-search-panel ui-card p-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between shrink-0"
-        style={{ background: 'var(--surface-2)' }}
-      >
-        <form onSubmit={handleSearch} className="position-history-search-form flex flex-col sm:flex-row sm:items-center gap-2 w-full min-w-0 lg:max-w-2xl">
-          <div className="relative w-full sm:max-w-sm">
+        <form onSubmit={handleSearch} className="position-history-search-form flex items-center gap-2 shrink-0">
+          <div className="relative w-[220px] sm:w-[240px]">
             <Search
               size={13}
               className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -124,52 +111,12 @@ const PositionsPage = () => {
           <button
             type="submit"
             disabled={!canSearch}
-            className="ui-btn ui-btn-primary ui-btn-sm flex items-center justify-center gap-1.5 min-w-[132px]"
+            className="ui-btn ui-btn-primary ui-btn-sm flex items-center justify-center gap-1.5 min-w-[116px] shrink-0"
           >
             {isLoading ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
             View history
           </button>
         </form>
-
-        <div className="position-history-search-actions flex items-center justify-between gap-2 lg:justify-end shrink-0">
-          {currentLogin ? (
-            <div
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5"
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-2)',
-              }}
-            >
-              <Clock3 size={13} style={{ color: 'var(--accent-text)' }} />
-              <span className="font-medium">Login</span>
-              <span className="tabular" style={{ color: 'var(--text)' }}>{currentLogin}</span>
-            </div>
-          ) : (
-            <span className="position-history-search-status position-history-copy" style={{ color: 'var(--muted)' }}>Select an account</span>
-          )}
-          <div className="flex items-center gap-1.5">
-            {currentLogin && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="ui-btn ui-btn-ghost ui-btn-sm"
-              >
-                Clear
-              </button>
-            )}
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm"
-              onClick={handleSearch}
-              disabled={isLoading || !currentLogin}
-              title="Refresh history"
-              aria-label="Refresh history"
-            >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            </button>
-          </div>
-        </div>
       </div>
 
       <div className="position-history-content flex-1 flex flex-col min-h-0">

@@ -1,80 +1,91 @@
-import { useMemo } from 'react';
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { useMemo, useState } from 'react';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { DonutChart } from '../../../components/ui/donut-chart';
 
-const SLICE_COLORS = ['#38bdf8', '#f2c94c', '#8bc34a', '#a987ff', '#e46b95', '#6f98a8', '#f97316', '#2dd4bf'];
-const RADIAN = Math.PI / 180;
+const SLICE_COLORS = ['#008ffb', '#f2c94c', '#8bc34a', '#a987ff', '#e46b95', '#6f98a8', '#f97316', '#2dd4bf'];
 const countFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-const tooltipStyle = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border-3)',
-  borderRadius: 4,
-  color: 'var(--text)',
-  fontSize: 10,
-};
+const percentage = (value, total) => (total ? `${((value / total) * 100).toFixed(2)}%` : '0.00%');
 
-const truncateName = (name) => {
-  const label = String(name ?? '');
-  return label.length > 26 ? `${label.slice(0, 24)}…` : label;
-};
+const OnlineUsersDonut = ({ slices = [], total, unitLabel = 'online' }) => {
+  const [hoveredSlice, setHoveredSlice] = useState(null);
 
-const renderSliceLabel = ({ cx, cy, midAngle, outerRadius, name, percent }) => {
-  if (!Number.isFinite(percent) || percent < 0.04) return null;
-  const cosine = Math.cos(-midAngle * RADIAN);
-  const sine = Math.sin(-midAngle * RADIAN);
-  const startX = cx + (outerRadius + 2) * cosine;
-  const startY = cy + (outerRadius + 2) * sine;
-  const middleX = cx + (outerRadius + 12) * cosine;
-  const middleY = cy + (outerRadius + 12) * sine;
-  const endX = middleX + (cosine >= 0 ? 16 : -16);
-  const textX = endX + (cosine >= 0 ? 4 : -4);
-  return (
-    <g className="trading-analytics-pie-label">
-      <path d={`M${startX},${startY}L${middleX},${middleY}L${endX},${middleY}`} />
-      <text x={textX} y={middleY} textAnchor={cosine >= 0 ? 'start' : 'end'} dominantBaseline="central">
-        {truncateName(name)}: {(percent * 100).toFixed(2)}%
-      </text>
-    </g>
+  const donutData = useMemo(
+    () => slices.map((item, index) => ({
+      value: item.count,
+      label: item.name,
+      color: SLICE_COLORS[index % SLICE_COLORS.length],
+    })),
+    [slices]
   );
-};
 
-const OnlineUsersDonut = ({ slices = [], total }) => {
-  const data = useMemo(() => slices.map((item, index) => ({
-    ...item,
-    color: SLICE_COLORS[index % SLICE_COLORS.length],
-  })), [slices]);
-  const totalCount = total ?? data.reduce((sum, item) => sum + item.count, 0);
+  const totalCount = total ?? donutData.reduce((sum, item) => sum + item.value, 0);
+
+  const activeSegment = useMemo(() => {
+    if (!hoveredSlice) return null;
+    const key = typeof hoveredSlice === 'object' ? hoveredSlice?.label : hoveredSlice;
+    return donutData.find((segment) => segment.label === key) || null;
+  }, [hoveredSlice, donutData]);
 
   return (
-    <div className="online-users-donut">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 360, height: 220 }}>
-        <PieChart margin={{ top: 18, right: 40, bottom: 18, left: 40 }}>
-          <Pie
-            data={data}
-            dataKey="count"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            innerRadius="50%"
-            outerRadius="68%"
-            paddingAngle={1}
-            stroke="var(--surface)"
-            strokeWidth={1}
-            isAnimationActive={false}
-            label={renderSliceLabel}
-            labelLine={false}
-          >
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value, name) => [countFormatter.format(value), name]}
+    <div className="trading-analytics-group online-users-donut-panel">
+      <div className="trading-analytics-group-layout">
+        <div className="trading-analytics-group-chart">
+          <DonutChart
+            data={donutData}
+            size={148}
+            strokeWidth={18}
+            animationDuration={0}
+            animationDelayPerSegment={0}
+            highlightOnHover
+            onSegmentHover={setHoveredSlice}
+            centerContent={
+              <AnimatePresence mode="wait">
+                <Motion.div
+                  key={activeSegment ? activeSegment.label : 'total'}
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="flex flex-col items-center justify-center text-center px-1 pointer-events-none select-none"
+                >
+                  <span className="text-[10px] text-[var(--text-3)] font-medium truncate max-w-[84px] leading-tight">
+                    {activeSegment ? activeSegment.label : unitLabel}
+                  </span>
+                  <strong className="text-base font-bold text-[var(--text)] leading-tight my-0.5 tabular">
+                    {activeSegment ? countFormatter.format(activeSegment.value) : countFormatter.format(totalCount)}
+                  </strong>
+                  {activeSegment && (
+                    <span className="text-[10px] font-semibold text-[var(--accent)] leading-tight tabular">
+                      {percentage(activeSegment.value, totalCount)}
+                    </span>
+                  )}
+                </Motion.div>
+              </AnimatePresence>
+            }
           />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="online-users-donut-center" aria-hidden="true">
-        <strong>{countFormatter.format(totalCount)}</strong>
+        </div>
+        <div className="trading-analytics-group-breakdown">
+          {donutData.map((segment) => {
+            const isHovered = activeSegment?.label === segment.label;
+            return (
+              <div
+                key={segment.label}
+                onMouseEnter={() => setHoveredSlice(segment)}
+                onMouseLeave={() => setHoveredSlice(null)}
+                className={`trading-analytics-group-row ${isHovered ? 'is-active' : ''}`}
+              >
+                <div className="trading-analytics-group-row-info">
+                  <span className="trading-analytics-group-dot" style={{ backgroundColor: segment.color }} />
+                  <span className="trading-analytics-group-name" title={segment.label}>{segment.label}</span>
+                </div>
+                <div className="trading-analytics-group-row-stats">
+                  <span className="trading-analytics-group-count tabular">{countFormatter.format(segment.value)}</span>
+                  <span className="trading-analytics-group-pct tabular">{percentage(segment.value, totalCount)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

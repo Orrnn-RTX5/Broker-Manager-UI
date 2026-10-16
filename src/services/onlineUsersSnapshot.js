@@ -1,4 +1,4 @@
-import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
+import { getDataAccessScope, assertDataAccessScope, matchesDataAccessScope } from './dataAccessScope.js';
 
 // /AccountsOnline returns only authorized connections, and each Online
 // Users view only pages, searches and sorts that list locally. One shared
@@ -30,7 +30,7 @@ const readStored = (scope) => {
     const raw = storage()?.getItem(ONLINE_USERS_SNAPSHOT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed?.scope !== scope || !Array.isArray(parsed.rows)) return null;
+    if ((parsed?.scope !== scope && !matchesDataAccessScope(parsed?.scope)) || !Array.isArray(parsed.rows)) return null;
     return { scope, rows: parsed.rows, fetchedAt: Number(parsed.fetchedAt) || 0 };
   } catch {
     return null;
@@ -48,7 +48,7 @@ const writeStored = (snapshot) => {
 /** Last known snapshot for the signed-in account, without any network work. */
 export const peekOnlineUsersSnapshot = () => {
   const scope = currentScope();
-  if (memory?.scope === scope) return memory;
+  if (memory && (memory.scope === scope || matchesDataAccessScope(memory.scope))) return memory;
   const stored = readStored(scope);
   if (stored) memory = stored;
   return stored;
@@ -62,13 +62,13 @@ export const fetchOnlineUsersSnapshot = async (load, { maxAgeMs = REUSE_WINDOW_M
   const scope = currentScope();
   const known = peekOnlineUsersSnapshot();
   if (known && Date.now() - known.fetchedAt < maxAgeMs) return known;
-  if (inflight?.scope === scope) return inflight.promise;
+  if (inflight && (inflight.scope === scope || matchesDataAccessScope(inflight.scope))) return inflight.promise;
 
   const promise = Promise.resolve()
     .then(load)
     .then((rows) => {
-      const snapshot = { scope, rows: Array.isArray(rows) ? rows : [], fetchedAt: Date.now() };
-      if (currentScope() === scope) {
+      const snapshot = { scope: currentScope(), rows: Array.isArray(rows) ? rows : [], fetchedAt: Date.now() };
+      if (matchesDataAccessScope(scope)) {
         memory = snapshot;
         writeStored(snapshot);
       }

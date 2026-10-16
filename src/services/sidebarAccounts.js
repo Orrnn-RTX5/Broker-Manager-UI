@@ -1,4 +1,4 @@
-import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
+import { getDataAccessScope, assertDataAccessScope, matchesDataAccessScope } from './dataAccessScope.js';
 import { fetchManagerApi } from './managerFetch';
 import { getAccountDetailsManyPage } from './api';
 import { normalizePagedStreamResult } from '../utils/pagination';
@@ -34,7 +34,7 @@ export const getInitialCachedSidebarAccounts = () => {
     const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(SIDEBAR_CACHE_KEY) : null;
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
-    if (parsed?.scope === getDataAccessScope() && Array.isArray(parsed.rows)) {
+    if (matchesDataAccessScope(parsed?.scope) && Array.isArray(parsed.rows)) {
       const normalized = normalizeSidebarAccountPage(parsed);
       if (normalized?.rows.length > 0) return normalized;
       window.sessionStorage?.removeItem(SIDEBAR_CACHE_KEY);
@@ -79,7 +79,10 @@ export const fetchSidebarAccounts = async ({
     endpoint = '/AccountDetails';
     params.set('login', searchValue);
   } else if (offset === 0 && !searchValue) {
-    const page = await getAccountDetailsManyPage({ limit, offset: 0 }, { signal });
+    const page = await getAccountDetailsManyPage(
+      { limit, offset: 0 },
+      { signal, bypassCache: limit > SIDEBAR_ACCOUNT_PAGE_SIZE },
+    );
     const result = normalizeSidebarAccountPage(page) || {
       rows: [],
       total: page.total ?? 0,
@@ -146,15 +149,40 @@ export const fetchSidebarAccountDetails = async (login, { signal } = {}) => {
   return { ...account, login: account.login || String(login) };
 };
 
+let inflightAllSidebarAccounts = null;
+
 export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
+  const normalizedSearch = String(search || '').trim();
   const scope = getDataAccessScope();
   const revision = getRealtimeCacheRevision();
-  const result = await collectAccountPages((offset) => fetchSidebarAccounts({
-    search, offset, limit: 500, signal,
-  }), { signal });
-  assertDataAccessScope(scope);
-  if (!String(search).trim() && revision === getRealtimeCacheRevision()) saveCachedAccounts(result);
-  return result;
+
+  if (
+    !normalizedSearch
+    && inflightAllSidebarAccounts
+    && inflightAllSidebarAccounts.revision === revision
+    && matchesDataAccessScope(inflightAllSidebarAccounts.scope)
+  ) {
+    return inflightAllSidebarAccounts.promise;
+  }
+
+  const run = (async () => {
+    const result = await collectAccountPages((offset) => fetchSidebarAccounts({
+      search, offset, limit: 500, signal: normalizedSearch ? signal : undefined,
+    }), { signal: normalizedSearch ? signal : undefined });
+    assertDataAccessScope(scope);
+    if (!normalizedSearch && revision === getRealtimeCacheRevision()) saveCachedAccounts(result);
+    return result;
+  })();
+
+  if (!normalizedSearch) {
+    const entry = { scope, revision, promise: run };
+    inflightAllSidebarAccounts = entry;
+    run.finally(() => {
+      if (inflightAllSidebarAccounts === entry) inflightAllSidebarAccounts = null;
+    });
+  }
+
+  return run;
 };
 
 export const getSidebarAccountsQueryOptions = (search = '') => ({

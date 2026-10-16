@@ -22,7 +22,7 @@ export default function DeleteConfirmModal({ item, onConfirm, onCancel }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100050] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-[100050] flex items-center justify-center bg-transparent p-4"
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -87,7 +87,7 @@ export default function DeleteConfirmModal({ item, onConfirm, onCancel }) {
             ref={confirmBtnRef}
             type="button"
             onClick={onConfirm}
-            className="px-3.5 py-1.5 rounded text-[11.5px] font-medium bg-[#dc2626] hover:bg-[#ef4444] text-white transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/50"
+            className="px-3.5 py-1.5 rounded text-[11.5px] font-medium bg-[#f06464] hover:bg-[#e05252] text-white transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/50"
           >
             Delete
           </button>

@@ -195,12 +195,8 @@ export const positionPriceChange = (ticket, new_price) =>
 export const positionVolumeChange = (ticket, new_lots) =>
   postQuery('/PositionVolumeChange', { ticket, new_lots });
 
-export const positionCommentChange = ({ ticket, comment, magic }) => {
-  const params = new URLSearchParams({ ticket: String(ticket) });
-  if (comment !== undefined) params.set('comment', comment);
-  if (magic !== undefined) params.set('magic', String(magic));
-  return tradeClient.post(`/PositionCommentChange?${params.toString()}`, {});
-};
+export const positionCommentChange = ({ ticket, comment, magic }) =>
+  tradeClient.post('/PositionCommentChange', { ticket, comment, magic });
 
 export const positionForceClose = ({ ticket, price, comment }) => {
   const params = new URLSearchParams({ ticket: String(ticket), price: String(price) });

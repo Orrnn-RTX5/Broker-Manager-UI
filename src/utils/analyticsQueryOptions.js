@@ -1,10 +1,12 @@
 export const ANALYTICS_PATHS = Object.freeze({
+  tradingAccounts: '/analytics/trading-accounts',
   onlineUsers: '/analytics/online-users',
   openPositions: '/analytics/open-positions',
   openOrders: '/analytics/open-orders',
 });
 
 export const ANALYTICS_VIEWS = Object.freeze({
+  tradingAccounts: 'trading-accounts',
   onlineUsers: 'online-users',
   openPositions: 'open-positions',
   openOrders: 'open-orders',
@@ -36,6 +38,21 @@ const requireRequest = (request) => {
   if (typeof request !== 'function') throw new TypeError('Analytics query request must be a function.');
   return request;
 };
+
+export const createTradingAccountsAnalyticsQueryOptions = ({ scope, request, loadSnapshot, getSnapshotTimestamp }) => ({
+  queryKey: ['analytics', 'trading-accounts', scope],
+  queryFn: ({ signal }) => requireRequest(request)({ signal, scope }),
+  // A missing snapshot is pending; only a completed report may be empty.
+  initialData: () => getSnapshotTimestamp(scope) === undefined ? undefined : loadSnapshot(scope),
+  initialDataUpdatedAt: () => getSnapshotTimestamp(scope),
+  staleTime: 30_000,
+  refetchInterval: 30_000,
+  refetchIntervalInBackground: false,
+  gcTime: 300_000,
+  retry: false,
+  refetchOnWindowFocus: true,
+  meta: ANALYTICS_QUERY_META,
+});
 
 export const createOnlineUsersQueryOptions = ({
   request,

@@ -12,7 +12,7 @@ const DealerPromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
   return (
     <div
       className="fixed inset-0 z-[10001] flex items-center justify-center p-4 animate-in fade-in duration-200"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      style={{ background: 'transparent', backdropFilter: 'none' }}
       onClick={onCancel}
     >
       <div

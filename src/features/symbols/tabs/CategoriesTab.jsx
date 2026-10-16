@@ -39,7 +39,7 @@ const CategoryFormModal = ({ category: existing, allCategories, onClose, onSucce
   const parents = allCategories.filter(c => !existing || c.id !== existing.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'transparent' }}>
       <div className="ui-card w-full max-w-sm p-6 flex flex-col gap-4" style={{ background: 'var(--surface)' }}>
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold" style={{ color: 'var(--text)' }}>{isEdit ? 'Edit Category' : 'New Category'}</h2>

@@ -25,7 +25,7 @@ const ExportCurrentViewDialog = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" style={{ background: 'rgba(2, 10, 20, 0.62)' }} role="presentation" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" style={{ background: 'transparent' }} role="presentation" onMouseDown={onClose}>
       <section className="ui-card w-full max-w-md p-5" role="dialog" aria-modal="true" aria-labelledby="export-current-view-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>

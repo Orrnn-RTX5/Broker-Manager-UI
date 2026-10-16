@@ -122,11 +122,6 @@ const OpenOrdersDashboard = () => {
           <h1 className="opened-orders-title text-2xl font-semibold" style={{ color: 'var(--text)' }}>
             Opened Orders
           </h1>
-          <p className="opened-orders-subtitle text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
-            {hasSearched
-              ? `Opened order details for login ${detailLogin}.`
-              : 'Search a login to view active order exposure, entry prices, P/L, costs, and state.'}
-          </p>
         </div>
 
         <form onSubmit={handleFetchOrders} className="opened-orders-search flex flex-col sm:flex-row sm:items-center gap-2 w-full xl:w-auto shrink-0">
@@ -141,7 +136,7 @@ const OpenOrdersDashboard = () => {
               placeholder="Enter login ID..."
               value={loginId}
               onChange={(event) => setLoginId(event.target.value)}
-              className="ui-input ui-input-sm"
+              className="ui-input ui-input-sm placeholder:text-white"
               style={{ paddingLeft: 34 }}
             />
           </div>

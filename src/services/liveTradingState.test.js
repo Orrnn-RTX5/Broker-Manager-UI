@@ -4,6 +4,41 @@ import { LiveTradingState } from './liveTradingState.js';
 import { isPositionMutation } from './positionSyncCore.js';
 const initial = { login: '1001', position: 42, state_version: '1', volume: 2, priceSl: 4, profit: 0 };
 const frame = (data, type = 'position_update') => ({ type, data: [{ account_login: 1001, ticket: 42, ...data }] });
+
+test('a burst of ticket updates publishes once while preserving the latest server values and revision', () => {
+  const scheduled = [];
+  const state = new LiveTradingState({ scheduleNotification: (callback) => scheduled.push(callback) });
+  let notifications = 0;
+  const unsubscribe = state.subscribe(() => { notifications += 1; });
+  for (let time = 1; time <= 200; time += 1) {
+    state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: time, profit: time }));
+  }
+  assert.equal(state.overlayRows([initial])[0].profit, 200);
+  assert.equal(state.snapshot(), 200);
+  assert.equal(scheduled.length, 1);
+  assert.equal(notifications, 0);
+  scheduled.shift()();
+  assert.equal(notifications, 1);
+  state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 201, profit: 201 }));
+  assert.equal(scheduled.length, 1);
+  unsubscribe();
+  scheduled.shift()();
+  assert.equal(notifications, 1);
+});
+
+test('listeners registered during a notification wait until the next publication', () => {
+  const state = new LiveTradingState({ scheduleNotification: null });
+  let calls = 0;
+  const subscribeAgain = () => {
+    calls += 1;
+    if (calls < 10) state.subscribe(() => subscribeAgain());
+  };
+  state.subscribe(subscribeAgain);
+  state.notify();
+  assert.equal(calls, 1);
+  state.notify();
+  assert.equal(calls, 3);
+});
 test('documented batched PnL updates reach existing rows with exact price precision', () => {
   const state = new LiveTradingState();
   const message = frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 12, price_current: 1.12345, profit: 5 });

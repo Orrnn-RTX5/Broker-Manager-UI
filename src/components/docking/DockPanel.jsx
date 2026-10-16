@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useMemo, useState } from 'react';
 import { DockTitleSlotContext } from './DockTitleSlotContext';
 import { BarChart3, BriefcaseBusiness, ChevronUp, ChevronDown, FolderTree, Maximize2, Minimize2, TerminalSquare, Users } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
@@ -148,6 +148,8 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
     window.addEventListener('mouseup', onUp);
   }, [id, isFloat, panel, bringToFront, updatePanel]);
 
+  const terminalTitle = useMemo(() => ({ slot: titleSlot, onTitleMouseDown }), [titleSlot, onTitleMouseDown]);
+
   if (!panel || !panel.visible) return null;
 
   // ─── Container style ─────────────────────────────────────────────────────────
@@ -257,7 +259,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
 
       {/* Content */}
       <div className={styles.content}>
-        <DockTitleSlotContext.Provider value={titleSlot}>{children}</DockTitleSlotContext.Provider>
+        <DockTitleSlotContext.Provider value={terminalTitle}>{children}</DockTitleSlotContext.Provider>
       </div>
 
       {/* Resize Handles (float only) */}

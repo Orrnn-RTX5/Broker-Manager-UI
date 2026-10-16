@@ -24,7 +24,7 @@ const PromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
     return init;
   });
   return (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onCancel}>
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center" style={{ background: 'transparent' }} onClick={onCancel}>
       <div className="ui-card p-4 flex flex-col gap-3" style={{ minWidth: 320, boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
         <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</h3>
         {fields.map(f => (

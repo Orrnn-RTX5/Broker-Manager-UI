@@ -55,12 +55,20 @@ const TradingAccountsPage = () => {
     <div className="trading-accounts-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden" {...ctl.pageProps}>
       <div className="trading-accounts-header flex flex-col md:flex-row items-start md:items-center justify-between pb-0 gap-2 shrink-0">
         <div className="trading-accounts-heading flex items-center gap-2 min-w-0">
-          <div>
-            <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
-            <p className="trading-accounts-subtitle" style={{ color: 'var(--text-3)' }}>Right-click for actions · Double-click a row to edit</p>
-          </div>
+          <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
         </div>
         <div className="trading-accounts-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <div className="trading-accounts-search relative w-[220px] shrink-0">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+            <input
+              type="text"
+              placeholder="Search login, name, group…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ui-input ui-input-sm w-full"
+              style={{ paddingLeft: 32 }}
+            />
+          </div>
           <FilterDropdown
             value={groupFilter}
             className="w-[150px]"
@@ -76,18 +84,6 @@ const TradingAccountsPage = () => {
             onChange={setCountryFilter}
           />
         </div>
-      </div>
-
-      <div className="trading-accounts-search relative w-full max-w-xs shrink-0">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input
-          type="text"
-          placeholder="Search login, name, group…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32 }}
-        />
       </div>
 
       <TradingAccountsDataGrid

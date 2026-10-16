@@ -7,12 +7,14 @@ import {
 import { peekOnlineUsersPage, peekOnlineUsersUpdatedAt } from '../../services/onlineUsersSnapshot.js';
 import { preloadWorkspaceRoute } from '../../utils/workspaceRouteModules.js';
 import { loadCompleteReportAccounts } from '../reports/dailyReportData.js';
+import { getDataAccessIdentity } from '../../services/dataAccessScope.js';
 import {
   ANALYTICS_PATHS,
   ANALYTICS_VIEWS,
   createOnlineUsersQueryOptions,
   createOpenedOrdersQueryOptions,
   createOpenPositionsQueryOptions,
+  createTradingAccountsAnalyticsQueryOptions,
 } from '../../utils/analyticsQueryOptions.js';
 import {
   getActiveAnalyticsTimingId,
@@ -64,24 +66,20 @@ export const fetchTradingAccountsAnalytics = async (options = {}) => {
     (params, requestOptions) => getTradingAccountsPage(params, { ...requestOptions, bypassCache: true }),
     { signal },
   );
-  if (Array.isArray(accounts) && accounts.length > 0) {
+  if (Array.isArray(accounts)) {
     saveTradingAccountsAnalyticsCache(scope, accounts);
   }
   return accounts;
 };
 
-export const getTradingAccountsAnalyticsQueryOptions = (scope = 'anonymous') => ({
-  queryKey: ['analytics', 'trading-accounts', scope],
-  queryFn: ({ signal }) => fetchTradingAccountsAnalytics({ signal, scope }),
-  initialData: () => loadTradingAccountsAnalyticsCache(scope),
-  initialDataUpdatedAt: () => getTradingAccountsAnalyticsCacheTimestamp(scope),
-  staleTime: 5_000,
-  refetchInterval: 8_000,
-  refetchIntervalInBackground: false,
-  gcTime: 300_000,
-  retry: false,
-  refetchOnWindowFocus: true,
-});
+export const getTradingAccountsAnalyticsQueryOptions = (scope = getDataAccessIdentity()) => (
+  createTradingAccountsAnalyticsQueryOptions({
+    scope,
+    request: fetchTradingAccountsAnalytics,
+    loadSnapshot: loadTradingAccountsAnalyticsCache,
+    getSnapshotTimestamp: getTradingAccountsAnalyticsCacheTimestamp,
+  })
+);
 
 export const invalidateTradingAccountsAnalytics = (queryClient) => {
   if (queryClient?.invalidateQueries) {
@@ -140,6 +138,9 @@ export const getOpenedOrdersAnalyticsQueryOptions = (login) => (
 );
 
 const initialQueryForPath = (path) => {
+  if (path === '/analytics' || path === ANALYTICS_PATHS.tradingAccounts || path.startsWith('/analytics/custom/')) {
+    return getTradingAccountsAnalyticsQueryOptions();
+  }
   if (path === ANALYTICS_PATHS.onlineUsers) return getOnlineUsersAnalyticsQueryOptions();
   if (path === ANALYTICS_PATHS.openPositions) return getOpenPositionsAnalyticsQueryOptions();
   return null;
@@ -165,8 +166,7 @@ export const preloadAnalyticsDestination = (queryClient, path) => Promise.all([
 ]).then(() => undefined);
 
 export const prefetchInitialAnalyticsData = (queryClient) => Promise.allSettled([
+  prefetchAnalyticsData(queryClient, ANALYTICS_PATHS.tradingAccounts),
   prefetchAnalyticsData(queryClient, ANALYTICS_PATHS.onlineUsers),
-  // Do not pull the global PositionsAll dataset during login. The account
-  // details flow uses a much smaller account-scoped request, while the open
-  // positions destination still prefetches on navigation intent.
+  prefetchAnalyticsData(queryClient, ANALYTICS_PATHS.openPositions),
 ]);

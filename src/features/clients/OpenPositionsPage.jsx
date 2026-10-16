@@ -24,7 +24,7 @@ const POSITION_COLUMNS = [
   { key: 'priceSl',      label: 'S/L' },
   { key: 'priceTp',      label: 'T/P' },
   { key: 'swap',         label: 'Storage' },
-  { key: 'profit',       label: 'Profit' },
+  { key: 'profit',       label: 'Profit / Loss' },
   { key: 'comment',      label: 'Comment' },
 ];
 
@@ -85,15 +85,21 @@ const OpenPositionsPage = () => {
 
   return (
     <div className="open-positions-page pt-4 pb-6 px-3 w-full h-full flex flex-col gap-2 overflow-y-auto" {...ctl.pageProps}>
-      {/* Header with Title and Dropdown Filters */}
+      {/* Header with Title, Search Bar, and Dropdown Filters */}
       <div ref={headerRef} className="flex flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2 shrink-0">
-          <div>
-            <h1 className="open-positions-title" style={{ color: 'var(--text)' }}>Open Positions</h1>
-            <p className="open-positions-subtitle" style={{ color: 'var(--text-3)' }}>Real-time monitoring of currently open trades</p>
-          </div>
+          <h1 className="open-positions-title" style={{ color: 'var(--text)' }}>Open Positions</h1>
         </div>
         <div className="open-positions-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <div className="open-positions-search relative w-[220px] shrink-0">
+            <input
+              type="text"
+              placeholder="Search login, position, symbol…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ui-input ui-input-sm h-7 w-full"
+            />
+          </div>
           <FilterDropdown
             value={typeFilter}
             className="w-[105px]"
@@ -113,17 +119,6 @@ const OpenPositionsPage = () => {
             onChange={setReasonFilter}
           />
         </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="open-positions-search relative w-full max-w-xs">
-        <input
-          type="text"
-          placeholder="Search login, position, symbol…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-        />
       </div>
 
       <PositionsDataGrid

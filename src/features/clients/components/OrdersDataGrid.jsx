@@ -90,8 +90,13 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
     refetch();
   };
 
-  const renderHeader = (col, label) => (
-    <th onClick={() => handleSort(col)} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} title={`Sort by ${label}`} style={{ textAlign: 'center' }}>
+  const renderHeader = (col, label, align = 'left') => (
+    <th
+      onClick={() => handleSort(col)}
+      aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      title={`Sort by ${label}`}
+      style={{ textAlign: align, color: 'var(--text)' }}
+    >
       {label}
     </th>
   );
@@ -99,8 +104,8 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
   const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = rows.length === 0 ? 0 : offset + 1;
   const rangeEnd = offset + rows.length;
-  const pageBuys = rows.filter((row) => (row.type || '').toLowerCase() === 'buy').length;
-  const pageSells = rows.filter((row) => (row.type || '').toLowerCase() === 'sell').length;
+  const pageBuys = rows.filter((row) => String(row.side || row.type || '').toLowerCase() === 'buy').length;
+  const pageSells = rows.filter((row) => String(row.side || row.type || '').toLowerCase() === 'sell').length;
   const isIdle = !hasRequestedData;
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
 
@@ -118,7 +123,23 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
         <GridLoadingState label="Loading orders…" />
       ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
-        <table className="ui-grid min-w-max">
+        <table className="ui-grid orders-table">
+          <colgroup>
+            <col style={{ width: '6.4%' }} />
+            <col style={{ width: '5.4%' }} />
+            <col style={{ width: '7.6%' }} />
+            <col style={{ width: '8.8%' }} />
+            <col style={{ width: '5.8%' }} />
+            <col style={{ width: '4.4%' }} />
+            <col style={{ width: '4.4%' }} />
+            <col style={{ width: '7.8%' }} />
+            <col style={{ width: '5.8%' }} />
+            <col style={{ width: '5.8%' }} />
+            <col style={{ width: '5.4%' }} />
+            <col style={{ width: '13.2%' }} />
+            <col style={{ width: '13.2%' }} />
+            <col style={{ width: '6.0%' }} />
+          </colgroup>
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {renderHeader('ticket', 'Ticket')}
@@ -126,7 +147,6 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               {renderHeader('name', 'User Name')}
               {renderHeader('group', 'Group')}
               {renderHeader('symbol', 'Symbol')}
-              {renderHeader('type', 'Type')}
               {renderHeader('side', 'Side')}
               {renderHeader('volume', 'Lots')}
               {renderHeader('priceOpen', 'Open')}
@@ -141,7 +161,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={15} className="orders-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={14} className="orders-grid-empty text-center py-16 text-sm" style={{ color: 'var(--text)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Orders are not loaded.</span>
@@ -155,12 +175,6 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               </tr>
             ) : rows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
-              const side = String(row.side || '').toLowerCase();
-              const typeTextClass = side === 'buy'
-                ? 'is-buy'
-                : side === 'sell'
-                  ? 'is-sell'
-                  : '';
               return (
                 <tr
                   key={rowKey}
@@ -173,25 +187,20 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="tabular" style={{ textAlign: 'center' }}>{row.ticket}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.login}</td>
-                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.name}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.group}</td>
-                  <td style={{ fontWeight: 500, textAlign: 'center' }}>{row.symbol}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span className={`orders-type-text ${typeTextClass}`}>
-                      {row.type}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>{row.side}</td>
-                  <td className="tabular" style={{ textAlign: 'center' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceOpen, 5)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceSl, 5)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'center' }}>{fmt(row.priceTp, 5)}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.status}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: 11, textAlign: 'center' }}>{fmtDate(row.timeSetup)}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: 11, textAlign: 'center' }}>{fmtDate(row.timeDone)}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>{row.comment}</td>
+                  <td className="tabular" style={{ color: 'var(--text)' }}>{row.ticket}</td>
+                  <td className="tabular" style={{ color: 'var(--text)' }}>{row.login}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.name}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.group}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.symbol}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.side}</td>
+                  <td className="tabular" style={{ color: 'var(--text)' }}>{row.volume}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text)' }}>{fmt(row.priceOpen, 5)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text)' }}>{fmt(row.priceSl, 5)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text)' }}>{fmt(row.priceTp, 5)}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.status}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text)', fontSize: 11 }}>{fmtDate(row.timeSetup)}</td>
+                  <td className="tabular font-mono" style={{ color: 'var(--text)', fontSize: 11 }}>{fmtDate(row.timeDone)}</td>
+                  <td style={{ color: 'var(--text)' }}>{row.comment}</td>
                 </tr>
               );
             })}
@@ -202,7 +211,7 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
 
       <div
         className="orders-grid-footer flex items-center justify-between px-3 py-0 text-xs shrink-0"
-        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}
       >
         <span className="flex items-center gap-3">
           <span>
@@ -210,14 +219,14 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               'Orders not loaded'
             ) : (
               <>
-                Showing <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{rangeStart}-{rangeEnd}</span>
+                Showing <span className="tabular font-medium" style={{ color: 'var(--text)' }}>{rangeStart}-{rangeEnd}</span>
                 {' '}of{' '}
-                <span className="tabular font-medium" style={{ color: 'var(--text-2)' }}>{total ?? 'many'}</span>
+                <span className="tabular font-medium" style={{ color: 'var(--text)' }}>{total ?? 'many'}</span>
               </>
             )}
           </span>
-          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--ok-text)' }}>{pageBuys}</span></span>}
-          {!isIdle && <span style={{ color: 'var(--muted)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--danger-text)' }}>{pageSells}</span></span>}
+          {!isIdle && <span style={{ color: 'var(--text)' }}>Page buy: <span className="tabular font-medium" style={{ color: 'var(--text)' }}>{pageBuys}</span></span>}
+          {!isIdle && <span style={{ color: 'var(--text)' }}>Page sell: <span className="tabular font-medium" style={{ color: 'var(--text)' }}>{pageSells}</span></span>}
           {isFetching && !isLoading && (
             <span className="ui-badge ui-badge-danger">
               <AlertTriangle size={10} />
@@ -226,13 +235,13 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
           )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>
+          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2, color: 'var(--text)' }}>
             <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
             {isIdle ? 'Load' : 'Refresh'}
           </button>
-          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>Prev</button>
-          <span className="tabular px-1" style={{ color: 'var(--text-2)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
-          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2 }}>Next</button>
+          <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2, color: 'var(--text)' }}>Prev</button>
+          <span className="tabular px-1" style={{ color: 'var(--text)' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
+          <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ paddingBlock: 2, color: 'var(--text)' }}>Next</button>
         </div>
       </div>
 

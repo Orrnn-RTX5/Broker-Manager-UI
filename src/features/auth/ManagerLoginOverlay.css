@@ -172,15 +172,15 @@
   color: #808998;
 }
 
-.manager-auth-shell .is-up { color: #47c68f; }
-.manager-auth-shell .is-down { color: #e27378; }
+.manager-auth-shell .is-up { color: #00a8ff; }
+.manager-auth-shell .is-down { color: #f06464; }
 
 .manager-auth-shell .manager-preview-watch-row:nth-child(3n + 2) {
-  color: #41c58b;
+  color: #00a8ff;
 }
 
 .manager-auth-shell .manager-preview-watch-row:nth-child(3n) {
-  color: #e07176;
+  color: #f06464;
 }
 
 .manager-auth-shell .manager-preview-navigator {
@@ -250,11 +250,11 @@
   width: 60%;
   height: 3px;
   border-radius: 3px;
-  background: #3da68e;
+  background: #007ecf;
 }
 
 .manager-auth-shell .manager-preview-metric i.is-down {
-  background: #d56369;
+  background: #f06464;
 }
 
 .manager-auth-shell .manager-preview-chart {
@@ -294,7 +294,7 @@
 
 .manager-auth-shell .manager-preview-chart-bars {
   fill: none;
-  stroke: #2d775f;
+  stroke: #2b6cb0;
   stroke-width: 5;
   opacity: .48;
 }
@@ -381,7 +381,7 @@
   padding: 11px;
   border-top: 1px solid #30343d;
   background: #12161b;
-  color: #6ec89a;
+  color: #58b2ff;
 }
 
 .manager-auth-shell .manager-preview-terminal > div {
@@ -393,7 +393,7 @@
   position: fixed;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(90deg, rgba(4, 8, 14, .28), rgba(4, 8, 14, .34));
+  background: radial-gradient(circle at 50% 45%, rgba(8, 13, 22, 0.38) 0%, rgba(4, 8, 14, 0.62) 100%);
   pointer-events: none;
 }
 
@@ -412,28 +412,31 @@
   min-height: 100dvh;
   align-items: center;
   justify-content: center;
-  padding: 22px 16px;
+  padding: 24px 16px;
   background: transparent;
 }
 
 #root .manager-auth-shell .manager-auth-card {
   position: relative;
-  width: min(100%, 420px);
-  padding: 23px 25px 24px;
-  border: 1px solid rgba(163, 190, 214, .33);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(48, 55, 65, .9), rgba(26, 32, 40, .94) 58%, rgba(22, 28, 36, .96));
-  box-shadow: 0 32px 90px rgba(0, 0, 0, .56), 0 8px 24px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .12);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  backdrop-filter: blur(14px) saturate(1.2);
+  width: min(100%, 404px);
+  padding: 24px 26px 22px;
+  border: 1px solid rgba(163, 190, 218, 0.22);
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgba(34, 40, 50, 0.95) 0%, rgba(22, 27, 35, 0.97) 55%, rgba(18, 22, 29, 0.98) 100%);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.62),
+    0 8px 24px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 
 #root .manager-auth-shell .manager-auth-card::before {
   position: absolute;
   inset: 0 0 auto;
-  height: 78px;
+  height: 72px;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .045), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
   content: '';
   pointer-events: none;
 }
@@ -448,48 +451,70 @@
 }
 
 #root .manager-auth-shell .manager-brand-mark {
-  width: 105px;
-  height: 30px;
+  width: 96px;
+  height: 28px;
   justify-content: flex-start;
-  margin: 0 0 9px;
+  margin: 0 0 10px;
 }
 
 #root .manager-auth-shell .manager-brand-mark img {
-  object-fit: cover;
-  filter: contrast(1.6);
+  object-fit: contain;
+  object-position: left center;
+  filter: contrast(1.5);
   mix-blend-mode: screen;
 }
 
 #root .manager-auth-shell .manager-auth-header h1 {
   margin: 0;
-  color: #f1f2f5;
+  color: #f4f6f9;
   line-height: 1.35;
-  letter-spacing: .07em;
+  letter-spacing: 0.06em;
 }
 
 #root .manager-auth-shell .manager-auth-header p {
   margin: 4px 0 0;
-  color: #aaadb5;
+  color: #9da4b0;
   line-height: 1.4;
 }
 
 #root .manager-auth-shell .manager-title-rule {
   height: 1px;
   margin-top: 14px;
-  background: #3c3e44;
+  background: rgba(255, 255, 255, 0.10);
 }
 
 #root .manager-auth-shell .manager-title-rule span {
   top: -1px;
   left: 0;
-  width: 44px;
+  width: 42px;
   height: 2px;
+  border-radius: 999px;
   transform: none;
-  background: #2c87dd;
+  background: #2d87d8;
+}
+
+#root .manager-auth-shell .manager-inline-notice {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(56, 152, 236, 0.36) !important;
+  border-radius: 8px;
+  background: rgba(0, 126, 207, 0.14) !important;
+  color: #e2f1ff !important;
+  line-height: 1.4;
+}
+
+#root .manager-auth-shell .manager-inline-error {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 100, 100, 0.36) !important;
+  border-radius: 8px;
+  background: rgba(240, 100, 100, 0.12) !important;
+  color: #f06464 !important;
+  line-height: 1.4;
 }
 
 #root .manager-auth-shell .manager-login-form {
-  gap: 10px;
+  gap: 12px;
 }
 
 #root .manager-auth-shell .manager-broker-group {
@@ -497,12 +522,12 @@
 }
 
 #root .manager-auth-shell .manager-broker-heading {
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 
 #root .manager-auth-shell .manager-form-label {
-  margin-bottom: 5px;
-  color: #d4d6dc;
+  margin-bottom: 6px;
+  color: #dce0e6;
   line-height: 1.3;
 }
 
@@ -516,24 +541,33 @@
 }
 
 #root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity) {
-  min-height: 39px;
-  gap: 9px;
-  padding: 5px 36px 5px 9px;
-  border: 1px solid #57616d;
-  border-radius: 6px;
-  background: rgba(21, 26, 33, .68);
-  color: #eceef2;
-  box-shadow: none;
+  min-height: 38px;
+  height: 38px;
+  gap: 10px;
+  padding: 5px 34px 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(14, 18, 24, 0.72);
+  color: #f0f2f6;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+#root .manager-auth-shell .manager-broker-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(18, 23, 31, 0.84);
 }
 
 #root .manager-auth-shell .manager-broker-identity {
-  padding-right: 9px;
+  padding-right: 10px;
 }
 
 #root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity) > span:first-child {
-  width: 27px !important;
-  height: 27px !important;
+  width: 26px !important;
+  height: 26px !important;
   border-radius: 5px !important;
+  background: rgba(45, 135, 216, 0.18) !important;
+  color: #66b8ed !important;
 }
 
 #root .manager-auth-shell .manager-broker-button .absolute.right-3 {
@@ -544,9 +578,9 @@
 
 #root .manager-auth-shell .manager-broker-count {
   gap: 6px;
-  margin: 5px 0 0;
-  color: #9398a2;
-  line-height: 1.2;
+  margin: 6px 0 0;
+  color: #8f96a3;
+  line-height: 1.25;
 }
 
 #root .manager-auth-shell .manager-broker-count span {
@@ -556,39 +590,47 @@
 }
 
 #root .manager-auth-shell .manager-input {
-  min-height: 37px;
-  padding: 8px 11px 8px 37px;
-  border: 1px solid #57616d;
-  border-radius: 6px;
-  background: rgba(17, 22, 29, .74);
-  color: #f0f2f6;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .16);
+  min-height: 38px;
+  height: 38px;
+  padding: 8px 12px 8px 36px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(14, 18, 24, 0.78);
+  color: #f2f4f8;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+#root .manager-auth-shell .manager-input:hover:not([readonly]):not(:focus) {
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 #root .manager-auth-shell .manager-input::placeholder {
-  color: #848892;
+  color: rgba(255, 255, 255, 0.42);
 }
 
 #root .manager-auth-shell .manager-input[readonly] {
-  background: rgba(28, 34, 42, .74);
-  color: #b1b5bd;
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(26, 32, 41, 0.62);
+  color: #b5bcc7;
+  cursor: default;
 }
 
 #root .manager-auth-shell .manager-input:-webkit-autofill,
 #root .manager-auth-shell .manager-input:-webkit-autofill:hover,
 #root .manager-auth-shell .manager-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #f0f2f6;
-  caret-color: #f0f2f6;
-  box-shadow: 0 0 0 1000px #1c1d20 inset;
+  -webkit-text-fill-color: #f2f4f8;
+  caret-color: #f2f4f8;
+  box-shadow: 0 0 0 1000px #141921 inset;
 }
 
 #root .manager-auth-shell .manager-input-with-action {
-  padding-right: 37px;
+  padding-right: 38px;
 }
 
 #root .manager-auth-shell .manager-input-icon {
-  padding-left: 12px;
-  color: #8e939d;
+  padding-left: 11px;
+  color: #8c93a0;
 }
 
 #root .manager-auth-shell .manager-input-icon svg,
@@ -598,83 +640,120 @@
 }
 
 #root .manager-auth-shell .manager-password-toggle {
-  width: 37px;
-  color: #999da7 !important;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 36px;
+  border-radius: 6px;
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #939aa6 !important;
 }
 
 #root .manager-auth-shell .manager-password-toggle:hover {
-  color: #d5d9e1 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #e2e6ee !important;
+}
+
+#root .manager-auth-shell .manager-password-toggle:focus-visible {
+  outline: 1px solid rgba(56, 143, 228, 0.5) !important;
+  outline-offset: -2px;
 }
 
 #root .manager-auth-shell :is(.manager-broker-button, .manager-input):focus-visible,
-#root .manager-auth-shell .manager-input:focus {
+#root .manager-auth-shell .manager-input:focus:not([readonly]) {
   border-color: #388fe4;
-  outline: 1px solid rgba(56, 143, 228, .55);
-  outline-offset: 0;
-  box-shadow: 0 0 0 3px rgba(45, 131, 215, .15);
+  background: rgba(12, 16, 22, 0.9);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(45, 135, 216, 0.20);
+}
+
+#root .manager-auth-shell .manager-input[readonly]:focus {
+  border-color: rgba(255, 255, 255, 0.16);
+  outline: none;
+  box-shadow: none;
 }
 
 #root .manager-auth-shell .manager-login-options {
   flex-wrap: wrap;
-  gap: 7px 10px;
-  margin-top: 1px;
+  gap: 8px 12px;
+  margin-top: 2px;
 }
 
 #root .manager-auth-shell .manager-remember-control {
   gap: 7px;
-  color: #c3c6cd;
+  color: #c8cdd6;
 }
 
 #root .manager-auth-shell .manager-remember-control input {
-  width: 13px;
-  height: 13px;
-  accent-color: #2f8fdf;
+  width: 14px;
+  height: 14px;
+  accent-color: #2d87d8;
+  border-radius: 3px;
 }
 
 #root .manager-auth-shell .manager-link-button {
-  color: #78b9f6;
+  color: #66b8ed !important;
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  transition: color 120ms ease;
 }
 
 #root .manager-auth-shell .manager-link-button:hover {
-  color: #a3d1ff;
+  color: #9fd0ff !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#root .manager-auth-shell .manager-link-button:focus-visible {
+  color: #9fd0ff !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 #root .manager-auth-shell .manager-submit-button {
-  min-height: 37px;
+  min-height: 38px;
+  height: 38px;
   margin-top: 2px;
-  padding: 9px 13px;
-  border: 1px solid #2d87d8;
-  border-radius: 6px;
-  background: #2d87d8;
-  color: #fff;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, .24);
+  padding: 0 14px;
+  border: 1px solid #3593e8;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #2f8ce0 0%, #1f78c9 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 #root .manager-auth-shell .manager-submit-button:hover:not(:disabled) {
-  border-color: #379af2;
-  background: #379af2;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, .3);
+  border-color: #4ba3f3;
+  background: linear-gradient(180deg, #3997ec 0%, #2682d6 100%);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 #root .manager-auth-shell .manager-contact-copy {
-  color: #a8abb3;
-  line-height: 1.3;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #9da3ae;
+  line-height: 1.35;
 }
 
 #root .manager-auth-shell .manager-contact-copy .manager-link-button {
-  margin-left: 3px;
+  margin-left: 4px;
 }
 
 #root .manager-auth-shell .manager-login-form [role='listbox'] {
   z-index: 10;
   border-color: #474a50 !important;
-  background: #292b2f !important;
+  background: #23272e !important;
   color: #f0f2f6;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, .45);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .5);
 }
 
 #root .manager-auth-shell .manager-login-form [role='option']:hover {
-  background: #353940;
+  background: #2f353f;
 }
 
 @media (max-width: 520px) {

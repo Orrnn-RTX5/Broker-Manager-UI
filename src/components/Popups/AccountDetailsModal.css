@@ -1,0 +1,50 @@
+#root .account-details-backdrop {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+#root .account-details-window { border: 1px solid var(--border); border-radius: 3px !important; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / .3); }
+#root .account-details-titlebar { min-height: 34px; padding: 0 10px; }
+#root .account-details-tabs { flex: 0 0 auto; min-height: 34px; padding: 3px 6px; gap: 3px; overflow-x: auto; }
+#root .account-details-tab { flex: 0 0 auto; height: 28px; padding: 0 10px; }
+#root .account-details-content { min-height: 0; gap: 12px; padding: 12px; }
+#root .account-details-content.is-overview { padding: 12px; }
+#root .account-details-footer { min-height: 42px; padding: 6px 12px; background: var(--surface-2); }
+#root .account-details-footer button { min-height: 26px; min-width: 70px; padding: 3px 10px; border-radius: 3px !important; }
+#root .account-details-footer .account-details-close { background: var(--surface) !important; border-color: var(--border-3) !important; color: var(--text) !important; }
+#root .account-details-window :is(.account-personal-tab, .account-settings-tab, .account-security-tab) { gap: 12px; }
+#root .account-details-window :is(.account-personal-section, .account-settings-card, .account-security-card, .account-transaction-card) { border-radius: 3px; box-shadow: none; }
+#root .account-details-window .account-section-heading { min-height: 28px; }
+#root .account-details-window .account-settings-card-title { min-height: 32px; padding: 0 12px; }
+#root .account-details-window :is(.account-personal-grid, .account-settings-grid) { gap: 10px 12px; }
+#root .account-details-window .account-settings-grid { padding: 12px; }
+#root .account-details-window .account-personal-section-header { margin-bottom: 10px; padding-bottom: 8px; }
+#root .account-details-window .account-personal-field { gap: 4px; }
+#root .account-details-window .account-personal-field > :is(input, select),
+#root .account-details-window .account-settings-field > :is(input, select),
+#root .account-details-window .account-transaction-body input { height: 28px; min-height: 28px; border-radius: 3px !important; }
+#root .account-details-window .account-settings-field.is-readonly { min-height: 50px; padding: 8px 10px; border-radius: 3px; }
+#root .account-details-window .account-settings-note { padding: 8px 10px; border-color: var(--border); border-radius: 3px; background: var(--surface-2); }
+#root .account-details-window .account-risk-grid { padding: 12px; gap: 16px; }
+#root .account-details-window .account-risk-preview { padding: 8px 12px; }
+#root .account-details-window .account-security-card { gap: 12px; padding: 10px 12px; }
+#root .account-details-window .account-security-controls { gap: 6px; }
+#root .account-details-window .account-password-input > input { height: 28px; min-height: 28px; border-radius: 3px !important; }
+#root .account-details-window .account-password-input > button { top: 2px; width: 24px; height: 24px; min-height: 24px; }
+#root .account-details-window .account-security-controls > button { min-height: 26px; border-radius: 3px; }
+#root .account-details-window .account-transaction-body { padding: 12px; gap: 10px; }
+#root .account-details-window .account-transaction-header { min-height: 34px; padding: 8px 12px; }
+#root .account-details-window .account-positions-header > div { min-height: 28px; padding: 5px 8px; }
+#root .account-details-window .account-positions-row > div { min-height: 26px; padding: 4px 8px; }
+#root .account-details-window .account-details-status { flex: 0 0 auto; min-height: 26px; padding: 4px 8px; border-radius: 3px; }
+#root .account-details-window :is(input, select, textarea, button):focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+#root#root#root#root#root :is(.account-details-window, .account-details-window *) { font-size: 11px !important; font-weight: 400 !important; }
+@media (max-width: 700px) {
+  #root .account-details-window .account-personal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #root .account-details-window .account-security-card { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 460px) {
+  #root .account-details-window :is(.account-personal-grid, .account-settings-grid, .account-risk-grid) { grid-template-columns: minmax(0, 1fr); }
+  #root .account-details-window .account-security-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #root .account-details-window .account-password-input { grid-column: 1 / -1; }
+}

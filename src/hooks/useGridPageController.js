@@ -22,23 +22,24 @@ export default function useGridPageController({
 }) {
   const grid = useGridController({ columns, rowKey, onClearFilter, singleSelect });
   const [contextMenu, setContextMenu] = useState(null);
-  const [currentRows, setCurrentRows] = useState([]);
   const rowsRef = useRef([]);
 
   const handleRowsChange = useCallback((rows) => {
     rowsRef.current = rows;
-    setCurrentRows((current) => current === rows ? current : rows);
+    // Rows belong to the grid. Mirroring each live-price frame into parent
+    // state renders the entire page again and feeds back into row effects.
+    // Menu actions read this ref; opening the menu already renders the parent.
   }, []);
 
   const handlePageContext = useCallback((e) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, row: null });
+    setContextMenu({ x: e.clientX, y: e.clientY, row: null, rows: rowsRef.current });
   }, []);
 
   const handleRowContext = useCallback((e, row) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, row });
+    setContextMenu({ x: e.clientX, y: e.clientY, row, rows: rowsRef.current });
   }, []);
 
   const closeMenu = useCallback(() => setContextMenu(null), []);
@@ -76,7 +77,7 @@ export default function useGridPageController({
       ...(contextMenu || {}),
       isOpen: !!contextMenu,
       grid,
-      rows: currentRows,
+      rows: contextMenu?.rows || [],
       selectedRow: contextMenu?.row || null,
       entityLabel,
       onCopyAs: handleCopyAs,

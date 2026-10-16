@@ -2,10 +2,28 @@ import { normalizePositionSyncPayload } from './positionSyncCore.js';
 
 // Server values are authoritative. Never calculate monetary P/L in the browser.
 export class LiveTradingState {
-  constructor() { this.positions = new Map(); this.metrics = new Map(); this.listeners = new Set(); this.revision = 0; }
+  constructor({ scheduleNotification = typeof window === 'undefined' ? null : (callback) => setTimeout(callback, 50) } = {}) {
+    this.positions = new Map(); this.metrics = new Map(); this.listeners = new Set(); this.revision = 0;
+    this.scheduleNotification = scheduleNotification;
+    this.notificationPending = false;
+  }
   subscribe = (listener) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   snapshot = () => this.revision;
-  notify() { this.revision += 1; this.listeners.forEach((fn) => fn()); }
+  notify() {
+    // Apply every server value/version immediately, but publish one UI update
+    // per burst. Per-ticket socket frames otherwise force synchronous React
+    // renders faster than grids can paint and starve clicks and HTTP callbacks.
+    this.revision += 1;
+    if (!this.scheduleNotification) { [...this.listeners].forEach((fn) => fn()); return; }
+    if (this.notificationPending) return;
+    this.notificationPending = true;
+    this.scheduleNotification(() => {
+      this.notificationPending = false;
+      // React can unsubscribe/resubscribe while a synchronous store update
+      // renders. Iterating the live Set revisits newly registered listeners.
+      [...this.listeners].forEach((fn) => fn());
+    });
+  }
   reset() { this.positions.clear(); this.metrics.clear(); this.notify(); }
   invalidateMetrics(logins) {
     let changed = false;

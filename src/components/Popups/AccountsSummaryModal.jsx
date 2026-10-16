@@ -1,56 +1,34 @@
-import { X, FileText } from 'lucide-react';
+﻿import { useEffect, useState } from 'react';
+import AccountDialog from './AccountDialog';
+import { useAccountSummary } from '../../hooks/useAccountDetails';
+import { loadAccountSummary, peekAccountSummary } from '../../services/accountDetails';
+import { buildAccountSummaryRows } from '../../utils/accountSummaryData';
 
-const AccountsSummaryModal = ({ account, onClose }) => {
-  const data = Array.isArray(account.data) ? account.data[0] : account.data;
-
+export default function AccountsSummaryModal({ account, onClose }) {
+  const cached = useAccountSummary(account.login);
+  const [loading, setLoading] = useState(() => !peekAccountSummary(account.login));
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    loadAccountSummary(account.login, { force: revision > 0 }).then(() => {
+      if (active) setError('');
+    }).catch(failure => {
+      if (active) setError(failure.message || 'Unable to refresh the summary.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [account.login, revision]);
+  const rows = buildAccountSummaryRows(account.data ?? cached, account.row, account.login);
   return (
-    <div className="ui-modal-backdrop" style={{ zIndex: 2000 }}>
-      <div className="ui-modal" style={{ width: 460 }}>
-        <div className="ui-modal-header">
-          <span
-            className="w-8 h-8 rounded-lg flex items-center justify-center mr-3"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}
-          >
-            <FileText size={15} />
-          </span>
-          Summary · <span className="tabular ml-1" style={{ color: 'var(--text-2)' }}>{account.login}</span>
-          <span className="x" onClick={onClose}><X size={16} /></span>
-        </div>
-
-        <div className="ui-modal-body" style={{ padding: 0, maxHeight: '60vh' }}>
-          {data ? (
-            <div>
-              {Object.entries(data).map(([key, val], idx) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between py-2.5 px-4"
-                  style={{
-                    borderBottom: '1px solid var(--border-2)',
-                    background: idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)',
-                  }}
-                >
-                  <span className="text-xs font-medium capitalize" style={{ color: 'var(--text-3)' }}>
-                    {key.replace(/_/g, ' ')}
-                  </span>
-                  <span className="text-sm tabular font-medium truncate ml-3" style={{ color: 'var(--text)' }}>
-                    {val !== null && val !== undefined ? String(val) : '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>
-              No summary data available.
-            </div>
-          )}
-        </div>
-
-        <div className="ui-modal-footer">
-          <button className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+    <AccountDialog title={`Account Summary · ${account.login}`} className="account-summary-dialog" onClose={onClose}
+      footer={<>
+        <span className="account-summary-status" role="status">{loading ? 'Updating summary…' : ''}</span>
+        <button type="button" className="account-panel-button" onClick={onClose}>Close</button>
+      </>}>
+      <dl className="account-summary-rows" aria-label="Account financial summary">
+        {rows.map(row => <div key={row.label}><dt>{row.label}</dt><dd className={`tabular ${row.tone}`}>{row.value}</dd></div>)}
+      </dl>
+      {error && <div className="account-panel-error" role="alert"><span>{error}</span><button type="button" className="account-panel-button" disabled={loading} onClick={() => { setLoading(true); setRevision(value => value + 1); }}>Retry</button></div>}
+    </AccountDialog>
   );
-};
-
-export default AccountsSummaryModal;
+}

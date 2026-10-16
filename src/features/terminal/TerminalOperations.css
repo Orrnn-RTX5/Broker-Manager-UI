@@ -1,0 +1,69 @@
+/* Only data tabs use these rules; Journal and the default trade grid keep their styles. */
+.cc-operations-view {
+  --operations-row: var(--bg-panel);
+  --operations-header: var(--bg-elevated);
+  --operations-hover: var(--bg-hover);
+  --operations-border: var(--border);
+  --operations-text: var(--text-primary);
+  --operations-muted: var(--text-tertiary);
+  --operations-positive: var(--success);
+  --operations-negative: var(--danger);
+  --operations-warning: var(--warning);
+  display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--operations-row); color: var(--operations-text);
+}
+.dark .cc-operations-view {
+  --operations-row: #1e1e1e; --operations-header: #292929;
+  --operations-hover: #333333; --operations-border: #303030;
+  --operations-text: #e4e4e4; --operations-muted: #b2b2b2;
+  --operations-positive: #8fbd9d; --operations-negative: #f06464; --operations-warning: #fec84b;
+}
+.operations-toolbar, .operations-pagination {
+  display: flex; flex: 0 0 auto; align-items: center; gap: 10px;
+  min-height: 28px; padding: 3px 8px; background: var(--operations-header);
+  border-bottom: 1px solid var(--operations-border);
+}
+.operations-caption, .operations-read-time, .operations-pagination { color: var(--operations-muted); }
+.operations-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.operations-read-time { margin-left: auto; white-space: nowrap; }
+.operations-toolbar button, .operations-pagination button {
+  display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 5px;
+  min-height: 23px; padding: 2px 7px; border: 1px solid var(--operations-border);
+  border-radius: 3px; background: var(--operations-row); color: var(--operations-text); cursor: pointer;
+}
+.operations-toolbar button:hover:not(:disabled), .operations-pagination button:hover:not(:disabled) { background: var(--operations-hover); }
+.operations-toolbar button:disabled, .operations-pagination button:disabled { opacity: .45; cursor: default; }
+.operations-toolbar button:focus-visible, .operations-pagination button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.cc-operations-view .cc-terminal-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+.cc-operations-view .cc-terminal-table { min-width: 960px; width: 100%; border-collapse: collapse; table-layout: auto; }
+.cc-operations-view .cc-terminal-table :is(th, td) {
+  height: 27px; padding: 4px 9px; border-right: 1px solid var(--operations-border);
+  border-bottom: 1px solid var(--operations-border); color: var(--operations-text);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.cc-operations-view .cc-terminal-table th { position: sticky; top: 0; z-index: 1; background: var(--operations-header); color: var(--operations-muted); width: auto; text-align: left; }
+.cc-operations-view .cc-terminal-table tbody tr { background: var(--operations-row); }
+.cc-operations-view .cc-terminal-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--operations-header) 25%, var(--operations-row)); }
+.cc-operations-view .cc-terminal-table tbody tr:hover { background: var(--operations-hover); }
+.cc-operations-view .cc-terminal-table tbody tr:hover td { color: var(--operations-text); }
+.cc-operations-view .cc-terminal-table td.operations-positive,
+.cc-operations-view .cc-terminal-table tr:hover td.operations-positive { color: var(--operations-positive); }
+.cc-operations-view .cc-terminal-table td.operations-negative,
+.cc-operations-view .cc-terminal-table tr:hover td.operations-negative { color: var(--operations-negative); }
+.operations-pagination { border-top: 1px solid var(--operations-border); border-bottom: 0; }
+.operations-pagination > span:first-child { flex: 1; }
+.operations-notice { padding: 5px 8px; border-bottom: 1px solid var(--operations-border); color: var(--operations-warning); background: var(--operations-row); }
+.cc-operations-view .operations-empty { padding: 15px 9px; color: var(--operations-muted); white-space: normal; text-align: center; }
+.operations-severity { display: inline-flex; align-items: center; gap: 6px; }
+.operations-severity::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.operations-severity.stop-out { color: var(--operations-negative); }
+.operations-severity.margin-call { color: var(--operations-warning); }
+.operations-severity.unavailable { color: var(--operations-muted); }
+#root#root#root#root#root .cc-operations-view,
+#root#root#root#root#root .cc-operations-view :is(button, input, select, span, th, td, p, strong, b) { font-size: 11px !important; font-weight: 400 !important; }
+@media (max-width: 640px) {
+  .operations-toolbar { gap: 6px; flex-wrap: wrap; }
+  .operations-caption { flex: 1; }
+  .operations-read-time { display: none; }
+  .operations-pagination { gap: 5px; }
+}

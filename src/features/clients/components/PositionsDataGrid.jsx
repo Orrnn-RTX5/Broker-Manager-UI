@@ -12,7 +12,11 @@ import { useAnalyticsDataTiming } from '../../../hooks/useAnalyticsTiming.js';
 import { fetchOpenPositionsAnalyticsPage } from '../../analytics/analyticsQueries.js';
 import { ANALYTICS_VIEWS, OPEN_POSITIONS_STALE_MS } from '../../../utils/analyticsQueryOptions.js';
 
-const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
+const formatters = new Map();
+const fmt = (n, d = 2) => {
+  if (!formatters.has(d)) formatters.set(d, new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  return formatters.get(d).format(n);
+};
 const EMPTY_ROWS = Object.freeze([]);
 
 const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 'All Symbols', reasonFilter = 'All Reasons', grid, onRowsChange, onRowContext }) => {
@@ -209,7 +213,7 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
               {renderHeader('priceSl', 'S/L')}
               {renderHeader('priceTp', 'T/P')}
               {renderHeader('swap', 'Storage')}
-              {renderHeader('profit', 'Profit')}
+              {renderHeader('profit', 'Profit / Loss')}
               {renderHeader('comment', 'Comment')}
             </tr>
           </thead>
@@ -233,8 +237,8 @@ const PositionsDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter
               const isSelected = grid?.selectedIds.has(rowKey) ?? false;
               const isBuy = row.type === 'buy';
               const profitTone = row.profit < 0
-                ? 'var(--open-position-sell-color)'
-                : 'var(--open-position-buy-color)';
+                ? 'var(--open-position-loss-color)'
+                : 'var(--open-position-profit-color)';
               return (
                 <tr
                   key={rowKey}

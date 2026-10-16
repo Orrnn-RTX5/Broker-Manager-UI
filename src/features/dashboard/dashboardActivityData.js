@@ -54,6 +54,45 @@ export const getDealTimestamp = (deal) => parseActivityTimestamp(
   deal?.time ?? deal?.timeDone ?? deal?.timeCreate ?? deal?.timestamp
 );
 
+function* activityDeals(deals, realLogins, start, now) {
+  const seenDeals = new Set();
+  for (const deal of Array.isArray(deals) ? deals : []) {
+    const time = getDealTimestamp(deal);
+    const volume = finiteNumber(deal?.volume);
+    const login = String(deal?.login ?? '').trim();
+    const ticket = String(deal?.ticket ?? '').trim();
+    const symbol = String(deal?.symbol ?? '').trim();
+    const action = String(deal?.action ?? '').trim().toLowerCase();
+    if (time === null || time < start || time > now || volume === null || volume <= 0 ||
+        !symbol || !['buy', 'sell', 'deal_buy', 'deal_sell', '0', '1'].includes(action) ||
+        (realLogins && !realLogins.has(login))) continue;
+    if (ticket && ticket !== '0') {
+      if (seenDeals.has(ticket)) continue;
+      seenDeals.add(ticket);
+    }
+    yield { time, volume, symbol };
+  }
+}
+
+export const buildSymbolActivity = ({ range = '24H', now = Date.now(), deals = [], realLogins = null } = {}) => {
+  const { durationMs } = ACTIVITY_RANGES[range] || ACTIVITY_RANGES['24H'];
+  const symbols = new Map();
+  let totalVolume = 0;
+  let totalDeals = 0;
+  for (const { symbol, volume } of activityDeals(deals, realLogins, now - durationMs, now)) {
+    const row = symbols.get(symbol) || { symbol, volume: 0, deals: 0 };
+    row.volume += volume;
+    row.deals += 1;
+    symbols.set(symbol, row);
+    totalVolume += volume;
+    totalDeals += 1;
+  }
+  const rows = [...symbols.values()]
+    .sort((a, b) => b.volume - a.volume || b.deals - a.deals || a.symbol.localeCompare(b.symbol))
+    .map((row) => ({ ...row, share: row.volume / totalVolume * 100, volume: Math.round(row.volume * 1_000_000) / 1_000_000 }));
+  return { rows, totalVolume: Math.round(totalVolume * 1_000_000) / 1_000_000, totalDeals };
+};
+
 export const buildActivitySeries = ({
   range = '24H',
   now = Date.now(),
@@ -72,20 +111,7 @@ export const buildActivitySeries = ({
     buckets.set(timestamp, { timestamp, volume: 0, equity: null });
   }
 
-  const seenDeals = new Set();
-  for (const deal of Array.isArray(deals) ? deals : []) {
-    const time = getDealTimestamp(deal);
-    const volume = finiteNumber(deal?.volume);
-    const login = String(deal?.login ?? '').trim();
-    const ticket = String(deal?.ticket ?? '').trim();
-    const action = String(deal?.action ?? '').trim().toLowerCase();
-    if (time === null || time < start || time > now || volume === null || volume <= 0 ||
-        !String(deal?.symbol ?? '').trim() || !['buy', 'sell', 'deal_buy', 'deal_sell', '0', '1'].includes(action) ||
-        (realLogins && !realLogins.has(login))) continue;
-    if (ticket && ticket !== '0') {
-      if (seenDeals.has(ticket)) continue;
-      seenDeals.add(ticket);
-    }
+  for (const { time, volume } of activityDeals(deals, realLogins, start, now)) {
     const bucket = buckets.get(Math.floor(time / bucketMs) * bucketMs);
     if (bucket) bucket.volume += volume;
   }

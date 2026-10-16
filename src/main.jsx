@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.jsx'
 import './styles/light-theme.css'
+import './styles/selection.css'
 import './features/auth/ManagerLoginOverlay.css'
 import ResultDialog from './components/ResultDialog.jsx'
 

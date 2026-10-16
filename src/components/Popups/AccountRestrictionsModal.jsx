@@ -1,6 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
-import { useState, useEffect, useCallback } from 'react';
-import { X, Shield, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Children, cloneElement, useId, useState, useEffect, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import AccountDialog from './AccountDialog';
 import {
   accountRestrictGet, accountRestrictSet, accountRestrictClear,
   accountSpreadSet, accountExecutionSet, accountBookSet,
@@ -13,6 +14,9 @@ const Toggle = ({ label, checked, onChange, disabled }) => (
     <span className="text-xs" style={{ color: 'var(--text-2)' }}>{label}</span>
     <button
       type="button"
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
@@ -29,12 +33,15 @@ const Toggle = ({ label, checked, onChange, disabled }) => (
   </label>
 );
 
-const Field = ({ label, children }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>{label}</label>
-    {children}
-  </div>
-);
+const Field = ({ label, children }) => {
+  const id = useId();
+  const child = Children.only(children);
+  const fieldId = child.props.id || id;
+  return <div className="flex flex-col gap-1">
+    <label htmlFor={fieldId} style={{ color: 'var(--text-3)' }}>{label}</label>
+    {cloneElement(child, { id: fieldId })}
+  </div>;
+};
 
 const BASIC_RESTRICTION_FIELDS = [
   'no_trading',
@@ -72,6 +79,8 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [hasRestriction, setHasRestriction] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
@@ -90,8 +99,14 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   const fetchRestrictions = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLoadFailed(false);
     try {
       const result = await accountRestrictGet(login);
+      if (!result || (Array.isArray(result) && result.length === 0)) {
+        setData(null);
+        setHasRestriction(false);
+        return;
+      }
       setData(result);
       setHasRestriction(true);
       setForm({
@@ -112,8 +127,10 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
       else if (result.bBookOverride) setBook('b');
       else setBook('auto');
       setExecDelay(result.executionDelayMs || 0);
-    } catch {
+    } catch (failure) {
       setHasRestriction(false);
+      const absent = failure.status === 404 && /restriction|record.*not found|no.*record/i.test(failure.message);
+      if (!absent) { setLoadFailed(true); setError(failure.message || 'Unable to load account restrictions.'); }
     } finally {
       setLoading(false);
     }
@@ -142,7 +159,6 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
 
   const handleClear = async () => {
     if (!canEditRestrictions) { showResult.error('Your role does not have permission to clear account restrictions.'); return; }
-    if (!window.confirm(`Clear all restrictions for login ${login}?`)) return;
     setSaving(true);
     try {
       await accountRestrictClear(login);
@@ -205,42 +221,24 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
-      <div
-        className="ui-card flex flex-col overflow-hidden"
-        style={{ width: 520, maxHeight: '90vh', boxShadow: 'var(--shadow-lg)' }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-4 py-3 shrink-0"
-          style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}
-        >
-          <div className="flex items-center gap-2">
-            <Shield size={16} style={{ color: 'var(--accent)' }} />
-            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Account Restrictions — {login}
-            </span>
-          </div>
-          <button className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" onClick={onClose}>
-            <X size={14} />
-          </button>
+    <>
+    <AccountDialog title={`Account Restrictions · ${login}`} className="account-restrictions-dialog" onClose={onClose} busy={saving}
+      footer={<>
+        <button type="button" className="account-panel-button is-danger" onClick={() => setConfirmClear(true)} disabled={loading || saving || loadFailed || !hasRestriction || !canEditRestrictions}>Clear All</button>
+        <div>
+          <button type="button" className="account-panel-button" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="button" className="account-panel-button is-primary" onClick={handleSave} disabled={loading || saving || loadFailed || !canEditRestrictions}>{saving ? 'Saving…' : hasRestriction ? 'Save Changes' : 'Create Restrictions'}</button>
         </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+      </>}>
           {loading && (
-            <div className="flex items-center justify-center py-12">
-              <Loader size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
-            </div>
+            <div className="account-restrictions-loading" role="status">Loading account restrictions…</div>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 p-2 rounded text-xs" style={{ background: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
-              <AlertTriangle size={14} /> {error}
-            </div>
+            <div className="account-panel-error" role="alert"><span>{error}</span>{loadFailed && <button type="button" className="account-panel-button" onClick={fetchRestrictions}>Retry</button>}</div>
           )}
 
-          {!loading && (
+          {!loading && !loadFailed && (
             <>
               {!canChangeAnyRestriction && (
                 <div className="flex items-center gap-2 p-2 rounded text-xs" style={{ background: 'var(--warning-soft)', color: 'var(--warning-text)' }}>
@@ -358,27 +356,13 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
               )}
             </>
           )}
-        </div>
-
-        {/* Footer */}
-        {!loading && (
-          <div
-            className="flex items-center justify-between px-4 py-3 shrink-0"
-            style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}
-          >
-            <button className="ui-btn ui-btn-danger ui-btn-sm" onClick={handleClear} disabled={saving || !hasRestriction || !canEditRestrictions}>
-              Clear All
-            </button>
-            <div className="flex gap-2">
-              <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={onClose}>Cancel</button>
-              <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSave} disabled={saving || !canEditRestrictions}>
-                {saving ? 'Saving…' : hasRestriction ? 'Update' : 'Create'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    </AccountDialog>
+    {confirmClear && <AccountDialog title={`Clear account restrictions · ${login}`} className="account-action-dialog" onClose={() => setConfirmClear(false)} busy={saving}
+      footer={<>
+        <button type="button" className="account-panel-button" disabled={saving} onClick={() => setConfirmClear(false)}>Cancel</button>
+        <button type="button" className="account-panel-button is-danger" disabled={saving} onClick={async () => { await handleClear(); setConfirmClear(false); }}>{saving ? 'Clearing…' : 'Clear restrictions'}</button>
+      </>}><p className="account-action-message">Remove all restrictions and trade overrides for account {login}?</p></AccountDialog>}
+    </>
   );
 };
 

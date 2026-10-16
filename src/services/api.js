@@ -1,4 +1,4 @@
-import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
+import { getDataAccessScope, assertDataAccessScope, matchesDataAccessScope } from './dataAccessScope.js';
 import { normalizePositionRow, getPositionTicket, mergePositionUpdates, reconcilePositionSnapshot } from './positionRecords.js';
 export { normalizePositionRow } from './positionRecords.js';
 
@@ -236,9 +236,12 @@ let accountDataScope = getDataAccessScope();
 const ensureAccountDataScope = () => {
   const scope = getDataAccessScope();
   if (accountDataScope !== scope) {
+    const promotedInitialScope = matchesDataAccessScope(accountDataScope);
     accountDataScope = scope;
-    invalidateRealtimeCaches();
-    clearOnlineUsersSnapshot();
+    if (!promotedInitialScope) {
+      invalidateRealtimeCaches();
+      clearOnlineUsersSnapshot();
+    }
   }
   return scope;
 };
@@ -255,7 +258,7 @@ const readStoredAccountDetailsPage = () => {
     const raw = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(ACCOUNT_DETAILS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed?.scope === getDataAccessScope() && Array.isArray(parsed.rows)) return parsed;
+    if (matchesDataAccessScope(parsed?.scope) && Array.isArray(parsed.rows)) return parsed;
   } catch {
     // Ignore storage parse errors
   }

@@ -101,13 +101,13 @@ const DonutChart = React.forwardRef(
                   strokeDasharray={strokeDasharray}
                   strokeDashoffset={-strokeDashoffset}
                   strokeLinecap={strokeLinecap}
-                  initial={{ opacity: 0, strokeDashoffset: circumference }}
+                  initial={animationDuration === 0 ? false : { opacity: 0, strokeDashoffset: circumference }}
                   animate={{ 
                     opacity: 1, 
                     strokeDashoffset: -strokeDashoffset,
                   }}
                   transition={{
-                    opacity: { duration: 0.3, delay: index * animationDelayPerSegment },
+                    opacity: { duration: animationDuration === 0 ? 0 : 0.3, delay: index * animationDelayPerSegment },
                     strokeDashoffset: {
                       duration: animationDuration,
                       delay: index * animationDelayPerSegment,

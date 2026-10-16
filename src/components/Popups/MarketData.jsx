@@ -1,17 +1,36 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowDownRight, ArrowUpRight, Search, X } from 'lucide-react';
-import useSymbolStore from '../../store/symbolStore';
+import useSymbolStore, {
+  ensureSymbolTickSeries,
+  getSymbolTickBuffer,
+  mergeRemoteSymbolTickHistory,
+  subscribeSymbolTicks,
+} from '../../store/symbolStore';
+import { buildBrokerApiUrl } from '../../config/endpoints';
+import authService from '../../services/authService';
 import {
   sortMarketWatchQuotes,
 } from '../../utils/marketWatchQuotes';
+import {
+  buildTickChartGeometry,
+  MARKET_WATCH_TICK_CHART_LIMIT,
+} from './tickChartGeometry';
 
-const MAX_TICKS = 1000;
+const MAX_TICKS = MARKET_WATCH_TICK_CHART_LIMIT;
+const REMOTE_TICK_FETCH_LIMIT = 180;
 const SYMBOL_CLICK_DELAY_MS = 300;
 const COMPACT_QUOTE_ROW_HEIGHT = 27;
 const COMPACT_QUOTE_OVERSCAN = 10;
 const COMPACT_QUOTE_FALLBACK_VIEWPORT_HEIGHT = 540;
+const FALLBACK_CHART_SIZE = { width: 320, height: 240, fontSize: 11 };
+
+const remoteTickCache = new Map();
+const inFlightTickRequests = new Map();
+const unsupportedTickSymbols = new Set();
+
+const isLikelyUnsupportedTickSymbol = (symbol) => /\.[A-Z0-9]{1,5}$|-PERP$/i.test(String(symbol || '').trim());
 
 const toNumber = (value) => {
   const number = Number(value);
@@ -30,10 +49,98 @@ const formatDetailValue = (value) => {
     : '-';
 };
 
+const formatServerDate = (epochMs) => {
+  const safeMs = Number.isFinite(epochMs) && epochMs > 0 ? epochMs : Date.now();
+  return new Date(safeMs).toISOString().slice(0, 10).replace(/-/g, '.');
+};
+
+const formatServerTime = (epochMs) => {
+  const safeMs = Number.isFinite(epochMs) && epochMs > 0 ? epochMs : Date.now();
+  return new Date(safeMs).toISOString().slice(11, 19);
+};
+
+const normalizeHistoryTimestampMs = (row) => {
+  if (!row || typeof row !== 'object') return undefined;
+  const raw = row.timestamp ?? row.time_msc ?? row.timeMs ?? row.time ?? row.quote_time ?? row.datetime;
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    if (numeric >= 100_000_000_000_000_000) return Math.floor(numeric / 1_000_000);
+    if (numeric >= 100_000_000_000_000) return Math.floor(numeric / 1_000);
+    if (numeric >= 100_000_000_000) return Math.floor(numeric);
+    return Math.floor(numeric * 1_000);
+  }
+  const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+};
+
+const parseRemoteTickHistory = (payload, symbol) => {
+  const target = String(symbol || '').trim().toUpperCase();
+  const rows = Array.isArray(payload)
+    ? payload
+    : (payload?.ticks ?? payload?.data ?? payload?.answer ?? []);
+  if (!Array.isArray(rows)) return [];
+  const points = [];
+  rows.forEach((row) => {
+    if (!row || typeof row !== 'object') return;
+    if (row.symbol && String(row.symbol).trim().toUpperCase() !== target) return;
+    const timestamp = normalizeHistoryTimestampMs(row);
+    const bid = Number(row.bid ?? row.Bid);
+    const ask = Number(row.ask ?? row.Ask);
+    if (!timestamp || !Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) return;
+    points.push({ timestamp, bid, ask });
+  });
+  return points.sort((a, b) => a.timestamp - b.timestamp);
+};
+
+const fetchRemoteTickSeries = (symbol) => {
+  const key = String(symbol || '').trim().toUpperCase();
+  if (!key || unsupportedTickSymbols.has(key) || isLikelyUnsupportedTickSymbol(key)) {
+    return Promise.resolve([]);
+  }
+  if (remoteTickCache.has(key)) {
+    return Promise.resolve(remoteTickCache.get(key));
+  }
+  if (inFlightTickRequests.has(key)) {
+    return inFlightTickRequests.get(key);
+  }
+  const url = buildBrokerApiUrl(`/api/v2/ticks/${encodeURIComponent(key)}?limit=${REMOTE_TICK_FETCH_LIMIT}`);
+  const token = authService.getToken?.() || null;
+  const request = fetch(url, {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+    .then((res) => {
+      if (res.status === 403 || res.status === 404) {
+        unsupportedTickSymbols.add(key);
+        return null;
+      }
+      return res.ok ? res.json() : null;
+    })
+    .then((payload) => {
+      const points = payload ? parseRemoteTickHistory(payload, key) : [];
+      if (points.length > 0) {
+        remoteTickCache.set(key, points);
+        mergeRemoteSymbolTickHistory(key, points);
+      }
+      return points;
+    })
+    .catch(() => [])
+    .finally(() => {
+      inFlightTickRequests.delete(key);
+    });
+  inFlightTickRequests.set(key, request);
+  return request;
+};
+
 const MarketQuoteRow = memo(function MarketQuoteRow({
   compact,
   isConnected,
   onOpenTicks,
+  onPrefetch,
   onSelect,
   quote,
   selected,
@@ -42,6 +149,7 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
 
   return (
     <tr
+      onPointerEnter={() => onPrefetch?.(quote)}
       onClick={() => onSelect(quote)}
       onDoubleClick={() => onOpenTicks(quote)}
       className={`market-row cursor-pointer ${selected ? 'is-selected' : ''}`}
@@ -82,7 +190,10 @@ const MarketData = ({ compact = false }) => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [tickHistory, setTickHistory] = useState([]);
-  const chartRef = useRef(null);
+  const [chartElement, setChartElement] = useState(null);
+  const [chartSize, setChartSize] = useState(FALLBACK_CHART_SIZE);
+  const titleId = useId();
+  const descriptionId = useId();
   const selectedSymbolRef = useRef(null);
   const tickCacheRef = useRef(new Map());
   const symbolClickTimer = useRef(null);
@@ -91,6 +202,21 @@ const MarketData = ({ compact = false }) => {
   const searchInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [symbolsViewport, setSymbolsViewport] = useState({ height: 0, scrollTop: 0 });
+
+  const handleChartCanvasRef = useCallback((node) => {
+    setChartElement(node);
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    if (width > 0 && height > 0) {
+      setChartSize((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height, fontSize: 11 }
+      ));
+    }
+  }, []);
 
   const {
     feedError,
@@ -107,6 +233,22 @@ const MarketData = ({ compact = false }) => {
   useEffect(() => {
     initWebSocket();
   }, [initWebSocket]);
+
+  useEffect(() => {
+    if (!chartElement || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.floor(entry.contentRect.width);
+      const height = Math.floor(entry.contentRect.height);
+      if (width <= 0 || height <= 0) return;
+      setChartSize((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height, fontSize: 11 }
+      ));
+    });
+    observer.observe(chartElement);
+    return () => observer.disconnect();
+  }, [chartElement]);
 
   const searchRegex = useMemo(() => {
     const query = searchQuery.trim();
@@ -171,6 +313,39 @@ const MarketData = ({ compact = false }) => {
   }, [selectedSymbol]);
 
   useEffect(() => {
+    if (!selectedSymbol || activeTab !== 'Ticks') return undefined;
+    let cancelled = false;
+    const controller = new AbortController();
+    const url = buildBrokerApiUrl(`/api/v2/ticks/${encodeURIComponent(selectedSymbol)}?limit=${MAX_TICKS}`);
+    const token = authService.getToken?.() || null;
+
+    fetch(url, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        const points = parseRemoteTickHistory(payload, selectedSymbol);
+        if (points.length > 0) {
+          setRemoteHistoryMap((prev) => ({ ...prev, [selectedSymbol]: points }));
+        }
+      })
+      .catch(() => {
+        // Brokers without historical tick endpoints still chart live session ticks.
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [activeTab, selectedSymbol]);
+
+  useEffect(() => {
     if (!compact || activeTab !== 'Symbols') return undefined;
 
     const viewport = symbolsViewportRef.current;
@@ -227,14 +402,19 @@ const MarketData = ({ compact = false }) => {
     if (!quote) return;
     if (quote.bid === previousQuote?.bid && quote.ask === previousQuote?.ask) return;
 
+    const storeBuffer = getSymbolTickBuffer(symbol);
     const nextTick = {
       bid: toNumber(quote.bid),
       ask: toNumber(quote.ask),
       time: quote.lastUpdate || Date.now(),
+      timestamp: quote.lastUpdate || Date.now(),
     };
 
-    const previousTicks = tickCacheRef.current.get(symbol) || [];
-    const next = [...previousTicks.slice(-(MAX_TICKS - 1)), nextTick];
+    const previousTicks = tickCacheRef.current.get(symbol) || storeBuffer;
+    const last = previousTicks[previousTicks.length - 1];
+    const next = last && last.bid === nextTick.bid && last.ask === nextTick.ask
+      ? previousTicks
+      : [...previousTicks.slice(-(MAX_TICKS - 1)), nextTick];
     tickCacheRef.current.set(symbol, next);
     setTickHistory(next);
   }), []);
@@ -243,15 +423,20 @@ const MarketData = ({ compact = false }) => {
     selectedSymbolRef.current = quote.symbol;
     setSelectedSymbol(quote.symbol);
     const latestQuote = useSymbolStore.getState().symbols?.[quote.symbol] || quote;
+    const storeBuffer = getSymbolTickBuffer(quote.symbol);
     const cached = tickCacheRef.current.get(quote.symbol) || [];
+    const mergedBase = storeBuffer.length >= cached.length ? storeBuffer : cached;
+    const timestamp = latestQuote.lastUpdate || Date.now();
     const latestTick = {
       bid: toNumber(latestQuote.bid),
       ask: toNumber(latestQuote.ask),
-      time: latestQuote.lastUpdate || 0,
+      time: timestamp,
+      timestamp,
     };
-    const last = cached[cached.length - 1];
+    const last = mergedBase[mergedBase.length - 1];
     const history = last?.bid === latestTick.bid && last?.ask === latestTick.ask
-      ? cached : [...cached.slice(-(MAX_TICKS - 1)), latestTick];
+      ? mergedBase
+      : [...mergedBase.slice(-(MAX_TICKS - 1)), latestTick];
     tickCacheRef.current.delete(quote.symbol);
     tickCacheRef.current.set(quote.symbol, history);
     if (tickCacheRef.current.size > 32) tickCacheRef.current.delete(tickCacheRef.current.keys().next().value);
@@ -275,8 +460,16 @@ const MarketData = ({ compact = false }) => {
 
   const handleTabChange = useCallback((tab) => {
     clearTimeout(symbolClickTimer.current);
-    if (tab !== 'Symbols' && !selectedQuote && liveQuotes.length > 0) {
-      selectQuote(liveQuotes[0], tab);
+    if (tab !== 'Symbols' && !selectedQuote) {
+      const allSymbols = Object.values(useSymbolStore.getState().symbols || {});
+      const firstQuote = liveQuotes[0] || sortMarketWatchQuotes(allSymbols)[0];
+      if (firstQuote) {
+        selectQuote(firstQuote, tab);
+        return;
+      }
+    }
+    if (tab === 'Ticks' && selectedQuote) {
+      selectQuote(selectedQuote, 'Ticks');
       return;
     }
     if (tab === 'Symbols' && activeTab !== 'Symbols') {
@@ -510,61 +703,132 @@ const MarketData = ({ compact = false }) => {
       );
     }
 
-    if (tickHistory.length === 0) {
-      return (
-        <div className="flex-1 flex items-center justify-center text-sm" style={{ color: 'var(--muted)' }}>
-          Waiting for ticks...
-        </div>
-      );
-    }
+    const storeBuffer = getSymbolTickBuffer(selectedQuote.symbol);
+    const liveSource = storeBuffer.length >= tickHistory.length ? storeBuffer : tickHistory;
+    const livePoints = liveSource
+      .map((tick) => ({
+        timestamp: Number(tick.timestamp ?? tick.time) || Date.now(),
+        bid: toNumber(tick.bid),
+        ask: toNumber(tick.ask),
+      }))
+      .filter((point) => point.bid > 0 && point.ask > 0);
 
-    const bids = tickHistory.map((tick) => tick.bid);
-    const minBid = Math.min(...bids);
-    const maxBid = Math.max(...bids);
-    const range = maxBid - minBid || 0.0001;
-    const minPrice = minBid - range * 0.1;
-    const maxPrice = maxBid + range * 0.1;
-    const finalRange = maxPrice - minPrice;
-    const isUp = tickHistory.length > 1 && tickHistory[tickHistory.length - 1].bid >= tickHistory[0].bid;
-    const lineColor = isUp ? 'var(--market-value-up)' : 'var(--market-value-down)';
+    const remotePoints = remoteHistoryMap[selectedQuote.symbol] || [];
+    const firstLiveTimestamp = livePoints[0]?.timestamp ?? Number.POSITIVE_INFINITY;
+    const earlierPoints = remotePoints.filter((point) => point.timestamp < firstLiveTimestamp);
+    const combinedPoints = [...earlierPoints, ...livePoints].slice(-MAX_TICKS);
 
-    const points = tickHistory.map((tick, index) => {
-      const x = (index / Math.max(tickHistory.length - 1, 1)) * 100;
-      const y = 100 - (((tick.bid - minPrice) / finalRange) * 100);
-      return `${x},${y}`;
-    }).join(' ');
+    const digits = Number.isInteger(Number(selectedQuote.digits)) ? Number(selectedQuote.digits) : null;
+    const geometry = buildTickChartGeometry(combinedPoints, {
+      ...chartSize,
+      digits,
+      formatDate: formatServerDate,
+      formatTime: formatServerTime,
+    });
+    const chartName = selectedQuote.symbol;
 
     return (
-      <div className="market-quote-ticks flex-1 min-h-0 min-w-0 overflow-hidden relative flex flex-col gap-2 p-2 bg-[var(--surface-2)]">
-        <div className="shrink-0 font-semibold" style={{ color: 'var(--accent-text)' }}>{selectedQuote.symbol}</div>
-        <div className="shrink-0 px-2 py-1.5 text-xs rounded ui-card font-mono font-medium" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}>
-          {tickHistory.length > 0
-            ? `${tickHistory[tickHistory.length - 1].bid.toFixed(5)} / ${tickHistory[tickHistory.length - 1].ask.toFixed(5)}`
-            : 'Waiting for ticks...'}
-        </div>
-        <div
-          ref={chartRef}
-          className="flex-1 min-h-0 relative rounded ui-card"
-          style={{
-            border: '1px solid var(--border)',
-            background: 'var(--surface)',
-            backgroundImage: 'radial-gradient(circle, var(--border-3) 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
-          }}
-        >
-          {tickHistory.length > 0 && (
-            <svg aria-label={`${selectedQuote.symbol} bid price chart`} role="img" className="w-full h-full absolute inset-0 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" style={{ overflow: 'hidden' }}>
-              {tickHistory.length === 1
-                ? <circle cx="50" cy="50" r="1.5" fill={lineColor} />
-                : <polyline fill="none" stroke={lineColor} strokeWidth="0.5" points={points} />}
+      <section className="market-quote-ticks rtx-market-tick-chart" aria-label={chartName}>
+        <div ref={setChartElement} className="rtx-market-tick-chart__canvas">
+          {geometry ? (
+            <svg
+              width={chartSize.width}
+              height={chartSize.height}
+              viewBox={`0 0 ${chartSize.width} ${chartSize.height}`}
+              role="img"
+              aria-labelledby={`${titleId} ${descriptionId}`}
+              data-tick-count={geometry.visibleCount}
+              style={{ fontSize: chartSize.fontSize }}
+            >
+              <title id={titleId}>{chartName}</title>
+              <desc id={descriptionId}>
+                {`${chartName} live tick chart with ${geometry.visibleCount} recent broker quotes. Bid ${geometry.bidTag.label}, Ask ${geometry.askTag.label}.`}
+              </desc>
+              <rect
+                className="rtx-market-tick-chart__plot"
+                x={geometry.plot.left}
+                y={geometry.plot.top}
+                width={geometry.plot.right - geometry.plot.left}
+                height={geometry.plot.bottom - geometry.plot.top}
+              />
+              <g className="rtx-market-tick-chart__grid" aria-hidden="true">
+                {geometry.priceTicks.map((tick) => (
+                  <line key={`price-${tick.label}`} x1={geometry.plot.left} x2={geometry.plot.right} y1={tick.y} y2={tick.y} />
+                ))}
+                {geometry.timeTicks.slice(1).map((tick) => (
+                  <line key={`time-${tick.x}`} x1={tick.x} x2={tick.x} y1={geometry.plot.top} y2={geometry.plot.bottom} />
+                ))}
+              </g>
+              <g className="rtx-market-tick-chart__separators" aria-hidden="true">
+                {geometry.separators.map((x) => (
+                  <line key={x} x1={x} x2={x} y1={geometry.plot.top} y2={geometry.plot.bottom} />
+                ))}
+              </g>
+              <path
+                data-testid="market-tick-ask-line"
+                className="rtx-market-tick-chart__line rtx-market-tick-chart__line--ask"
+                d={geometry.askPath}
+              />
+              <path
+                data-testid="market-tick-bid-line"
+                className="rtx-market-tick-chart__line rtx-market-tick-chart__line--bid"
+                d={geometry.bidPath}
+              />
+              <rect
+                className="rtx-market-tick-chart__frame"
+                x={geometry.plot.left}
+                y={geometry.plot.top}
+                width={geometry.plot.right - geometry.plot.left}
+                height={geometry.plot.bottom - geometry.plot.top}
+              />
+              <text
+                className="rtx-market-tick-chart__symbol"
+                x={geometry.plot.left + 5}
+                y={geometry.plot.top + chartSize.fontSize + 4}
+              >
+                {chartName}
+              </text>
+              <g className="rtx-market-tick-chart__axis" aria-hidden="true">
+                {geometry.priceTicks
+                  .filter((tick) => tick.y > geometry.plot.top + chartSize.fontSize / 2 && tick.y < geometry.plot.bottom - chartSize.fontSize / 2)
+                  .map((tick) => (
+                    <g key={`price-label-${tick.label}`}>
+                      <line x1={geometry.plot.right} x2={geometry.plot.right + geometry.tickLength} y1={tick.y} y2={tick.y} />
+                      <text x={geometry.plot.right + geometry.tickLength + 3} y={tick.y + chartSize.fontSize * 0.35}>{tick.label}</text>
+                    </g>
+                  ))}
+                {geometry.timeTicks.map((tick) => {
+                  const textX = tick.isLast
+                    ? Math.max(geometry.plot.left, Math.min(tick.x - 18, geometry.plot.right - 24))
+                    : tick.x + 2;
+                  return (
+                    <g key={`time-label-${tick.x}`}>
+                      <line x1={tick.x} x2={tick.x} y1={geometry.plot.bottom} y2={geometry.plot.bottom + geometry.tickLength} />
+                      <text x={textX} y={geometry.plot.bottom + geometry.tickLength + chartSize.fontSize}>{tick.label}</text>
+                    </g>
+                  );
+                })}
+              </g>
+              {[['ask', geometry.askTag], ['bid', geometry.bidTag]].map(([side, tag]) => (
+                <g key={side} className={`rtx-market-tick-chart__tag rtx-market-tick-chart__tag--${side}`} data-testid={`market-tick-${side}-tag`}>
+                  <rect
+                    x={geometry.plot.right}
+                    y={tag.y - geometry.tagHeight / 2}
+                    width={geometry.axisWidth}
+                    height={geometry.tagHeight}
+                  />
+                  <text x={geometry.plot.right + geometry.tickLength + 3} y={tag.y + chartSize.fontSize * 0.35}>{tag.label}</text>
+                </g>
+              ))}
             </svg>
+          ) : (
+            <div className="rtx-market-tick-chart__empty" role="status">
+              <strong>Waiting for live ticks</strong>
+              <span>{`The chart will appear when the broker publishes a quote for ${chartName}.`}</span>
+            </div>
           )}
         </div>
-        <div className="shrink-0 flex justify-between gap-2" style={{ color: 'var(--text-3)' }}>
-          <span>{isConnected && !selectedQuote.isStale ? 'Live price changes' : 'Cached prices'}</span>
-          <span>{tickHistory.length} points</span>
-        </div>
-      </div>
+      </section>
     );
   };
 
@@ -575,15 +839,146 @@ const MarketData = ({ compact = false }) => {
            labels, values and controls share the same visual weight. */
         .market-watch-type {
           --market-watch-font-size: var(--workspace-ui-small-font-size, 10px);
-        }
-        .dark .market-watch-type {
-          /* Lift and soften the green/red bases for small text on charcoal. */
-          --market-value-up: rgb(88, 174, 104);
-          --market-value-down: rgb(235, 112, 112);
+          --market-value-up: #0078d4;
+          --market-value-down: #f06464;
           --market-direction-up: var(--market-value-up);
           --market-direction-down: var(--market-value-down);
-          --cc-market-glow-up: rgba(0, 128, 0, 0.12);
-          --cc-market-glow-down: rgba(255, 0, 0, 0.10);
+          --cc-market-glow-up: rgba(0, 120, 212, 0.12);
+          --cc-market-glow-down: rgba(240, 100, 100, 0.10);
+        }
+        .dark .market-watch-type {
+          /* Match the Admin Market Watch palette within this panel. */
+          --bg-panel: #1e1e1e;
+          --surface: #1e1e1e;
+          --surface-2: #292929;
+          --surface-hover: #333333;
+          --border: #303030;
+          --border-3: #575757;
+          --text: #e4e4e4;
+          --text-2: #c7c7c7;
+          --text-3: #c7c7c7;
+          --muted: #b2b2b2;
+          --ink-strong: #ffffff;
+          --ink-2: #c7c7c7;
+          --accent: #0075c2;
+          --accent-hover: #006eaf;
+          --accent-text: #e4e4e4;
+          --market-value-up: #00a8ff;
+          --market-value-down: #f06464;
+          --market-direction-up: var(--market-value-up);
+          --market-direction-down: var(--market-value-down);
+          --cc-market-glow-up: rgba(0, 168, 255, 0.12);
+          --cc-market-glow-down: rgba(240, 100, 100, 0.10);
+        }
+        .market-watch-type .rtx-market-tick-chart {
+          --rtx-tick-chart-bid: #0078d4;
+          --rtx-tick-chart-ask: #f06464;
+          --rtx-tick-chart-plot: #ffffff;
+          --rtx-tick-chart-grid: rgba(15, 23, 42, 0.08);
+          --rtx-tick-chart-frame: #334155;
+          --rtx-tick-chart-separator: #94a3b8;
+          --rtx-tick-chart-text: #0f172a;
+          --rtx-tick-chart-tag-text: #ffffff;
+          display: flex;
+          min-width: 0;
+          min-height: 0;
+          flex: 1 1 auto;
+          flex-direction: column;
+          padding: 6px 2px 2px 6px;
+          overflow: hidden;
+          color: var(--rtx-tick-chart-text);
+          background: var(--surface);
+        }
+        .dark .market-watch-type .rtx-market-tick-chart {
+          --rtx-tick-chart-bid: #1d7dfa;
+          --rtx-tick-chart-ask: #ff5858;
+          --rtx-tick-chart-plot: #14161b;
+          --rtx-tick-chart-grid: rgba(255, 255, 255, 0.05);
+          --rtx-tick-chart-frame: #d4d4d8;
+          --rtx-tick-chart-separator: #606068;
+          --rtx-tick-chart-text: #e4e4e4;
+          --rtx-tick-chart-tag-text: #111318;
+          background: var(--surface);
+        }
+        .market-watch-type .rtx-market-tick-chart__canvas {
+          position: relative;
+          min-width: 0;
+          min-height: 120px;
+          flex: 1 1 auto;
+          overflow: hidden;
+        }
+        .market-watch-type .rtx-market-tick-chart__canvas > svg {
+          position: absolute;
+          inset: 0;
+          display: block;
+          font-variant-numeric: tabular-nums;
+        }
+        .market-watch-type .rtx-market-tick-chart__plot {
+          fill: var(--rtx-tick-chart-plot);
+        }
+        .market-watch-type .rtx-market-tick-chart__grid line {
+          stroke: var(--rtx-tick-chart-grid);
+          stroke-dasharray: 3 3;
+          shape-rendering: crispEdges;
+        }
+        .market-watch-type .rtx-market-tick-chart__separators line {
+          stroke: var(--rtx-tick-chart-separator);
+          stroke-dasharray: 4 3;
+          shape-rendering: crispEdges;
+        }
+        .market-watch-type .rtx-market-tick-chart__line {
+          fill: none;
+          stroke-width: 1.15;
+          shape-rendering: crispEdges;
+        }
+        .market-watch-type .rtx-market-tick-chart__line--bid {
+          stroke: var(--rtx-tick-chart-bid);
+        }
+        .market-watch-type .rtx-market-tick-chart__line--ask {
+          stroke: var(--rtx-tick-chart-ask);
+        }
+        .market-watch-type .rtx-market-tick-chart__frame {
+          fill: none;
+          stroke: var(--rtx-tick-chart-frame);
+          shape-rendering: crispEdges;
+        }
+        .market-watch-type .rtx-market-tick-chart__axis line {
+          stroke: var(--rtx-tick-chart-frame);
+          shape-rendering: crispEdges;
+        }
+        .market-watch-type .rtx-market-tick-chart__axis text,
+        .market-watch-type .rtx-market-tick-chart__symbol {
+          fill: var(--rtx-tick-chart-text);
+        }
+        .market-watch-type .rtx-market-tick-chart__tag--bid rect {
+          fill: var(--rtx-tick-chart-bid);
+        }
+        .market-watch-type .rtx-market-tick-chart__tag--ask rect {
+          fill: var(--rtx-tick-chart-ask);
+        }
+        .market-watch-type .rtx-market-tick-chart__tag text {
+          fill: var(--rtx-tick-chart-tag-text);
+        }
+        .market-watch-type .rtx-market-tick-chart__empty {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+          gap: 5px;
+          padding: 18px;
+          color: var(--muted);
+          background: var(--rtx-tick-chart-plot);
+          border: 1px solid var(--rtx-tick-chart-frame);
+          text-align: center;
+        }
+        .market-watch-type .rtx-market-tick-chart__empty strong {
+          color: var(--rtx-tick-chart-text);
+        }
+        .dark .market-watch-type .market-watch-search-field {
+          background: var(--surface);
+          border-color: #3b3b3b;
         }
         .market-watch-type,
         .market-watch-type * {

@@ -6,6 +6,7 @@ import {
   createOnlineUsersQueryOptions,
   createOpenedOrdersQueryOptions,
   createOpenPositionsQueryOptions,
+  createTradingAccountsAnalyticsQueryOptions,
 } from './analyticsQueryOptions.js';
 
 const createClient = () => new QueryClient({
@@ -17,6 +18,55 @@ const deferred = () => {
   const promise = new Promise((done) => { resolve = done; });
   return { promise, resolve };
 };
+
+const tradingOptions = (overrides = {}) => createTradingAccountsAnalyticsQueryOptions({
+  scope: 'manager-A',
+  request: async () => [{ login: 1001 }],
+  loadSnapshot: () => [],
+  getSnapshotTimestamp: () => undefined,
+  ...overrides,
+});
+
+test('a cold Trading Analytics visit starts fetching immediately instead of caching a false empty report', async () => {
+  const client = createClient();
+  const pending = deferred();
+  let requests = 0;
+  const options = tradingOptions({ request: () => { requests += 1; return pending.promise; } });
+  const fetch = client.fetchQuery(options);
+  assert.equal(requests, 1);
+  assert.equal(client.getQueryData(options.queryKey), undefined);
+  assert.equal(client.getQueryState(options.queryKey).status, 'pending');
+  pending.resolve([{ login: 1001 }]);
+  assert.deepEqual(await fetch, [{ login: 1001 }]);
+  client.clear();
+});
+
+test('a completed empty Trading Analytics snapshot is reused as a valid report', async () => {
+  const client = createClient();
+  let requests = 0;
+  const options = tradingOptions({
+    getSnapshotTimestamp: () => Date.now(),
+    request: async () => { requests += 1; return []; },
+  });
+  assert.deepEqual(await client.fetchQuery(options), []);
+  assert.equal(requests, 0);
+  client.clear();
+});
+
+test('Trading Analytics prefetch and navigation share one request and isolate manager sessions', async () => {
+  const client = createClient();
+  const pending = deferred();
+  let requests = 0;
+  const options = tradingOptions({ request: () => { requests += 1; return pending.promise; } });
+  const prefetch = client.prefetchQuery(options);
+  const navigation = client.fetchQuery(tradingOptions({ request: options.queryFn }));
+  pending.resolve([{ login: 1001 }]);
+  await prefetch;
+  assert.deepEqual(await navigation, [{ login: 1001 }]);
+  assert.equal(requests, 1);
+  assert.equal(client.getQueryData(tradingOptions({ scope: 'manager-B' }).queryKey), undefined);
+  client.clear();
+});
 
 test('prefetched online users are reused without a duplicate request', async () => {
   const client = createClient();

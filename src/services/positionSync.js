@@ -32,7 +32,8 @@ positionSync.subscribe((event) => {
     || (event?.type === 'position' && (!event.snapshot || getPositionSnapshotRows(event.payload)?.length === 0));
   if (!needsReconciliation || reconciliation) return;
   const generation = sessionGeneration;
-  const request = fetchAllPositionsDataset({ force: true });
+  const force = event?.reason !== 'connected';
+  const request = fetchAllPositionsDataset({ force });
   reconciliation = request;
   request.then(() => {
     if (generation === sessionGeneration) positionSync.emit({ type: 'snapshot', reason: 'reconciled' });

@@ -1,14 +1,16 @@
 import { showResult } from '../store/resultDialogStore.js';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Loader, WifiOff, Search } from 'lucide-react';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
+import AccountActionDialog from './Popups/AccountActionDialog';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
 import { deleteManagerAccount } from '../services/managerAccountApi';
-import { peekAccountDetailsManyPage, preloadAccountPositions } from '../services/api';
+import { peekAccountDetailsManyPage, preloadAccountPositions, invalidateRealtimeCaches } from '../services/api';
+import { prefetchAccountDetails, prefetchAccountSummary, seedAccountDetails } from '../services/accountDetails';
 import {
   fetchSidebarAccountDetails,
   fetchAllSidebarAccounts,
@@ -53,6 +55,9 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const [contextMenu, setContextMenu] = useState(null);
   const [blockedUsers, setBlockedUsers] = useState({});
   const [restrictLogin, setRestrictLogin] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [selectedLogin, setSelectedLogin] = useState(null);
+  const prefetchTimerRef = useRef(null);
 
   const { canAct } = usePermissions();
   const { groups } = useGroupList({ enabled: isAuthenticated });
@@ -191,28 +196,34 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const handleContextMenu = (e, acc) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, account: acc });
+    warmAccount(acc);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setSelectedLogin(String(acc.login));
+    setContextMenu({ x: e.clientX ?? rect.left, y: e.clientY ?? rect.bottom, account: acc });
   };
 
-  const handleMenuAction = async (action, acc) => {
+  useEffect(() => () => clearTimeout(prefetchTimerRef.current), []);
+
+  const warmAccount = (acc) => {
+    clearTimeout(prefetchTimerRef.current);
+    const login = typeof acc === 'object' ? acc.login : acc;
+    if (typeof acc === 'object' && (hasBalance(acc) || acc.Name || acc.FirstName || acc.Email)) seedAccountDetails(login, acc);
+    void prefetchAccountDetails(login);
+    if (canViewPositions) void preloadAccountPositions(login);
+  };
+
+  const handleMenuIntent = (action, acc) => {
+    if (action === 'details') warmAccount(acc);
+    if (action === 'summary') void prefetchAccountSummary(typeof acc === 'object' ? acc.login : acc);
+  };
+
+  const handleMenuAction = (action, acc) => {
     const login = typeof acc === 'object' ? acc.login : acc;
 
     if (action === 'summary') {
-      try {
-        const params = new URLSearchParams();
-        params.append('login[]', String(login));
-        const res = await fetchManagerApi(`/AccountsSummary?${params.toString()}`, {
-          method: 'GET',
-          headers: { 'accept': 'application/json' }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setSummaryAccount({ login, data });
-      } catch (err) {
-        showResult.error("Error fetching summary: " + err.message);
-      }
+      setSummaryAccount({ login, row: typeof acc === 'object' ? acc : undefined });
     } else if (action === 'details') {
-      if (canViewPositions) void preloadAccountPositions(login);
+      warmAccount(acc);
       setSelectedAccountDetails(acc);
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
@@ -220,59 +231,33 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         return;
       }
       setRestrictLogin(login);
-    } else if (action === 'block') {
+    } else if (['block', 'unblock', 'delete'].includes(action)) {
       if (!canManageAccounts) {
-        showResult.error('Your role does not have permission to block accounts.');
+        showResult.error('Your role does not have permission to manage accounts.');
         return;
       }
-      try {
-        const params = new URLSearchParams({ login: String(login) });
-        const res = await fetchManagerApi(`/UserArchive?${params.toString()}`, {
-          method: 'POST',
-          headers: { 'accept': 'application/json', 'Content-Type': 'application/json' },
-          body: '{}',
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await res.json();
-        setBlockedUsers(prev => ({ ...prev, [login]: true }));
-        showResult.success(`User ${login} blocked successfully.`);
-      } catch (err) {
-        showResult.error("Error blocking user: " + err.message);
-      }
-    } else if (action === 'unblock') {
-      if (!canManageAccounts) {
-        showResult.error('Your role does not have permission to unblock accounts.');
-        return;
-      }
-      try {
-        const params = new URLSearchParams({ login: String(login) });
-        const res = await fetchManagerApi(`/UserRestore?${params.toString()}`, {
-          method: 'POST',
-          headers: { 'accept': 'application/json', 'Content-Type': 'application/json' },
-          body: '{}',
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await res.json();
-        setBlockedUsers(prev => ({ ...prev, [login]: false }));
-        showResult.success(`User ${login} unblocked successfully.`);
-      } catch (err) {
-        showResult.error("Error unblocking user: " + err.message);
-      }
-    } else if (action === 'delete') {
-      if (!canManageAccounts) {
-        showResult.error('Your role does not have permission to delete accounts.');
-        return;
-      }
-      if (!window.confirm(`Are you sure you want to permanently delete account ${login}?`)) return;
-      try {
-        await deleteManagerAccount(login);
-
-        showResult.success(`Account ${login} deleted successfully.`);
-        handleRefresh();
-      } catch (err) {
-        showResult.error("Error deleting account: " + err.message);
-      }
+      setPendingAction({ action, account: acc });
     }
+  };
+
+  const performAccountAction = async (action, acc) => {
+    if (!canManageAccounts) throw new Error('Your role does not have permission to manage accounts.');
+    const login = typeof acc === 'object' ? acc.login : acc;
+    if (action === 'delete') {
+      await deleteManagerAccount(login);
+      invalidateRealtimeCaches('accounts');
+      showResult.success(`Account ${login} deleted successfully.`);
+      handleRefresh();
+      return;
+    }
+    const endpoint = action === 'block' ? 'UserArchive' : 'UserRestore';
+    const res = await fetchManagerApi(`/${endpoint}?${new URLSearchParams({ login: String(login) })}`, {
+      method: 'POST', headers: { accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const data = await res.json();
+    if (!res.ok || data?.success === false || data?.error) throw new Error(data?.message || data?.error?.message || data?.error || `Unable to ${action} the account.`);
+    setBlockedUsers(previous => ({ ...previous, [login]: action === 'block' }));
+    showResult.success(`Account ${login} ${action === 'block' ? 'blocked' : 'unblocked'} successfully.`);
   };
 
   return (
@@ -333,7 +318,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
           <table className="ui-grid accounts-sidebar-grid">
             <thead>
               <tr>
-                <th>login_id</th>
+                <th>Login</th>
               
                 <th style={{ textAlign: 'right' }}>Balance</th>
               </tr>
@@ -341,7 +326,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
             <tbody>
               {accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-6 text-xs" style={{ color: 'var(--muted)' }}>
+                  <td colSpan={2} className="text-center py-6 text-xs" style={{ color: 'var(--muted)' }}>
                     No accounts found
                   </td>
                 </tr>
@@ -354,11 +339,23 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
                   return (
                     <tr
                       key={login ?? idx}
+                      tabIndex={0}
+                      data-account-login={login}
+                      aria-selected={selectedLogin === String(login)}
+                      className={selectedLogin === String(login) ? 'is-selected' : ''}
+                      onClick={() => setSelectedLogin(String(login))}
+                      onPointerEnter={() => { clearTimeout(prefetchTimerRef.current); prefetchTimerRef.current = setTimeout(() => warmAccount(acc), 120); }}
+                      onPointerLeave={() => clearTimeout(prefetchTimerRef.current)}
+                      onFocus={() => warmAccount(acc)}
                       onPointerDown={(event) => {
                         if (event.pointerType === 'mouse' && event.button !== 0) return;
-                        if (canViewPositions) void preloadAccountPositions(login);
+                        warmAccount(acc);
                       }}
-                      onDoubleClick={() => setSelectedAccountDetails(acc)}
+                      onDoubleClick={() => handleMenuAction('details', acc)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') { event.preventDefault(); handleMenuAction('details', acc); }
+                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) handleContextMenu(event, acc);
+                      }}
                       onContextMenu={(e) => handleContextMenu(e, acc)}
                       style={{
                         cursor: 'pointer',
@@ -403,6 +400,8 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
 
+      {pendingAction && <AccountActionDialog {...pendingAction} onClose={() => setPendingAction(null)} onConfirm={performAccountAction} />}
+
       {contextMenu && (
         <SidebarContextMenu
           x={contextMenu.x}
@@ -410,6 +409,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
           account={contextMenu.account}
           onClose={() => setContextMenu(null)}
           onAction={handleMenuAction}
+          onIntent={handleMenuIntent}
           canManageAccounts={canManageAccounts}
           canManageRestrictions={canOpenRestrictions}
           isBlocked={blockedUsers[typeof contextMenu.account === 'object' ? contextMenu.account.login : contextMenu.account]}

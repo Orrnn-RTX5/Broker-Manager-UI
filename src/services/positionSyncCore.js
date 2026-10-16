@@ -22,7 +22,7 @@ export const requiresPositionReconciliation = (payload) => {
   if (event.type === 'state_changed') return true;
   if (['position_opened', 'position_closed', 'position_increased', 'position_decreased', 'position_reversed', 'position_modified'].includes(event.type)) return true;
   const rows = Array.isArray(event.data) ? event.data : [event.data];
-  return event.type === 'position_update' && rows.some(row => row?.update_kind === 'snapshot' || row?.status === 'closed');
+  return event.type === 'position_update' && rows.some(row => row?.status === 'closed');
 };
 
 export const getWsTicket = (payload) => {
@@ -177,13 +177,17 @@ export class PositionSyncClient {
       const isCurrentConnection = () => (
         this.running && connectionId === this.connectionId && this.socket === socket
       );
+      let openedAt = 0;
       socket.onopen = () => {
         if (!isCurrentConnection()) return;
-        this.reconnectAttempt = 0;
+        openedAt = Date.now();
         this.emit({ type: 'snapshot', reason: 'connected' });
       };
       socket.onmessage = (event) => {
         if (!isCurrentConnection()) return;
+        if (openedAt > 0 && Date.now() - openedAt >= 5_000) {
+          this.reconnectAttempt = 0;
+        }
         const payload = normalizePositionSyncPayload(parseMessage(event.data));
         if (!isPositionMutation(payload)) return;
         const snapshotRows = getPositionSnapshotRows(payload);

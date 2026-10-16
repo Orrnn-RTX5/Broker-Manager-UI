@@ -10,6 +10,7 @@ import { isRealAccount } from './dashboardMetrics';
 import {
   appendEquityObservation,
   buildActivitySeries,
+  buildSymbolActivity,
 } from './dashboardActivityData';
 import {
   createActivitySnapshot,
@@ -201,8 +202,22 @@ export default function useDashboardActivity(range, metricsData) {
     });
   }, [range, now, metricsAsOf, liveDeals, equityHistory, usingCached, cachedSnapshot]);
 
+  const symbolActivity = useMemo(() => canViewAccounts && liveDeals
+    ? buildSymbolActivity({
+      range,
+      now: Math.max(now, Number(metricsAsOf) || 0, liveDeals.asOf),
+      deals: liveDeals.deals,
+      realLogins: liveDeals.realLogins,
+    })
+    : null, [canViewAccounts, liveDeals, range, now, metricsAsOf]);
+
   return {
     series,
+    symbolActivity,
+    symbolsLoading: !resolved || (canViewAccounts && dealsQuery.isPending),
+    symbolsRefreshing: canViewAccounts && dealsQuery.isFetching,
+    symbolsPartial: Boolean(dealsQuery.data?.partial),
+    symbolsAsOf: symbolActivity ? liveDeals.asOf : null,
     isLoading: !resolved || (canViewAccounts && !usingCached &&
       (dealsQuery.isPending || dealsQuery.isFetching && !dealsQuery.data)),
     restricted: resolved && !canViewAccounts,

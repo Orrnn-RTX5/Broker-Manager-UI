@@ -85,7 +85,7 @@ const IBClientLinker = ({ ibLogin, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: 'transparent' }}>
       <div className="ui-card flex flex-col" style={{ width: 560, maxHeight: '88vh', boxShadow: 'var(--shadow-lg)' }}>
         <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
           <div className="flex items-center gap-2">

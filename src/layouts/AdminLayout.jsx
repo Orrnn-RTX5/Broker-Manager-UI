@@ -4,7 +4,6 @@ import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
 import MarginCallsSidebar from '../components/MarginCallsSidebar';
 import MarketData from '../components/Popups/MarketData';
-import WorkspaceTabs from '../components/shell/WorkspaceTabs';
 import StatusBar from '../components/shell/StatusBar';
 import OwnerConsole from '../features/owner/OwnerConsole';
 import TerminalDock from '../features/terminal/TerminalDock';
@@ -140,7 +139,10 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       }
     };
     const unsubscribe = subscribeToPositionSync((event) => {
-      if (!requiresPositionReconciliation(event?.payload) && event?.reason !== 'connected') return;
+      // PositionSync already reconciles its book when the socket opens. A
+      // connection is not a mutation: clearing all caches here restarts the
+      // active page and duplicates its startup requests.
+      if (!requiresPositionReconciliation(event?.payload)) return;
       if (refreshing) { dirty = true; return; }
       if (refreshTimer) return;
       refreshTimer = setTimeout(refresh, 50);
@@ -325,7 +327,6 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       <div className="cc-shell-workspace flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout key={workspaceRevision} panelContents={panelContents}>
           <div className="cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
-            <WorkspaceTabs />
             <div className="cc-route-viewport">
               {children}
             </div>

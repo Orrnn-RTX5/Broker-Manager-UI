@@ -73,12 +73,21 @@ export const preloadFrequentWorkspaceRoutes = () => Promise.allSettled(
   FREQUENT_WORKSPACE_ROUTE_KEYS.map((key) => workspaceRouteLoaders[key]())
 );
 
-export const preloadAllWorkspaceRoutes = () => Promise.allSettled(
-  Object.values(workspaceRouteLoaders).map((loader) => {
+export const preloadAllWorkspaceRoutes = async () => {
+  // Importing every page at once competes with the active view for parsing,
+  // network connections and memory, especially on the development server.
+  for (const loader of Object.values(workspaceRouteLoaders)) {
+    await new Promise((resolve) => {
+      if (typeof window !== 'undefined' && window.requestIdleCallback) {
+        window.requestIdleCallback(resolve, { timeout: 2000 });
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
     try {
-      return loader().catch(() => undefined);
+      await loader();
     } catch {
-      return Promise.resolve();
+      // An unavailable auxiliary route must not block the remaining warmup.
     }
-  })
-);
+  }
+};

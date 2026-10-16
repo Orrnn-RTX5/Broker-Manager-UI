@@ -2,8 +2,7 @@
 
 export const GroupFolderIcon = () => (
   <svg className="groups-folder-mark" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-    <path d="M1.4 4.1h4.1L6.7 5.5h7.9c.4 0 .7.3.7.7v6.6c0 .4-.3.7-.7.7H1.4c-.4 0-.7-.3-.7-.7V4.8c0-.4.3-.7.7-.7z" />
-    <path d="M1.6 7.2h12.8" />
+    <path d="M1.35 3.7h4.15l1.2 1.35h8c.4 0 .7.3.7.7v7.15c0 .4-.3.7-.7.7H1.35c-.4 0-.7-.3-.7-.7V4.4c0-.4.3-.7.7-.7z" />
   </svg>
 );
 

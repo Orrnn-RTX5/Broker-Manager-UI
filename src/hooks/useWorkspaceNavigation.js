@@ -1,7 +1,6 @@
-import { useCallback, useLayoutEffect, useMemo } from 'react';
+import { startTransition, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { preloadWorkspaceRoute } from '../utils/workspaceRouteModules';
 import { startAnalyticsNavigationTiming } from '../utils/analyticsPerformance.js';
 import { preloadWorkspaceDestination } from '../features/workspaceQueries.js';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
@@ -51,8 +50,10 @@ export const useWorkspaceNavigation = () => {
   return useMemo(() => Object.assign((path, options) => {
     if (!path) return;
     startAnalyticsNavigationTiming(path);
-    preloadWorkspaceRoute(path);
-    navigateTo(path, options);
+    // Clicks and keyboard navigation warm data as well as UI code. A transition
+    // keeps the current view painted while an auxiliary route module loads.
+    preload(path);
+    startTransition(() => navigateTo(path, options));
   }, { preload, prefetch: preload }), [preload]);
 };
 

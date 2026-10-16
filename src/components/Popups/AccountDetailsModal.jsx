@@ -22,6 +22,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
 import { normalizeResult } from '../../utils/resultMessage';
+import './AccountDetailsModal.css';
 import {
   canCloseAccountTrades,
   canMutateAccountTrades,
@@ -250,6 +251,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const showPositions = canViewPositions && positionsDeniedLogin !== String(loginId);
   const visibleTab = activeTab === 'History' && !showPositions ? 'Overview' : activeTab;
   const [focusedTicket, setFocusedTicket] = useState(targetTicket);
+  const windowRef = useRef(null);
+  useEffect(() => {
+    const dialog = windowRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement;
+    dialog.querySelector('.account-details-tab.is-active')?.focus({ preventScroll: true });
+    return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, []);
   const accountData = useAccountDetails(loginId);
   const [detailsLoading, setLoading] = useState(false);
   const [detailsError, setError] = useState(null);
@@ -640,7 +649,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         await loadAccountDetails(loginId, { force });
         if (active && requestId === detailsRequest) setError(null);
       } catch (err) {
-        if (active && requestId === detailsRequest && !silent) setError(err.message);
+        if (active && requestId === detailsRequest) setError(err.message);
       } finally {
         if (active && requestId === detailsRequest) setLoading(false);
       }
@@ -1016,12 +1025,26 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return d.toISOString().replace('T', ' ').slice(0, 19).replace(/-/g, '.');
   };
 
-  const titleText = `Account: ${loginId}, ${name}, ${currencyValue}, ${leverageValue}, ${modeVal}`;
+  const titleText = `Account ${loginId}${name ? ` · ${name}` : ''}`;
 
   return (
     <>
     <div className="account-details-backdrop" aria-hidden="true" />
     <div
+      ref={windowRef}
+      onKeyDown={event => {
+        if (pendingTradeClose || isDepositing || depositConfirmation || updateFeedback) return;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (ctxMenu.isOpen) setCtxMenu(previous => ({ ...previous, isOpen: false }));
+          else onClose();
+        }
+        if (event.key !== 'Tab') return;
+        const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]')].filter(control => control.getClientRects().length > 0);
+        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+        else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
+      }}
       style={{
         position: 'fixed',
         left: isMaximized ? 0 : position.x,
@@ -1030,7 +1053,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         height: isMaximized ? '100vh' : size.height,
         zIndex: 100000
       }}
-      className="account-details-window legacy-popup flex flex-col shadow-2xl rounded-xl font-sans select-none overflow-hidden"
+      className="account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden"
       data-maximized={isMaximized}
       role="dialog"
       aria-modal="true"
@@ -1061,7 +1084,16 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
         <>
           {/* Tab Bar */}
-          <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections">
+          <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections" onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const buttons = [...event.currentTarget.querySelectorAll('[role="tab"]')];
+            const index = buttons.indexOf(event.target.closest('[role="tab"]'));
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+            const tabs = TABS.filter(tab => showPositions || tab !== 'History');
+            setActiveTab(tabs[next]);
+            buttons[next]?.focus({ preventScroll: true });
+          }}>
             {TABS.filter(tab => showPositions || tab !== 'History').map(tab => (
               <button
                 type="button"
@@ -1357,7 +1389,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             ) : activeTab === 'Personal' ? (
               <div className="account-personal-tab">
                 <header className="account-personal-intro">
-                  <div><h2>Personal details</h2><p>Identity, contact information and account preferences.</p></div>
+                  <div><h2>Personal details</h2></div>
                   <span className="account-personal-account-ref">#{loginId}</span>
                 </header>
                 {[
@@ -1375,9 +1407,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     ['Registered', 'Registered', '', 'registered'],
                     ['LeadCampaign', 'Lead campaign'], ['LeadSource', 'Lead source'], ['Comment', 'Comment'],
                   ] },
-                ].map(({ title, description, fields }) => (
+                ].map(({ title, fields }) => (
                   <section className="account-personal-section" key={title}>
-                    <div className="account-personal-section-header"><h3>{title}</h3><p>{description}</p></div>
+                    <div className="account-personal-section-header"><h3>{title}</h3></div>
                     <div className="account-personal-grid">
                       {fields.map(([key, label, fallback = '', kind]) => (
                         <label className={'account-personal-field' + (kind === 'wide' ? ' account-personal-span-full' : '')} key={key}>
@@ -1405,7 +1437,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 <div className="account-section-heading">
                   <div>
                     <h2>Trading configuration</h2>
-                    <p>Review the account profile and update supported trading settings.</p>
                   </div>
                 </div>
 
@@ -1446,10 +1477,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                   </div>
                 </section>
 
-                <div className="account-settings-note">
-                  <ShieldCheck size={15} />
-                  <span>Changes are validated by the manager server. Account access and password controls are available in the Security tab.</span>
-                </div>
               </div>
             ) : activeTab === 'Limits' ? (
               <div className="account-settings-tab account-limits-tab custom-scrollbar">
@@ -1542,10 +1569,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             ) : activeTab === 'Security' ? (
               <div className="account-security-tab">
                 <div className="account-section-heading">
-                  <div className="account-section-heading-icon"><ShieldCheck size={16} /></div>
                   <div>
                     <h2>Password management</h2>
-                    <p>Verify or rotate account credentials without exposing them in request URLs.</p>
+                    <p>Verify or change account passwords.</p>
                   </div>
                 </div>
 
@@ -1590,8 +1616,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 </div>
 
                 <div className="account-settings-note">
-                  <ShieldCheck size={15} />
-                  <span>Passwords stay masked by default and are sent in an authenticated POST body. Generated values are not saved until you choose Change.</span>
+                  <span>Generated passwords are applied only when you select Change.</span>
                 </div>
               </div>
             ) : activeTab === 'Balance' ? (
@@ -1678,10 +1703,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           {visibleTab !== 'Overview' && (
           <div className="account-details-footer flex items-center justify-end flex-shrink-0">
             <div className="flex gap-2">
-              <button type={activeTab === 'Trade' ? 'submit' : 'button'} form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined} onClick={activeTab === 'Trade' ? undefined : handleUpdate} disabled={activeTab === 'Trade' ? !tradeUpdateState.canUpdate : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={activeTab === 'Trade' ? 'Select an existing position and change its volume, SL or TP to update' : !canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
+              {['Personal', 'Account', 'Limits', 'Trade'].includes(visibleTab) && <button type={activeTab === 'Trade' ? 'submit' : 'button'} form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined} onClick={activeTab === 'Trade' ? undefined : handleUpdate} disabled={activeTab === 'Trade' ? !tradeUpdateState.canUpdate : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={activeTab === 'Trade' ? 'Select an existing position and change its volume, SL or TP to update' : !canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="account-details-update px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
                 {(activeTab === 'Trade' ? tradeUpdateState.busy : updateLoading) ? 'Wait...' : 'Update'}
-              </button>
-              <button type="button" onClick={onClose} className="px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
+              </button>}
+              <button type="button" onClick={onClose} className="account-details-close px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
                 Close
               </button>
             </div>

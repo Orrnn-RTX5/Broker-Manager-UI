@@ -1,9 +1,6 @@
-import { createElement, useState } from 'react';
-import {
-  BarChart3, CalendarDays, ChevronRight, CircleGauge, DollarSign,
-  MoreVertical, Server, ShieldCheck, TrendingDown,
-  TrendingUp, UserRoundCheck, UsersRound, WalletCards,
-} from 'lucide-react';
+import { useState } from 'react';
+import { BarChart3, ChevronRight } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Area, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -13,12 +10,13 @@ import useDashboardActivity from './useDashboardActivity';
 import useDashboardOperationalMetrics from './useDashboardOperationalMetrics';
 import useManagerConnection from './useManagerConnection';
 import { ACTIVITY_RANGES } from './dashboardActivityData';
-import { OPERATIONAL_DASHBOARD_PLACEHOLDERS as preview } from './operationalDashboardAdapter';
-import RegionalActivityMap from './RegionalActivityMap';
 import AllSymbolsDialog from './AllSymbolsDialog';
+import { getSidebarAccountsQueryOptions } from '../../services/sidebarAccounts';
+import { invalidateGlobalPositionsCache } from '../../services/api';
 import { useDockingContext } from '../../components/docking/DockingContext';
 import usePermissions from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
+import './Dashboard.css';
 
 const integer = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
 const money = (value, compact = false, currency = 'USD') => new Intl.NumberFormat('en-US', {
@@ -49,13 +47,11 @@ const chartTooltipTime = (value, range) => new Intl.DateTimeFormat('en-US',
   range === '30D' ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' }
 ).format(new Date(Number(value)));
 
-const MetricCard = ({ icon: Icon, label, value, change, detail, tone = 'success', placeholder, onClick }) => (
-  <article className="cc-metric-card" role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? `Show ${label.toLowerCase()}` : undefined} onClick={onClick} onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); } } : undefined} data-placeholder={placeholder || undefined} title={placeholder ? 'This aggregate is supplied by the isolated UI adapter until its API is connected.' : undefined}>
-    <span className={`cc-metric-icon is-${tone}`}>{createElement(Icon, { size: 17, strokeWidth: 1.7 })}</span>
+const MetricCard = ({ label, value, tone = 'neutral', onClick }) => (
+  <article className="cc-metric-card" role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? `Show ${label.toLowerCase()}` : undefined} onClick={onClick} onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); } } : undefined}>
     <div className="cc-metric-main">
-      <small>{label}</small>
-      <strong className="tabular">{value}</strong>
-      <span className={`is-${tone}`}>{change ? (tone === 'danger' ? <TrendingDown size={11} /> : <TrendingUp size={11} />) : null}{change || detail}</span>
+      <small title={label}>{label}</small>
+      <strong className={`cc-metric-value tabular is-${tone}`}>{value}</strong>
     </div>
   </article>
 );
@@ -83,6 +79,22 @@ const PanelTitle = ({ children, meta }) => (
 
 export default function Dashboard() {
   const [showAllSymbols, setShowAllSymbols] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const refreshDashboard = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      invalidateGlobalPositionsCache();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: getSidebarAccountsQueryOptions('').queryKey }),
+        queryClient.invalidateQueries({ queryKey: ['groups', 'dashboard-complete'] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const { updatePanel } = useDockingContext();
   const showAccounts = (accountType) => {
     updatePanel('owner_console', { visible: false, maximized: false });
@@ -107,23 +119,9 @@ export default function Dashboard() {
     : margin.accountsWithMargin !== null
       ? integer(margin.accountsWithMargin)
       : operational.loading ? 'Loading…' : '—';
-  const marginDetail = hasMarginAmount
-    ? `${integer(margin.accountsWithMargin)} real accounts using margin`
-    : margin.accountsWithMargin !== null
-      ? margin.accountsWithMargin === 0
-        ? 'No real accounts using margin'
-        : 'Real accounts using margin · currencies differ or are unavailable'
-      : operational.restricted ? 'Account access required'
-        : operational.loading ? 'Loading account margin data' : 'Complete margin data unavailable';
   const alertValue = margin.marginAlertCount === null
     ? operational.loading ? 'Loading…' : '—'
     : integer(margin.marginAlertCount);
-  const alertDetail = margin.marginAlertCount === null
-    ? operational.restricted ? 'Account access required'
-      : operational.loading ? 'Loading margin alerts' : 'Margin levels or thresholds unavailable'
-    : margin.marginAlertCount === 0
-      ? 'No accounts at margin-call level'
-      : `${integer(margin.stopOutCount)} stop-out · ${integer(margin.marginCallCount)} margin call`;
   const connectionValue = connection.state === 'connected' ? 'Connected'
     : connection.state === 'disconnected' ? 'Disconnected'
       : connection.isLoading ? 'Checking…' : '—';
@@ -179,33 +177,46 @@ export default function Dashboard() {
     ? `One equity reading as of ${new Date(activity.firstEquityAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}; the area trend forms as more readings arrive.`
     : `Equity readings recorded in this session since ${new Date(activity.firstEquityAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}.`
     : 'Equity history begins when the first live broker reading arrives.';
-
+  const symbolActivity = activity.symbolActivity;
+  const symbolRows = symbolActivity?.rows.slice(0, 5) || [];
+  const symbolStatus = activity.symbolsRefreshing ? 'Updating…'
+    : symbolActivity && activity.error ? 'Last snapshot'
+      : symbolActivity ? 'Real accounts' : 'Unavailable';
+  const emptySymbolsTitle = activity.restricted ? 'Symbol activity unavailable for this role'
+    : activity.symbolsLoading ? 'Loading symbol activity…'
+      : activity.symbolsPartial ? 'Complete trade history unavailable'
+        : activity.error ? 'Symbol activity unavailable' : 'No trades in this period';
+  const emptySymbolsDetail = activity.restricted ? 'Account viewing access is required.'
+    : activity.symbolsLoading ? 'Fetching recent executed trades.'
+      : activity.symbolsPartial ? 'Rankings appear when the complete trade history is available.'
+        : activity.error ? 'Refresh the dashboard to try again.' : 'Choose a longer time range to see earlier activity.';
   return (
     <main className="cc-dashboard" data-dashboard-mode={DASHBOARD_PLACEHOLDER_MODE ? 'placeholder' : 'live'}>
       <header className="cc-dashboard-header">
-        <div><h1>Dashboard</h1><p>Live brokerage operations, exposure, account activity and infrastructure health.</p></div>
+        <h1>Dashboard</h1>
         <div className="cc-dashboard-controls">
-          <span className="cc-dashboard-period"><CalendarDays size={13} />Latest snapshot</span>
-          <button type="button" aria-label="More dashboard actions" title="More dashboard actions"><MoreVertical size={15} /></button>
+          <button type="button" aria-label="Refresh dashboard" title="Refresh dashboard" disabled={refreshing} onClick={refreshDashboard}>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
       </header>
 
       <section className="cc-metric-grid" aria-label="Brokerage key metrics">
-        <MetricCard icon={UserRoundCheck} label="REAL ACCOUNTS" onClick={() => showAccounts('real')} value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} change="+12 today" />
-        <MetricCard icon={UsersRound} label="DEMO ACCOUNTS" onClick={() => showAccounts('demo')} value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} change="+86 today" tone="neutral" />
-        <MetricCard icon={DollarSign} label="NET EQUITY" value={metrics.equity == null ? (isLoading ? 'Loading…' : '—') : money(metrics.equity, true)} detail="Real account total" />
-        {canViewPositions && <MetricCard icon={BarChart3} label="OPEN POSITIONS" value={metrics.openPositions == null ? (isLoading ? 'Loading…' : '—') : integer(metrics.openPositions)} detail="Currently open" tone="neutral" />}
-        <MetricCard icon={WalletCards} label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? (isLoading ? 'Loading…' : '—') : money(metrics.deposits24h, false, metrics.reportCurrency)} detail={metrics.deposits24h == null ? (isLoading ? 'Loading latest report' : 'Daily report unavailable') : metrics.reportDate || 'Latest report'} tone={metrics.deposits24h == null ? 'neutral' : 'success'} />
-        <MetricCard icon={ShieldCheck} label={hasMarginAmount ? 'USED MARGIN' : 'ACCOUNTS USING MARGIN'} value={marginValue} detail={marginDetail} tone={margin.marginAlertCount > 0 ? 'danger' : 'neutral'} />
-        <MetricCard icon={Server} label="MANAGER CONNECTION" value={connectionValue} detail={connection.isLoading ? 'Checking current manager session' : connection.state === 'unavailable' ? 'Connection status unavailable' : 'Current manager session'} tone={connection.state === 'connected' ? 'success' : connection.state === 'disconnected' ? 'danger' : 'neutral'} />
-        <MetricCard icon={CircleGauge} label="MARGIN ALERTS" value={alertValue} detail={alertDetail} tone={margin.marginAlertCount === null ? 'neutral' : margin.marginAlertCount > 0 ? 'danger' : 'success'} />
+        <MetricCard label="REAL ACCOUNTS" onClick={() => showAccounts('real')} value={realAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(realAccounts)} />
+        <MetricCard label="DEMO ACCOUNTS" onClick={() => showAccounts('demo')} value={demoAccounts == null ? (isLoading ? 'Loading…' : '—') : integer(demoAccounts)} />
+        <MetricCard label="NET EQUITY" value={metrics.equity == null ? (isLoading ? 'Loading…' : '—') : money(metrics.equity, true)} />
+        {canViewPositions && <MetricCard label="OPEN POSITIONS" value={metrics.openPositions == null ? (isLoading ? 'Loading…' : '—') : integer(metrics.openPositions)} />}
+        <MetricCard label="DEPOSIT FLOW (REPORT DAY)" value={metrics.deposits24h == null ? (isLoading ? 'Loading…' : '—') : money(metrics.deposits24h, false, metrics.reportCurrency)} />
+        <MetricCard label={hasMarginAmount ? 'USED MARGIN' : 'ACCOUNTS USING MARGIN'} value={marginValue} tone={margin.marginAlertCount > 0 ? 'danger' : 'neutral'} />
+        <MetricCard label="MANAGER CONNECTION" value={connectionValue} tone={connection.state === 'disconnected' ? 'danger' : 'neutral'} />
+        <MetricCard label="MARGIN ALERTS" value={alertValue} tone={margin.marginAlertCount > 0 ? 'danger' : 'neutral'} />
       </section>
 
       <section className="cc-panel cc-activity-panel">
         <div className="cc-chart-toolbar">
           <div><PanelTitle>Trading Activity & Account Equity</PanelTitle><div className="cc-chart-legend"><span><i className="is-volume" />Trading Volume (Lots)</span><span><i className="is-equity" />Account Equity (USD)</span></div></div>
           <div className="cc-chart-actions">
-            <span className={`cc-chart-data-state ${chartStateTone}`} role="status" aria-live="polite">{chartState}</span>
+            {chartState !== 'Live broker data' && <span className={`cc-chart-data-state ${chartStateTone}`} role="status" aria-live="polite">{chartState}</span>}
             <div>{['1H','6H','24H','7D','30D'].map((item) => <button key={item} type="button" aria-pressed={range === item} title={`${intervalLabels[item]} intervals`} className={range === item ? 'is-active' : ''} onClick={() => setRange(item)}>{item}</button>)}</div>
             <span className="cc-chart-currency" title="Reporting currency">USD</span>
           </div>
@@ -255,24 +266,29 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="cc-lower-grid">
-        <article className="cc-panel cc-data-panel">
-          <PanelTitle meta="UI adapter">Top Traded Symbols</PanelTitle>
-          <table><thead><tr><th>Symbol</th><th>Volume (Lots)</th><th>Trades</th><th>Contribution</th></tr></thead><tbody>{preview.symbols.map((row) => <tr key={row[0]}>{row.map((cell, i) => <td key={cell} className={i ? 'tabular' : ''}>{cell}</td>)}</tr>)}</tbody></table>
-          <button type="button" className="cc-panel-link" onClick={() => setShowAllSymbols(true)}>View All Symbols <ChevronRight size={12} /></button>
-        </article>
-
-        <article className="cc-panel cc-region-panel">
-          <PanelTitle meta="Account share · Volume share">Regional Activity</PanelTitle>
-          <RegionalActivityMap />
-          <div className="cc-region-columns"><span>Region</span><b>Accounts</b><em>Volume</em></div>
-          <div className="cc-region-list">{preview.regions.map(([name, accounts, volume]) => <div key={name}><span><i />{name}</span><b>{accounts}</b><em>{volume}</em></div>)}</div>
-        </article>
-
-        <article className="cc-panel cc-data-panel cc-approvals">
-          <PanelTitle meta={`${preview.approvalCount} pending`}>Approval Queue</PanelTitle>
-          <table><thead><tr><th>Type</th><th>Details</th><th>Time</th><th>Status</th></tr></thead><tbody>{preview.approvals.map((row) => <tr key={`${row[0]}-${row[2]}`}>{row.map((cell, i) => <td key={cell} className={i === 3 ? `is-status is-${cell.toLowerCase()}` : ''}>{cell}</td>)}</tr>)}</tbody></table>
-        </article>
+      <section className="cc-panel cc-data-panel cc-symbol-activity" aria-labelledby="dashboard-symbols-title">
+        <header className="cc-symbol-activity-heading">
+          <div><h2 id="dashboard-symbols-title">Top Traded Symbols</h2><p>Executed volume in the selected period.</p></div>
+          <span className="cc-symbol-activity-status" role="status">{symbolStatus}<i aria-hidden="true" />{range}</span>
+        </header>
+        {symbolRows.length ? (
+          <div className="cc-symbol-activity-table">
+            <table aria-label="Top traded symbols"><thead><tr><th>Symbol</th><th>Volume (Lots)</th><th>Executed deals</th><th>Volume share</th></tr></thead>
+              <tbody>{symbolRows.map((row) => <tr key={row.symbol}>
+                <td>{row.symbol}</td><td className="tabular">{lots(row.volume)}</td><td className="tabular">{integer(row.deals)}</td>
+                <td><span className="cc-symbol-share"><span className="cc-symbol-share-track" aria-hidden="true"><i style={{ width: `${row.share}%` }} /></span><span className="tabular">{row.share.toFixed(1)}%</span></span></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="cc-symbol-activity-empty" role="status"><BarChart3 size={20} aria-hidden="true" /><strong>{emptySymbolsTitle}</strong><p>{emptySymbolsDetail}</p></div>
+        )}
+        <footer className="cc-symbol-activity-footer">
+          <span>{symbolActivity
+            ? `${integer(symbolActivity.totalDeals)} executed deals · ${lots(symbolActivity.totalVolume)} lots${symbolActivity.rows.length > 5 ? ` · Top 5 of ${integer(symbolActivity.rows.length)} symbols` : ''}${activity.error ? ' · Last successful snapshot' : ''}`
+            : 'Trade totals appear when available.'}</span>
+          <button type="button" onClick={() => setShowAllSymbols(true)}>Browse symbols <ChevronRight size={12} aria-hidden="true" /></button>
+        </footer>
       </section>
       {showAllSymbols && <AllSymbolsDialog onClose={() => setShowAllSymbols(false)} />}
     </main>

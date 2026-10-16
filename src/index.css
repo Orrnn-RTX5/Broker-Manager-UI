@@ -77,9 +77,9 @@
   --ok-text: #1d4ed8;
   --ok-border: #bfdbfe;
 
-  --danger: #f04438;
+  --danger: #f06464;
   --danger-soft: #fef3f2;
-  --danger-text: #b42318;
+  --danger-text: #f06464;
   --danger-border: #fecdca;
 
   --warn: #f79009;
@@ -101,7 +101,7 @@
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
   --shadow-md: 0 2px 4px -2px rgba(16, 24, 40, 0.06), 0 4px 8px -2px rgba(16, 24, 40, 0.10);
   --shadow-lg: 0 4px 6px -2px rgba(16, 24, 40, 0.03), 0 12px 16px -4px rgba(16, 24, 40, 0.08);
-  --shadow-xl: 0 8px 8px -4px rgba(16, 24, 40, 0.03), 0 20px 24px -4px rgba(16, 24, 40, 0.08);
+  --shadow-xl: 0 8px 8px -4px rgba(16, 24, 40, 0.03), 0 20px 24px -4px rgba(16, 24, 40, 0.10);
   --shadow-2xl: 0 24px 48px -12px rgba(16, 24, 40, 0.18);
 
   /* Radius scale */
@@ -150,13 +150,13 @@
   --accent-soft-2: #292929;
   --accent-border: #007ecf;
   --accent-text: var(--ink-strong);
-  --ok: #8fbd9d;
+  --ok: #00a8ff;
   --ok-soft: #252e28;
-  --ok-text: #a4cfb0;
+  --ok-text: #00a8ff;
   --ok-border: #3e5946;
-  --danger: #ed968a;
+  --danger: #f06464;
   --danger-soft: #351e1a;
-  --danger-text: #f0a296;
+  --danger-text: #f06464;
   --danger-border: #744238;
   --warn: #fec84b;
   --warn-soft: rgba(254, 200, 75, 0.14);
@@ -773,8 +773,9 @@ body :where(
   align-items: flex-start;
   justify-content: center;
   padding: min(14vh, 128px) 16px 16px;
-  background: rgba(16, 24, 40, 0.4);
-  backdrop-filter: blur(5px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .manager-command-palette {
@@ -1221,7 +1222,7 @@ h4 {
 
 .desktop-app-download-error {
   margin: 0;
-  color: #b42318;
+  color: #f06464;
   font-size: 11px;
   line-height: 1.35;
   text-align: center;
@@ -2373,7 +2374,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
    BUY/SELL column so status and side labels read like a trading terminal. */
 :root {
   --status-ok-color: #107c10;
-  --status-danger-color: #c42b1c;
+  --status-danger-color: #f06464;
   --status-warn-color: #b54708;
   --status-info-color: #026aa2;
   --status-neutral-color: var(--text-3);
@@ -2381,7 +2382,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 .dark {
   --status-ok-color: rgb(88, 174, 104);
-  --status-danger-color: rgb(235, 112, 112);
+  --status-danger-color: #f06464;
   --status-warn-color: rgb(226, 176, 84);
   --status-info-color: rgb(110, 168, 230);
   --status-neutral-color: var(--text-3);
@@ -2933,21 +2934,26 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   .trading-analytics-country-summary { grid-template-columns:1fr; }
 }
 
-/* Online Users analytics: 2x2 distribution panels above the live grid. */
+/* Online Users analytics: full-width country map + 2-column Type & Group donuts. */
 #root .online-users-page { container-type:inline-size; }
-.online-users-analytics-grid { display:grid; flex:0 0 auto; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(250px,auto); gap:8px; }
-.online-users-analytics-grid .trading-analytics-card { min-height:250px; }
+.online-users-analytics-grid { display:grid; flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:minmax(185px,1fr) minmax(185px,1fr); gap:8px; }
+.online-users-analytics-grid .trading-analytics-card { min-height:185px; }
+.online-users-analytics-grid .online-users-country-card { grid-column:1 / -1; min-height:185px; }
 .online-users-analytics-grid .trading-analytics-empty { height:auto; min-height:0; flex:1; }
 .online-users-chart-body { position:relative; display:flex; min-height:0; flex:1; }
+.online-users-country-layout { display:flex; min-height:0; flex:1; align-items:stretch; gap:16px; padding:4px 14px; }
+.online-users-country-map-canvas { flex:1.35; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.online-users-country-map-canvas svg { display:block; width:100%; height:100%; max-height:175px; }
+.online-users-country-breakdown { flex:0.85; min-width:200px; max-width:340px; display:flex; flex-direction:column; justify-content:center; gap:4px; padding-left:14px; border-left:1px solid var(--border-2); overflow-y:auto; }
 .online-users-donut { position:relative; min-height:0; flex:1; }
 .online-users-donut svg { display:block; }
 .online-users-donut-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
 .online-users-donut-center strong { color:var(--text); font-size: 11px; font-weight: 400; }
-.online-users-build-chart { position:relative; min-height:0; flex:1; cursor:crosshair; padding:0 6px 4px 0; }
-.online-users-build-chart svg { display:block; }
 
-@container (max-width: 900px) {
-  .online-users-analytics-grid { grid-template-columns:minmax(0,1fr); }
+@container (max-width: 620px) {
+  .online-users-analytics-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:auto; }
+  .online-users-country-layout { flex-direction:column; }
+  .online-users-country-breakdown { max-width:none; padding-left:0; padding-top:8px; border-left:0; border-top:1px solid var(--border-2); }
 }
 
 /* Symbol Browser: enforce the 12px/10px scale inside every category card. */
@@ -3212,14 +3218,20 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
    their trading semantics. Action colors mirror the Operations Terminal. */
 #root .open-positions-page .open-positions-grid {
   --open-position-value-color: var(--text);
+  --open-position-action-color: var(--text);
   --open-position-buy-color: #107c10;
-  --open-position-sell-color: #c42b1c;
+  --open-position-sell-color: #f06464;
+  --open-position-profit-color: var(--accent);
+  --open-position-loss-color: var(--open-position-sell-color);
 }
 
 .dark #root .open-positions-page .open-positions-grid {
   --open-position-value-color: var(--ink-1);
+  --open-position-action-color: #ffffff;
   --open-position-buy-color: rgb(88, 174, 104);
-  --open-position-sell-color: rgb(235, 112, 112);
+  --open-position-sell-color: #f06464;
+  --open-position-profit-color: #00a8ff;
+  --open-position-loss-color: var(--open-position-sell-color);
 }
 
 #root .open-positions-page .open-position-value {
@@ -3232,14 +3244,15 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--open-position-action-color);
 }
 
 #root .open-positions-page .open-position-action.is-buy {
-  color: var(--open-position-buy-color);
+  color: var(--open-position-action-color);
 }
 
 #root .open-positions-page .open-position-action.is-sell {
-  color: var(--open-position-sell-color);
+  color: var(--open-position-action-color);
 }
 
 #root .open-positions-page .ui-grid thead th {
@@ -3383,14 +3396,64 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 /* Orders follows the compact Clients layout without a selection column. */
-#root .orders-page .orders-filters > * {
-  width: 100% !important;
+#root .orders-page {
   min-width: 0;
+  min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+#root .orders-header,
+#root .orders-heading,
+#root .orders-filters {
+  min-width: 0;
+}
+
+#root .orders-header,
+#root .orders-search {
+  flex: 0 0 auto;
+}
+
+#root .orders-header {
+  padding-bottom: 0 !important;
+}
+
+#root .orders-search .ui-input,
+#root .orders-filters .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+
+#root .orders-page :is(h1, h2, h3, .orders-title) {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 1.3 !important;
 }
 
 #root .orders-page :is(.orders-subtitle, .orders-search .ui-input, .orders-search .ui-input::placeholder, .orders-filters button, .orders-filters span) {
   font-size: 11px !important;
   line-height: 1.35 !important;
+}
+
+.dark #root .orders-page :is(
+  .orders-title,
+  .orders-search .ui-input,
+  .orders-search .ui-input::placeholder,
+  .orders-filters button,
+  .orders-filters span,
+  .orders-grid .ui-grid thead th,
+  .orders-grid .ui-grid tbody td,
+  .orders-grid-footer,
+  .orders-grid-footer span,
+  .orders-grid-footer button
+) {
+  color: #ffffff !important;
+  opacity: 1 !important;
 }
 
 #root .orders-page .orders-grid .ui-grid thead th {
@@ -3399,30 +3462,24 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   font-weight: 400 !important;
 }
 
-/* Orders Type column: trading semantics carried by text color only, no badge.
-   Colors mirror the Open Positions Action column. */
-#root .orders-page .orders-grid {
-  --order-type-buy-color: #107c10;
-  --order-type-sell-color: #c42b1c;
+#root .orders-grid .grid-scroll-area {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
 }
 
-.dark #root .orders-page .orders-grid {
-  --order-type-buy-color: rgb(88, 174, 104);
-  --order-type-sell-color: rgb(235, 112, 112);
+#root .orders-grid .orders-table {
+  width: 100%;
+  min-width: 1120px;
+  table-layout: fixed;
 }
 
-#root .orders-page .orders-type-text {
-  color: var(--text-2);
-  font-weight: 400;
-  text-transform: uppercase;
-}
-
-#root .orders-page .orders-type-text.is-buy {
-  color: var(--order-type-buy-color);
-}
-
-#root .orders-page .orders-type-text.is-sell {
-  color: var(--order-type-sell-color);
+#root .orders-grid .orders-table :is(th, td):not(.orders-grid-empty) {
+  padding: 9px 7px;
+  text-align: left !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #root .orders-page .orders-grid-footer {
@@ -3699,11 +3756,11 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 }
 
 #root .position-history-search-form {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 /* The login field keeps a clear focus border without the oversized blue glow. */
-#root .position-history-search-panel .ui-input:is(:focus, :focus-visible) {
+#root :is(.position-history-search-panel, .position-history-search-form) .ui-input:is(:focus, :focus-visible) {
   outline: none !important;
   border-color: var(--accent) !important;
   box-shadow: none !important;
@@ -3762,7 +3819,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   }
 
   #root .position-history-search-form {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     flex-direction: row !important;
     align-items: center !important;
     width: auto !important;
@@ -3916,6 +3973,20 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   scrollbar-gutter: auto;
 }
 
+#root .trading-accounts-grid .trading-accounts-table {
+  width: 100%;
+  min-width: 780px;
+  table-layout: fixed;
+}
+
+#root .trading-accounts-grid .trading-accounts-table :is(th, td):not(.trading-accounts-grid-empty) {
+  padding: 9px 10px;
+  text-align: left !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Keep the compact desktop header intact until the remaining workspace
    genuinely needs the controls to contract or stack. */
 @container (max-width: 560px) {
@@ -4013,6 +4084,8 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .opened-orders-page .opened-orders-search .ui-input::placeholder {
   font-size: 11px !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
 }
 
 @container (min-width: 581px) {
@@ -4167,8 +4240,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .ui-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(16, 24, 40, 0.45);
-  backdrop-filter: blur(4px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4235,8 +4309,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: color-mix(in srgb, var(--text) 48%, transparent);
-  backdrop-filter: blur(5px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .keyboard-shortcuts-modal {
@@ -4412,8 +4487,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
    same hierarchy, contrast, and focus states hold in both theme modes. */
 .new-account-modal-backdrop {
   padding: 16px;
-  background: color-mix(in srgb, var(--text) 48%, transparent);
-  backdrop-filter: blur(5px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .new-account-modal {
@@ -4819,9 +4895,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: color-mix(in srgb, var(--text) 34%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .account-details-window {
@@ -5090,9 +5166,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   --account-ui-base: 11px;
   --account-ui-heading: 11px;
   /* Action fills stay dark enough for white labels in both themes. */
-  --account-close-fill: #b42318;
-  --account-close-hover: #912018;
-  --account-close-active: #7a1b14;
+  --account-close-fill: #f06464;
+  --account-close-hover: #e05252;
+  --account-close-active: #c84242;
   container-name: account-details;
   container-type: inline-size;
   border-radius: var(--radius-xl) !important;
@@ -5703,9 +5779,9 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgb(0 0 0 / 44%);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .trade-close-confirmation-card {
   --trade-confirm-surface: #ffffff;
@@ -5887,8 +5963,6 @@ body#root#root *,
 .dark [class*="text-blue-500/"]:not(svg),
 .dark .exposure-eyebrow,
 .dark #root .manager-auth-shell :is(
-  .manager-link-button,
-  .manager-link-button:hover,
   .manager-preview-toolbar .is-active,
   .manager-preview-tabs .is-active,
   .manager-preview-nav-row.is-active,
@@ -5997,4 +6071,29 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) .cc-metric-card strong
 html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(input, textarea)::placeholder {
   color: var(--ink-placeholder) !important;
   opacity: 1;
+}
+#root .open-positions-page .open-positions-search .ui-input::placeholder,
+#root .opened-orders-page .opened-orders-search .ui-input::placeholder {
+  color: var(--text) !important;
+  opacity: 1;
+}
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .open-positions-page .open-positions-search .ui-input::placeholder,
+html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-page .opened-orders-search .ui-input::placeholder {
+  color: #ffffff !important;
+  opacity: 1;
+}
+#root :is(
+  .text-red-300,
+  .text-red-400,
+  .text-red-500,
+  .text-red-600,
+  .text-red-700,
+  .text-rose-400,
+  .text-rose-500,
+  [class~="dark:text-red-300"],
+  [class~="dark:text-red-400"],
+  [class~="text-[#ef4444]"],
+  [class~="text-[#dc2626]"]
+) {
+  color: #f06464 !important;
 }

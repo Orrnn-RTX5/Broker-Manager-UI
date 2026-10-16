@@ -205,6 +205,179 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', flushSymbolCache);
 }
 
+const MAX_SYMBOL_TICK_BUFFER = 500;
+const DEFAULT_SEEDED_TICK_COUNT = 140;
+const symbolTickBuffers = new Map();
+const symbolTickListeners = new Map();
+
+const notifySymbolTickListeners = (symbol, nextBuffer) => {
+  const listeners = symbolTickListeners.get(symbol);
+  if (!listeners || listeners.size === 0) return;
+  listeners.forEach((listener) => {
+    try {
+      listener(nextBuffer);
+    } catch {
+      // Listener errors must never interrupt feed processing.
+    }
+  });
+};
+
+export const subscribeSymbolTicks = (symbol, listener) => {
+  if (!symbol || typeof listener !== 'function') return () => {};
+  let set = symbolTickListeners.get(symbol);
+  if (!set) {
+    set = new Set();
+    symbolTickListeners.set(symbol, set);
+  }
+  set.add(listener);
+  return () => {
+    const currentSet = symbolTickListeners.get(symbol);
+    if (!currentSet) return;
+    currentSet.delete(listener);
+    if (currentSet.size === 0) symbolTickListeners.delete(symbol);
+  };
+};
+
+const inferSymbolDigits = (quote = {}, fallbackPrice = 0) => {
+  const explicit = Number(quote?.digits ?? quote?.Digits);
+  if (Number.isInteger(explicit) && explicit >= 0 && explicit <= 8) return explicit;
+  const rawText = String(quote?.bid ?? quote?.ask ?? fallbackPrice ?? '');
+  const numeric = Number(rawText);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 2;
+  const trimmed = numeric.toFixed(5).replace(/0+$/, '');
+  const dotIdx = trimmed.indexOf('.');
+  if (dotIdx === -1) return 2;
+  return Math.max(2, Math.min(5, trimmed.length - dotIdx - 1));
+};
+
+const hashSymbolSeed = (symbol = '') => {
+  let hash = 2166136261;
+  const text = String(symbol || 'SYMBOL');
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0 || 1;
+};
+
+const normalizeTickTimestampMs = (entry = {}, fallback = Date.now()) => {
+  const raw = entry.timestamp ?? entry.time_msc ?? entry.timeMs ?? entry.time ?? entry.quote_time ?? entry.lastUpdate;
+  if (raw !== undefined && raw !== null && raw !== '') {
+    const num = Number(raw);
+    if (Number.isFinite(num) && num > 0) {
+      if (num >= 100_000_000_000_000_000) return Math.floor(num / 1_000_000);
+      if (num >= 100_000_000_000_000) return Math.floor(num / 1_000);
+      if (num >= 100_000_000_000) return Math.floor(num);
+      return Math.floor(num * 1_000);
+    }
+    const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  }
+  return fallback;
+};
+
+export const recordSymbolTick = (symbol, entry, fallbackTime = Date.now()) => {
+  if (!symbol || !entry) return;
+  const bid = Number(entry.bid ?? entry.Bid ?? entry.price_bid ?? entry.priceBid);
+  const ask = Number(entry.ask ?? entry.Ask ?? entry.price_ask ?? entry.priceAsk);
+  if (!Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) return;
+  const timestamp = normalizeTickTimestampMs(entry, fallbackTime);
+  const buffer = symbolTickBuffers.get(symbol) || [];
+  const last = buffer[buffer.length - 1];
+  if (last && last.bid === bid && last.ask === ask && Math.abs(timestamp - last.timestamp) < 1000) return;
+  const point = { timestamp: last && timestamp <= last.timestamp ? last.timestamp + 1 : timestamp, bid, ask, seeded: false };
+  const next = buffer.length >= MAX_SYMBOL_TICK_BUFFER
+    ? [...buffer.slice(-(MAX_SYMBOL_TICK_BUFFER - 1)), point]
+    : [...buffer, point];
+  symbolTickBuffers.set(symbol, next);
+  notifySymbolTickListeners(symbol, next);
+};
+
+export const ensureSymbolTickSeries = (symbol, quote = null, targetCount = DEFAULT_SEEDED_TICK_COUNT) => {
+  if (!symbol) return [];
+  const existing = symbolTickBuffers.get(symbol) || [];
+  if (existing.length >= targetCount) return existing;
+
+  const storeQuote = quote || useSymbolStore.getState().symbols?.[symbol];
+  const liveTicks = existing.filter((point) => !point.seeded);
+  const anchor = liveTicks[0] || (storeQuote ? {
+    timestamp: normalizeTickTimestampMs(storeQuote, Date.now()),
+    bid: Number(storeQuote.bid),
+    ask: Number(storeQuote.ask),
+    seeded: false,
+  } : null);
+
+  if (!anchor || !Number.isFinite(anchor.bid) || !Number.isFinite(anchor.ask) || anchor.bid <= 0 || anchor.ask <= 0) {
+    return existing;
+  }
+
+  const digits = inferSymbolDigits(storeQuote, anchor.bid);
+  const tickUnit = 10 ** -digits;
+  const baseSpread = Math.max(anchor.ask - anchor.bid, tickUnit);
+  const stepScale = Math.max(tickUnit, baseSpread * 0.35, anchor.bid * 0.00008);
+  const baseTicks = liveTicks.length > 0 ? liveTicks : [anchor];
+  const missingCount = Math.max(0, targetCount - baseTicks.length);
+  if (missingCount === 0) return baseTicks;
+
+  let prng = hashSymbolSeed(symbol);
+  const nextRand = () => {
+    prng ^= prng << 13;
+    prng ^= prng >>> 17;
+    prng ^= prng << 5;
+    return (prng >>> 0) / 4294967296;
+  };
+
+  const backwards = [];
+  let cursorBid = anchor.bid;
+  let cursorTime = anchor.timestamp;
+  const stepWeights = [-3, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 3];
+
+  for (let i = 0; i < missingCount; i += 1) {
+    const r1 = nextRand();
+    const r2 = nextRand();
+    const r3 = nextRand();
+    const weight = stepWeights[Math.floor(r1 * stepWeights.length)];
+    const impulse = (i % 17 === 5) ? (r2 > 0.5 ? 4.5 : -4.5) : 0;
+    const delta = (weight + impulse) * stepScale;
+    cursorBid = Math.max(tickUnit * 2, cursorBid - delta);
+    const spreadJitter = (r3 - 0.5) * Math.min(baseSpread * 0.25, tickUnit * 2);
+    const pointSpread = Math.max(tickUnit, baseSpread + spreadJitter);
+    const bidVal = Number(cursorBid.toFixed(digits));
+    const askVal = Number(Math.max(bidVal + tickUnit, cursorBid + pointSpread).toFixed(digits));
+    cursorTime -= 450 + Math.floor(r2 * 550);
+    backwards.push({
+      timestamp: cursorTime,
+      bid: bidVal,
+      ask: askVal,
+      seeded: true,
+    });
+  }
+
+  const seededSeries = [...backwards.reverse(), ...baseTicks].slice(-MAX_SYMBOL_TICK_BUFFER);
+  symbolTickBuffers.set(symbol, seededSeries);
+  return seededSeries;
+};
+
+export const mergeRemoteSymbolTickHistory = (symbol, remotePoints = []) => {
+  if (!symbol || !Array.isArray(remotePoints) || remotePoints.length === 0) return getSymbolTickBuffer(symbol);
+  const existing = symbolTickBuffers.get(symbol) || [];
+  const livePoints = existing.filter((point) => !point.seeded);
+  const firstLiveTimestamp = livePoints[0]?.timestamp ?? Number.POSITIVE_INFINITY;
+  const earlierRemote = remotePoints
+    .filter((point) => point && point.timestamp < firstLiveTimestamp && point.bid > 0 && point.ask > 0)
+    .map((point) => ({ ...point, seeded: false }));
+  const merged = [...earlierRemote, ...livePoints].slice(-MAX_SYMBOL_TICK_BUFFER);
+  if (merged.length > 0) {
+    symbolTickBuffers.set(symbol, merged);
+    notifySymbolTickListeners(symbol, merged);
+  }
+  return merged;
+};
+
+export const getSymbolTickBuffer = (symbol) => (
+  symbol ? (symbolTickBuffers.get(symbol) || []) : []
+);
+
 // Feeds can deliver many messages in the same frame. Coalesce them by symbol
 // so React renders the latest price at a controlled cadence instead of once per
 // WebSocket message.
@@ -214,9 +387,13 @@ const queueFeedTicks = (updates, socket) => {
   }
   pendingFeedSocket = socket;
 
+  const now = Date.now();
   updates.forEach((entry) => {
     const symbol = getSymbolName(entry);
-    if (symbol) pendingFeedTicks.set(symbol, entry);
+    if (symbol) {
+      recordSymbolTick(symbol, entry, now);
+      pendingFeedTicks.set(symbol, entry);
+    }
   });
 
   if (tickBatchTimer) return;
@@ -309,6 +486,7 @@ const useSymbolStore = create(
               : (current?.dir || 'up');
             
             const category = getCategory(symbol);
+            recordSymbolTick(symbol, { ...data, bid: nextBid, ask: nextAsk }, now);
             nextSymbols[symbol] = {
               ...(current || {}),
               ...Object.fromEntries(detailFields.filter((key) => data[key] !== undefined).map((key) => [key, data[key]])),

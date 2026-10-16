@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getDataAccessScope, updateDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
+import { getDataAccessScope, getVerifiedDataAccessScope, updateDataAccessScope, assertDataAccessScope } from './dataAccessScope.js';
 import { fetchOnlineUsersSnapshot, peekOnlineUsersPage, clearOnlineUsersSnapshot } from './onlineUsersSnapshot.js';
 import { writeStoredTerminalPage, readStoredTerminalPage } from '../features/terminal/terminalTrades.js';
-import { saveTradingAccountsAnalyticsCache, loadTradingAccountsAnalyticsCache } from '../utils/tradingAccountsCache.js';
+import { ANALYTICS_TRADING_ACCOUNTS_STORAGE_PREFIX, saveTradingAccountsAnalyticsCache, loadTradingAccountsAnalyticsCache } from '../utils/tradingAccountsCache.js';
 
 const storage = () => {
   const values = new Map();
@@ -65,4 +65,22 @@ test('a late online-users response is discarded after same-session revocation', 
   finish([{ login: 1001 }]);
   await assert.rejects(request, { name: 'AbortError' });
   assert.equal(peekOnlineUsersPage(), undefined);
+});
+
+test('an analytics snapshot from a previous page waits for verification and rejects changed access', () => {
+  setup();
+  signIn(9020, 'reload-session');
+  const rows = [{ login: 1001, group: 'Real' }];
+  const cacheKey = `${ANALYTICS_TRADING_ACCOUNTS_STORAGE_PREFIX}_reload`;
+  updateDataAccessScope({ access_fingerprint: 'same-assignment' });
+  saveTradingAccountsAnalyticsCache('reload', rows);
+  const snapshot = JSON.parse(sessionStorage.getItem(cacheKey));
+  snapshot.authority = 'previous-page-epoch';
+  sessionStorage.setItem(cacheKey, JSON.stringify(snapshot));
+  assert.deepEqual(loadTradingAccountsAnalyticsCache('reload'), rows);
+  updateDataAccessScope({ access_fingerprint: 'revoked-assignment' });
+  assert.deepEqual(loadTradingAccountsAnalyticsCache('reload'), []);
+  signIn(9020, 'another-session');
+  assert.equal(getVerifiedDataAccessScope(), null);
+  assert.deepEqual(loadTradingAccountsAnalyticsCache('reload'), []);
 });

@@ -827,7 +827,7 @@ const IBDetailDrawer = ({ login, initialTab = 'profile', onClose, onNavigateTab,
 
   return (
     <>
-      <div className="fixed inset-0 z-[8000]" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onClose} />
+      <div className="fixed inset-0 z-[8000]" style={{ background: 'transparent' }} onClick={onClose} />
       <div
         className="fixed top-0 right-0 h-full flex flex-col z-[8001]"
         style={{ width: 'min(980px, 92vw)', background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-2xl)' }}

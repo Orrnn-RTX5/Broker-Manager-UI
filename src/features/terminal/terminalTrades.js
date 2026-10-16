@@ -1,7 +1,7 @@
 import { getDataAccessScope } from '../../services/dataAccessScope.js';
 export const TRADE_COLUMNS = [
   'Ticket', 'Login', 'User Name', 'Email', 'Symbol', 'Action', 'Lots',
-  'Open', 'Current', 'S/L', 'T/P', 'Storage', 'Profit', 'Comment',
+  'Open', 'Current', 'S/L', 'T/P', 'Storage', 'Profit / Loss', 'Comment',
 ];
 
 export const TERMINAL_POSITIONS_QUERY_KEY = Object.freeze(['terminal-positions']);

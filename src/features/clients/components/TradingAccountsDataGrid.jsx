@@ -9,7 +9,8 @@ import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPosit
 import GridLoadingState from '../../../components/GridLoadingState';
 import { prefetchAccountDetails } from '../../../services/accountDetails';
 import { PERMISSIONS } from '../../../utils/permissions';
-// A pointer resting this long on a row signals intent to open it.
+
+// A pointer resting this long on a row signals intent to open it.
 const ROW_PREFETCH_INTENT_MS = 120;
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -220,26 +221,37 @@ const TradingAccountsDataGrid = ({
         <GridLoadingState label="Loading trading accounts…" />
       ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
-        <table className="ui-grid min-w-max">
+        <table className="ui-grid trading-accounts-table">
+          <colgroup>
+            <col style={{ width: '8.5%' }} />
+            <col style={{ width: '13.5%' }} />
+            <col style={{ width: '12.5%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11.5%' }} />
+            <col style={{ width: '8.5%' }} />
+            <col style={{ width: '9.5%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '9%' }} />
+          </colgroup>
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {renderHeader('login', 'Login')}
-              {renderHeader('status', 'Status')}
               {renderHeader('name', 'Name')}
               {renderHeader('group', 'Group')}
               {renderHeader('leverage', 'Lev.')}
-              {renderHeader('balance', 'Balance', 'right')}
-              {renderHeader('equity', 'Equity', 'right')}
-              {renderHeader('credit', 'Credit', 'right')}
-              {renderHeader('profit', 'Profit', 'right')}
+              {renderHeader('balance', 'Balance')}
+              {renderHeader('equity', 'Equity')}
+              {renderHeader('credit', 'Credit')}
+              {renderHeader('profit', 'Profit')}
               {renderHeader('currency', 'Cu.')}
-              <th style={{ textAlign: 'right' }}>Actions</th>
+              <th style={{ textAlign: 'left' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="trading-accounts-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={10} className="trading-accounts-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Trading accounts are not loaded.</span>
@@ -254,7 +266,6 @@ const TradingAccountsDataGrid = ({
             ) : rows.map((row, idx) => {
               const rowKey = `${row.login}-${idx}`;
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : row.profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
-              const status = (row.status || 'active').toLowerCase();
               return (
                 <tr
                   key={rowKey}
@@ -282,26 +293,18 @@ const TradingAccountsDataGrid = ({
                   <td style={{ color: 'var(--text-3)' }}>
                     <span className="tabular">{row.login}</span>
                   </td>
-                  <td>
-                    <span className={`ui-status ${
-                      status === 'active' ? 'ui-status-ok' : status === 'disabled' ? 'ui-status-danger' : 'ui-status-warn'
-                    }`}>
-                      {status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 500 }} className="truncate max-w-[150px]">{row.name}</td>
-                  <td style={{ color: 'var(--text-3)' }} className="truncate max-w-[150px]">{row.group}</td>
-                  <td style={{ color: 'var(--text-3)', textAlign: 'center' }}>1:{row.leverage}</td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.balance)}</td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{fmt(row.equity)}</td>
-                  <td className="tabular" style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmt(row.credit || 0)}</td>
-                  <td className="tabular" style={{ textAlign: 'right', color: profitTone, fontWeight: 500 }}>{fmt(row.profit)}</td>
+                  <td style={{ fontWeight: 500 }} className="truncate">{row.name}</td>
+                  <td style={{ color: 'var(--text-3)' }} className="truncate">{row.group}</td>
+                  <td className="tabular" style={{ color: 'var(--text-3)' }}>1:{row.leverage}</td>
+                  <td className="tabular">{fmt(row.balance)}</td>
+                  <td className="tabular">{fmt(row.equity)}</td>
+                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{fmt(row.credit || 0)}</td>
+                  <td className="tabular" style={{ color: profitTone, fontWeight: 500 }}>{fmt(row.profit)}</td>
                   <td style={{ color: 'var(--text-3)' }}>{row.currency}</td>
                   <td
                     onClick={(e) => e.stopPropagation()}
                     onDoubleClick={(e) => e.stopPropagation()}
                     onTouchEnd={(e) => e.stopPropagation()}
-                    style={{ textAlign: 'right' }}
                   >
                     <button
                       type="button"

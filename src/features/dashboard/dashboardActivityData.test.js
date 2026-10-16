@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   appendEquityObservation,
   buildActivitySeries,
+  buildSymbolActivity,
   parseActivityTimestamp,
 } from './dashboardActivityData.js';
 
@@ -82,5 +83,47 @@ test('the current time bucket is marked as a partial live total', () => {
   assert.equal(points.at(-1).volume, 0);
   assert.equal(points.at(-1).volumePartial, true);
   assert.equal(points.at(-2).volumePartial, false);
+});
+
+test('symbol rankings use the chart scope, exclude non-trades, and deduplicate executed deals', () => {
+  const now = Date.UTC(2026, 9, 12, 12);
+  const recent = (ticket, symbol, volume, extra = {}) => ({ ticket, symbol, volume, time: now - 20 * 60_000, login: 'real', action: 'buy', ...extra });
+  const deals = [
+    recent(1, 'EURUSD', 0.1), recent(1, 'EURUSD', 0.1), recent(2, 'EURUSD', 0.2),
+    recent(3, 'XAUUSD', 0.7, { action: 1 }),
+    recent(4, 'BTCUSD', 100, { login: 'demo' }),
+    recent(5, 'EURUSD', 100, { action: 'balance' }),
+    recent(6, '', 100), recent(7, 'EURUSD', -10),
+    recent(8, 'EURUSD', 100, { time: now + 1 }),
+    recent(9, 'EURUSD', 100, { time: now - 2 * 60 * 60_000 }),
+  ];
+  const options = { range: '1H', now, deals, realLogins: new Set(['real']) };
+  const ranked = buildSymbolActivity(options);
+  assert.equal(ranked.totalDeals, 3);
+  assert.equal(ranked.totalVolume, 1);
+  assert.deepEqual(ranked.rows.map(({ symbol, volume, deals }) => ({ symbol, volume, deals })), [
+    { symbol: 'XAUUSD', volume: 0.7, deals: 1 },
+    { symbol: 'EURUSD', volume: 0.3, deals: 2 },
+  ]);
+  assert.ok(Math.abs(ranked.rows.reduce((total, row) => total + row.share, 0) - 100) < 1e-9);
+  const chart = buildActivitySeries({ ...options, volumeCoverageFrom: 0 });
+  assert.equal(chart.reduce((total, point) => total + point.volume, 0), ranked.totalVolume);
+});
+
+test('symbol rankings follow the selected period and return a genuine empty state', () => {
+  const now = Date.UTC(2026, 9, 12, 12);
+  const deals = [{ ticket: 1, login: 'real', symbol: 'EURUSD', action: 'sell', volume: 2, time: now - 2 * 60 * 60_000 }];
+  assert.deepEqual(buildSymbolActivity({ range: '1H', now, deals }), { rows: [], totalDeals: 0, totalVolume: 0 });
+  assert.equal(buildSymbolActivity({ range: '6H', now, deals }).totalVolume, 2);
+  assert.deepEqual(buildSymbolActivity({ range: '6H', now, deals, realLogins: new Set() }), { rows: [], totalDeals: 0, totalVolume: 0 });
+});
+
+test('equal-volume rankings sort by execution count and then symbol', () => {
+  const now = Date.UTC(2026, 9, 12, 12);
+  const deals = [
+    { ticket: 1, symbol: 'EURUSD', volume: 0.5 }, { ticket: 2, symbol: 'EURUSD', volume: 0.5 },
+    { ticket: 3, symbol: 'XAUUSD', volume: 1 }, { ticket: 4, symbol: 'AUDUSD', volume: 1 },
+  ].map(deal => ({ ...deal, time: now, action: 'deal_sell' }));
+  assert.deepEqual(buildSymbolActivity({ now, deals }).rows.map(row => row.symbol), ['EURUSD', 'AUDUSD', 'XAUUSD']);
 });
 

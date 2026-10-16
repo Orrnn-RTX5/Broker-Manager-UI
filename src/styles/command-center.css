@@ -10,7 +10,7 @@
   --text-secondary: #4f6074;
   --text-tertiary: #75869a;
   --success: #2563eb;
-  --danger: #d92d20;
+  --danger: #f06464;
   --warning: #b76514;
   --info: #2563eb;
   --radius-sm: 4px;
@@ -37,7 +37,7 @@
   --ok-text: #1d4ed8;
   --ok-border: #a9c7fa;
   --danger-soft: #fff1f0;
-  --danger-text: #b42318;
+  --danger-text: #f06464;
   --danger-border: #f2b8b5;
   --warn: var(--warning);
   --warn-soft: #fff7e8;
@@ -79,11 +79,11 @@
   --cc-map-caption: rgba(255, 255, 255, .9);
   --cc-map-caption-border: rgba(120, 146, 167, .5);
   --cc-market-glow-up: rgba(37, 99, 235, .32);
-  --cc-market-glow-down: rgba(217, 45, 32, .3);
+  --cc-market-glow-down: rgba(240, 100, 100, .25);
   --market-value-up: #00a8ff;
-  --market-value-down: #ff3b52;
-  --market-direction-up: #12c878;
-  --market-direction-down: #ff3b52;
+  --market-value-down: #f06464;
+  --market-direction-up: #00a8ff;
+  --market-direction-down: #f06464;
   color: var(--text-primary);
   background: var(--bg-app);
   color-scheme: light;
@@ -104,8 +104,8 @@
   --text-primary: var(--ink-1);
   --text-secondary: var(--ink-2);
   --text-tertiary: var(--ink-3);
-  --success: #8fbd9d;
-  --danger: #ed968a;
+  --success: #00a8ff;
+  --danger: #f06464;
   --warning: #e5a84c;
   --info: #66b8ed;
   --accent: #007ecf;
@@ -116,12 +116,12 @@
   --accent-soft-2: #292929;
   --accent-border: #007ecf;
   --accent-text: var(--ink-strong);
-  --ok: #8fbd9d;
+  --ok: #00a8ff;
   --ok-soft: #252e28;
-  --ok-text: #a4cfb0;
+  --ok-text: #00a8ff;
   --ok-border: #3e5946;
   --danger-soft: #351e1a;
-  --danger-text: #f0a296;
+  --danger-text: #f06464;
   --danger-border: #744238;
   --warn: var(--warning);
   --warn-soft: rgba(229, 168, 76, .13);
@@ -162,12 +162,12 @@
   --cc-map-light-glow: rgba(184, 219, 203, .45);
   --cc-map-caption: rgba(37, 37, 37, .92);
   --cc-map-caption-border: #3b3b3b;
-  --cc-market-glow-up: rgba(143, 189, 157, .25);
-  --cc-market-glow-down: rgba(237, 150, 138, .25);
-  --market-value-up: #a4cfb0;
-  --market-value-down: #f0a296;
-  --market-direction-up: #a4cfb0;
-  --market-direction-down: #f0a296;
+  --cc-market-glow-up: rgba(0, 168, 255, .25);
+  --cc-market-glow-down: rgba(240, 100, 100, .25);
+  --market-value-up: #00a8ff;
+  --market-value-down: #f06464;
+  --market-direction-up: #00a8ff;
+  --market-direction-down: #f06464;
   color-scheme: dark;
 }
 
@@ -300,10 +300,11 @@
   .manager-action-menu .manager-toolbar-trigger.is-active,
   .manager-action-menu .manager-toolbar-trigger.is-open
 ) {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)) !important;
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border)) !important;
-  box-shadow: inset 0 -2px 0 var(--accent) !important;
-  color: var(--accent-text) !important;
+  background: var(--navigation-selected-bg) !important;
+  border-color: transparent !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  color: var(--navigation-selected-text) !important;
 }
 .dark .rtx5-command-shell .manager-toolbar :is(
   .manager-primary-navigation .manager-primary-link.is-active,
@@ -584,15 +585,15 @@
 .cc-terminal-table tbody tr.is-selected { background:var(--accent); }
 .cc-terminal-table tbody tr:hover td,
 .cc-terminal-table tbody tr.is-selected td { color:var(--accent-contrast); }
-/* Open trades: neutral stripes, side-colored hover, blue selection. */
+/* Open trades keep neutral stripes on hover; clicking selects a row in blue. */
 .cc-terminal-trades {
   --trade-row-odd: #fff;
   --trade-row-even: #fafafa;
   --trade-value-text: var(--text);
   --trade-buy-text: #107c10;
-  --trade-sell-text: #c42b1c;
-  --trade-buy-hover: var(--trade-buy-text);
-  --trade-sell-hover: var(--trade-sell-text);
+  --trade-sell-text: #f06464;
+  --trade-profit-text: var(--accent);
+  --trade-loss-text: var(--trade-sell-text);
 }
 .dark .cc-terminal-trades {
   --trade-row-odd: #131313;
@@ -600,25 +601,22 @@
   --trade-value-text: var(--ink-1);
   /* Match the compact Market Watch quote colors. */
   --trade-buy-text: rgb(88, 174, 104);
-  --trade-sell-text: rgb(235, 112, 112);
+  --trade-sell-text: #f06464;
+  --trade-profit-text: #00a8ff;
 }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody td { color: var(--trade-value-text); }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:nth-child(odd) { background: var(--trade-row-odd); }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:nth-child(even) { background: var(--trade-row-even); }
-.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-buy:not(.is-selected):hover { background: var(--trade-buy-hover); }
-.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-sell:not(.is-selected):hover { background: var(--trade-sell-hover); }
-.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:not(.is-selected):hover td { color: var(--text-secondary); }
+.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:not(.is-selected):hover td { color: var(--trade-value-text); }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-selected,
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-selected:hover { background: var(--accent); }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-selected td { color: #fff; }
-.cc-terminal-trades tr.is-buy .cc-trade-side { color: var(--trade-buy-text); }
-.cc-terminal-trades tr.is-sell .cc-trade-side { color: var(--trade-sell-text); }
-.cc-terminal-trades .cc-trade-profit.is-positive { color: var(--trade-buy-text); }
-.cc-terminal-trades .cc-trade-profit.is-negative { color: var(--trade-sell-text); }
-.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:is(.is-buy, .is-sell):not(.is-selected):hover td,
-.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:is(.is-buy, .is-sell):not(.is-selected):hover :is(.cc-trade-side, .cc-trade-profit) { color: #fff; }
-.dark .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:is(.is-buy, .is-sell):not(.is-selected):hover td,
-.dark .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr:is(.is-buy, .is-sell):not(.is-selected):hover :is(.cc-trade-side, .cc-trade-profit) { color: #131313; }
+/* Neutral Action labels use a soft white against the dark trade rows. */
+.cc-terminal-trades .cc-trade-side { color: inherit; }
+.dark .cc-terminal-trades .cc-trade-side { color: #f2f2f2; }
+.cc-terminal-trades .cc-trade-profit.is-positive { color: var(--trade-profit-text); }
+.cc-terminal-trades .cc-trade-profit.is-negative { color: var(--trade-loss-text); }
+.cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-selected .cc-trade-side { color: inherit; }
 .cc-terminal-bottom { flex:0 0 26px; border-top:1px solid var(--border); border-bottom:0; }
 .cc-terminal-bottom button.is-active::after { top:-1px; bottom:auto; }
 .cc-terminal-search { align-self:center; width:120px; height:18px; margin-left:auto; margin-right:6px; padding:0 7px; border:1px solid var(--border); border-radius:3px; background:var(--bg-elevated); color:var(--text-primary); font-size: 11px; outline:0; }
@@ -638,10 +636,36 @@
 /* Existing panes inherit the command-center language. */
 .rtx5-command-shell .market-data,
 .rtx5-command-shell .navigator-type { background:var(--bg-panel) !important; }.rtx5-command-shell .market-watch-type { --market-watch-font-size: 11px !important; }.rtx5-command-shell .navigator-type,.rtx5-command-shell .navigator-type * { font-size: 11px !important; font-weight: 400 !important; }.rtx5-command-shell .navigator-type .tree-node--branch > div:first-child > span { font-size: 11px !important; font-weight: 400 !important; }.rtx5-command-shell .ui-grid thead th { background:var(--bg-elevated); color:var(--text-tertiary); }.rtx5-command-shell .ui-card { border-radius:var(--radius-md); box-shadow:none; }
-.cc-navigator { height:100%; overflow:hidden; background:var(--bg-panel); }.cc-navigator-scroll { height:100%; overflow:auto; padding:4px 3px 8px; }.cc-tree-node { color:var(--text-secondary); font-size: 11px; }.cc-tree-node > div:first-child { position:relative; display:grid; min-height:23px; grid-template-columns:14px 18px minmax(0,1fr) auto; align-items:center; gap:1px; padding:0 5px 0 1px; border-radius:2px; cursor:pointer; }.cc-tree-node > div:first-child:hover { background:var(--bg-hover); color:var(--text-primary); }.cc-tree-node.is-active > div:first-child { background:var(--accent-soft); color:var(--text-primary); font-weight: 400; }.cc-tree-node.is-active > div:first-child::before { content:""; position:absolute; left:0; top:4px; bottom:4px; width:2px; border-radius:1px; background:var(--accent); }.cc-tree-node.is-disabled { opacity:.52; }.cc-tree-node.is-disabled > div:first-child { cursor:default; }.cc-tree-node.is-branch > div:first-child { color:var(--text-primary); font-weight: 400; }.cc-tree-chevron,.cc-tree-icon { display:grid; place-items:center; color:var(--text-tertiary); }.cc-tree-node.is-active .cc-tree-icon { color:var(--accent-text); }.cc-tree-node b { color:var(--text-tertiary); font-size: 11px; font-weight: 400; }.cc-tree-children { position:relative; margin-left:8px; padding-left:5px; }.cc-tree-children::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:var(--border); }
+.cc-navigator { height:100%; overflow:hidden; background:var(--bg-panel); }.cc-navigator-scroll { height:100%; overflow:auto; padding:4px 3px 8px; }.cc-tree-node { color:var(--text-secondary); font-size: 11px; }.cc-tree-node > div:first-child { position:relative; display:grid; min-height:23px; grid-template-columns:14px 18px minmax(0,1fr) auto; align-items:center; gap:1px; padding:0 5px 0 1px; border-radius:2px; cursor:pointer; }.cc-tree-node > div:first-child:hover { background:var(--bg-hover); color:var(--text-primary); }.cc-tree-node.is-active > div:first-child { background:var(--accent-soft); color:var(--text-primary); font-weight: 400; }.cc-tree-node.is-disabled { opacity:.52; }.cc-tree-node.is-disabled > div:first-child { cursor:default; }.cc-tree-node.is-branch > div:first-child { color:var(--text-primary); font-weight: 400; }.cc-tree-chevron,.cc-tree-icon { display:grid; place-items:center; color:var(--text-tertiary); }.cc-tree-node.is-active .cc-tree-icon { color:var(--accent-text); }.cc-tree-node b { color:var(--text-tertiary); font-size: 11px; font-weight: 400; }.cc-tree-children { position:relative; margin-left:8px; padding-left:5px; }.cc-tree-children::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:var(--border); }
 .rtx5-command-shell [data-panel-id="navigator"] .cc-tree-node.is-active > [role="treeitem"] {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)) !important;
+  background: var(--navigation-selected-bg) !important;
 }
+
+/* The shared selection frame replaces the old tab underline indicators. */
+#root .rtx5-command-shell :is(
+  .cc-tree-node.is-active > [role="treeitem"],
+  .market-data-tab.is-active,
+  .cc-terminal-tabs button.is-active,
+  .cc-owner-tabs button.is-active,
+  [role="tab"][aria-selected="true"]
+)::before,
+#root .rtx5-command-shell :is(
+  .market-data-tab.is-active,
+  .cc-terminal-tabs button.is-active,
+  .cc-owner-tabs button.is-active,
+  [role="tab"][aria-selected="true"]
+)::after { display: none !important; }
+
+#root#root#root#root#root .rtx5-command-shell :is(
+  .manager-primary-link,
+  .manager-toolbar-trigger,
+  .manager-action-popover-item,
+  .cc-tree-node > [role="treeitem"],
+  .market-data-tab,
+  .cc-terminal-tabs button,
+  .cc-owner-tabs button,
+  [role="tab"]
+) { font-size: 11px !important; font-weight: 400 !important; }
 
 /* Navigator labels use neutral white in dark mode; icons keep their state colors. */
 .dark .rtx5-command-shell [data-panel-id="navigator"] { --dock-title-text: var(--ink-strong); }
@@ -1109,7 +1133,7 @@
 }
 .dark .rtx5-command-shell .market-watch-type thead th { color: var(--ink-2); }
 .dark .rtx5-command-shell .market-watch-type .market-quote-symbol { color: var(--ink-strong); }
-.dark .rtx5-command-shell .market-watch-type .market-quote-spread { color: var(--ink-2) !important; }
+.dark .rtx5-command-shell .market-watch-type .market-quote-spread { color: #ffffff !important; }
 
 /* Summary tab: account summary beside the margin alerts section. */
 .cc-terminal-summary { display:grid; flex:1; min-height:0; grid-template-columns:minmax(0, 1fr) minmax(0, 1.25fr); }

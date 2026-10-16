@@ -43,6 +43,18 @@ export const createAccountDetailsStore = ({
 
   const peek = (login) => entries.get(normalizeLogin(login))?.value;
 
+  // A grid snapshot can paint immediately, but must still be revalidated.
+  // Seeding never displaces a fetched value or outranks an in-flight response.
+  const seed = (login, value) => {
+    const key = normalizeLogin(login);
+    if (!key || !value || typeof value !== 'object' || Array.isArray(value)) return;
+    if (entries.has(key)) return entries.get(key).value;
+    entries.set(key, { value, sequence: clearedThrough, savedAt: -Infinity });
+    while (entries.size > maxEntries) entries.delete(entries.keys().next().value);
+    notify(key);
+    return value;
+  };
+
   const load = (login, { force = false } = {}) => {
     const key = normalizeLogin(login);
     if (!key) return Promise.reject(new Error('Account login is required.'));
@@ -88,5 +100,5 @@ export const createAccountDetailsStore = ({
     return () => listeners.delete(listener);
   };
 
-  return { clear, load, peek, prefetch, subscribe, update };
+  return { clear, load, peek, prefetch, seed, subscribe, update };
 };

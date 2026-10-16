@@ -20,6 +20,42 @@ const createHarness = (options = {}) => {
   return { store, requests, advance: (ms) => { clock += ms; } };
 };
 
+test('grid details paint immediately while the authoritative request is still required', async () => {
+  const { store, requests } = createHarness();
+  store.seed('7', { Name: 'Grid name', Balance: 100 });
+  assert.deepEqual(store.peek('7'), { Name: 'Grid name', Balance: 100 });
+  const loaded = store.load('7');
+  assert.equal(requests.length, 1, 'a grid snapshot must not count as a fresh details response');
+  requests[0].resolve({ Name: 'Current name', Balance: 125, Email: 'current@example.test' });
+  await loaded;
+  assert.equal(store.peek('7').Balance, 125);
+  store.seed('7', { Balance: 5 });
+  assert.equal(store.peek('7').Balance, 125, 'later grid data cannot overwrite fetched details');
+});
+
+test('seeding during an in-flight prefetch does not discard the server result', async () => {
+  const { store, requests } = createHarness();
+  const loaded = store.load('7');
+  store.seed('7', { Balance: 100 });
+  requests[0].resolve({ Balance: 150 });
+  await loaded;
+  assert.equal(store.peek('7').Balance, 150);
+});
+
+test('cleared sessions reject late responses even after a new snapshot is seeded', async () => {
+  const { store, requests } = createHarness();
+  const previous = store.load('7');
+  store.clear();
+  store.seed('7', { Balance: 25 });
+  requests[0].resolve({ Balance: 1000 });
+  await previous;
+  assert.equal(store.peek('7').Balance, 25);
+  const current = store.load('7');
+  requests[1].resolve({ Balance: 30 });
+  await current;
+  assert.equal(store.peek('7').Balance, 30);
+});
+
 test('a prefetch in flight is joined by the open instead of starting a second request', async () => {
   const { store, requests } = createHarness();
   store.prefetch(200001);

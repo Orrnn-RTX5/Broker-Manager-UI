@@ -134,7 +134,7 @@ const InlineError = ({ children }) => {
   if (!children) return null;
   return (
     <div
-      className="mb-5 flex items-start gap-3 p-3 rounded-lg text-sm"
+      className="manager-inline-error mb-4 flex items-center gap-2.5 p-3 rounded-lg text-sm"
       role="alert"
       style={{
         background: 'var(--danger-soft)',
@@ -142,7 +142,7 @@ const InlineError = ({ children }) => {
         color: 'var(--danger-text)',
       }}
     >
-      <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+      <AlertCircle size={16} className="flex-shrink-0" />
       <span>{children}</span>
     </div>
   );
@@ -152,15 +152,15 @@ const InlineNotice = ({ children }) => {
   if (!children) return null;
   return (
     <div
-      className="mb-5 flex items-start gap-3 rounded-lg p-3 text-sm"
+      className="manager-inline-notice mb-4 flex items-center gap-2.5 rounded-lg p-3 text-sm"
       role="status"
       style={{
-        background: 'rgba(44, 154, 29, 0.08)',
-        border: '1px solid rgba(44, 154, 29, 0.18)',
-        color: '#1f7a14',
+        background: 'rgba(0, 126, 207, 0.14)',
+        border: '1px solid rgba(56, 152, 236, 0.36)',
+        color: '#e2f1ff',
       }}
     >
-      <ShieldCheck size={18} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+      <ShieldCheck size={16} className="flex-shrink-0" style={{ color: '#58b2ff' }} aria-hidden="true" />
       <span>{children}</span>
     </div>
   );
@@ -245,7 +245,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange, variant = 'de
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <BrokerLogo broker={selectedBroker} size={isManager ? 46 : 36} />
+        <BrokerLogo broker={selectedBroker} size={isManager ? 26 : 36} />
         <span className="min-w-0 flex-1">
           <span
             className={`block truncate font-medium ${isManager ? 'manager-broker-name' : 'text-sm'}`}
@@ -255,7 +255,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange, variant = 'de
           </span>
         </span>
         <ChevronDown
-          size={isManager ? 20 : 16}
+          size={isManager ? 16 : 16}
           className="absolute right-3 top-1/2 -translate-y-1/2"
           style={{ color: 'var(--muted)' }}
           aria-hidden="true"
@@ -292,7 +292,7 @@ const BrokerDropdown = ({ brokers, selectedId, disabled, onChange, variant = 'de
                   background: selected ? 'var(--accent-soft)' : 'transparent',
                 }}
               >
-                <BrokerLogo broker={broker} size={isManager ? 38 : 34} />
+                <BrokerLogo broker={broker} size={isManager ? 30 : 34} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium" style={{ color: 'var(--text)' }}>
                     {broker.name}
@@ -322,7 +322,7 @@ const BrokerIdentity = ({ broker, variant = 'default' }) => {
       role="group"
       aria-label="Selected broker"
     >
-      <BrokerLogo broker={broker} size={isManager ? 46 : 36} />
+      <BrokerLogo broker={broker} size={isManager ? 26 : 36} />
       <span className="min-w-0 flex-1">
         <span
           className={`block truncate font-medium ${isManager ? 'manager-broker-name' : 'text-sm'}`}
@@ -783,10 +783,17 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
           icon={User}
           value={user}
           onChange={setUser}
+          placeholder="Enter your manager login ID"
           required
           variant="manager"
         />
-        <PasswordField id="manager-password" value={password} onChange={setPassword} variant="manager" />
+        <PasswordField
+          id="manager-password"
+          value={password}
+          onChange={setPassword}
+          placeholder="Enter your password"
+          variant="manager"
+        />
         <Field
           id="manager-server"
           label="Server"
@@ -979,6 +986,7 @@ const Field = ({
   icon: Icon,
   value,
   onChange,
+  placeholder,
   type = 'text',
   readOnly = false,
   required = false,
@@ -1000,7 +1008,7 @@ const Field = ({
         className={isManager ? 'manager-input-icon' : 'absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'}
         style={{ color: isManager ? undefined : 'var(--muted)' }}
       >
-        {createElement(Icon, { size: isManager ? 22 : 16, 'aria-hidden': 'true' })}
+        {createElement(Icon, { size: isManager ? 15 : 16, 'aria-hidden': 'true' })}
       </span>
       <input
         id={id}
@@ -1008,6 +1016,7 @@ const Field = ({
         inputMode={type === 'number' ? 'numeric' : undefined}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         readOnly={readOnly}
         required={required}
         className={isManager ? 'ui-input manager-input' : 'ui-input'}
@@ -1018,7 +1027,7 @@ const Field = ({
   );
 };
 
-const PasswordField = ({ id, value, onChange, variant = 'default' }) => {
+const PasswordField = ({ id, value, onChange, placeholder, variant = 'default' }) => {
   const [showPassword, setShowPassword] = useState(false);
   const isManager = variant === 'manager';
 
@@ -1036,13 +1045,14 @@ const PasswordField = ({ id, value, onChange, variant = 'default' }) => {
           className={isManager ? 'manager-input-icon' : 'absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'}
           style={{ color: isManager ? undefined : 'var(--muted)' }}
         >
-          <Lock size={isManager ? 22 : 16} aria-hidden="true" />
+          <Lock size={isManager ? 15 : 16} aria-hidden="true" />
         </span>
         <input
           id={id}
           type={showPassword ? 'text' : 'password'}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
           required
           className={isManager ? 'ui-input manager-input manager-input-with-action' : 'ui-input'}
           style={{ paddingLeft: isManager ? undefined : 36, paddingRight: isManager ? undefined : 36 }}
@@ -1058,8 +1068,8 @@ const PasswordField = ({ id, value, onChange, variant = 'default' }) => {
           aria-pressed={showPassword}
         >
           {showPassword
-            ? <EyeOff size={isManager ? 22 : 16} aria-hidden="true" />
-            : <Eye size={isManager ? 22 : 16} aria-hidden="true" />}
+            ? <EyeOff size={isManager ? 15 : 16} aria-hidden="true" />
+            : <Eye size={isManager ? 15 : 16} aria-hidden="true" />}
         </button>
       </div>
     </div>

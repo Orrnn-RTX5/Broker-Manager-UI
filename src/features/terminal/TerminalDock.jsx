@@ -1,5 +1,7 @@
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ChevronDown, ChevronRight, ListFilter, RefreshCw, Search } from 'lucide-react';
+import './TerminalJournal.css';
 import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_HOST } from '../../config/endpoints.js';
@@ -58,9 +60,8 @@ const sideRowClass = (side, isSelected) => [
   isSelected ? 'is-selected' : '',
 ].filter(Boolean).join(' ') || undefined;
 
-// The open-trades grid is the panel's default view and the Exposure tab.
-// Exposure shows that grid on the first click. Alerts stays on its list.
-// Other tabs toggle off when clicked again and return to the trades grid.
+// Summary owns the default open-trades grid. Selecting a tab is idempotent:
+// repeated clicks keep its content and selection together.
 const TERMINAL_TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'exposure', label: 'Exposure' },
@@ -74,6 +75,7 @@ const TERMINAL_TABS = [
 
 const TAB_STATUS = {
   summary: 'Account summary',
+  exposure: 'Symbol exposure',
   news: 'News',
   calendar: 'Economic calendar',
   dealing: 'Dealer queue · auto-refresh',
@@ -96,7 +98,7 @@ const journalDetailText = (entry) => {
 };
 
 function TerminalDock({ isAuthenticated = false }) {
-  const titleSlot = useContext(DockTitleSlotContext);
+  const { slot: titleSlot } = useContext(DockTitleSlotContext) || {};
   const queryClient = useQueryClient();
   const { resolved, hasPermission, isAdmin, role, permissions, accessRevision } = usePermissions();
   const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
@@ -109,7 +111,7 @@ function TerminalDock({ isAuthenticated = false }) {
     () => canViewPositions ? readStoredTerminalPage(terminalScope) : undefined,
     [terminalScope, canViewPositions]
   );
-  const [activeTab, setActiveTab] = useState('trades');
+  const [activeTab, setActiveTab] = useState('summary');
   const [journalEntries, setJournalEntries] = useState(() => getTradeJournalEntries());
   const [selectedTradeKey, setSelectedTradeKey] = useState(null);
   const [selectedJournalId, setSelectedJournalId] = useState(null);
@@ -176,6 +178,9 @@ function TerminalDock({ isAuthenticated = false }) {
     let timer;
     const unsubscribe = subscribeToPositionSync((event) => {
       if (event.type === 'position' && !requiresPositionReconciliation(event.payload)) return;
+      // Wait for the sync service's authoritative HTTP reconciliation instead
+      // of refetching once on connect/poll and again when it completes.
+      if (event.type !== 'position' && event.reason !== 'reconciled') return;
       if (timer) return;
       timer = setTimeout(() => {
         timer = undefined;
@@ -237,9 +242,9 @@ function TerminalDock({ isAuthenticated = false }) {
   };
 
   const searchNeedle = terminalSearch.trim().toLowerCase();
-  const visibleTab = !showPositionViews && ['trades', 'exposure', 'search'].includes(activeTab)
+  const visibleTab = !showPositionViews && ['exposure', 'search'].includes(activeTab)
     ? 'summary' : activeTab;
-  const showingTrades = visibleTab === 'trades' || visibleTab === 'exposure';
+  const showingTrades = visibleTab === 'summary' && showPositionViews;
   const showingServerJournal = visibleTab === 'journal' && journalMode === 'server';
   const visibleServerJournal = searchNeedle
     ? serverJournal.entries.filter((entry) => matchesServerJournalSearch(entry, searchNeedle))
@@ -258,11 +263,15 @@ function TerminalDock({ isAuthenticated = false }) {
     : journalEntries;
 
   const controls = (
-      <div className="cc-terminal-tabs cc-terminal-title-controls" role="group" aria-label="Terminal controls">
-        <span className="cc-trade-status" role="status" title={showingServerJournal ? serverJournalStatus : undefined}>
-          {showingServerJournal
-            ? serverJournalStatus
-            : visibleTab === 'journal'
+      <div className={`cc-terminal-tabs cc-terminal-title-controls${showingServerJournal ? ' cc-server-journal-controls' : ''}`} role="group" aria-label="Terminal controls">
+        {showingServerJournal ? (
+          <div className="cc-server-journal-heading">
+            <span className="cc-server-journal-caption" role="status" title={serverJournalStatus}>
+              {serverJournalStatus.replace(/^Journal\s*·\s*/i, '')}
+            </span>
+          </div>
+        ) : <span className="cc-trade-status" role="status">
+          {visibleTab === 'journal'
             ? (!isAuthenticated ? 'Sign in to view trade requests' : 'Trade requests · live feed')
             : showingTrades
               ? (isError
@@ -271,7 +280,7 @@ function TerminalDock({ isAuthenticated = false }) {
                   ? 'Synchronizing trades…'
                   : 'Open trades · auto-refresh')
               : (!isAuthenticated ? 'Sign in to view the terminal' : visibleTab === 'summary' && !showPositionViews ? 'Alerts' : (TAB_STATUS[visibleTab] || 'Terminal'))}
-        </span>
+        </span>}
         {showingTrades ? (
           <>
             <button type="button" onClick={handleManualRefresh} disabled={!isAuthenticated || isFetching}>Refresh</button>
@@ -281,21 +290,33 @@ function TerminalDock({ isAuthenticated = false }) {
           </>
         ) : visibleTab === 'journal' ? (
           <>
-            <button type="button" aria-pressed={journalMode === 'server'} className={journalMode === 'server' ? 'is-active' : undefined}
-              onClick={() => setJournalMode('server')}>Journal</button>
+            {!showingServerJournal && <button type="button" aria-pressed={journalMode === 'server'} className={journalMode === 'server' ? 'is-active' : undefined}
+              onClick={() => setJournalMode('server')}>Journal</button>}
             <button type="button" aria-pressed={journalMode === 'requests'} className={journalMode === 'requests' ? 'is-active' : undefined}
               onClick={() => setJournalMode('requests')}>Trade requests</button>
             {journalMode === 'server' ? (
               <>
-                <select aria-label="Journal filter" value={serverJournal.filter} disabled={!isAuthenticated}
-                  onChange={(event) => serverJournal.setFilter(event.target.value)}>
-                  {SERVER_JOURNAL_FILTERS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-                <label className="cc-server-journal-live" title="Refresh every 5 seconds">
+                <label className="cc-server-journal-search">
+                  <Search size={12} aria-hidden="true" />
+                  <input type="search" aria-label="Search journal" placeholder="Search journal…" value={terminalSearch}
+                    onChange={(event) => setTerminalSearch(event.target.value)} />
+                </label>
+                <div className="cc-server-journal-filter">
+                  <ListFilter size={12} aria-hidden="true" />
+                  <select aria-label="Journal filter" value={serverJournal.filter} disabled={!isAuthenticated}
+                    onChange={(event) => serverJournal.setFilter(event.target.value)}>
+                    {SERVER_JOURNAL_FILTERS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  </select>
+                  <ChevronDown size={11} aria-hidden="true" />
+                </div>
+                <label className={`cc-server-journal-live${serverJournal.live ? ' is-live' : ''}`} title="Refresh every 5 seconds">
                   <input type="checkbox" checked={serverJournal.live} disabled={!isAuthenticated}
                     onChange={(event) => serverJournal.setLive(event.target.checked)} /> Live
                 </label>
-                <button type="button" onClick={() => serverJournal.refresh()} disabled={!isAuthenticated || serverJournal.loading}>Refresh</button>
+                <button type="button" className="cc-server-journal-refresh" aria-label="Refresh journal" title="Refresh journal"
+                  onClick={() => serverJournal.refresh()} disabled={!isAuthenticated || serverJournal.loading}>
+                  <RefreshCw size={13} aria-hidden="true" />
+                </button>
               </>
             ) : (
               <button type="button" onClick={clearTradeJournal} disabled={!journalEntries.length}>Clear</button>
@@ -306,7 +327,7 @@ function TerminalDock({ isAuthenticated = false }) {
   );
 
   return (
-    <div className="cc-terminal" ref={terminalRef}>
+    <div className={`cc-terminal${showingServerJournal ? ' cc-terminal-journal' : ''}`} ref={terminalRef}>
       {titleSlot ? createPortal(controls, titleSlot) : controls}
       {showingServerJournal ? (
         <div className="cc-terminal-table-wrap">
@@ -318,10 +339,11 @@ function TerminalDock({ isAuthenticated = false }) {
               </tr>
             </thead>
             <tbody>
-              {visibleServerJournal.map((entry) => (
+              {visibleServerJournal.map((entry, index) => (
                 <ServerJournalRow
                   key={entry.id}
                   entry={entry}
+                  alternate={index % 2 === 1}
                   expanded={expandedServerIds.has(entry.id)}
                   selected={selectedServerId === entry.id}
                   onToggleExpand={() => toggleServerExpand(entry.id)}
@@ -409,7 +431,7 @@ function TerminalDock({ isAuthenticated = false }) {
                         <td key={column} title={String(cell)}>
                           {column === 'Action' ? (
                             <span className="cc-trade-side">{cell}</span>
-                          ) : column === 'Profit' ? (
+                          ) : column === 'Profit / Loss' ? (
                             <span className={`cc-trade-profit ${profitClassName}`}>{cell}</span>
                           ) : column === 'Comment' ? (
                             <TradeCommentCell row={row} disabled={!isAuthenticated} onSaved={(comment) => handleCommentSaved(row, comment)} />
@@ -449,10 +471,7 @@ function TerminalDock({ isAuthenticated = false }) {
             role="tab"
             aria-selected={visibleTab === tab.id}
             className={visibleTab === tab.id ? 'is-active' : ''}
-            onClick={() => setActiveTab((prev) => {
-              if (tab.id === 'exposure' || tab.id === 'alerts') return tab.id;
-              return prev === tab.id ? (showPositionViews ? 'trades' : 'summary') : tab.id;
-            })}
+            onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
             {tab.id === 'summary' && marginAlerts.length > 0 && (
@@ -460,19 +479,24 @@ function TerminalDock({ isAuthenticated = false }) {
                 {marginAlerts.length > 99 ? '99+' : marginAlerts.length}
               </b>
             )}
-            {tab.id === 'journal' && journalEntries.length > 0 && (
+            {tab.id === 'journal' && !showingServerJournal && journalEntries.length > 0 && (
               <b>{journalEntries.length > 99 ? '99+' : journalEntries.length}</b>
             )}
           </button>
         ))}
-        <input
+        {showingServerJournal ? (
+          <span className="cc-server-journal-count">
+            {searchNeedle ? `${visibleServerJournal.length} of ${serverJournal.entries.length}` : visibleServerJournal.length}
+            {' '}{serverJournal.entries.length === 1 ? 'event' : 'events'}
+          </span>
+        ) : <input
           type="search"
           className="cc-terminal-search"
           placeholder="Search"
           aria-label="Search terminal rows"
           value={terminalSearch}
           onChange={(event) => setTerminalSearch(event.target.value)}
-        />
+        />}
       </div>
     </div>
   );
@@ -510,11 +534,12 @@ function JournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
   );
 }
 
-function ServerJournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
+function ServerJournalRow({ entry, alternate, expanded, selected, onToggleExpand, onSelect }) {
   const login = serverJournalLogin(entry);
+  const severityLabel = entry.severity ? entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1) : 'Info';
   return (
     <>
-      <tr className={selected ? 'is-selected' : undefined} onClick={onSelect}>
+      <tr className={`cc-server-journal-row${alternate ? ' is-alternate' : ''}${selected ? ' is-selected' : ''}`} onClick={onSelect}>
         <td className="cc-journal-expander-col">
           <button
             type="button"
@@ -522,14 +547,14 @@ function ServerJournalRow({ entry, expanded, selected, onToggleExpand, onSelect 
             aria-label={expanded ? 'Collapse journal details' : 'Expand journal details'}
             aria-expanded={expanded}
             onClick={(event) => { event.stopPropagation(); onToggleExpand(); }}
-          >{expanded ? '−' : '+'}</button>
+          >{expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}</button>
         </td>
-        <td>{formatServerJournalTime(entry.time)}</td>
-        <td className={severityClass(entry.severity)}><span>{entry.severity}</span></td>
+        <td className="cc-server-journal-time">{formatServerJournalTime(entry.time)}</td>
+        <td><span className={`cc-server-journal-severity ${severityClass(entry.severity)}`}>{severityLabel}</span></td>
         <td title={entry.category}>{entry.source}</td>
         <td title={entry.action}>{entry.action}</td>
         <td title={String(login)}>{login}</td>
-        <td title={entry.group || ''}>{entry.group || '—'}</td>
+        <td className="cc-server-journal-group" title={entry.group || ''}>{entry.group || '—'}</td>
         <td title={entry.message}>{entry.message}</td>
       </tr>
       {expanded && (

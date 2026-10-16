@@ -18,7 +18,7 @@ import GroupPermissionNotice from '../features/groups/components/GroupPermission
 import { getGroupsFolderPath, getGroupsSelectedFromSearch } from '../features/groups/groupRoutes';
 import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
 import { accountsByGroupName, countAccountsByGroup } from '../features/groups/groupAccountRows.js';
-import { AccountMark } from '../features/groups/groupMarks.jsx';
+import { AccountMark, GroupFolderIcon } from '../features/groups/groupMarks.jsx';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { PERMISSIONS } from '../utils/permissions';
 import { preloadAnalyticsDestination } from '../features/analytics/analyticsQueries.js';
@@ -431,7 +431,7 @@ export default function NavigatorPanel() {
         <TreeNode
           key={node.id}
           label={node.label}
-          icon={Folder}
+          icon={GroupFolderIcon}
           iconClassName="groups-icon-folder"
           count={accountCount > 0 ? accountCount : null}
           path={groupPath}
@@ -453,7 +453,7 @@ export default function NavigatorPanel() {
       );
     }
     return (
-      <TreeNode key={node.id} label={node.label} icon={Folder} iconClassName="groups-icon-folder" count={node.count} path={getGroupsFolderPath(node.path)} activePath={currentWorkspacePath} onClickNode={go(getGroupsFolderPath(node.path))}>
+      <TreeNode key={node.id} label={node.label} icon={GroupFolderIcon} iconClassName="groups-icon-folder" count={node.count} path={getGroupsFolderPath(node.path)} activePath={currentWorkspacePath} onClickNode={go(getGroupsFolderPath(node.path))}>
         {node.children.map((child) => renderGroupTreeNode(child))}
       </TreeNode>
     );
@@ -869,7 +869,6 @@ export default function NavigatorPanel() {
           {node('Online Users', Users, '/clients/online-users')}
           {node('Clients', User, '/clients')}
           {node('Trading Accounts', User, '/clients/trading-accounts')}
-          {canViewPositions && node('Positions', Activity, '/analytics/open-positions', 'analytics')}
           {node('Orders', ClipboardCheck, '/clients/orders')}
           {canViewPositions && node('Position History', FileClock, '/clients/positions')}
         </TreeNode>

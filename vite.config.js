@@ -95,7 +95,9 @@ export default defineConfig(({ mode, command }) => {
           secure: proxySecure,
           rewrite: (path) => path.replace(/^\/discovery-api/, ''),
           configure: (proxy) => {
+            proxy.on('error', () => {})
             proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.on('error', () => {})
               try {
                 const origin = new URL(discoveryHost).origin
                 proxyReq.setHeader('origin', origin)
@@ -132,12 +134,28 @@ export default defineConfig(({ mode, command }) => {
           // Manager session sockets validate the browser Origin. Preserve it;
           // the optional bridge origin stripping does not apply to this route.
           rewrite: rewriteLegacyManagerPath,
+          configure: (proxy) => {
+            proxy.on('error', () => {})
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              proxyReq.on('error', () => {})
+              socket.on('error', () => {})
+              req.socket?.on?.('error', () => {})
+            })
+          },
         },
         '^/OnTick(?:\\?|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
           ws: true,
+          configure: (proxy) => {
+            proxy.on('error', () => {})
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              proxyReq.on('error', () => {})
+              socket.on('error', () => {})
+              req.socket?.on?.('error', () => {})
+            })
+          },
         },
         '^/Manager(?:/|$)': {
           target: apiHost,
@@ -158,13 +176,17 @@ export default defineConfig(({ mode, command }) => {
           secure: proxySecure,
           ws: true,
           rewriteWsOrigin: !stripFeedProxyOrigin,
-          configure: stripFeedProxyOrigin
-            ? (proxy) => {
-                proxy.on('proxyReqWs', (proxyRequest) => {
-                  proxyRequest.removeHeader('origin')
-                })
+          configure: (proxy) => {
+            proxy.on('error', () => {})
+            proxy.on('proxyReqWs', (proxyRequest, req, socket) => {
+              proxyRequest.on('error', () => {})
+              socket.on('error', () => {})
+              req.socket?.on?.('error', () => {})
+              if (stripFeedProxyOrigin) {
+                proxyRequest.removeHeader('origin')
               }
-            : undefined,
+            })
+          },
         },
       }
     }

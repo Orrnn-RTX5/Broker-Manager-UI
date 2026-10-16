@@ -15,21 +15,24 @@ test('theme bootstrap is an external blocking head script compatible with the st
   }
 });
 
-test('external theme bootstrap restores dark mode and tolerates missing or unavailable storage', () => {
+test('external theme bootstrap defaults to dark mode and restores a saved light choice', () => {
   for (const [stored, expected] of [
     ['{"state":{"isDarkMode":true}}', ['dark']],
     ['{"state":{"isDarkMode":false}}', []],
-    [null, []], ['invalid JSON', []], [new Error('Storage denied'), []],
+    [null, ['dark']], ['{}', ['dark']], ['invalid JSON', ['dark']],
+    [new Error('Storage denied'), ['dark']],
   ]) {
-    const added = [];
+    const classes = new Set(['dark']);
     runInNewContext(script, {
       localStorage: { getItem: (key) => {
         assert.equal(key, 'theme-storage');
         if (stored instanceof Error) throw stored;
         return stored;
       } },
-      document: { documentElement: { classList: { add: value => added.push(value) } } },
+      document: { documentElement: { classList: {
+        toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value),
+      } } },
     });
-    assert.deepEqual(added, expected);
+    assert.deepEqual([...classes], expected);
   }
 });

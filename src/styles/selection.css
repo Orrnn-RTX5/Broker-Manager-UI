@@ -1,0 +1,88 @@
+/* Same blue tint and frame as the terminal application's selected timeframe. */
+:root {
+  --navigation-selected-bg: rgb(59 130 246 / .12);
+  --navigation-selected-border: rgb(59 130 246 / .5);
+  --navigation-selected-text: #1d4ed8;
+}
+
+:root.dark {
+  --navigation-selected-bg: rgb(59 130 246 / .15);
+  --navigation-selected-text: #93c5fd;
+}
+
+/* An inset outline gives borderless tabs and toolbar controls the same frame,
+   without changing their size when selected. */
+#root#root#root#root#root :is(
+  button.is-active,
+  button.is-open,
+  button.is-selected,
+  button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
+  [role="tab"][aria-selected="true"],
+  [role="radio"][aria-checked="true"],
+  [role="option"][aria-selected="true"],
+  [aria-current="page"],
+  .cc-tree-node.is-active > [role="treeitem"],
+  .manager-action-popover-item.is-active
+),
+body :is(
+  .group-create-menu button[aria-selected="true"],
+  .ui-modal [role="tab"][aria-selected="true"],
+  .groups-props-tab.is-active
+) {
+  background: var(--navigation-selected-bg) !important;
+  color: var(--navigation-selected-text) !important;
+  border-color: transparent !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  outline: 1px solid var(--navigation-selected-border) !important;
+  outline-offset: -1px;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+#root#root#root#root#root :is(
+  button.is-active,
+  button.is-open,
+  button.is-selected,
+  button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
+  [role="tab"][aria-selected="true"],
+  .cc-tree-node.is-active > [role="treeitem"],
+  .manager-action-popover-item.is-active
+) :is(span, svg) { color: inherit !important; }
+
+#root#root#root#root#root :is(
+  button.is-active,
+  button.is-open,
+  button.is-selected,
+  button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
+  [role="tab"][aria-selected="true"],
+  .cc-tree-node.is-active > [role="treeitem"]
+):focus-visible,
+body .group-create-menu button[aria-selected="true"]:focus-visible {
+  outline: 2px solid var(--navigation-selected-text) !important;
+  outline-offset: -2px;
+}
+
+/* Selected data rows share the tint, while quote and P/L colors stay intact. */
+#root#root#root#root#root .rtx5-command-shell tbody tr.is-selected,
+body .ui-modal tbody tr.is-selected { background: transparent !important; }
+
+#root#root#root#root#root .rtx5-command-shell tbody tr.is-selected > td,
+body .ui-modal tbody tr.is-selected > td {
+  background: var(--navigation-selected-bg) !important;
+  box-shadow: inset 0 1px 0 var(--navigation-selected-border), inset 0 -1px 0 var(--navigation-selected-border) !important;
+}
+
+#root#root#root#root#root .rtx5-command-shell tbody tr.is-selected > td:first-child,
+body .ui-modal tbody tr.is-selected > td:first-child {
+  box-shadow: inset 1px 0 0 var(--navigation-selected-border), inset 0 1px 0 var(--navigation-selected-border), inset 0 -1px 0 var(--navigation-selected-border) !important;
+}
+
+#root#root#root#root#root .rtx5-command-shell tbody tr.is-selected > td:last-child,
+body .ui-modal tbody tr.is-selected > td:last-child {
+  box-shadow: inset -1px 0 0 var(--navigation-selected-border), inset 0 1px 0 var(--navigation-selected-border), inset 0 -1px 0 var(--navigation-selected-border) !important;
+}
+
+#root#root#root#root#root .rtx5-command-shell .cc-terminal-table tbody tr.is-selected > td {
+  color: var(--text-primary) !important;
+}

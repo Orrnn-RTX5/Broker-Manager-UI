@@ -12,7 +12,7 @@ test('Open Positions renders Action as plain semantic text', () => {
   assert.match(actionCell, /isBuy \? 'is-buy' : 'is-sell'/);
   assert.doesNotMatch(actionCell, /ui-badge/);
   assert.match(styles, /--open-position-buy-color:\s*rgb\(88, 174, 104\)/);
-  assert.match(styles, /--open-position-sell-color:\s*rgb\(235, 112, 112\)/);
+  assert.match(styles, /--open-position-sell-color:\s*#f06464/);
   assert.match(styles, /\.open-position-action\s*\{[\s\S]*?background:\s*transparent/);
 });
 
@@ -22,6 +22,6 @@ test('Open Positions keeps neutral values on the white ink in dark mode and Prof
   assert.equal(neutralValueCells.length, 12);
   assert.match(styles, /\.dark #root \.open-positions-page \.open-positions-grid\s*\{[\s\S]*?--open-position-value-color:\s*var\(--ink-1\)/);
   assert.match(source, /className="open-position-profit tabular font-mono"/);
-  assert.match(source, /const profitTone = row\.profit < 0[\s\S]*?'var\(--open-position-sell-color\)'[\s\S]*?'var\(--open-position-buy-color\)'/);
+  assert.match(source, /const profitTone = row\.profit < 0[\s\S]*?'var\(--open-position-loss-color\)'[\s\S]*?'var\(--open-position-profit-color\)'/);
   assert.doesNotMatch(source, /const swapTone/);
 });
