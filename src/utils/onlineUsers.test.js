@@ -65,3 +65,16 @@ test('online user numeric parsing rejects non-finite values', () => {
   assert.equal(toFiniteNumber('not-a-number'), 0);
   assert.equal(toFiniteNumber(Number.POSITIVE_INFINITY), 0);
 });
+
+test('live account scope keeps trading accounts and skips manager sessions', async () => {
+  const { liveAccountScope } = await import('./onlineUsers.js');
+  const rows = [
+    { login: '9001', equity: 0, deviceType: 'manager', isAdmin: true },
+    { login: '200002', equity: 10, deviceType: 'web' },
+    { login: '200001', balance: 5 },
+    { login: '200001', equity: 5 },
+    { login: '', equity: 1 },
+    { login: '300000' },
+  ];
+  assert.equal(liveAccountScope(rows), '200001,200002');
+});

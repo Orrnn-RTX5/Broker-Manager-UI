@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { liveTradingState } from '../services/liveTradingState.js';
 import { watchAccountMetrics } from '../services/accountMetricsSync.js';
+import { liveAccountScope } from '../utils/onlineUsers.js';
 
 const subscribeToNothing = () => () => {};
 const zeroRevision = () => 0;
@@ -19,7 +20,7 @@ export function useLiveAccountMetrics(login) {
   return liveTradingState.account(login);
 }
 export function useLiveAccountRows(rows) {
-  const scope = [...new Set(rows.filter((row) => row.login && ('equity' in row || 'balance' in row)).map((row) => String(row.login)))].sort().join(',');
+  const scope = liveAccountScope(rows);
   // Position/order grids apply their own position overlay. Subscribing them
   // to account metrics here duplicates every live render with a fresh array.
   const revision = useSyncExternalStore(scope ? liveTradingState.subscribe : subscribeToNothing, scope ? liveTradingState.snapshot : zeroRevision);
