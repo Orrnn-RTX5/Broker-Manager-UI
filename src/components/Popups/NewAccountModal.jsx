@@ -3,9 +3,9 @@ import { X, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, Eye, EyeOff 
 import { useGroupList } from '../../hooks/useGroupList';
 import { createManagerAccount } from '../../services/managerAccountApi';
 import {
-  ACCOUNT_MODES,
+  ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
-  buildNewAccountPayload,
+  buildSubmittableAccountPayload,
   inheritGroupSettings,
 } from './newAccountWizard';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -232,9 +232,11 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     // The submitted group is the trimmed, visible selection. No fallback to
     // the first loaded group is applied here so an untouched/empty choice
     // fails closed instead of creating the account under an assumed group.
+    // The engine-creatability gate runs first so netting can never reach the
+    // wire even if component state is forced.
     let payload;
     try {
-      payload = buildNewAccountPayload(form);
+      payload = buildSubmittableAccountPayload(form);
     } catch (err) {
       setResult({ success: false, message: err.message || 'Please review the account fields.' });
       return;
@@ -365,7 +367,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                   </Field>
                   <Field id="new-account-mode" label="Account mode" required hint="Cannot be changed after creation">
                     <select id="new-account-mode" className="ui-select" value={form.AccountMode} required onChange={(event) => set('AccountMode', event.target.value)}>
-                      {ACCOUNT_MODES.map((mode) => <option key={mode} value={mode}>{mode === 'hedging' ? 'Hedging' : 'Netting'}</option>)}
+                      {ACCOUNT_MODE_CREATE_OPTIONS.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
                     </select>
                   </Field>
                   <Field id="new-account-country" label="Country" required>

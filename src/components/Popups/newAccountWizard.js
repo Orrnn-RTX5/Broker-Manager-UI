@@ -10,6 +10,23 @@ export const ACCOUNT_MODES = Object.freeze(['hedging', 'netting']);
 
 export const ACCOUNT_MODE_DEFAULT = 'hedging';
 
+/**
+ * The exact options the Account mode control renders. Netting is shown but
+ * DISABLED: the RAM engine cannot open netting accounts, so hedging stays the
+ * default and netting can never be picked through the UI.
+ */
+export const ACCOUNT_MODE_CREATE_OPTIONS = Object.freeze([
+  { value: 'hedging', label: 'Hedging', disabled: false },
+  { value: 'netting', label: 'Netting — not supported yet', disabled: true },
+]);
+
+/**
+ * True only for modes the engine can open today: hedging alone. The submit
+ * path checks this AND the control disables every other option, so the submit
+ * payload can never carry netting even if component state is forced.
+ */
+export const isCreatableAccountMode = (value) => normalizeAccountMode(value) === 'hedging';
+
 const CURRENCY_CODE_PATTERN = /^[A-Z0-9]{2,8}$/;
 
 const LEVERAGE_MIN = 1;
@@ -133,4 +150,16 @@ export const buildNewAccountPayload = (form = {}) => {
     Currency,
     AccountMode,
   };
+};
+
+/**
+ * The exact submit path NewAccountModal.jsx calls: the engine-creatability
+ * gate first (fail-closed), then the canonical payload builder. Netting can
+ * never reach the wire through this function.
+ */
+export const buildSubmittableAccountPayload = (form = {}) => {
+  if (!isCreatableAccountMode(form?.AccountMode)) {
+    throw new TypeError('Netting accounts are not supported yet. Select hedging.');
+  }
+  return buildNewAccountPayload(form);
 };

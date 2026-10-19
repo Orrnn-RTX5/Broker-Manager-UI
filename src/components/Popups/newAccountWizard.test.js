@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACCOUNT_MODES,
+  ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
   buildNewAccountPayload,
+  buildSubmittableAccountPayload,
   groupCurrencyOf,
   groupLeverageOf,
   inheritGroupSettings,
   isAccountMode,
+  isCreatableAccountMode,
   normalizeAccountMode,
   normalizeCurrencyCode,
   normalizeGroupName,
@@ -281,4 +284,27 @@ test('reset leaves Group empty and fail-closed until the next explicit pick', ()
     }),
     { Leverage: 50, Currency: 'GBP' },
   );
+});
+
+test('netting option is shown disabled with a not-supported label; hedging is the enabled default', () => {
+  assert.deepEqual(ACCOUNT_MODE_CREATE_OPTIONS, [
+    { value: 'hedging', label: 'Hedging', disabled: false },
+    { value: 'netting', label: 'Netting — not supported yet', disabled: true },
+  ]);
+  assert.equal(ACCOUNT_MODE_DEFAULT, 'hedging');
+  const enabled = ACCOUNT_MODE_CREATE_OPTIONS.filter((option) => !option.disabled);
+  assert.deepEqual(enabled.map((option) => option.value), ['hedging']);
+});
+
+test('submit path admits hedging and refuses netting before any payload is built', () => {
+  assert.equal(isCreatableAccountMode('hedging'), true);
+  assert.equal(isCreatableAccountMode('Hedging'), true);
+  assert.equal(isCreatableAccountMode('netting'), false);
+  assert.equal(isCreatableAccountMode('NETTING'), false);
+  assert.equal(isCreatableAccountMode(''), false);
+  assert.equal(isCreatableAccountMode('unknown'), false);
+  const payload = buildSubmittableAccountPayload(baseForm({ AccountMode: 'hedging' }));
+  assert.equal(payload.AccountMode, 'hedging');
+  assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: 'netting' })), /not supported yet/);
+  assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: '' })), /not supported yet/);
 });
