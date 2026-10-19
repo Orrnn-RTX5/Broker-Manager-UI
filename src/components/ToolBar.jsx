@@ -17,6 +17,7 @@ import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { useI18nStore } from '../i18n/index.js';
 import { usePermissions } from '../hooks/usePermissions.js';
 import { PERMISSIONS } from '../utils/permissions.js';
+import { normalizeShortcutKey } from './toolbarShortcutKey.js';
 
 const MANAGER_REFRESH_EVENT = 'manager:refresh-data';
 
@@ -355,7 +356,7 @@ const ToolBar = ({
   useEffect(() => {
     const onKeyDown = (event) => {
       const commandKey = event.ctrlKey || event.metaKey;
-      const key = event.key.toLowerCase();
+      const key = normalizeShortcutKey(event.key);
       if (event.key === 'Escape') setOpenToolbarMenu(null);
       if (event.altKey && !commandKey && key === 'r') {
         event.preventDefault();
