@@ -193,11 +193,32 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     if (!groupSearch && !loadingGroups && groups && groups.length > 0) {
       if (!groups.find(g => g.name === form.Group)) {
         setForm(prev => ({ ...prev, Group: groups[0].name }));
+        if (!leverageTouched.current) {
+          const v = Number(groups[0]?.leverage ?? groups[0]?.Leverage);
+          if (Number.isInteger(v) && v >= 1 && v <= 10000) {
+            setForm(prev => ({ ...prev, Leverage: v }));
+          }
+        }
       }
     }
   }, [groups, loadingGroups, form.Group, groupSearch]);
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  // T8-B: the leverage dropdown follows the selected group's leverage until
+  // the operator touches it, so UI-created accounts inherit group leverage
+  // exactly like API-created accounts with an omitted Leverage.
+  const leverageTouched = useRef(false);
+  const groupLeverageOf = (groupName) => {
+    const g = (groups || []).find((x) => x && x.name === groupName);
+    const v = Number(g?.leverage ?? g?.Leverage);
+    return Number.isInteger(v) && v >= 1 && v <= 10000 ? v : null;
+  };
+  const syncLeverageFromGroup = (groupName) => {
+    if (leverageTouched.current) return;
+    const v = groupLeverageOf(groupName);
+    if (v !== null) set('Leverage', v);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -243,8 +264,12 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   const handleClose = (e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     setResult(null);
+    leverageTouched.current = false;
+    const firstGroup = groups?.[0];
+    const firstLeverage = Number(firstGroup?.leverage ?? firstGroup?.Leverage);
     setForm({
-      Group: groups?.[0]?.name || '', Leverage: 100,
+      Group: firstGroup?.name || '',
+      Leverage: Number.isInteger(firstLeverage) && firstLeverage >= 1 && firstLeverage <= 10000 ? firstLeverage : 100,
       FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: 'USD',
       master_pass: '', investor_pass: '',
     });
@@ -307,7 +332,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                 <div className="new-account-section-heading">
                   <div>
                     <h2>Account setup</h2>
-                    <p>Select the account group, leverage, and base currency.</p>
+                    <p>Select the account group, leverage, and base currency. Leverage follows the selected group until changed.</p>
                   </div>
                 </div>
                 <div className="new-account-settings-grid">
@@ -316,7 +341,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                       <GroupCombobox
                         id="new-account-group"
                         value={form.Group}
-                        onChange={(selectedGroup) => set('Group', selectedGroup)}
+                        onChange={(selectedGroup) => { set('Group', selectedGroup); syncLeverageFromGroup(selectedGroup); }}
                         groups={groups}
                         loading={loadingGroups}
                         hasMore={hasMoreGroups}
@@ -326,8 +351,8 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </Field>
                   </div>
                   <Field id="new-account-leverage" label="Leverage" required>
-                    <select id="new-account-leverage" className="ui-select" value={form.Leverage} onChange={(event) => set('Leverage', Number(event.target.value))}>
-                      {LEVERAGES.map((leverage) => <option key={leverage} value={leverage}>1:{leverage}</option>)}
+                    <select id="new-account-leverage" className="ui-select" value={form.Leverage} onChange={(event) => { leverageTouched.current = true; set('Leverage', Number(event.target.value)); }}>
+                      {[...new Set([...LEVERAGES, form.Leverage])].sort((a, b) => a - b).map((leverage) => <option key={leverage} value={leverage}>1:{leverage}</option>)}
                     </select>
                   </Field>
                   <Field id="new-account-currency" label="Currency" required>
