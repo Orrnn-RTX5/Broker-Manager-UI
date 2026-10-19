@@ -424,11 +424,19 @@ export const buildFeedWsUrl = () => {
   }
 };
 
+export const resolveManagerWsBase = (configuredHost, useDevProxy, pageOrigin) => {
+  if (useDevProxy && pageOrigin) {
+    return String(pageOrigin).replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:').replace(/\/+$/, '');
+  }
+  return trimTrailingSlash(configuredHost).replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+};
+
 const getBaseWsHost = () => {
   updateDynamicEndpoints();
-  return trimTrailingSlash(
-    getRuntimeConfigValue(['MANAGER_WS_HOST', 'VITE_MANAGER_WS_HOST']) || WS_HOST || buildWsHost(API_HOST)
-  ).replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+  const configured = getRuntimeConfigValue(['MANAGER_WS_HOST', 'VITE_MANAGER_WS_HOST'])
+    || WS_HOST || buildWsHost(API_HOST);
+  const pageOrigin = typeof window !== 'undefined' ? window.location?.origin : '';
+  return resolveManagerWsBase(configured, shouldUseManagerDevProxy(), pageOrigin);
 };
 
 export const isManagerMarketFeed = () => getRuntimeConfigValue(

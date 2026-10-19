@@ -162,6 +162,34 @@ export default defineConfig(({ mode, command }) => {
             })
           },
         },
+        '^/OnPositionUpdate(?:\\?|$)': {
+          target: apiHost,
+          changeOrigin: true,
+          secure: proxySecure,
+          ws: true,
+          configure: (proxy) => {
+            proxy.on('error', () => {})
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              proxyReq.on('error', () => {})
+              socket.on('error', () => {})
+              req.socket?.on?.('error', () => {})
+            })
+          },
+        },
+        '^/OnAccountMetrics(?:\\?|$)': {
+          target: apiHost,
+          changeOrigin: true,
+          secure: proxySecure,
+          ws: true,
+          configure: (proxy) => {
+            proxy.on('error', () => {})
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              proxyReq.on('error', () => {})
+              socket.on('error', () => {})
+              req.socket?.on?.('error', () => {})
+            })
+          },
+        },
         '^/Manager(?:/|$)': {
           target: apiHost,
           changeOrigin: true,

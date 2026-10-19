@@ -13,6 +13,7 @@ import {
   shouldUseFeedDevProxy,
   shouldUseManagerDevProxy,
   shouldUseManagerProxyPrefix,
+  resolveManagerWsBase,
   toLocalDevFeedProxyUrl,
 } from './endpoints.js';
 
@@ -166,6 +167,21 @@ test('manager dev proxy is enabled for LAN IP and tunnel origins served by Vite'
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   }
+});
+
+test('manager websockets use the page origin when the dev proxy is active', () => {
+  assert.equal(
+    resolveManagerWsBase('ws://localhost:8091', true, 'https://manager-trivanta.orrnn.com'),
+    'wss://manager-trivanta.orrnn.com',
+  );
+  assert.equal(
+    resolveManagerWsBase('ws://localhost:8091', false, 'https://manager-trivanta.orrnn.com'),
+    'ws://localhost:8091',
+  );
+  assert.equal(
+    resolveManagerWsBase('wss://manager-api.example', true, 'http://localhost:3000'),
+    'ws://localhost:3000',
+  );
 });
 
 test('manager dev proxy remains opt-in', () => {
