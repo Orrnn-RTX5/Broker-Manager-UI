@@ -477,12 +477,4 @@ export const buildPositionUpdatesWsUrl = (ticket) => {
   return url.toString();
 };
 
-export const buildMetricsWsUrl = (token, login) => {
-  // Browser WebSocket calls cannot attach Authorization headers, so this
-  // legacy endpoint is the only remaining token-in-query path.
-  const params = new URLSearchParams({
-    id: String(token || ''),
-    login: String(login || ''),
-  });
-  return `${getBaseWsHost()}/manager/OnAccountMetrics?${params.toString()}`;
-};
+
