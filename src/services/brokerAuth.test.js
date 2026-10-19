@@ -14,13 +14,24 @@ import {
 } from './brokerAuth.js';
 import { normalizeBrokerInfo } from '../config/backendTarget.js';
 
+const DISCOVERY_BASE_URL = 'https://discovery.example.test';
+const withDiscovery = (config = {}) => ({ DISCOVERY_BASE_URL, ...config });
+const TEST_BROKER_ENV = {
+  TEST_BROKER_PUBLIC_BACKEND_URL: 'https://test-broker.example.test',
+  TEST_BROKER_DIRECT_HOST: '198.51.100.30',
+  TEST_BROKER_DIRECT_PORT: '8443',
+  TEST_BROKER_WS_URL: 'wss://test-broker.example.test/ws/feed',
+  TEST_BROKER_FEED_STATUS_URL: 'https://test-broker.example.test/ws/feed/status',
+  TEST_BROKER_DEFAULT_MT5_SERVER: '198.51.100.30',
+};
+
 test('local fxtrust discovery preserves its real identity and loopback endpoints', async () => {
-  globalThis.__RTX_RUNTIME_CONFIG__ = {
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery({
     LOCAL_BACKEND: 'true', BROKER_ID: 'fxtrust', BACKEND_TARGET: 'desktop',
     API_HOST: 'http://127.0.0.1:8091', API_HOST_EXT: 'http://127.0.0.1:8091',
     FEED_WS_URL: 'ws://127.0.0.1:8094/ws/feed',
     DEFAULT_MT5_SERVER: '127.0.0.1:8091',
-  };
+  });
   globalThis.fetch = async () => ({ ok: true, text: async () => JSON.stringify([
     { broker_id: 'fxtrust', broker_name: 'FX Trust Local', server: 'broker-server-3' },
   ]) });
@@ -47,6 +58,7 @@ let fetchCalls;
 
 beforeEach(() => {
   fetchCalls = [];
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery();
   globalThis.sessionStorage = createStorage();
   globalThis.localStorage = createStorage();
   globalThis.fetch = async (url, options = {}) => {
@@ -96,7 +108,7 @@ test('fetchBrokerList uses the v2 public broker discovery contract and preserves
   const brokers = await fetchBrokerList();
 
   assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0].url, 'https://superbackend.orrnn.com/api/v2/broker/servers');
+  assert.equal(fetchCalls[0].url, `${DISCOVERY_BASE_URL}/api/v2/broker/servers`);
   assert.equal(fetchCalls[0].options.credentials, 'same-origin');
   assert.equal(brokers.length, 1);
   assert.equal(brokers[0].broker_id, 'testorrnn');
@@ -105,7 +117,7 @@ test('fetchBrokerList uses the v2 public broker discovery contract and preserves
 });
 
 test('an empty discovery response does not silently select a different broker', async () => {
-  globalThis.__RTX_RUNTIME_CONFIG__ = { BROKER_ID: 'orrnn' };
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery({ BROKER_ID: 'orrnn' });
   const brokers = await fetchBrokerList();
   assert.deepEqual(brokers, []);
   const selection = resolveBrokerSelection(brokers, { runtimeBrokerId: 'orrnn' });
@@ -114,11 +126,11 @@ test('an empty discovery response does not silently select a different broker', 
 });
 
 test('Orrnn discovery keeps its server handle while the env supplies public endpoints', async () => {
-  globalThis.__RTX_RUNTIME_CONFIG__ = {
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery({
     BROKER_ID: 'orrnn',
     API_HOST: 'https://service.orrnn.com',
     WS_HOST: 'wss://service.orrnn.com',
-  };
+  });
   globalThis.fetch = async () => ({
     ok: true,
     status: 200,
@@ -141,8 +153,10 @@ test("broker discovery uses Vite's same-origin proxy when enabled", () => {
   assert.equal(buildBrokerDiscoveryUrl(true), '/discovery-api/api/v2/broker/servers');
   assert.equal(
     buildBrokerDiscoveryUrl(false),
-    'https://superbackend.orrnn.com/api/v2/broker/servers'
+    `${DISCOVERY_BASE_URL}/api/v2/broker/servers`
   );
+  delete globalThis.__RTX_RUNTIME_CONFIG__;
+  assert.equal(buildBrokerDiscoveryUrl(false), '');
 });
 
 test('discoverBrokerById can resolve by the opaque server handle', () => {
@@ -160,14 +174,15 @@ test('discoverBrokerById can resolve by the opaque server handle', () => {
   assert.equal(broker.broker_id, 'testorrnn');
 });
 
-test('getBrokerDisplayServerName prefers the real GTA server address over the opaque server handle', () => {
+test('server display prefers an explicit broker server over the opaque server handle', () => {
   const broker = {
-    broker_id: 'gta_broker',
-    broker_name: 'Grow Trading Academy',
+    broker_id: 'broker-a',
+    broker_name: 'Broker A',
     server: 'broker-server-2',
+    default_mt5_server: '198.51.100.20',
   };
 
-  assert.equal(getBrokerDisplayServerName(broker), '103.91.186.142');
+  assert.equal(getBrokerDisplayServerName(broker), '198.51.100.20');
   assert.equal(getBrokerSelectionId(broker), 'broker-server-2');
 });
 
@@ -524,7 +539,8 @@ test('loginManager uses the documented native manager auth route for MyProp brok
   assert.equal(fetchCalls[0].url, 'https://services.myprop.trade/api/v1/manager/auth/login');
 });
 
-test('normalizeBrokerInfo attaches backend to test broker records that lack backend metadata', () => {
+test('normalizeBrokerInfo attaches explicit test broker defaults', () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery(TEST_BROKER_ENV);
   const normalized = normalizeBrokerInfo({
     broker_id: 'TEST',
     broker_name: 'RTX5-Local-Test-Broker',
@@ -533,16 +549,33 @@ test('normalizeBrokerInfo attaches backend to test broker records that lack back
 
   assert.equal(normalized.broker_id, 'TEST');
   assert.equal(normalized.server, 'broker-server-3');
-  assert.equal(normalized.backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
-  assert.equal(normalized.api_url, 'https://fxtrustbrokerbackend.orrnn.com');
-  assert.equal(normalized.server_ip, '100.120.168.28');
-  assert.equal(normalized.server_port, 8091);
-  assert.equal(normalized.ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
-  assert.equal(normalized.feed_ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
-  assert.equal(normalized.default_mt5_server, '100.120.168.28');
+  assert.equal(normalized.backend_url, 'https://test-broker.example.test');
+  assert.equal(normalized.api_url, 'https://test-broker.example.test');
+  assert.equal(normalized.server_ip, '198.51.100.30');
+  assert.equal(normalized.server_port, 8443);
+  assert.equal(normalized.ws_url, 'wss://test-broker.example.test/ws/feed');
+  assert.equal(normalized.feed_ws_url, 'wss://test-broker.example.test/ws/feed');
+  assert.equal(normalized.default_mt5_server, '198.51.100.30');
 });
 
-test('fetchBrokerList attaches backend to test broker returned from discovery', async () => {
+test('normalizeBrokerInfo fails closed when no test broker endpoints are configured', () => {
+  const normalized = normalizeBrokerInfo({
+    broker_id: 'TEST',
+    broker_name: 'RTX5-Local-Test-Broker',
+    server: 'broker-server-3',
+  });
+
+  assert.equal(normalized.backend_url, '');
+  assert.equal(normalized.api_url, undefined);
+  assert.equal(normalized.server_ip, '');
+  assert.equal(normalized.ws_url, undefined);
+  assert.equal(normalized.feed_ws_url, undefined);
+  assert.equal(normalized.feed_status_url, undefined);
+  assert.equal(normalized.default_mt5_server, undefined);
+});
+
+test('fetchBrokerList attaches explicit test broker defaults returned from discovery', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery(TEST_BROKER_ENV);
   globalThis.fetch = async (url, options = {}) => {
     fetchCalls.push({ url: String(url), options });
     return {
@@ -563,16 +596,44 @@ test('fetchBrokerList attaches backend to test broker returned from discovery', 
   const brokers = await fetchBrokerList();
   assert.equal(brokers.length, 1);
   assert.equal(brokers[0].broker_id, 'TEST');
-  assert.equal(brokers[0].backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
-  assert.equal(brokers[0].server_ip, '100.120.168.28');
-  assert.equal(brokers[0].server_port, 8091);
+  assert.equal(brokers[0].backend_url, 'https://test-broker.example.test');
+  assert.equal(brokers[0].server_ip, '198.51.100.30');
+  assert.equal(brokers[0].server_port, 8443);
 });
 
-test('MOCK_BROKER_LIST includes test broker with backend', () => {
+test('MOCK_BROKER_LIST keeps entries without hardcoded host defaults', () => {
   const testBroker = MOCK_BROKER_LIST.find((b) => b.broker_id === 'TEST');
   assert.ok(testBroker);
-  assert.equal(testBroker.backend_url, 'https://fxtrustbrokerbackend.orrnn.com');
-  assert.equal(testBroker.server_ip, '100.120.168.28');
-  assert.equal(testBroker.server_port, 8091);
-  assert.equal(testBroker.ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
+  assert.equal(testBroker.backend_url, '');
+  assert.equal(testBroker.server, '');
+  assert.equal(testBroker.server_ip, '');
+  assert.equal(testBroker.ws_url, '');
+  assert.equal(testBroker.feed_ws_url, '');
+});
+
+test('MOCK_BROKER_LIST reads explicit test, Nexa and mock broker runtime settings', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery({
+    ...TEST_BROKER_ENV,
+    NEXA_BACKEND_URL: 'https://nexa.example.test',
+    NEXA_SERVER_IP: '198.51.100.40',
+    NEXA_WS_URL: 'wss://nexa.example.test/ws/feed',
+    NEXA_FEED_STATUS_URL: 'https://nexa.example.test/ws/feed/status',
+    NEXA_DEFAULT_MT5_SERVER: '198.51.100.40',
+    MOCK_BROKER_TENANT_BACKEND_URL: 'https://mock-tenant.example.test',
+    MOCK_BROKER_DEMO_BACKEND_URL: 'https://mock-demo.example.test',
+  });
+  const { MOCK_BROKER_LIST: configuredMockList } = await import(`./brokerAuth.js?mock-env=${Date.now()}`);
+
+  const testBroker = configuredMockList.find((b) => b.broker_id === 'TEST');
+  assert.equal(testBroker.backend_url, 'https://test-broker.example.test');
+  assert.equal(testBroker.ws_url, 'wss://test-broker.example.test/ws/feed');
+
+  const nexaBroker = configuredMockList.find((b) => b.broker_id === 'Nexa');
+  assert.equal(nexaBroker.backend_url, 'https://nexa.example.test');
+  assert.equal(nexaBroker.ws_url, 'wss://nexa.example.test/ws/feed');
+
+  const mockTenant = configuredMockList.find((b) => b.broker_id === 'MOCK-TENANT');
+  assert.equal(mockTenant.backend_url, 'https://mock-tenant.example.test');
+  const mockDemo = configuredMockList.find((b) => b.broker_id === 'MOCK-DEMO');
+  assert.equal(mockDemo.backend_url, 'https://mock-demo.example.test');
 });

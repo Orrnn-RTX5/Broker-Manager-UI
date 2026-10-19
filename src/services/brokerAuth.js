@@ -1,15 +1,10 @@
 import {
   getRuntimeConfigValue,
+  getTestBrokerRuntimeDefaults,
   isTestBrokerInfo,
   normalizeBrokerInfo,
   resolveBrokerBackendUrl,
   resolveBrokerDefaultMt5Server,
-  TEST_BROKER_PUBLIC_BACKEND_URL,
-  TEST_BROKER_DIRECT_HOST,
-  TEST_BROKER_DIRECT_PORT,
-  TEST_BROKER_WS_URL,
-  TEST_BROKER_FEED_STATUS_URL,
-  TEST_BROKER_DEFAULT_MT5_SERVER,
 } from '../config/backendTarget.js';
 import {
   buildManagerApiUrl,
@@ -21,71 +16,124 @@ import { MANAGER_API } from '../config/managerApiContract.js';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
-const PLATFORM_DISCOVERY_BASE_URL = 'https://superbackend.orrnn.com';
 
-export const DISCOVERY_BASE_URL = getRuntimeConfigValue(
+const getDiscoveryBaseUrl = () => getRuntimeConfigValue(
   ['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'],
-  PLATFORM_DISCOVERY_BASE_URL
+  ''
 );
+
+export const DISCOVERY_BASE_URL = getDiscoveryBaseUrl();
 
 // Set VITE_USE_MOCK_DISCOVERY=true in .env only when local mock data is needed.
 const USE_MOCK_DISCOVERY = getRuntimeConfigValue(['USE_MOCK_DISCOVERY', 'VITE_USE_MOCK_DISCOVERY'], 'false') === 'true';
 
-export const TEST_BROKER_DEFAULT_ENTRY = {
-  broker_id: 'TEST',
-  name: 'TEST',
-  broker_name: 'TEST',
-  status: 'active',
-  server: 'fxtrustbrokerbackend.orrnn.com:443',
-  backend_url: TEST_BROKER_PUBLIC_BACKEND_URL,
-  server_url: TEST_BROKER_PUBLIC_BACKEND_URL,
-  market_api_url: TEST_BROKER_PUBLIC_BACKEND_URL,
-  server_ip: TEST_BROKER_DIRECT_HOST,
-  server_port: TEST_BROKER_DIRECT_PORT,
-  ws_url: TEST_BROKER_WS_URL,
-  feed_ws_url: TEST_BROKER_WS_URL,
-  feed_status_url: TEST_BROKER_FEED_STATUS_URL,
-  default_mt5_server: TEST_BROKER_DEFAULT_MT5_SERVER,
+const serverHandleFromUrl = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const port = url.port || (url.protocol === 'http:' ? '80' : '443');
+    return `${url.hostname}:${port}`;
+  } catch {
+    return raw;
+  }
 };
 
-export const NEXA_BROKER_DEFAULT_ENTRY = {
-  broker_id: 'Nexa',
-  name: 'Nexa',
-  broker_name: 'Nexa',
-  status: 'active',
-  server: 'nexa.orrnn.com:443',
-  backend_url: 'https://nexa.orrnn.com',
-  server_url: 'https://nexa.orrnn.com',
-  market_api_url: 'https://nexa.orrnn.com',
-  server_ip: '100.119.182.26',
-  server_port: 443,
-  ws_url: 'wss://nexa.orrnn.com/ws/feed',
-  feed_ws_url: 'wss://nexa.orrnn.com/ws/feed',
-  feed_status_url: 'https://nexa.orrnn.com/ws/feed/status',
-  default_mt5_server: '100.119.182.26',
+const buildTestBrokerDefaultEntry = () => {
+  const defaults = getTestBrokerRuntimeDefaults();
+  return {
+    broker_id: 'TEST',
+    name: 'TEST',
+    broker_name: 'TEST',
+    status: 'active',
+    server: getRuntimeConfigValue(['TEST_BROKER_SERVER', 'VITE_TEST_BROKER_SERVER'], '')
+      || serverHandleFromUrl(defaults.publicBackendUrl),
+    backend_url: defaults.publicBackendUrl,
+    server_url: defaults.publicBackendUrl,
+    market_api_url: defaults.publicBackendUrl,
+    server_ip: defaults.directHost,
+    server_port: defaults.directPort,
+    ws_url: defaults.wsUrl,
+    feed_ws_url: defaults.wsUrl,
+    feed_status_url: defaults.feedStatusUrl,
+    default_mt5_server: defaults.defaultMt5Server,
+  };
 };
+
+export const TEST_BROKER_DEFAULT_ENTRY = buildTestBrokerDefaultEntry();
+
+const buildNexaBrokerDefaultEntry = () => {
+  const backendUrl = getRuntimeConfigValue([
+    'NEXA_BACKEND_URL', 'VITE_NEXA_BACKEND_URL',
+    'NEXA_PUBLIC_BACKEND_URL', 'VITE_NEXA_PUBLIC_BACKEND_URL',
+    'API_HOST', 'VITE_API_HOST',
+  ], '');
+  const wsUrl = getRuntimeConfigValue([
+    'NEXA_WS_URL', 'VITE_NEXA_WS_URL',
+    'NEXA_FEED_WS_URL', 'VITE_NEXA_FEED_WS_URL',
+    'FEED_WS_URL', 'VITE_FEED_WS_URL',
+  ], '');
+  const feedStatusUrl = getRuntimeConfigValue([
+    'NEXA_FEED_STATUS_URL', 'VITE_NEXA_FEED_STATUS_URL',
+    'FEED_STATUS_URL', 'VITE_FEED_STATUS_URL',
+  ], '');
+  const defaultMt5Server = getRuntimeConfigValue([
+    'NEXA_DEFAULT_MT5_SERVER', 'VITE_NEXA_DEFAULT_MT5_SERVER',
+    'DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER',
+  ], '');
+
+  return {
+    broker_id: 'Nexa',
+    name: 'Nexa',
+    broker_name: 'Nexa',
+    status: 'active',
+    server: getRuntimeConfigValue(['NEXA_SERVER', 'VITE_NEXA_SERVER'], '')
+      || serverHandleFromUrl(backendUrl),
+    backend_url: backendUrl,
+    server_url: backendUrl,
+    market_api_url: backendUrl,
+    server_ip: getRuntimeConfigValue(['NEXA_SERVER_IP', 'VITE_NEXA_SERVER_IP'], ''),
+    server_port: getRuntimeConfigValue(['NEXA_SERVER_PORT', 'VITE_NEXA_SERVER_PORT'], ''),
+    ws_url: wsUrl,
+    feed_ws_url: wsUrl,
+    feed_status_url: feedStatusUrl,
+    default_mt5_server: defaultMt5Server,
+  };
+};
+
+export const NEXA_BROKER_DEFAULT_ENTRY = buildNexaBrokerDefaultEntry();
 
 // ---------------------------------------------------------------------------
 // Mock broker list — mirrors what the real /api/v2/broker/servers returns.
+// Hosts stay empty unless a MOCK_BROKER_* runtime setting provides them.
 // ---------------------------------------------------------------------------
-export const MOCK_BROKER_LIST = [
-  NEXA_BROKER_DEFAULT_ENTRY,
-  TEST_BROKER_DEFAULT_ENTRY,
+const buildMockBrokerList = () => [
+  buildNexaBrokerDefaultEntry(),
+  buildTestBrokerDefaultEntry(),
   {
-    broker_id: 'testorrnn',
-    name: 'Test Orrnn Broker (Demo)',
+    broker_id: getRuntimeConfigValue(['MOCK_BROKER_TENANT_ID', 'VITE_MOCK_BROKER_TENANT_ID'], 'MOCK-TENANT'),
+    name: getRuntimeConfigValue(['MOCK_BROKER_TENANT_NAME', 'VITE_MOCK_BROKER_TENANT_NAME'], 'Mock Tenant Broker'),
     status: 'active',
-    server: 'broker-server-testorrnn',
-    backend_url: 'https://testbrokerbackend.orrnn.com',
+    server: getRuntimeConfigValue(['MOCK_BROKER_TENANT_SERVER', 'VITE_MOCK_BROKER_TENANT_SERVER'], 'mock-tenant-server'),
+    backend_url: getRuntimeConfigValue(
+      ['MOCK_BROKER_TENANT_BACKEND_URL', 'VITE_MOCK_BROKER_TENANT_BACKEND_URL'],
+      ''
+    ),
   },
   {
-    broker_id: 'orrnn',
-    name: 'Orrnn Broker',
+    broker_id: getRuntimeConfigValue(['MOCK_BROKER_DEMO_ID', 'VITE_MOCK_BROKER_DEMO_ID'], 'MOCK-DEMO'),
+    name: getRuntimeConfigValue(['MOCK_BROKER_DEMO_NAME', 'VITE_MOCK_BROKER_DEMO_NAME'], 'Mock Demo Broker'),
     status: 'active',
-    server: 'broker-server-orrnn',
-    backend_url: 'https://testbrokerbackend.orrnn.com',
+    server: getRuntimeConfigValue(['MOCK_BROKER_DEMO_SERVER', 'VITE_MOCK_BROKER_DEMO_SERVER'], 'mock-demo-server'),
+    backend_url: getRuntimeConfigValue(
+      ['MOCK_BROKER_DEMO_BACKEND_URL', 'VITE_MOCK_BROKER_DEMO_BACKEND_URL'],
+      ''
+    ),
   },
 ];
+
+export const MOCK_BROKER_LIST = buildMockBrokerList();
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -113,23 +161,27 @@ export const buildBrokerDiscoveryUrl = (useDevProxy = shouldUseManagerDevProxy()
   // Vite forwards this same-origin path to DISCOVERY_BASE_URL in local web
   // development. Production continues to use the configured public host.
   if (useDevProxy) return `/discovery-api${path}`;
-  return `${DISCOVERY_BASE_URL.replace(/\/+$/, '')}${path}`;
+  const discoveryBaseUrl = getDiscoveryBaseUrl().replace(/\/+$/, '');
+  return discoveryBaseUrl ? `${discoveryBaseUrl}${path}` : '';
 };
 
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
-// Calls:  GET https://superbackend.orrnn.com/api/v2/broker/servers
+// Calls:  GET {DISCOVERY_BASE_URL}/api/v2/broker/servers
 // ---------------------------------------------------------------------------
 export const fetchBrokerList = async () => {
   if (USE_MOCK_DISCOVERY) {
     // Local fallback only; set VITE_USE_MOCK_DISCOVERY=true to use it.
-    return MOCK_BROKER_LIST.filter((b) => b.status === 'active').map((broker) => normalizeBrokerInfo(broker));
+    return buildMockBrokerList().filter((b) => b.status === 'active').map((broker) => normalizeBrokerInfo(broker));
   }
+
+  const discoveryUrl = buildBrokerDiscoveryUrl();
+  if (!discoveryUrl) throw new Error('Broker discovery is not configured.');
 
   let response;
   try {
     response = await fetch(
-      buildBrokerDiscoveryUrl(),
+      discoveryUrl,
       {
         method: 'GET',
         // Same-origin keeps Dev Tunnels / Vite auth cookies on the local
@@ -159,11 +211,11 @@ export const fetchBrokerList = async () => {
   const usable = normalized.filter((broker) => !isOpaqueLocalTestBroker(broker));
   const hasTestBroker = usable.some((broker) => isTestBrokerInfo(broker));
   if (!hasTestBroker && (wantsTestBroker || normalized.some((broker) => isTestBrokerInfo(broker)))) {
-    usable.push(normalizeBrokerInfo(TEST_BROKER_DEFAULT_ENTRY));
+    usable.push(normalizeBrokerInfo(buildTestBrokerDefaultEntry()));
   }
   const hasNexaBroker = usable.some((broker) => String(broker?.broker_id || '').trim().toLowerCase() === 'nexa');
   if (!hasNexaBroker && wantsNexaBroker) {
-    usable.unshift(normalizeBrokerInfo(NEXA_BROKER_DEFAULT_ENTRY));
+    usable.unshift(normalizeBrokerInfo(buildNexaBrokerDefaultEntry()));
   }
 
   return usable;

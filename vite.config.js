@@ -41,9 +41,9 @@ export default defineConfig(({ mode, command }) => {
       this.emitFile({ type: 'asset', fileName: 'runtime-config.js', source: localRuntimeSource })
     },
   } : null
-  const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
+  const apiHost = env.VITE_API_HOST || ''
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
-  const discoveryHost = env.VITE_DISCOVERY_BASE_URL || 'https://superbackend.orrnn.com'
+  const discoveryHost = env.VITE_DISCOVERY_BASE_URL || ''
   const wsHost = env.VITE_WS_HOST || apiHost
   const feedWsUrl = env.VITE_FEED_WS_URL || env.FEED_WS_URL || ''
   const wsFeedPath = env.VITE_WS_FEED_PATH || '/ws/feed'
@@ -51,9 +51,14 @@ export default defineConfig(({ mode, command }) => {
   const stripManagerPrefix = env.VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX === 'true'
   const isDesktopMode = mode === 'electron' || mode === 'desktop'
   const wsProxySource = feedWsUrl || wsHost
-  const wsProxyUrl = new URL(wsProxySource.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:'))
-  const wsProxyTarget = wsProxyUrl.origin
-  const wsProxyPath = feedWsUrl ? wsProxyUrl.pathname : wsFeedPath
+  let wsProxyUrl = null
+  try {
+    wsProxyUrl = new URL(wsProxySource.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:'))
+  } catch {
+    // Empty or invalid runtime host: the WebSocket proxy stays unconfigured.
+  }
+  const wsProxyTarget = wsProxyUrl?.origin || ''
+  const wsProxyPath = feedWsUrl && wsProxyUrl ? wsProxyUrl.pathname : wsFeedPath
   const stripFeedProxyOrigin = env.VITE_FEED_PROXY_STRIP_ORIGIN === 'true'
   const rewriteManagerProxyPath = (path) => stripManagerPrefix
     ? path.replace(/^\/api\/manager(?=\/|\?|$)/i, '') || '/'
