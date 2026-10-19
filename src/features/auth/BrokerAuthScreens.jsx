@@ -16,8 +16,10 @@ import {
   User,
 } from 'lucide-react';
 import {
+  buildBrokerLogoCandidates,
   clearBrokerInfo,
   discoverBrokerById,
+  fetchBrokerConfig,
   fetchBrokerList,
   getBrokerInfo,
   getRecentBrokers,
@@ -174,10 +176,13 @@ const SpinnerLabel = ({ children }) => (
 );
 
 const BrokerLogo = ({ broker, size = 40, fallback: Fallback = Building2 }) => {
-  const [failed, setFailed] = useState(false);
-  const src = broker?.logo_url;
+  const candidates = buildBrokerLogoCandidates(broker);
+  const candidateKey = candidates.join('|');
+  const [attempt, setAttempt] = useState({ key: candidateKey, index: 0 });
+  const index = attempt.key === candidateKey ? attempt.index : 0;
+  const src = candidates[index];
 
-  if (src && !failed) {
+  if (src) {
     return (
       <span
         className="inline-flex shrink-0 items-center justify-center overflow-hidden"
@@ -193,7 +198,7 @@ const BrokerLogo = ({ broker, size = 40, fallback: Fallback = Building2 }) => {
           src={src}
           alt=""
           className="h-full w-full object-contain p-1.5"
-          onError={() => setFailed(true)}
+          onError={() => setAttempt({ key: candidateKey, index: index + 1 })}
         />
       </span>
     );
@@ -418,18 +423,38 @@ const ManagerLoginShell = ({ children }) => (
   </div>
 );
 
-const ManagerLoginHeader = () => (
-  <header className="manager-auth-header">
-    <span className="manager-brand-mark">
-      <img src={`${import.meta.env.BASE_URL}rtx5-logo.png`} alt="RTX5" draggable="false" />
-    </span>
-    <h1 id="manager-login-title">MANAGER LOGIN</h1>
-    <p>Sign in to access your manager dashboard</p>
-    <div className="manager-title-rule" aria-hidden="true">
-      <span />
-    </div>
-  </header>
-);
+const ManagerLoginHeader = ({ broker }) => {
+  const defaultLogo = `${import.meta.env.BASE_URL}rtx5-logo.png`;
+  const candidates = buildBrokerLogoCandidates(broker, { appFallbackUrl: defaultLogo });
+  const candidateKey = candidates.join('|');
+  const [attempt, setAttempt] = useState({ key: candidateKey, index: 0 });
+  const index = attempt.key === candidateKey ? attempt.index : 0;
+  const src = candidates[index] || defaultLogo;
+  const rawName = String(broker?.broker_name || broker?.name || '').trim();
+  const brokerTitle = rawName && !/^broker$/i.test(rawName) ? rawName : 'RTX5';
+
+  return (
+    <header className="manager-auth-header">
+      <span className="manager-brand-mark">
+        <img
+          src={src}
+          alt={brokerTitle}
+          draggable="false"
+          onError={() => {
+            if (index + 1 < candidates.length) {
+              setAttempt({ key: candidateKey, index: index + 1 });
+            }
+          }}
+        />
+      </span>
+      <h1 id="manager-login-title">MANAGER LOGIN</h1>
+      <p>Sign in to access your manager dashboard</p>
+      <div className="manager-title-rule" aria-hidden="true">
+        <span />
+      </div>
+    </header>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // BrokerSelector — fetches full broker list from API, shows styled dropdown
@@ -658,6 +683,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
       setBrokerInfo(currentBrokerInfo);
       rememberBroker(selectedId);
       const auth = await loginManager(currentBrokerInfo, { user, password, server: selectedId });
+      void fetchBrokerConfig(currentBrokerInfo);
       writeRememberedManagerLogin(rememberMe ? user : '');
       const session = setAuthSession(auth, currentBrokerInfo);
       onLoginSuccess?.(session);
@@ -676,7 +702,7 @@ export const ManagerLogin = ({ onLoginSuccess }) => {
 
   return (
     <ManagerLoginShell>
-      <ManagerLoginHeader />
+      <ManagerLoginHeader broker={selectedBroker} />
 
       <InlineError>{error}</InlineError>
       <InlineNotice>{notice}</InlineNotice>

@@ -658,6 +658,101 @@ export const resolveBrokerDefaultMt5Server = (brokerInfo = {}, backendUrl = '') 
     || getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']);
 };
 
+export const isPlaceholderBrokerLogoUrl = (value = '') =>
+  /(?:^|\/)assets\/logo\.png(?:[?#].*)?$/i.test(String(value || '').trim());
+
+export const buildBrokerDirectoryLogoUrl = (
+  brokerId = '',
+  discoveryBaseUrl = getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'], '')
+) => {
+  const normalizedBrokerId = String(brokerId || '').trim();
+  if (!normalizedBrokerId) return '';
+  const base = trimTrailingSlash(String(discoveryBaseUrl || '').trim());
+  const path = `/api/v1/brokers/${encodeURIComponent(normalizedBrokerId)}/logo`;
+  return base ? `${base}${path}` : path;
+};
+
+export const buildBrokerLogoCandidates = (
+  brokerInfo = {},
+  {
+    discoveryBaseUrl = getRuntimeConfigValue(['DISCOVERY_BASE_URL', 'VITE_DISCOVERY_BASE_URL'], ''),
+    appFallbackUrl = '',
+  } = {}
+) => {
+  const candidates = [];
+  const appendUnique = (value = '') => {
+    const trimmed = String(value || '').trim();
+    if (trimmed && !candidates.includes(trimmed)) candidates.push(trimmed);
+  };
+
+  if (brokerInfo && typeof brokerInfo === 'object') {
+    const brokerId = String(brokerInfo.broker_id || brokerInfo.id || '').trim();
+    const configuredBrokerId = String(getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID'], '')).trim();
+    const configuredLogoUrl = getRuntimeConfigValue(['BROKER_LOGO_URL', 'VITE_BROKER_LOGO_URL'], '');
+    if (
+      !isDesktopBackendTarget() &&
+      configuredLogoUrl &&
+      !isPlaceholderBrokerLogoUrl(configuredLogoUrl) &&
+      (!configuredBrokerId || !brokerId || configuredBrokerId.toLowerCase() === brokerId.toLowerCase())
+    ) {
+      appendUnique(configuredLogoUrl);
+    }
+
+    const rawLogoUrl = String(brokerInfo.logo_url || '').trim();
+    const backendUrl = resolveBrokerBackendUrl(brokerInfo);
+    const baseCandidates = [
+      rawLogoUrl.startsWith('/api/v1/brokers/') ? discoveryBaseUrl : '',
+      backendUrl,
+      brokerInfo.server_url,
+      brokerInfo.backend_url,
+      brokerInfo.market_api_url,
+      getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST'], ''),
+      discoveryBaseUrl,
+    ]
+      .map((base) => trimTrailingSlash(String(base || '').trim()))
+      .filter(Boolean);
+
+    if (rawLogoUrl && !isPlaceholderBrokerLogoUrl(rawLogoUrl)) {
+      if (/^(?:https?:|data:|blob:)/i.test(rawLogoUrl)) {
+        appendUnique(rawLogoUrl);
+      } else if (rawLogoUrl.startsWith('//')) {
+        appendUnique(`https:${rawLogoUrl}`);
+      } else if (baseCandidates.length > 0) {
+        const path = rawLogoUrl.startsWith('/') ? rawLogoUrl : `/${rawLogoUrl}`;
+        for (const base of baseCandidates) {
+          if (/^https?:\/\//i.test(base)) {
+            appendUnique(`${base}${path}`);
+          }
+        }
+      } else {
+        appendUnique(rawLogoUrl);
+      }
+    }
+
+    if (brokerId) {
+      const logoPath = `/api/v1/brokers/${encodeURIComponent(brokerId)}/logo`;
+      const directoryBases = [
+        discoveryBaseUrl,
+        backendUrl,
+        brokerInfo.server_url,
+        brokerInfo.backend_url,
+        getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST'], ''),
+      ]
+        .map((base) => trimTrailingSlash(String(base || '').trim()))
+        .filter((base) => /^https?:\/\//i.test(base));
+      for (const base of directoryBases) {
+        appendUnique(`${base}${logoPath}`);
+      }
+    }
+  }
+
+  appendUnique(appFallbackUrl);
+  return candidates;
+};
+
+export const resolveBrokerLogoUrl = (brokerInfo = {}, options = {}) =>
+  buildBrokerLogoCandidates(brokerInfo, options)[0] || '';
+
 export const normalizeBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
   const source = isConfiguredLocalBroker(brokerInfo) ? {
     ...brokerInfo,
@@ -694,6 +789,10 @@ export const normalizeBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
     server_ip: serverIp,
     server_port: Number(serverPort),
   };
+
+  if (isPlaceholderBrokerLogoUrl(normalized.logo_url)) {
+    delete normalized.logo_url;
+  }
 
   if (isTest) {
     if (!normalized.ws_url && testDefaults.wsUrl) normalized.ws_url = testDefaults.wsUrl;

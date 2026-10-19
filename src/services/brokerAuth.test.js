@@ -611,14 +611,9 @@ test('MOCK_BROKER_LIST keeps entries without hardcoded host defaults', () => {
   assert.equal(testBroker.feed_ws_url, '');
 });
 
-test('MOCK_BROKER_LIST reads explicit test, Nexa and mock broker runtime settings', async () => {
+test('MOCK_BROKER_LIST reads explicit test and mock broker runtime settings', async () => {
   globalThis.__RTX_RUNTIME_CONFIG__ = withDiscovery({
     ...TEST_BROKER_ENV,
-    NEXA_BACKEND_URL: 'https://nexa.example.test',
-    NEXA_SERVER_IP: '198.51.100.40',
-    NEXA_WS_URL: 'wss://nexa.example.test/ws/feed',
-    NEXA_FEED_STATUS_URL: 'https://nexa.example.test/ws/feed/status',
-    NEXA_DEFAULT_MT5_SERVER: '198.51.100.40',
     MOCK_BROKER_TENANT_BACKEND_URL: 'https://mock-tenant.example.test',
     MOCK_BROKER_DEMO_BACKEND_URL: 'https://mock-demo.example.test',
   });
@@ -628,12 +623,34 @@ test('MOCK_BROKER_LIST reads explicit test, Nexa and mock broker runtime setting
   assert.equal(testBroker.backend_url, 'https://test-broker.example.test');
   assert.equal(testBroker.ws_url, 'wss://test-broker.example.test/ws/feed');
 
-  const nexaBroker = configuredMockList.find((b) => b.broker_id === 'Nexa');
-  assert.equal(nexaBroker.backend_url, 'https://nexa.example.test');
-  assert.equal(nexaBroker.ws_url, 'wss://nexa.example.test/ws/feed');
-
   const mockTenant = configuredMockList.find((b) => b.broker_id === 'MOCK-TENANT');
   assert.equal(mockTenant.backend_url, 'https://mock-tenant.example.test');
   const mockDemo = configuredMockList.find((b) => b.broker_id === 'MOCK-DEMO');
   assert.equal(mockDemo.backend_url, 'https://mock-demo.example.test');
 });
+
+test('buildBrokerLogoCandidates ignores legacy /assets/logo.png placeholder and falls back to /api/v1/brokers/:id/logo', async () => {
+  const { buildBrokerLogoCandidates, isPlaceholderBrokerLogoUrl } = await import('./brokerAuth.js');
+  assert.equal(isPlaceholderBrokerLogoUrl('/assets/logo.png'), true);
+  assert.equal(isPlaceholderBrokerLogoUrl('https://broker.example.test/assets/logo.png'), true);
+  assert.equal(isPlaceholderBrokerLogoUrl('/api/v1/brokers/alpha/logo'), false);
+
+  const candidates = buildBrokerLogoCandidates(
+    {
+      broker_id: 'alpha-broker',
+      server_url: 'https://api.alpha.example.test',
+      logo_url: '/assets/logo.png',
+    },
+    {
+      discoveryBaseUrl: 'https://discovery.example.test',
+      appFallbackUrl: '/rtx5-logo.png',
+    }
+  );
+
+  assert.deepEqual(candidates, [
+    'https://discovery.example.test/api/v1/brokers/alpha-broker/logo',
+    'https://api.alpha.example.test/api/v1/brokers/alpha-broker/logo',
+    '/rtx5-logo.png',
+  ]);
+});
+

@@ -6,6 +6,7 @@ import ClientsContextMenu from './components/ClientsContextMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
+import useSymbolStore from '../../store/symbolStore';
 
 const DEAL_COLUMNS = [
   { key: 'ticket',       label: 'Ticket' },
@@ -33,6 +34,7 @@ const DealsPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [entryFilter, setEntryFilter] = useState('All Entries');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const storeSymbols = useSymbolStore((state) => state.symbols);
 
   const ctl = useGridPageController({
     columns: DEAL_COLUMNS,
@@ -44,6 +46,18 @@ const DealsPage = () => {
       setSymbolFilter('All Symbols'); setEntryFilter('All Entries');
     },
   });
+
+  const symbolOptions = useMemo(() => {
+    const dynamicSymbols = (ctl.grid?.rows || [])
+      .map((row) => row?.symbol)
+      .filter(Boolean);
+    const catalogSymbols = Object.keys(storeSymbols || {});
+    return Array.from(new Set([
+      'All Symbols',
+      ...dynamicSymbols,
+      ...catalogSymbols,
+    ]));
+  }, [ctl.grid?.rows, storeSymbols]);
 
   const { getDealActions, renderDialog } = useDealerMenu(() => {
     ctl.gridProps.onRowsChange?.([]);
@@ -65,7 +79,7 @@ const DealsPage = () => {
         </div>
         <div className="deals-filters flex items-center gap-2 shrink-0">
           <FilterDropdown value={actionFilter} className="w-[110px]" fontSize="10px" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
-          <FilterDropdown value={symbolFilter} className="w-[120px]" fontSize="10px" options={['All Symbols', 'GBPUSD', 'xauusd']} onChange={setSymbolFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[120px]" fontSize="10px" options={symbolOptions} onChange={setSymbolFilter} />
           <FilterDropdown value={entryFilter} className="w-[120px]" fontSize="10px" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />
         </div>
       </div>

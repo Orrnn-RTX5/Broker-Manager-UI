@@ -1,10 +1,14 @@
 import {
+  buildBrokerDirectoryLogoUrl,
+  buildBrokerLogoCandidates,
   getRuntimeConfigValue,
   getTestBrokerRuntimeDefaults,
+  isPlaceholderBrokerLogoUrl,
   isTestBrokerInfo,
   normalizeBrokerInfo,
   resolveBrokerBackendUrl,
   resolveBrokerDefaultMt5Server,
+  resolveBrokerLogoUrl,
 } from '../config/backendTarget.js';
 import {
   buildManagerApiUrl,
@@ -13,6 +17,15 @@ import {
 } from '../config/endpoints.js';
 import { normalizeTokenExpiresAt, setSession } from './authService.js';
 import { MANAGER_API } from '../config/managerApiContract.js';
+
+export {
+  buildBrokerDirectoryLogoUrl,
+  buildBrokerLogoCandidates,
+  isPlaceholderBrokerLogoUrl,
+  resolveBrokerLogoUrl,
+};
+
+export const BROKER_INFO_UPDATED_EVENT = 'rtx:broker-info-updated';
 
 const BROKER_INFO_KEY = 'broker_info';
 const RECENT_BROKERS_KEY = 'recent_brokers';
@@ -63,53 +76,11 @@ const buildTestBrokerDefaultEntry = () => {
 
 export const TEST_BROKER_DEFAULT_ENTRY = buildTestBrokerDefaultEntry();
 
-const buildNexaBrokerDefaultEntry = () => {
-  const backendUrl = getRuntimeConfigValue([
-    'NEXA_BACKEND_URL', 'VITE_NEXA_BACKEND_URL',
-    'NEXA_PUBLIC_BACKEND_URL', 'VITE_NEXA_PUBLIC_BACKEND_URL',
-    'API_HOST', 'VITE_API_HOST',
-  ], '');
-  const wsUrl = getRuntimeConfigValue([
-    'NEXA_WS_URL', 'VITE_NEXA_WS_URL',
-    'NEXA_FEED_WS_URL', 'VITE_NEXA_FEED_WS_URL',
-    'FEED_WS_URL', 'VITE_FEED_WS_URL',
-  ], '');
-  const feedStatusUrl = getRuntimeConfigValue([
-    'NEXA_FEED_STATUS_URL', 'VITE_NEXA_FEED_STATUS_URL',
-    'FEED_STATUS_URL', 'VITE_FEED_STATUS_URL',
-  ], '');
-  const defaultMt5Server = getRuntimeConfigValue([
-    'NEXA_DEFAULT_MT5_SERVER', 'VITE_NEXA_DEFAULT_MT5_SERVER',
-    'DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER',
-  ], '');
-
-  return {
-    broker_id: 'Nexa',
-    name: 'Nexa',
-    broker_name: 'Nexa',
-    status: 'active',
-    server: getRuntimeConfigValue(['NEXA_SERVER', 'VITE_NEXA_SERVER'], '')
-      || serverHandleFromUrl(backendUrl),
-    backend_url: backendUrl,
-    server_url: backendUrl,
-    market_api_url: backendUrl,
-    server_ip: getRuntimeConfigValue(['NEXA_SERVER_IP', 'VITE_NEXA_SERVER_IP'], ''),
-    server_port: getRuntimeConfigValue(['NEXA_SERVER_PORT', 'VITE_NEXA_SERVER_PORT'], ''),
-    ws_url: wsUrl,
-    feed_ws_url: wsUrl,
-    feed_status_url: feedStatusUrl,
-    default_mt5_server: defaultMt5Server,
-  };
-};
-
-export const NEXA_BROKER_DEFAULT_ENTRY = buildNexaBrokerDefaultEntry();
-
 // ---------------------------------------------------------------------------
 // Mock broker list — mirrors what the real /api/v2/broker/servers returns.
 // Hosts stay empty unless a MOCK_BROKER_* runtime setting provides them.
 // ---------------------------------------------------------------------------
 const buildMockBrokerList = () => [
-  buildNexaBrokerDefaultEntry(),
   buildTestBrokerDefaultEntry(),
   {
     broker_id: getRuntimeConfigValue(['MOCK_BROKER_TENANT_ID', 'VITE_MOCK_BROKER_TENANT_ID'], 'MOCK-TENANT'),
@@ -207,15 +178,10 @@ export const fetchBrokerList = async () => {
 
   const runtimeBrokerId = String(getRuntimeBrokerId() || '').trim().toLowerCase();
   const wantsTestBroker = runtimeBrokerId === 'test' || runtimeBrokerId === 'test-broker';
-  const wantsNexaBroker = runtimeBrokerId === 'nexa' || runtimeBrokerId === 'nexa-broker';
   const usable = normalized.filter((broker) => !isOpaqueLocalTestBroker(broker));
   const hasTestBroker = usable.some((broker) => isTestBrokerInfo(broker));
   if (!hasTestBroker && (wantsTestBroker || normalized.some((broker) => isTestBrokerInfo(broker)))) {
     usable.push(normalizeBrokerInfo(buildTestBrokerDefaultEntry()));
-  }
-  const hasNexaBroker = usable.some((broker) => String(broker?.broker_id || '').trim().toLowerCase() === 'nexa');
-  if (!hasNexaBroker && wantsNexaBroker) {
-    usable.unshift(normalizeBrokerInfo(buildNexaBrokerDefaultEntry()));
   }
 
   return usable;
@@ -576,6 +542,12 @@ const postJson = async (url, body) => {
   return data || {};
 };
 
+const notifyBrokerInfoUpdated = (brokerInfo = null) => {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent(BROKER_INFO_UPDATED_EVENT, { detail: brokerInfo }));
+  }
+};
+
 const saveBrokerInfo = (brokerInfo) => {
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.setItem(BROKER_INFO_KEY, JSON.stringify(brokerInfo));
@@ -584,6 +556,7 @@ const saveBrokerInfo = (brokerInfo) => {
     localStorage.setItem(BROKER_INFO_KEY, JSON.stringify(brokerInfo));
   }
   updateDynamicEndpoints();
+  notifyBrokerInfoUpdated(brokerInfo);
 };
 
 export const loginManager = async (brokerInfo, { user, password, server }) => {
@@ -651,7 +624,13 @@ export const getBrokerInfo = () => {
       clearBrokerInfo();
       return null;
     }
-    saveBrokerInfo(normalized);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(BROKER_INFO_KEY, JSON.stringify(normalized));
+    }
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(BROKER_INFO_KEY)) {
+      localStorage.setItem(BROKER_INFO_KEY, JSON.stringify(normalized));
+    }
+    updateDynamicEndpoints();
     return normalized;
   } catch {
     return null;
@@ -665,6 +644,58 @@ export const setBrokerInfo = (brokerInfo) => {
 export const clearBrokerInfo = () => {
   sessionStorage.removeItem(BROKER_INFO_KEY);
   updateDynamicEndpoints();
+  notifyBrokerInfoUpdated(null);
+};
+
+const isMeaningfulBrokerName = (value = '') => {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (/^broker$/i.test(text)) return false;
+  if (/^(?:https?:|wss?:|\/\/)/i.test(text)) return false;
+  return true;
+};
+
+export const fetchBrokerConfig = async (brokerInfo = getBrokerInfo()) => {
+  const baseBroker = brokerInfo ? normalizeBrokerInfo(brokerInfo) : getBrokerInfo();
+  const brokerId = String(baseBroker?.broker_id || baseBroker?.id || getRuntimeBrokerId() || '').trim();
+  const query = brokerId ? `?broker_id=${encodeURIComponent(brokerId)}` : '';
+  const url = buildManagerApiUrl(`/api/v2/broker/config${query}`);
+  if (!url) return baseBroker || null;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return baseBroker || null;
+    const data = await readJson(response);
+    if (!data || typeof data !== 'object') return baseBroker || null;
+
+    const configBrokerName = [data.broker_name, data.brokerName, data.name].find(isMeaningfulBrokerName) || '';
+    const configServerName = String(data.server_name || data.serverName || '').trim();
+    const rawLogo = String(data.logo_url || data.logoUrl || '').trim();
+    const configLogoUrl = rawLogo && !isPlaceholderBrokerLogoUrl(rawLogo) ? rawLogo : '';
+
+    const merged = normalizeBrokerInfo({
+      ...(baseBroker || {}),
+      ...(configBrokerName ? { name: configBrokerName, broker_name: configBrokerName } : {}),
+      ...(configServerName ? { server_name: configServerName } : {}),
+      ...(configLogoUrl ? { logo_url: configLogoUrl } : {}),
+      ...(data.support_email ? { support_email: String(data.support_email).trim() } : {}),
+      ...(data.theme_color ? { theme_color: String(data.theme_color).trim() } : {}),
+    });
+
+    const activeStored = getBrokerInfo();
+    const activeId = String(activeStored?.broker_id || activeStored?.id || '').trim().toLowerCase();
+    const targetId = String(merged?.broker_id || merged?.id || '').trim().toLowerCase();
+    if (!activeStored || !activeId || !targetId || activeId === targetId) {
+      saveBrokerInfo(merged);
+    }
+    return merged;
+  } catch {
+    return baseBroker || null;
+  }
 };
 
 export const getRecentBrokers = () => {

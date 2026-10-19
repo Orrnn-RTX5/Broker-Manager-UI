@@ -6,6 +6,7 @@ import ClientsContextMenu from './components/ClientsContextMenu';
 import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
+import useSymbolStore from '../../store/symbolStore';
 
 const ORDER_COLUMNS = [
   { key: 'ticket',    label: 'Ticket' },
@@ -30,6 +31,7 @@ const OrdersPage = () => {
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const storeSymbols = useSymbolStore((state) => state.symbols);
 
   const ctl = useGridPageController({
     columns: ORDER_COLUMNS,
@@ -46,18 +48,13 @@ const OrdersPage = () => {
     const dynamicSymbols = (ctl.grid?.rows || [])
       .map((row) => row?.symbol)
       .filter(Boolean);
+    const catalogSymbols = Object.keys(storeSymbols || {});
     return Array.from(new Set([
       'All Symbols',
       ...dynamicSymbols,
-      'BTCUSD',
-      'EURUSD',
-      'GBPUSD',
-      'XAUUSD',
-      'xauusd.c',
-      'xauusd',
-      'Nubjpy.c',
+      ...catalogSymbols,
     ]));
-  }, [ctl.grid?.rows]);
+  }, [ctl.grid?.rows, storeSymbols]);
 
   const { getOrderActions, renderDialog } = useDealerMenu(() => {
     ctl.gridProps.onRowsChange?.([]);

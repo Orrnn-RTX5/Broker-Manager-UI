@@ -12,7 +12,7 @@ import {
 import { useAllGroups } from '../hooks/useAllGroups';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
-import { getBrokerInfo } from '../services/brokerAuth';
+import { BROKER_INFO_UPDATED_EVENT, getBrokerInfo } from '../services/brokerAuth';
 import NewGroupModal from '../features/groups/components/NewGroupModal';
 import GroupPermissionNotice from '../features/groups/components/GroupPermissionNotice';
 import { getGroupsFolderPath, getGroupsSelectedFromSearch } from '../features/groups/groupRoutes';
@@ -414,8 +414,13 @@ export default function NavigatorPanel() {
   const { canAct, manager } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
-  const [brokerInfo] = useState(() => getBrokerInfo());
-  const serverLabel = brokerInfo?.name || brokerInfo?.broker_id || 'Broker';
+  const [brokerInfo, setBrokerInfoState] = useState(() => getBrokerInfo());
+  useEffect(() => {
+    const syncBrokerInfo = () => setBrokerInfoState(getBrokerInfo());
+    window.addEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+    return () => window.removeEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+  }, []);
+  const serverLabel = brokerInfo?.broker_name || brokerInfo?.name || brokerInfo?.broker_id || 'Broker';
   const managerLogin = String(manager.login ?? '').trim();
   const dailyReportLabel = managerLogin ? `(${managerLogin})- Daily Report` : 'Daily Report';
   const go = (path) => () => navigate(path);
@@ -838,7 +843,6 @@ export default function NavigatorPanel() {
           <TreeNode label={serverLabel} icon={Server} defaultExpanded onContextMenu={openServerContextMenu}>
             {node(dailyReportLabel, FileClock, '/reports/daily', 'workspace', openDailyReportContextMenu)}
           </TreeNode>
-          <TreeNode label="RTX5-Demo" icon={Server} />
           <TreeNode label="Backup Servers" icon={Network} disabled />
         </TreeNode>
 

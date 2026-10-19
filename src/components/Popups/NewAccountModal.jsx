@@ -169,7 +169,7 @@ const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasM
 
 const NewAccountModalContent = ({ onClose, onSuccess }) => {
   const [form, setForm] = useState({
-    Group: 'demo\\forex-hedge-usd-01',
+    Group: '',
     Leverage: 100,
     FirstName: '', LastName: '', Email: '', Phone: '',
     Country: 'India', Currency: 'USD',
@@ -206,6 +206,10 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
       setResult({ success: false, message: 'Your role does not have permission to create accounts.' });
       return;
     }
+    if (!String(form.Group || '').trim()) {
+      setResult({ success: false, message: 'Please select an account group.' });
+      return;
+    }
     setLoading(true);
     setResult(null);
 
@@ -240,7 +244,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     setResult(null);
     setForm({
-      Group: 'demo\\forex-hedge-usd-01', Leverage: 100,
+      Group: groups?.[0]?.name || '', Leverage: 100,
       FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: 'USD',
       master_pass: '', investor_pass: '',
     });

@@ -17,6 +17,12 @@ import NewAccountModal from './Popups/NewAccountModal';
 import LoginModal from './Popups/LoginModal';
 import ExportCurrentViewDialog from './ExportCurrentViewDialog';
 import apiClient from '../services/apiClient';
+import {
+  BROKER_INFO_UPDATED_EVENT,
+  buildBrokerLogoCandidates,
+  fetchBrokerConfig,
+  getBrokerInfo,
+} from '../services/brokerAuth.js';
 import { usePermissions } from '../hooks/usePermissions.js';
 import useThemeStore from '../store/themeStore.js';
 import useNotificationStore from '../store/notificationStore.js';
@@ -38,11 +44,37 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
   const t = useT();
   const { manager, loading: isManagerLoading } = usePermissions();
   const managerLabel = manager.login || manager.displayName;
+  const [brokerInfo, setBrokerInfoState] = useState(() => getBrokerInfo());
+  const [logoErrorIndex, setLogoErrorIndex] = useState(0);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
   const [helpSection, setHelpSection] = useState(null);
   const [bugReportOpen, setBugReportOpen] = useState(false);
   const openHelp = (section) => { setActiveMenu(null); setHelpSection(section); };
+  useEffect(() => {
+    const syncBrokerInfo = () => {
+      setBrokerInfoState(getBrokerInfo());
+      setLogoErrorIndex(0);
+    };
+    window.addEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+    return () => window.removeEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+  }, []);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchBrokerConfig().then((updated) => {
+      if (updated) {
+        setBrokerInfoState(updated);
+        setLogoErrorIndex(0);
+      }
+    });
+  }, [isAuthenticated]);
+  useEffect(() => {
+    const rawName = String(brokerInfo?.broker_name || brokerInfo?.name || '').trim();
+    const validBrokerName = rawName && !/^broker$/i.test(rawName) ? rawName : '';
+    if (typeof document !== 'undefined') {
+      document.title = validBrokerName ? `${validBrokerName} - Manager` : 'RTX5 Manager';
+    }
+  }, [brokerInfo]);
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === 'F1') { event.preventDefault(); setActiveMenu(null); setHelpSection('Guide'); }
@@ -65,6 +97,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
   const menuRef = useRef(null);
   const statusRef = useRef(null);
   const menuItems = ['File', 'Edit', 'View', 'Tools', 'Window', 'Help'];
+  const brandLogoCandidates = buildBrokerLogoCandidates(brokerInfo, {
+    appFallbackUrl: '/manager-symbol-dark.png',
+  });
+  const brandLogoSrc = brandLogoCandidates[Math.min(logoErrorIndex, brandLogoCandidates.length - 1)] || '/manager-symbol-dark.png';
+  const brandCaption = (() => {
+    const raw = String(brokerInfo?.broker_name || brokerInfo?.name || '').trim();
+    return raw && !/^broker$/i.test(raw) ? raw : 'Manager';
+  })();
 
   useEffect(() => {
     let timeoutId;
@@ -310,8 +350,15 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
           aria-label={t('bar.goToDashboard')}
         >
             <span className="manager-brand-stacked">
-              <img className="manager-brand-symbol" src="/manager-symbol-dark.png" alt="" />
-              <span className="manager-brand-caption">Manager</span>
+              <img
+                className="manager-brand-symbol"
+                src={brandLogoSrc}
+                alt=""
+                onError={() => {
+                  setLogoErrorIndex((idx) => (idx + 1 < brandLogoCandidates.length ? idx + 1 : idx));
+                }}
+              />
+              <span className="manager-brand-caption">{brandCaption}</span>
             </span>
         </button>
 

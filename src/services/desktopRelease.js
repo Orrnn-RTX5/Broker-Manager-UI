@@ -1,4 +1,10 @@
-const RELEASE_API_URL = 'https://api.github.com/repos/rtx5-orrnn/rtx5-broker-manager-releases/releases/latest';
+import { getRuntimeConfigValue } from '../config/backendTarget.js';
+
+const DEFAULT_RELEASE_API_URL = 'https://api.github.com/repos/rtx5-orrnn/rtx5-broker-manager-releases/releases/latest';
+const getReleaseApiUrl = () => getRuntimeConfigValue(
+  ['DESKTOP_RELEASE_API_URL', 'VITE_DESKTOP_RELEASE_API_URL'],
+  DEFAULT_RELEASE_API_URL
+);
 const INSTALLER_ASSET_PATTERN = /^RTX-5-Broker-Manager-Setup-.+\.exe$/i;
 
 export const selectDesktopInstallerAsset = (release = {}) => {
@@ -26,7 +32,7 @@ export const fetchLatestDesktopInstaller = async ({ fetchImpl = globalThis.fetch
     throw new Error('Download service is not available in this browser.');
   }
 
-  const response = await fetchImpl(RELEASE_API_URL, {
+  const response = await fetchImpl(getReleaseApiUrl(), {
     headers: {
       Accept: 'application/vnd.github+json',
     },
