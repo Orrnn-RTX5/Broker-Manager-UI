@@ -7,7 +7,8 @@ import GroupPermissionNotice from './GroupPermissionNotice';
 import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
-import { GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, pickGroupPayloadFields as pickAllowedFields, submitGroup } from '../groupPayload.js';
+import { useGroupList } from '../../../hooks/useGroupList';
+import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import {
   LEVERAGE_PRESETS,
@@ -210,6 +211,18 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
     // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.
     if (!source && presetName) data.name = presetName;
+    // New groups trade by default; edits and duplicates keep their source value.
+    if (!source) data.tradeAllowed = true;
+    // The visible Book choice is routingMode; bookType is its backend-canonical
+    // value (b/a/hybrid), never a display label.
+    if (!source && data.routingMode) {
+      const canonical = bookTypeForRoutingMode(data.routingMode);
+      if (canonical) data.bookType = canonical;
+    }
+    if (source && data.routingMode) {
+      const canonical = bookTypeForRoutingMode(data.routingMode);
+      if (canonical) data.bookType = canonical;
+    }
     if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
     if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
     return data;
@@ -218,12 +231,42 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
+  // Duplicate/edit sources keep their value and count as touched, so parent
+  // inheritance never overwrites them; an explicit check/uncheck always wins.
+  const tradeTouched = useRef(Boolean(initialData || duplicateData));
+  const parentSearch = String(formData.parentGroup ?? '').trim();
+  const { groups: parentGroups, loading: parentLoading } = useGroupList({
+    limit: 100,
+    offset: 0,
+    search: parentSearch,
+    sort_by: 'name',
+    sort_dir: 'asc',
+    enabled: parentSearch !== '',
+  });
+
+  // While tradeAllowed is untouched, default the checkbox from the exact
+  // (case-insensitive) parent match; with no parent or no exact match the
+  // global default true applies.
+  useEffect(() => {
+    if (tradeTouched.current) return;
+    if (parentLoading) return;
+    const next = resolveNewGroupTradeAllowed({
+      groups: parentGroups,
+      parentGroup: parentSearch,
+      tradeTouched: false,
+      currentValue: true,
+    });
+    setFormData((prev) => (prev.tradeAllowed === next ? prev : { ...prev, tradeAllowed: next }));
+  }, [parentGroups, parentLoading, parentSearch]);
+
   const handleChange = (key, val) => {
+    if (key === 'tradeAllowed') tradeTouched.current = true;
     setFormData(prev => {
       const next = { ...prev, [key]: val };
-      // Sync bookType with routingMode if routingMode changed
+      // Sync backend-canonical bookType with the visible routingMode choice.
       if (key === 'routingMode') {
-        next.bookType = val === 'b_book' ? 'B-Book' : val === 'a_book' ? 'A-Book' : 'Hybrid';
+        const canonical = bookTypeForRoutingMode(val);
+        if (canonical) next.bookType = canonical;
       }
       return next;
     });
@@ -239,8 +282,13 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
       return;
     }
 
-    if (!formData.name) {
-      setError("Group Name is required.");
+    const fieldError = validateNewGroupFields({
+      name: formData.name,
+      parentGroup: formData.parentGroup,
+      groupPurpose: formData.groupPurpose,
+    });
+    if (fieldError) {
+      setError(fieldError);
       return;
     }
 
@@ -248,7 +296,9 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
       setLoading(true);
       setError(null);
 
-      const payload = pickAllowedFields(formData, GROUP_ALLOWED_FIELDS);
+      const payload = isEditing
+        ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
+        : buildNewGroupPayload(formData);
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -301,6 +351,17 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
               <InputGroup label="Currency" value={formData.currency} onChange={(v) => handleChange('currency', v)} />
               <InputGroup label="Account type" value={formData.accountType} onChange={(v) => handleChange('accountType', v)} />
             </div>
+            <div className="group-create-grid">
+              <InputGroup label="Parent group (optional)" value={formData.parentGroup || ''} onChange={(v) => handleChange('parentGroup', v)} />
+              <GroupChoice
+                label="Purpose"
+                value={formData.groupPurpose || ''}
+                placeholder="Select"
+                options={GROUP_PURPOSE_OPTIONS}
+                onChange={(v) => handleChange('groupPurpose', v)}
+              />
+            </div>
+            <p className="group-create-note">Leave currency, execution, parent, or purpose blank to use backend derivation. A blank currency is omitted, never hardcoded.</p>
             <div className="group-create-checks">
               <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} />
               <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} />
@@ -324,7 +385,17 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
           <section className="group-create-panel">
             <h3>Execution and commission</h3>
             <div className="group-create-grid">
-              <InputGroup label="Execution mode" value={formData.executionMode} onChange={(v) => handleChange('executionMode', v)} />
+              <GroupChoice
+                label="Execution mode"
+                value={formData.executionMode || ''}
+                placeholder="Select"
+                options={EXECUTION_MODE_OPTIONS.some((option) => option.value === formData.executionMode)
+                  ? EXECUTION_MODE_OPTIONS
+                  : formData.executionMode
+                    ? [{ value: formData.executionMode, label: String(formData.executionMode) }, ...EXECUTION_MODE_OPTIONS]
+                    : EXECUTION_MODE_OPTIONS}
+                onChange={(v) => handleChange('executionMode', v)}
+              />
               <GroupChoice
                 label="Book"
                 value={formData.routingMode}

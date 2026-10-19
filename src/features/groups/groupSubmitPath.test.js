@@ -1,0 +1,224 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { Buffer } from 'node:buffer';
+import { NEW_GROUP_FINANCIAL_DEFAULTS } from './groupFinancialPresets.js';
+
+// Submit-path test for the new-group create flow (ds-18).
+//
+// ds-20 lesson: tests must execute the REAL helpers against REAL production
+// data shapes, never re-implemented logic or mirrored literals. Everything
+// asserted below runs through the real production code:
+//   - formData is composed from the REAL GROUP_DEFAULT_PAYLOAD and the REAL
+//     NEW_GROUP_FINANCIAL_DEFAULTS exactly like NewGroupModal.jsx's useState
+//     initializer does (defaults spread, then financial defaults for new,
+//     then source);
+//   - the submit composition is the REAL handleSubmit create branch:
+//     validateNewGroupFields gate, then buildNewGroupPayload, then the same
+//     comma-string -> array split NewGroupModal.jsx performs for symbol lists.
+// groupPayload.js cannot be imported directly under node (its service imports
+// use extensionless paths), so it is bundled with esbuild exactly like
+// groupPayload.test.js does. Only the network transports (never called by
+// these tests) are stubbed fail-closed; every builder/validator executed here
+// is the real production code.
+const bundle = await build({
+  entryPoints: [fileURLToPath(new URL('./groupPayload.js', import.meta.url))],
+  bundle: true, write: false, format: 'esm', platform: 'browser',
+  plugins: [{ name: 'group-submit-path-transport', setup(builder) {
+    builder.onResolve({ filter: /\/(managerFetch|managerAccountApi|sidebarAccounts)\.js$/ }, ({ path }) => ({ path, namespace: 'group-submit-stub' }));
+    builder.onLoad({ filter: /.*/, namespace: 'group-submit-stub' }, () => ({ loader: 'js', contents:
+      'export const fetchManagerApi = () => { throw new Error("groupSubmitPath: network stub must never be called"); };'
+      + 'export const updateManagerAccount = () => { throw new Error("groupSubmitPath: network stub must never be called"); };'
+      + 'export const fetchAllSidebarAccounts = () => { throw new Error("groupSubmitPath: network stub must never be called"); };',
+    }));
+  } }],
+});
+const {
+  GROUP_DEFAULT_PAYLOAD,
+  GROUP_ALLOWED_FIELDS,
+  buildNewGroupPayload,
+  buildGroupSavePayload,
+  validateNewGroupFields,
+  bookTypeForRoutingMode,
+} = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+
+// Generic fixtures only: synthetic group names with placeholder values. No
+// tenant, broker, host, or account identifiers.
+
+// Mirrors NewGroupModal.jsx's useState initializer for the create path, where
+// initialData/duplicateData are absent (source is undefined). Composed from
+// the REAL constants only -- no mirrored literals.
+const buildCreateFormData = (overrides = {}) => {
+  const source = undefined; // creates have no initialData/duplicateData
+  const data = { ...GROUP_DEFAULT_PAYLOAD, ...(source ? {} : NEW_GROUP_FINANCIAL_DEFAULTS), ...(source || {}) };
+  // New groups trade by default; edits and duplicates keep their source value.
+  if (!source) data.tradeAllowed = true;
+  // The visible Book choice is routingMode; bookType is its backend-canonical
+  // value (b/a/hybrid), never a display label.
+  if (!source && data.routingMode) {
+    const canonical = bookTypeForRoutingMode(data.routingMode);
+    if (canonical) data.bookType = canonical;
+  }
+  if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
+  if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
+  return { ...data, ...overrides };
+};
+
+// Mirrors NewGroupModal.jsx handleSubmit for creates (isEditing false): the
+// validateNewGroupFields gate, then buildNewGroupPayload, then the same
+// comma-string -> array split applied to the symbol lists.
+const runCreateSubmitPath = (formData) => {
+  const validationError = validateNewGroupFields({
+    name: formData.name,
+    parentGroup: formData.parentGroup,
+    groupPurpose: formData.groupPurpose,
+  });
+  if (validationError) return { validationError, payload: null };
+  const payload = buildNewGroupPayload(formData);
+  if (typeof payload.symbolsAllowed === 'string') {
+    payload.symbolsAllowed = payload.symbolsAllowed.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  if (typeof payload.symbolsBlocked === 'string') {
+    payload.symbolsBlocked = payload.symbolsBlocked.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return { validationError: null, payload };
+};
+
+// Book choices shaped exactly as NewGroupModal.jsx builds them for the
+// visible "Book" dropdown (routingMode values, never backend labels).
+const BOOK_CHOICES = [
+  { value: 'b_book', label: 'B-Book' },
+  { value: 'a_book', label: 'A-Book' },
+  { value: 'hybrid', label: 'Hybrid' },
+];
+
+test('create initializer composes the real defaults without mirrored literals', () => {
+  const form = buildCreateFormData();
+
+  assert.equal(form.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  assert.equal(form.marginCallLevel, NEW_GROUP_FINANCIAL_DEFAULTS.marginCallLevel);
+  assert.equal(form.stopOutLevel, NEW_GROUP_FINANCIAL_DEFAULTS.stopOutLevel);
+  assert.equal(form.spreadMarkup, NEW_GROUP_FINANCIAL_DEFAULTS.spreadMarkup);
+  assert.equal(form.routingMode, GROUP_DEFAULT_PAYLOAD.routingMode);
+  assert.equal(form.tradeAllowed, true);
+  // GROUP_DEFAULT_PAYLOAD holds symbol ARRAYS; the initializer joins them so
+  // the form (like SymbolSelector/handleArrayChange) carries comma strings.
+  assert.equal(typeof form.symbolsAllowed, 'string');
+  assert.equal(typeof form.symbolsBlocked, 'string');
+});
+
+test('fresh-create submit path: keys within allowed fields, blanks absent, symbols a true Array', () => {
+  const form = buildCreateFormData({
+    name: 'Fixture/Standard',
+    description: '',
+    currency: '',
+    executionMode: '',
+    accountType: '',
+    parentGroup: '',
+    groupPurpose: '',
+    // Comma-joined string, exactly what handleArrayChange stores while typing.
+    symbolsAllowed: 'EURUSD, GBPUSD,XAUUSD ',
+    symbolsBlocked: '',
+  });
+
+  const { validationError, payload } = runCreateSubmitPath(form);
+
+  assert.equal(validationError, null);
+  for (const key of Object.keys(payload)) {
+    assert.ok(GROUP_ALLOWED_FIELDS.includes(key), `payload key outside GROUP_ALLOWED_FIELDS: ${key}`);
+  }
+  for (const key of ['currency', 'executionMode', 'accountType', 'parentGroup', 'groupPurpose']) {
+    assert.ok(!(key in payload), `blank ${key} must be omitted so backend derivation applies`);
+  }
+  // Default routingMode b_book derives the canonical backend bookType.
+  assert.equal(payload.bookType, 'b');
+  assert.ok('tradeAllowed' in payload);
+  assert.equal(typeof payload.tradeAllowed, 'boolean');
+  assert.equal(payload.tradeAllowed, true);
+  // ds-20 guard: the submitted list must be a true Array (not Set/string), so
+  // production array operations such as .includes keep working.
+  assert.ok(Array.isArray(payload.symbolsAllowed));
+  assert.ok(!(payload.symbolsAllowed instanceof Set));
+  assert.equal(Object.getPrototypeOf(payload.symbolsAllowed), Array.prototype);
+  assert.deepEqual(payload.symbolsAllowed, ['EURUSD', 'GBPUSD', 'XAUUSD']);
+  assert.ok(payload.symbolsAllowed.includes('EURUSD'));
+  assert.deepEqual(payload.symbolsBlocked, []);
+});
+
+for (const choice of BOOK_CHOICES) {
+  const expected = choice.value === 'b_book' ? 'b' : choice.value === 'a_book' ? 'a' : 'hybrid';
+  test(`routingMode ${choice.value} (${choice.label}) submits canonical bookType ${expected}`, () => {
+    assert.equal(bookTypeForRoutingMode(choice.value), expected);
+    const form = buildCreateFormData({ name: 'Fixture/Standard', routingMode: choice.value });
+    const { validationError, payload } = runCreateSubmitPath(form);
+    assert.equal(validationError, null);
+    assert.equal(payload.bookType, expected);
+  });
+}
+
+test('blank routing/book/currency (incl. whitespace) are omitted, never sent as empty strings', () => {
+  const form = buildCreateFormData({
+    name: 'Fixture/Standard',
+    routingMode: '',
+    bookType: '',
+    currency: '   ',
+  });
+  const { validationError, payload } = runCreateSubmitPath(form);
+  assert.equal(validationError, null);
+  assert.ok(!('routingMode' in payload));
+  assert.ok(!('bookType' in payload));
+  assert.ok(!('currency' in payload));
+});
+
+test('parent group naming the group itself is refused', () => {
+  assert.equal(
+    validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: 'fixture/alpha', groupPurpose: '' }),
+    'Parent group must name another group.',
+  );
+  assert.equal(
+    validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: 'Fixture/Alpha', groupPurpose: '' }),
+    'Parent group must name another group.',
+  );
+  const { validationError, payload } = runCreateSubmitPath(
+    buildCreateFormData({ name: 'Fixture/Alpha', parentGroup: 'Fixture/Alpha' }),
+  );
+  assert.equal(validationError, 'Parent group must name another group.');
+  assert.equal(payload, null);
+});
+
+test('purpose outside customer|coverage is refused; customer|coverage|blank pass the gate', () => {
+  assert.equal(
+    validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: '', groupPurpose: 'internal' }),
+    'Purpose must be customer or coverage.',
+  );
+  const { validationError, payload } = runCreateSubmitPath(
+    buildCreateFormData({ name: 'Fixture/Alpha', groupPurpose: 'internal' }),
+  );
+  assert.equal(validationError, 'Purpose must be customer or coverage.');
+  assert.equal(payload, null);
+  assert.equal(validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: '', groupPurpose: 'customer' }), null);
+  assert.equal(validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: '', groupPurpose: 'coverage' }), null);
+  assert.equal(validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: '', groupPurpose: '' }), null);
+  assert.equal(validateNewGroupFields({ name: '   ', parentGroup: '', groupPurpose: '' }), 'Group Name is required.');
+});
+
+test('isNew save delegates to the real create builder', () => {
+  const initial = buildCreateFormData({ name: 'Fixture/Standard' });
+  const current = buildCreateFormData({ name: 'Fixture/Standard', leverage: 200, symbolsAllowed: 'EURUSD' });
+  assert.deepEqual(
+    buildGroupSavePayload(initial, current, { isNew: true }),
+    buildNewGroupPayload(current),
+  );
+});
+
+test('string-typed form numbers pass through the create builder without crashing', () => {
+  // Numeric inputs normally produce numbers, but server-echoed/duplicated
+  // values can arrive as strings; the builder preserves explicit values.
+  const { validationError, payload } = runCreateSubmitPath(
+    buildCreateFormData({ name: 'Fixture/Standard', leverage: '100', marginCallLevel: '100' }),
+  );
+  assert.equal(validationError, null);
+  assert.equal(payload.leverage, '100');
+  assert.equal(payload.marginCallLevel, '100');
+});

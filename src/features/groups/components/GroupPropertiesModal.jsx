@@ -4,7 +4,7 @@ import { AlertCircle, Loader2, Pencil, Users, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
-import { GROUP_DEFAULT_PAYLOAD, buildGroupSavePayload, submitGroup, toSymbolList } from '../groupPayload.js';
+import { GROUP_DEFAULT_PAYLOAD, bookTypeForRoutingMode, buildGroupSavePayload, submitGroup, toSymbolList } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { ROUTING_LABELS } from '../groupTree.js';
@@ -67,7 +67,10 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
   const update = (key, value) => setForm((prev) => {
     const next = { ...prev, [key]: value };
-    if (key === 'routingMode') next.bookType = ROUTING_LABELS[value] ?? prev.bookType;
+    if (key === 'routingMode') {
+      const canonical = bookTypeForRoutingMode(value);
+      if (canonical) next.bookType = canonical;
+    }
     return next;
   });
 

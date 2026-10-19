@@ -2,6 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
 import { createManagerAccount } from '../../services/managerAccountApi';
+import {
+  ACCOUNT_MODES,
+  ACCOUNT_MODE_DEFAULT,
+  buildNewAccountPayload,
+  inheritGroupSettings,
+} from './newAccountWizard';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
@@ -52,6 +58,10 @@ const PasswordField = ({ id, label, value, onChange }) => {
 };
 
 const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasMore = false, onSearchChange, searchValue }) => {
+  // Search text lives only in `searchValue` (the list filter) and is never
+  // written to `value`/form.Group. Only an explicit option click calls
+  // onChange, so typing without picking leaves Group '' and submit fails
+  // closed via buildNewAccountPayload.
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -87,7 +97,7 @@ const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasM
           value={isOpen ? searchValue : value}
           onFocus={() => setIsOpen(true)}
           onChange={handleInputChange}
-          placeholder="Search or select group..."
+          placeholder="Select group…"
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={isOpen}
@@ -172,7 +182,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     Group: '',
     Leverage: 100,
     FirstName: '', LastName: '', Email: '', Phone: '',
-    Country: 'India', Currency: 'USD',
+    Country: 'India', Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
     master_pass: '', investor_pass: '',
   });
 
@@ -189,35 +199,27 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   const { canAct } = usePermissions();
   const canCreate = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
 
-  useEffect(() => {
-    if (!groupSearch && !loadingGroups && groups && groups.length > 0) {
-      if (!groups.find(g => g.name === form.Group)) {
-        setForm(prev => ({ ...prev, Group: groups[0].name }));
-        if (!leverageTouched.current) {
-          const v = Number(groups[0]?.leverage ?? groups[0]?.Leverage);
-          if (Number.isInteger(v) && v >= 1 && v <= 10000) {
-            setForm(prev => ({ ...prev, Leverage: v }));
-          }
-        }
-      }
-    }
-  }, [groups, loadingGroups, form.Group, groupSearch]);
+  // UI-4 follow-up: the wizard NEVER auto-fills Group. Opening, list
+  // refreshes, and searches leave Group exactly as the operator left it
+  // ('' until an explicit pick), so an empty choice fails closed on submit
+  // instead of silently creating under the first row. Leverage and currency
+  // still follow the EXPLICITLY selected group until the operator touches
+  // them (see syncGroupDefaults), exactly like API-created accounts with
+  // omitted fields.
+  const leverageTouched = useRef(false);
+  const currencyTouched = useRef(false);
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
-  // T8-B: the leverage dropdown follows the selected group's leverage until
-  // the operator touches it, so UI-created accounts inherit group leverage
-  // exactly like API-created accounts with an omitted Leverage.
-  const leverageTouched = useRef(false);
-  const groupLeverageOf = (groupName) => {
-    const g = (groups || []).find((x) => x && x.name === groupName);
-    const v = Number(g?.leverage ?? g?.Leverage);
-    return Number.isInteger(v) && v >= 1 && v <= 10000 ? v : null;
-  };
-  const syncLeverageFromGroup = (groupName) => {
-    if (leverageTouched.current) return;
-    const v = groupLeverageOf(groupName);
-    if (v !== null) set('Leverage', v);
+  const syncGroupDefaults = (groupName) => {
+    const inherited = inheritGroupSettings({
+      groups,
+      groupName,
+      leverageTouched: leverageTouched.current,
+      currencyTouched: currencyTouched.current,
+    });
+    if (Object.keys(inherited).length === 0) return;
+    setForm(prev => ({ ...prev, ...inherited }));
   };
 
   const handleSubmit = async (e) => {
@@ -227,8 +229,14 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
       setResult({ success: false, message: 'Your role does not have permission to create accounts.' });
       return;
     }
-    if (!String(form.Group || '').trim()) {
-      setResult({ success: false, message: 'Please select an account group.' });
+    // The submitted group is the trimmed, visible selection. No fallback to
+    // the first loaded group is applied here so an untouched/empty choice
+    // fails closed instead of creating the account under an assumed group.
+    let payload;
+    try {
+      payload = buildNewAccountPayload(form);
+    } catch (err) {
+      setResult({ success: false, message: err.message || 'Please review the account fields.' });
       return;
     }
     setLoading(true);
@@ -236,18 +244,6 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
 
     // POST the payload as JSON to the versioned account writer so passwords and
     // account fields never appear in request URLs or browser history.
-    const payload = {
-      master_pass: form.master_pass,
-      investor_pass: form.investor_pass,
-      Group: form.Group,
-      Leverage: form.Leverage,
-      FirstName: form.FirstName,
-      LastName: form.LastName,
-      Email: form.Email,
-      Phone: form.Phone,
-      Country: form.Country,
-      Currency: form.Currency,
-    };
 
     try {
       const data = await createManagerAccount(payload);
@@ -265,12 +261,18 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     setResult(null);
     leverageTouched.current = false;
-    const firstGroup = groups?.[0];
-    const firstLeverage = Number(firstGroup?.leverage ?? firstGroup?.Leverage);
+    currencyTouched.current = false;
+    // Reset path never prefills the first row: Group stays empty with the
+    // "Select group…" placeholder so a reopened wizard fails closed until
+    // the operator explicitly picks a group (inheritance then applies via
+    // syncGroupDefaults). Search text is cleared so it can never leak into
+    // the next Group value.
+    setGroupSearch('');
     setForm({
-      Group: firstGroup?.name || '',
-      Leverage: Number.isInteger(firstLeverage) && firstLeverage >= 1 && firstLeverage <= 10000 ? firstLeverage : 100,
-      FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: 'USD',
+      Group: '',
+      Leverage: 100,
+      FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: '',
+      AccountMode: ACCOUNT_MODE_DEFAULT,
       master_pass: '', investor_pass: '',
     });
     if (onClose) onClose();
@@ -332,7 +334,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                 <div className="new-account-section-heading">
                   <div>
                     <h2>Account setup</h2>
-                    <p>Select the account group, leverage, and base currency. Leverage follows the selected group until changed.</p>
+                    <p>Select the account group, leverage, base currency, and accounting mode. Leverage and currency follow the selected group until changed. Accounting mode cannot be changed after creation.</p>
                   </div>
                 </div>
                 <div className="new-account-settings-grid">
@@ -341,7 +343,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                       <GroupCombobox
                         id="new-account-group"
                         value={form.Group}
-                        onChange={(selectedGroup) => { set('Group', selectedGroup); syncLeverageFromGroup(selectedGroup); }}
+                        onChange={(selectedGroup) => { set('Group', selectedGroup); syncGroupDefaults(selectedGroup); }}
                         groups={groups}
                         loading={loadingGroups}
                         hasMore={hasMoreGroups}
@@ -356,8 +358,14 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </select>
                   </Field>
                   <Field id="new-account-currency" label="Currency" required>
-                    <select id="new-account-currency" className="ui-select" value={form.Currency} onChange={(event) => set('Currency', event.target.value)}>
-                      {CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                    <select id="new-account-currency" className="ui-select" value={form.Currency} required onChange={(event) => { currencyTouched.current = true; set('Currency', event.target.value); }}>
+                      <option value="" disabled>Select currency…</option>
+                      {[...new Set([...CURRENCIES, form.Currency].filter(Boolean))].sort().map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                    </select>
+                  </Field>
+                  <Field id="new-account-mode" label="Account mode" required hint="Cannot be changed after creation">
+                    <select id="new-account-mode" className="ui-select" value={form.AccountMode} required onChange={(event) => set('AccountMode', event.target.value)}>
+                      {ACCOUNT_MODES.map((mode) => <option key={mode} value={mode}>{mode === 'hedging' ? 'Hedging' : 'Netting'}</option>)}
                     </select>
                   </Field>
                   <Field id="new-account-country" label="Country" required>

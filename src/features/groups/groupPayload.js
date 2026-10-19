@@ -21,19 +21,93 @@ export const GROUP_DEFAULT_PAYLOAD = Object.freeze({
   executionMode: '',
   bookType: '',
   negativeBalanceProtection: false,
-  tradeAllowed: false,
+  tradeAllowed: true,
   demo: false,
   accountType: '',
   lotDivisor: 0,
   routingMode: 'b_book',
   symbolsAllowed: [],
   symbolsBlocked: [],
+  parentGroup: '',
+  groupPurpose: '',
 });
 
 // Only these keys are ever sent to GroupCreate/GroupUpdate. Anything else that
 // ends up in a form (e.g. server-echoed fields like createdAt/updatedAt/enabled
 // when editing, or values injected via dev-tools) is stripped before submit.
+// parentGroup/groupPurpose are the only creation-payload additions: no other
+// new backend keys are introduced here.
 export const GROUP_ALLOWED_FIELDS = Object.keys(GROUP_DEFAULT_PAYLOAD);
+
+// Backend-canonical book_type values (groups.book_type, COALESCE 'b').
+// The wizard shows B-Book/A-Book/Hybrid labels for routingMode; bookType sent
+// to the backend must be one of these canonical values, never a display label.
+export const ROUTING_TO_BOOK_TYPE = Object.freeze({
+  a_book: 'a',
+  b_book: 'b',
+  hybrid: 'hybrid',
+});
+
+// Tenant-agnostic execution choices shown in the new-group wizard. They mirror
+// the Admin Margin-tab precedent (market/instant) without hardcoding any
+// tenant, broker, currency, or rate. A blank choice is omitted so backend
+// tenant/environment/parent derivation applies; an explicit choice always wins.
+export const EXECUTION_MODE_OPTIONS = Object.freeze([
+  { value: 'market', label: 'Market execution' },
+  { value: 'instant', label: 'Instant execution' },
+]);
+
+// Tenant-agnostic group-purpose choices. The backend defaults an omitted
+// purpose to customer and refuses anything outside customer|coverage.
+export const GROUP_PURPOSE_OPTIONS = Object.freeze([
+  { value: 'customer', label: 'Customer' },
+  { value: 'coverage', label: 'Coverage' },
+]);
+
+export const GROUP_PURPOSE_VALUES = Object.freeze(['customer', 'coverage']);
+
+// Blank policy strings omitted on new-group create so omitted-field backend
+// derivation (tenant defaults, then environment, then parent-group fallback)
+// applies instead of storing an empty string. Numbers, booleans, and symbol
+// lists are never omitted here: explicit zero/false/empty-list values are
+// preserved by the caller.
+const NEW_GROUP_OMIT_BLANK_KEYS = new Set([
+  'description',
+  'currency',
+  'executionMode',
+  'bookType',
+  'accountType',
+  'commissionType',
+  'routingMode',
+  'parentGroup',
+  'groupPurpose',
+]);
+
+const isBlankString = (value) => typeof value === 'string' && value.trim() === '';
+
+const normalizeRoutingToken = (value) =>
+  String(value ?? '').trim().toLowerCase().replace(/[- ]+/g, '_');
+
+/** Map a user-visible Book/routing choice to its backend-canonical bookType. */
+export const bookTypeForRoutingMode = (mode) => {
+  const token = normalizeRoutingToken(mode);
+  if (!token) return '';
+  if (token === 'a_book' || token === 'abook' || token === 'a') return 'a';
+  if (token === 'b_book' || token === 'bbook' || token === 'b') return 'b';
+  if (token === 'hybrid' || token === 'h') return 'hybrid';
+  return '';
+};
+
+/** True for the canonical bookType values the backend stores. */
+export const isCanonicalBookType = (value) => value === 'a' || value === 'b' || value === 'hybrid';
+
+const normalizeBookTypeValue = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (isCanonicalBookType(text)) return text;
+  const mapped = bookTypeForRoutingMode(text);
+  return mapped || text;
+};
 
 export const pickGroupPayloadFields = (source, allowedKeys = GROUP_ALLOWED_FIELDS) =>
   allowedKeys.reduce((acc, key) => {
@@ -41,11 +115,108 @@ export const pickGroupPayloadFields = (source, allowedKeys = GROUP_ALLOWED_FIELD
     return acc;
   }, {});
 
+/** Validate the new-group identity fields without any tenant-specific defaults. */
+export const validateNewGroupFields = ({ name, parentGroup, groupPurpose } = {}) => {
+  if (String(name ?? '').trim() === '') return 'Group Name is required.';
+  const purpose = String(groupPurpose ?? '').trim();
+  if (purpose !== '' && !GROUP_PURPOSE_VALUES.includes(purpose)) {
+    return 'Purpose must be customer or coverage.';
+  }
+  const parent = String(parentGroup ?? '').trim();
+  if (parent !== '' && parent.toLowerCase() === String(name ?? '').trim().toLowerCase()) {
+    return 'Parent group must name another group.';
+  }
+  return null;
+};
+
+// Parent-group tradeAllowed default for the new-group wizard. The
+// operator-typed parent name resolves against GroupList rows with an exact,
+// case-insensitive (trimmed) match: near-misses never inherit. The record's
+// boolean tradeAllowed wins when present (the API's known casings are
+// accepted); anything else reports null so the caller keeps the global
+// default. No tenant, broker, currency, symbol, rate, or group names here.
+const normalizeParentKey = (value) => String(value ?? '').trim().toLowerCase();
+
+const parentRecordOf = (groups, parentGroup) => {
+  const target = normalizeParentKey(parentGroup);
+  if (!target) return null;
+  const rows = Array.isArray(groups) ? groups : [];
+  return rows.find((entry) => {
+    if (typeof entry === 'string') return normalizeParentKey(entry) === target;
+    if (!entry || typeof entry !== 'object') return false;
+    return ['name', 'Group', 'group', 'group_name'].some((key) => {
+      const candidate = normalizeParentKey(entry[key]);
+      return candidate !== '' && candidate === target;
+    });
+  }) ?? null;
+};
+
+/** Parent group's boolean tradeAllowed for an exact name match, else null. */
+export const parentTradeAllowedOf = (groups, parentGroup) => {
+  const match = parentRecordOf(groups, parentGroup);
+  if (!match || typeof match !== 'object') return null;
+  const value = match.tradeAllowed ?? match.TradeAllowed ?? match.trade_allowed;
+  return typeof value === 'boolean' ? value : null;
+};
+
+/**
+ * Value the new-group tradeAllowed checkbox should show.
+ * - An explicit operator check/uncheck (tradeTouched) always wins.
+ * - Otherwise the exact parent match's tradeAllowed wins when found.
+ * - With no parent, no exact match, or no boolean on the record, the
+ *   sensible global default true applies.
+ */
+export const resolveNewGroupTradeAllowed = ({ groups, parentGroup, tradeTouched = false, currentValue = true } = {}) => {
+  if (tradeTouched) return Boolean(currentValue);
+  return parentTradeAllowedOf(groups, parentGroup) ?? true;
+};
+
+/**
+ * Build the POST /GroupCreate payload from wizard form data.
+ * - Preserves every explicit operator value (non-blank strings, numbers
+ *   including zero, booleans including false, symbol arrays).
+ * - Omits blank policy strings so omitted-field backend derivation applies.
+ * - Derives backend-canonical bookType from the visible routingMode choice.
+ * - Omits a blank parentGroup/groupPurpose; validates purpose and self-parent.
+ * - Never hardcodes a tenant/broker/currency: a blank currency is omitted and
+ *   left for backend derivation.
+ */
+export const buildNewGroupPayload = (formData = {}) => {
+  const payload = pickGroupPayloadFields(formData);
+  const routingText = String(payload.routingMode ?? '').trim();
+  if (routingText !== '') {
+    const canonical = bookTypeForRoutingMode(routingText);
+    if (canonical) payload.bookType = canonical;
+  }
+  if (payload.bookType !== undefined) {
+    const normalized = normalizeBookTypeValue(payload.bookType);
+    if (normalized === '' || isBlankString(payload.bookType)) delete payload.bookType;
+    else payload.bookType = normalized;
+  }
+  for (const key of NEW_GROUP_OMIT_BLANK_KEYS) {
+    if (payload[key] !== undefined && isBlankString(payload[key])) delete payload[key];
+  }
+  if (payload.parentGroup !== undefined) {
+    const parent = String(payload.parentGroup ?? '').trim();
+    if (parent === '') delete payload.parentGroup;
+    else payload.parentGroup = parent;
+  }
+  if (payload.groupPurpose !== undefined) {
+    const purpose = String(payload.groupPurpose ?? '').trim();
+    if (purpose === '') delete payload.groupPurpose;
+    else payload.groupPurpose = purpose;
+  }
+  if (payload.tradeAllowed === undefined) payload.tradeAllowed = true;
+  return payload;
+};
+
 // Existing groups accept partial updates. Keep untouched values out of the
 // request so a stale dialog cannot overwrite changes made by another manager.
+// New groups use the creation contract: explicit values preserved, blank
+// policy strings omitted so backend derivation applies.
 export const buildGroupSavePayload = (initial, current, { isNew = false } = {}) => {
+  if (isNew) return buildNewGroupPayload(current);
   const payload = pickGroupPayloadFields(current);
-  if (isNew) return payload;
   return Object.fromEntries(Object.entries(payload).filter(([key, value]) =>
     JSON.stringify(value) !== JSON.stringify(initial[key])
   ));
