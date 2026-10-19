@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Activity, CircleCheck, Wifi, WifiOff } from 'lucide-react';
 import DesktopAppDownloadButton from '../DesktopAppDownloadButton';
 import DesktopUpdateButton from '../DesktopUpdateButton';
 import { useT } from '../../i18n/index.js';
 import { getRuntimeConfigValue } from '../../config/backendTarget.js';
+import { BROKER_INFO_UPDATED_EVENT, getBrokerInfo } from '../../services/brokerAuth.js';
+import packageInfo from '../../../package.json';
 
 export default function StatusBar({
   isAuthenticated = false,
@@ -11,6 +14,30 @@ export default function StatusBar({
   trafficKb = 13.0,
 }) {
   const t = useT();
+  const [brokerInfo, setBrokerInfo] = useState(() => {
+    try {
+      return getBrokerInfo();
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    const syncBrokerInfo = () => {
+      try {
+        setBrokerInfo(getBrokerInfo());
+      } catch {
+        // Keep the last known broker label; the status bar must never break rendering.
+      }
+    };
+    window.addEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+    return () => window.removeEventListener(BROKER_INFO_UPDATED_EVENT, syncBrokerInfo);
+  }, []);
+  const rawBrokerName = String(brokerInfo?.broker_name || brokerInfo?.name || '').trim();
+  const productTitle = rawBrokerName && !/^broker$/i.test(rawBrokerName)
+    ? `${rawBrokerName} Manager`
+    : 'Manager';
+  const appVersion = String(packageInfo?.version || '').trim();
+  const versionLabel = appVersion ? `${productTitle} v${appVersion}` : productTitle;
   const visibleConnectionData = isAuthenticated ? connectionData : null;
   const visiblePingMs = isAuthenticated ? pingMs : null;
   const isConnected = visibleConnectionData?.status === 'Connected';
@@ -22,7 +49,7 @@ export default function StatusBar({
   return (
     <footer className="cc-status-bar" aria-label={t('status.connection')}>
       <div className="cc-status-group">
-        <span className="cc-status-version">RTX5 Manager v2.6.0</span>
+        <span className="cc-status-version">{versionLabel}</span>
         <span><i className="cc-status-dot is-live" />{getRuntimeConfigValue(['LOCAL_BACKEND', 'VITE_LOCAL_BACKEND']) === 'true' ? 'Local' : t('status.production')}</span>
         <span><CircleCheck size={11} />{t('status.ready')}</span>
       </div>

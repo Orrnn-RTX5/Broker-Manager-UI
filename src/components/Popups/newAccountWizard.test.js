@@ -308,3 +308,87 @@ test('submit path admits hedging and refuses netting before any payload is built
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: 'netting' })), /not supported yet/);
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: '' })), /not supported yet/);
 });
+
+// Sweep W5/W4 (no hardcoded tenant defaults reach the wire; real helpers
+// only): USD is never emitted as a default, group currency (including a
+// non-USD fixture) wins after an explicit pick, a stale Leverage 100 with no
+// group still fails closed on group-required, and reset leaves no currency
+// default. Country 'India' and the CURRENCIES/LEVERAGES option lists are out
+// of scope and untouched.
+
+test('sweep W5/W4: no USD default is ever emitted; empty currency fails closed', () => {
+  assert.equal(normalizeCurrencyCode(''), '');
+  assert.equal(groupCurrencyOf(groups(), 'No\\SuchGroup'), null);
+  assert.equal(groupCurrencyOf([], 'Fixture\\Alpha'), null);
+  // A group row with no currency data invents nothing (in particular no USD).
+  const inherited = inheritGroupSettings({
+    groups: groups(),
+    groupName: 'Fixture\\Gamma',
+    leverageTouched: false,
+    currencyTouched: false,
+  });
+  assert.ok(!('Currency' in inherited));
+  assert.throws(() => buildNewAccountPayload(baseForm({ Currency: '' })), /currency/i);
+  assert.throws(() => buildSubmittableAccountPayload(baseForm({ Currency: '' })), /currency/i);
+});
+
+test('sweep W5/W4: group currency wins after an explicit pick (non-USD fixture)', () => {
+  const inherited = inheritGroupSettings({
+    groups: groups(),
+    groupName: 'Fixture\\Alpha',
+    leverageTouched: false,
+    currencyTouched: false,
+  });
+  assert.deepEqual(inherited, { Leverage: 200, Currency: 'EUR' });
+  assert.notEqual(inherited.Currency, 'USD');
+  const payload = buildNewAccountPayload({
+    ...baseForm({ Group: 'Fixture\\Alpha', Leverage: '', Currency: '' }),
+    ...inherited,
+  });
+  assert.equal(payload.Currency, 'EUR');
+  assert.equal(payload.Leverage, 200);
+  assert.notEqual(payload.Currency, 'USD');
+});
+
+test('sweep W5/W4: stale Leverage 100 with no group still fails closed; group wins after a pick', () => {
+  for (const empty of ['', '   ', undefined, null]) {
+    assert.throws(
+      () => buildNewAccountPayload(baseForm({ Group: empty, Leverage: 100, Currency: 'EUR' })),
+      /Please select an account group\./,
+    );
+    assert.throws(
+      () => buildSubmittableAccountPayload(baseForm({ Group: empty, Leverage: 100, Currency: 'EUR' })),
+      /Please select an account group\./,
+    );
+  }
+  // The same stale 100 is overwritten by the group value after an explicit pick.
+  const inherited = inheritGroupSettings({
+    groups: groups(),
+    groupName: 'Fixture\\Beta',
+    leverageTouched: false,
+    currencyTouched: false,
+  });
+  const payload = buildNewAccountPayload({
+    ...baseForm({ Group: 'Fixture\\Beta', Leverage: 100, Currency: '' }),
+    ...inherited,
+  });
+  assert.equal(payload.Leverage, 50);
+  assert.equal(payload.Currency, 'GBP');
+});
+
+test('sweep W5/W4: reset leaves no currency default and fails closed', () => {
+  const resetForm = baseForm({ Group: '', Leverage: '', Currency: '', AccountMode: 'hedging' });
+  assert.equal(resetForm.Currency, '');
+  assert.notEqual(resetForm.Currency, 'USD');
+  assert.equal(normalizeCurrencyCode(resetForm.Currency), '');
+  assert.deepEqual(
+    inheritGroupSettings({
+      groups: groups(),
+      groupName: resetForm.Group,
+      leverageTouched: false,
+      currencyTouched: false,
+    }),
+    {},
+  );
+  assert.throws(() => buildNewAccountPayload(resetForm), /Please select an account group\./);
+});

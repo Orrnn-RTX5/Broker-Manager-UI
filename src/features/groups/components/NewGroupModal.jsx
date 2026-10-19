@@ -234,6 +234,11 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   // Duplicate/edit sources keep their value and count as touched, so parent
   // inheritance never overwrites them; an explicit check/uncheck always wins.
   const tradeTouched = useRef(Boolean(initialData || duplicateData));
+  // Same ref pattern for leverage: the display default (100) is shown but an
+  // untouched leverage is omitted on create so backend tenant/env/parent
+  // derivation governs; edit/duplicate sources count as touched and any
+  // explicit operator pick (including a re-typed 100) is always sent.
+  const leverageTouched = useRef(Boolean(initialData || duplicateData));
   const parentSearch = String(formData.parentGroup ?? '').trim();
   const { groups: parentGroups, loading: parentLoading } = useGroupList({
     limit: 100,
@@ -261,6 +266,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
 
   const handleChange = (key, val) => {
     if (key === 'tradeAllowed') tradeTouched.current = true;
+    if (key === 'leverage') leverageTouched.current = true;
     setFormData(prev => {
       const next = { ...prev, [key]: val };
       // Sync backend-canonical bookType with the visible routingMode choice.
@@ -298,7 +304,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
 
       const payload = isEditing
         ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
-        : buildNewGroupPayload(formData);
+        : buildNewGroupPayload(formData, { leverageTouched: leverageTouched.current });
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
       }

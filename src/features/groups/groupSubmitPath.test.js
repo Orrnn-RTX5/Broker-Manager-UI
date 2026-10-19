@@ -41,6 +41,7 @@ const {
   buildGroupSavePayload,
   validateNewGroupFields,
   bookTypeForRoutingMode,
+  pickGroupPayloadFields,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 
 // Generic fixtures only: synthetic group names with placeholder values. No
@@ -67,15 +68,18 @@ const buildCreateFormData = (overrides = {}) => {
 
 // Mirrors NewGroupModal.jsx handleSubmit for creates (isEditing false): the
 // validateNewGroupFields gate, then buildNewGroupPayload, then the same
-// comma-string -> array split applied to the symbol lists.
-const runCreateSubmitPath = (formData) => {
+// comma-string -> array split applied to the symbol lists. leverageTouched
+// mirrors NewGroupModal.jsx's leverageTouched ref: fresh creates start
+// untouched (display default shown but omitted), while an explicit operator
+// pick -- and every edit/duplicate source -- counts as touched.
+const runCreateSubmitPath = (formData, { leverageTouched = false } = {}) => {
   const validationError = validateNewGroupFields({
     name: formData.name,
     parentGroup: formData.parentGroup,
     groupPurpose: formData.groupPurpose,
   });
   if (validationError) return { validationError, payload: null };
-  const payload = buildNewGroupPayload(formData);
+  const payload = buildNewGroupPayload(formData, { leverageTouched });
   if (typeof payload.symbolsAllowed === 'string') {
     payload.symbolsAllowed = payload.symbolsAllowed.split(',').map((s) => s.trim()).filter(Boolean);
   }
@@ -136,6 +140,10 @@ test('fresh-create submit path: keys within allowed fields, blanks absent, symbo
   assert.ok('tradeAllowed' in payload);
   assert.equal(typeof payload.tradeAllowed, 'boolean');
   assert.equal(payload.tradeAllowed, true);
+  // Untouched display-default leverage is omitted so backend tenant/env/parent
+  // derivation governs; the form still shows the display default.
+  assert.equal(form.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  assert.ok(!('leverage' in payload), 'untouched leverage must be omitted for backend derivation');
   // ds-20 guard: the submitted list must be a true Array (not Set/string), so
   // production array operations such as .includes keep working.
   assert.ok(Array.isArray(payload.symbolsAllowed));
@@ -215,10 +223,47 @@ test('isNew save delegates to the real create builder', () => {
 test('string-typed form numbers pass through the create builder without crashing', () => {
   // Numeric inputs normally produce numbers, but server-echoed/duplicated
   // values can arrive as strings; the builder preserves explicit values.
+  // String-typed values mirror edit/duplicate sources, which count as
+  // touched, so the touched flag is passed like NewGroupModal.jsx does.
   const { validationError, payload } = runCreateSubmitPath(
     buildCreateFormData({ name: 'Fixture/Standard', leverage: '100', marginCallLevel: '100' }),
+    { leverageTouched: true },
   );
   assert.equal(validationError, null);
   assert.equal(payload.leverage, '100');
   assert.equal(payload.marginCallLevel, '100');
+});
+
+test('untouched display-default leverage omitted; explicit 100 and 200 always sent', () => {
+  // Fresh create: the display default is shown but untouched, so the key is
+  // omitted and backend tenant/env/parent derivation governs.
+  const untouchedForm = buildCreateFormData({ name: 'Fixture/Standard' });
+  assert.equal(untouchedForm.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  const untouched = runCreateSubmitPath(untouchedForm);
+  assert.equal(untouched.validationError, null);
+  assert.ok(!('leverage' in untouched.payload), 'untouched leverage 100 must be omitted');
+  assert.ok(!('leverageTouched' in untouched.payload), 'the touched flag itself is never a payload key');
+
+  // An explicit operator pick -- including a re-typed display default -- wins.
+  for (const value of [NEW_GROUP_FINANCIAL_DEFAULTS.leverage, 200]) {
+    const { validationError, payload } = runCreateSubmitPath(
+      buildCreateFormData({ name: 'Fixture/Standard', leverage: value }),
+      { leverageTouched: true },
+    );
+    assert.equal(validationError, null);
+    assert.equal(payload.leverage, value);
+    for (const key of Object.keys(payload)) {
+      assert.ok(GROUP_ALLOWED_FIELDS.includes(key), `payload key outside GROUP_ALLOWED_FIELDS: ${key}`);
+    }
+  }
+});
+
+test('edit path still sends the full picked payload including leverage', () => {
+  const form = { ...buildCreateFormData({ name: 'Fixture/Standard' }), leverage: NEW_GROUP_FINANCIAL_DEFAULTS.leverage };
+  const picked = pickGroupPayloadFields(form, GROUP_ALLOWED_FIELDS);
+
+  assert.equal(picked.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  for (const key of Object.keys(picked)) {
+    assert.ok(GROUP_ALLOWED_FIELDS.includes(key), `payload key outside GROUP_ALLOWED_FIELDS: ${key}`);
+  }
 });

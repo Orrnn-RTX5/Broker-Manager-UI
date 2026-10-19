@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchLatestDesktopInstaller } from '../services/desktopRelease';
+import { getBrokerInfo } from '../services/brokerAuth.js';
 import packageInfo from '../../package.json';
 import './HelpCenter.css';
 
@@ -18,7 +19,13 @@ export default function HelpCenter({ initialSection = 'Guide', onClose }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [failed, setFailed] = useState(false);
-  const [message, setMessage] = useState(`RTX5 Manager ${packageInfo.version}\n\nIssue summary:\n\nSteps to reproduce:\n1. \n\nExpected result:\n\nActual result / error message:\n`);
+  const helpBrokerName = (() => {
+    const info = getBrokerInfo();
+    const rawName = String(info?.broker_name || info?.name || '').trim();
+    return rawName && !/^broker$/i.test(rawName) ? rawName : '';
+  })();
+  const helpProductTitle = helpBrokerName ? `${helpBrokerName} Manager` : 'Manager';
+  const [message, setMessage] = useState(`${helpProductTitle} ${packageInfo.version}\n\nIssue summary:\n\nSteps to reproduce:\n1. \n\nExpected result:\n\nActual result / error message:\n`);
   useEffect(() => { dialogRef.current?.showModal(); }, []);
   const checkUpdates = async () => {
     setBusy(true); setFailed(false); setStatus('Checking for updates…');
@@ -39,15 +46,15 @@ export default function HelpCenter({ initialSection = 'Guide', onClose }) {
     catch { setFailed(true); setStatus('Copy unavailable. Select the text below and copy it manually.'); }
   };
   return <dialog ref={dialogRef} className="manager-help-center" aria-labelledby="manager-help-title" onCancel={onClose} onClose={onClose}>
-    <header><div><h2 id="manager-help-title">Help Center</h2><p>Guidance, updates and support for RTX5 Manager</p></div><button type="button" onClick={onClose} aria-label="Close Help Center">×</button></header>
+    <header><div><h2 id="manager-help-title">Help Center</h2><p>Guidance, updates and support for {helpProductTitle}</p></div><button type="button" onClick={onClose} aria-label="Close Help Center">×</button></header>
     <nav aria-label="Help sections">{['Guide', 'Updates', 'Support', 'About'].map(name => <button type="button" key={name} aria-pressed={section === name} onClick={() => { setSection(name); setStatus(''); }}>{name}</button>)}</nav>
     <div className="manager-help-content">
       {section === 'Guide' && <><label className="manager-help-search">Find a help topic<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts, prices, workspace…" /></label>{topics.filter(t => t.join(' ').toLowerCase().includes(search.toLowerCase())).map(([title, text]) => <section key={title}><h3>{title}</h3><p>{text}</p></section>)}{!topics.some(t => t.join(' ').toLowerCase().includes(search.toLowerCase())) && <p>No matching topics. Try another search or open Support.</p>}</>}
       {section === 'Updates' && <><section><h3>Releases & updates</h3><p>Build version: {packageInfo.version}</p><p>Read published release notes or check for the latest desktop version.</p><div className="manager-help-actions"><button type="button" disabled={busy} onClick={checkUpdates}>{busy ? 'Checking…' : 'Check for updates'}</button><a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">View release notes ?</a></div></section><section><h3>Web app updates</h3><p>The web app is updated by your platform operator. Finish any pending work before refreshing to load a deployed update.</p></section></>}
       {section === 'Support' && <><section><h3>Prepare a support message</h3><p>Describe what happened and copy the message to share with your broker administrator. Do not include passwords, access tokens or client personal data.</p><label>Message<textarea rows={9} value={message} onChange={e => setMessage(e.target.value)} /></label><div className="manager-help-actions"><button type="button" onClick={copyMessage}>Copy support message</button></div></section><p>Messages are not sent from this window.</p></>}
-      {section === 'About' && <section><h3>RTX5 Broker Manager</h3><p>Version {packageInfo.version}</p><p>Workspace for broker accounts, market data and trading operations.</p><p>Account access and available actions depend on the permissions assigned by your broker administrator.</p></section>}
+      {section === 'About' && <section><h3>{helpProductTitle}</h3><p>Version {packageInfo.version}</p><p>Workspace for broker accounts, market data and trading operations.</p><p>Account access and available actions depend on the permissions assigned by your broker administrator.</p></section>}
       {status && <p className={`manager-help-status${failed ? ' is-error' : ''}`} role={failed ? 'alert' : 'status'}>{status}</p>}
     </div>
-    <footer><span>RTX5 Manager · {packageInfo.version}</span><button type="button" onClick={onClose}>Close</button></footer>
+    <footer><span>{helpProductTitle} · {packageInfo.version}</span><button type="button" onClick={onClose}>Close</button></footer>
   </dialog>;
 }

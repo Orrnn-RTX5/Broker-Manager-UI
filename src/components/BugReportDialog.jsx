@@ -5,10 +5,12 @@ import {
   CATEGORY_LABELS,
   MAX_ATTACHMENTS,
   SEVERITY_LABELS,
+  buildReportSubmittedNotice,
   fetchBugReportOptions,
   submitBugReport,
   validateAttachment,
 } from '../services/bugReportService';
+import { getBrokerInfo } from '../services/brokerAuth.js';
 
 // Kept low on purpose, and matched by the control plane. The first live test
 // reports ("check", "check ing") were blocked by a 10-character minimum the
@@ -140,6 +142,12 @@ export default function BugReportDialog({ onClose }) {
 
   const storageDisabled = options && options.enabled === false;
 
+  // Per-broker support contact merged from the broker config (see brokerAuth
+  // fetchBrokerConfig); falls back to vendor-free generic wording when absent.
+  // Captured once so typing in the form does not re-read session storage.
+  const [brokerInfo] = useState(() => getBrokerInfo());
+  const supportNotice = buildReportSubmittedNotice(brokerInfo);
+
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-transparent p-6">
       <div
@@ -167,7 +175,7 @@ export default function BugReportDialog({ onClose }) {
             </div>
             <p className="text-[13px] font-semibold text-[var(--text)]">Bug report submitted</p>
             <p className="mt-1 text-[11px] text-[var(--text-2)]">
-              The RTX5 platform team can see this report. Quote this reference if you follow it up.
+              {supportNotice}
             </p>
             <div className="mt-4 inline-flex items-center gap-2 border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
               <code className="font-mono text-[12px] text-[var(--text)]">{receipt.report_id}</code>
@@ -270,7 +278,7 @@ export default function BugReportDialog({ onClose }) {
               {/* Stated plainly, because a screenshot of this UI can contain
                   client names, balances and open positions. */}
               <p className="mt-1.5 text-[10px] leading-4 text-[var(--text-3)]">
-                Screenshots are sent to the RTX5 platform team. Check the image does not show anything
+                Screenshots are sent with this report to your support team. Check the image does not show anything
                 you would not want shared.
               </p>
             </div>

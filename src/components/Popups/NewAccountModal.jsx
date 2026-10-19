@@ -178,9 +178,16 @@ const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasM
 };
 
 const NewAccountModalContent = ({ onClose, onSuccess }) => {
+  // Sweep W5/W4: NO tenant-meaningful hardcoded defaults reach the wire.
+  // Group starts '' (never auto-filled), Leverage starts '' (no 1:100
+  // placeholder), Currency starts '' (no USD default). Leverage and currency
+  // arrive only via explicit group inheritance (syncGroupDefaults) or an
+  // explicit operator pick; submit fails closed on empty group/leverage/
+  // currency via buildSubmittableAccountPayload. Country 'India' and the
+  // CURRENCIES/LEVERAGES option lists are intentionally out of scope here.
   const [form, setForm] = useState({
     Group: '',
-    Leverage: 100,
+    Leverage: '',
     FirstName: '', LastName: '', Email: '', Phone: '',
     Country: 'India', Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
     master_pass: '', investor_pass: '',
@@ -272,7 +279,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     setGroupSearch('');
     setForm({
       Group: '',
-      Leverage: 100,
+      Leverage: '',
       FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: '',
       AccountMode: ACCOUNT_MODE_DEFAULT,
       master_pass: '', investor_pass: '',
@@ -355,8 +362,9 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </Field>
                   </div>
                   <Field id="new-account-leverage" label="Leverage" required>
-                    <select id="new-account-leverage" className="ui-select" value={form.Leverage} onChange={(event) => { leverageTouched.current = true; set('Leverage', Number(event.target.value)); }}>
-                      {[...new Set([...LEVERAGES, form.Leverage])].sort((a, b) => a - b).map((leverage) => <option key={leverage} value={leverage}>1:{leverage}</option>)}
+                    <select id="new-account-leverage" className="ui-select" value={form.Leverage} required onChange={(event) => { leverageTouched.current = true; set('Leverage', Number(event.target.value)); }}>
+                      <option value="" disabled>Select leverage…</option>
+                      {[...new Set([...LEVERAGES, form.Leverage].filter((v) => v !== '' && v !== null && v !== undefined))].sort((a, b) => a - b).map((leverage) => <option key={leverage} value={leverage}>1:{leverage}</option>)}
                     </select>
                   </Field>
                   <Field id="new-account-currency" label="Currency" required>

@@ -1,4 +1,4 @@
-import { fetchManagerApi } from './managerFetch';
+import { fetchManagerApi } from './managerFetch.js';
 
 // Bug reporting from the Manager UI.
 //
@@ -40,6 +40,42 @@ export const SEVERITY_LABELS = {
   medium: 'Medium — works, but wrongly',
   high: 'High — important function broken',
   critical: 'Critical — trading or account integrity affected',
+};
+
+// Broker support contact helpers (pure; unit-tested in bugReportService.test.js).
+//
+// The Manager UI already carries per-broker support data: fetchBrokerConfig in
+// brokerAuth.js merges `support_email` from the broker config into the stored
+// broker info. Support copy routes through that data when present and falls
+// back to vendor-free generic wording otherwise — never a hardcoded vendor.
+
+// Support address merged from the broker config, if the broker provided one.
+export const resolveBrokerSupportEmail = (brokerInfo = null) => {
+  if (!brokerInfo || typeof brokerInfo !== 'object') return '';
+  return String(brokerInfo.support_email ?? brokerInfo.supportEmail ?? '').trim();
+};
+
+// Receipt notice shown after a report is filed. Names the broker's support
+// contact when one is configured; otherwise stays vendor-free and generic.
+export const buildReportSubmittedNotice = (brokerInfo = null) => {
+  const email = resolveBrokerSupportEmail(brokerInfo);
+  if (email) {
+    return `Your support team (${email}) can see this report. Quote this reference if you follow it up.`;
+  }
+  return 'Your support team can see this report. Quote this reference if you follow it up.';
+};
+
+// Maps a failed submission response to the message shown to the reporter.
+// Kept pure so the copy (including its vendor-free wording) is unit-testable;
+// submitBugReport below is the only caller and passes the live response through.
+export const mapBugReportSubmitError = ({ status, message } = {}) => {
+  if (status === 503) {
+    return 'Bug reporting is not configured on this server yet. Please contact your administrator.';
+  }
+  if (status === 502) {
+    return 'The support service could not be reached. Please try again in a moment.';
+  }
+  return message || 'The report could not be submitted';
 };
 
 const readJson = async (response) => {
@@ -161,13 +197,7 @@ export const submitBugReport = async ({ form, attachments = [], signal }) => {
   const data = await readJson(response);
 
   if (!response.ok) {
-    if (response.status === 503) {
-      throw new Error('Bug reporting is not configured on this server yet. Please contact your administrator.');
-    }
-    if (response.status === 502) {
-      throw new Error('The RTX5 support service could not be reached. Please try again in a moment.');
-    }
-    throw new Error(data?.error || 'The report could not be submitted');
+    throw new Error(mapBugReportSubmitError({ status: response.status, message: data?.error }));
   }
   return data;
 };

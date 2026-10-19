@@ -178,11 +178,18 @@ export const resolveNewGroupTradeAllowed = ({ groups, parentGroup, tradeTouched 
  * - Omits blank policy strings so omitted-field backend derivation applies.
  * - Derives backend-canonical bookType from the visible routingMode choice.
  * - Omits a blank parentGroup/groupPurpose; validates purpose and self-parent.
+ * - An untouched leverage (display default 100, never explicitly picked) is
+ *   omitted so backend tenant/env/parent derivation (or its compiled
+ *   fallback) governs; an explicit operator value (including a re-typed 100)
+ *   is always sent. Follows the tradeTouched/parent-inheritance pattern:
+ *   edit/duplicate sources count as touched, so callers pass
+ *   leverageTouched explicitly and the flag itself is never a payload key.
  * - Never hardcodes a tenant/broker/currency: a blank currency is omitted and
  *   left for backend derivation.
  */
-export const buildNewGroupPayload = (formData = {}) => {
+export const buildNewGroupPayload = (formData = {}, { leverageTouched = true } = {}) => {
   const payload = pickGroupPayloadFields(formData);
+  if (!leverageTouched) delete payload.leverage;
   const routingText = String(payload.routingMode ?? '').trim();
   if (routingText !== '') {
     const canonical = bookTypeForRoutingMode(routingText);
@@ -214,8 +221,8 @@ export const buildNewGroupPayload = (formData = {}) => {
 // request so a stale dialog cannot overwrite changes made by another manager.
 // New groups use the creation contract: explicit values preserved, blank
 // policy strings omitted so backend derivation applies.
-export const buildGroupSavePayload = (initial, current, { isNew = false } = {}) => {
-  if (isNew) return buildNewGroupPayload(current);
+export const buildGroupSavePayload = (initial, current, { isNew = false, leverageTouched = true } = {}) => {
+  if (isNew) return buildNewGroupPayload(current, { leverageTouched });
   const payload = pickGroupPayloadFields(current);
   return Object.fromEntries(Object.entries(payload).filter(([key, value]) =>
     JSON.stringify(value) !== JSON.stringify(initial[key])

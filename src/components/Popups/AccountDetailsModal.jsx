@@ -966,7 +966,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     `Account ${loginId}`;
 
   const groupValue = getFieldValue('Group');
-  const currencyValue = getFieldValue('Currency', 'USD');
+  // No group-currency source is in scope here (only the account payload and
+  // live metrics), so an unreported currency stays '' (unknown) instead of
+  // inventing 'USD'. Render sites already treat '' as unknown ('—'/blank).
+  const currencyValue = getFieldValue('Currency', '');
   const rawLeverageValue = getFieldValue('Leverage');
   const leverageValue = rawLeverageValue ? `1:${String(rawLeverageValue).replace(/^1:/, '')}` : '';
   const modeRaw = String(getFieldValue('AccountMode', 'hedge'));

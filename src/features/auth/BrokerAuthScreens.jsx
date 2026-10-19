@@ -121,7 +121,7 @@ const ProductHeader = ({ subtitle }) => (
     >
       <img
         src={BRAND_LOGO}
-        alt="RTX5"
+        alt="Manager"
         className="h-full w-full object-contain"
         draggable="false"
       />
@@ -345,7 +345,7 @@ const BrokerIdentity = ({ broker, variant = 'default' }) => {
 const ManagerDashboardPreview = () => (
   <div className="manager-dashboard-preview" aria-hidden="true">
     <div className="manager-preview-topbar">
-      <div className="manager-preview-brand"><span>RTX5</span> Manager</div>
+      <div className="manager-preview-brand">Manager</div>
       <div className="manager-preview-menu">File&nbsp;&nbsp;&nbsp; Edit&nbsp;&nbsp;&nbsp; View&nbsp;&nbsp;&nbsp; Tools&nbsp;&nbsp;&nbsp; Window</div>
       <div className="manager-preview-avatar">M</div>
     </div>
@@ -431,7 +431,7 @@ const ManagerLoginHeader = ({ broker }) => {
   const index = attempt.key === candidateKey ? attempt.index : 0;
   const src = candidates[index] || defaultLogo;
   const rawName = String(broker?.broker_name || broker?.name || '').trim();
-  const brokerTitle = rawName && !/^broker$/i.test(rawName) ? rawName : 'RTX5';
+  const brokerTitle = rawName && !/^broker$/i.test(rawName) ? rawName : 'Manager';
 
   return (
     <header className="manager-auth-header">

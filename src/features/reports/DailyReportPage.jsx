@@ -75,7 +75,9 @@ function TrendChart({ data, cash = false }) {
 
 export default function DailyReportPage() {
   const { brokerName, date, accounts, cash, sources, refreshing, refresh } = useDailyReport();
-  const [preferredCurrency, setPreferredCurrency] = useState('USD');
+  // Start unknown so the first available server row wins via the
+  // `currencies[0]` fallback below; an explicit user selection wins after.
+  const [preferredCurrency, setPreferredCurrency] = useState('');
   const currencies = cash.data?.rows
     .filter((row) => Number.isFinite(row.deposits) || Number.isFinite(row.withdrawals))
     .map((row) => row.currency) || [];

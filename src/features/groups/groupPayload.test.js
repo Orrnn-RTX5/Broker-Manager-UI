@@ -21,7 +21,7 @@ const bundle = await build({
     }));
   } }],
 });
-const { GROUP_DEFAULT_PAYLOAD, GROUP_ALLOWED_FIELDS, ROUTING_TO_BOOK_TYPE, EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, isCanonicalBookType, buildNewGroupPayload, validateNewGroupFields, buildGroupSavePayload, parentTradeAllowedOf, resolveNewGroupTradeAllowed, submitGroup } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const { GROUP_DEFAULT_PAYLOAD, GROUP_ALLOWED_FIELDS, ROUTING_TO_BOOK_TYPE, EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, isCanonicalBookType, buildNewGroupPayload, validateNewGroupFields, buildGroupSavePayload, parentTradeAllowedOf, resolveNewGroupTradeAllowed, pickGroupPayloadFields, submitGroup } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 import { buildGroupSymbolsSavePayload, isCanonicalGroupSymbolsSavePayload, NEW_GROUP_SYMBOL_TERMS_GAP } from './groupSymbolTerms.js';
 
 beforeEach(() => {
@@ -345,4 +345,65 @@ test('a group edit copies leverage, margin, and a renamed group onto each accoun
     title: 'Group updated',
     message: 'The group was updated. 2 accounts now use the new settings.',
   });
+});
+
+test('untouched display-default leverage is omitted on create so backend derivation governs', () => {
+  const payload = buildNewGroupPayload(
+    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 },
+    { leverageTouched: false },
+  );
+
+  assert.ok(!('leverage' in payload), 'untouched leverage 100 must be omitted for backend derivation');
+  assert.ok(!('leverageTouched' in payload), 'the touched flag itself is never a payload key');
+  assert.ok(
+    Object.keys(payload).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
+    'payload keys must stay within GROUP_ALLOWED_FIELDS',
+  );
+});
+
+test('explicit leverage values (including a re-typed 100) are always sent on create', () => {
+  const explicit100 = buildNewGroupPayload(
+    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 },
+    { leverageTouched: true },
+  );
+  const explicit200 = buildNewGroupPayload(
+    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 200 },
+    { leverageTouched: true },
+  );
+  // Callers that predate the touched flag keep the previous behavior: the
+  // value is preserved.
+  const defaultTouched = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 });
+
+  assert.equal(explicit100.leverage, 100);
+  assert.equal(explicit200.leverage, 200);
+  assert.equal(defaultTouched.leverage, 100);
+  for (const payload of [explicit100, explicit200, defaultTouched]) {
+    assert.ok(
+      Object.keys(payload).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
+      'payload keys must stay within GROUP_ALLOWED_FIELDS',
+    );
+  }
+
+  // The isNew save path forwards the touched flag to the create builder.
+  assert.ok(!('leverage' in buildGroupSavePayload(
+    existingGroup(),
+    { ...existingGroup(), leverage: 100 },
+    { isNew: true, leverageTouched: false },
+  )));
+  assert.equal(buildGroupSavePayload(
+    existingGroup(),
+    { ...existingGroup(), leverage: 100 },
+    { isNew: true, leverageTouched: true },
+  ).leverage, 100);
+});
+
+test('edit path still sends the full picked payload including leverage', () => {
+  const form = { ...existingGroup(), leverage: 100 };
+  const picked = pickGroupPayloadFields(form, GROUP_ALLOWED_FIELDS);
+
+  assert.equal(picked.leverage, 100);
+  assert.ok(
+    Object.keys(picked).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
+    'payload keys must stay within GROUP_ALLOWED_FIELDS',
+  );
 });

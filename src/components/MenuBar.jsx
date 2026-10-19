@@ -72,7 +72,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
     const rawName = String(brokerInfo?.broker_name || brokerInfo?.name || '').trim();
     const validBrokerName = rawName && !/^broker$/i.test(rawName) ? rawName : '';
     if (typeof document !== 'undefined') {
-      document.title = validBrokerName ? `${validBrokerName} - Manager` : 'RTX5 Manager';
+      document.title = validBrokerName ? `${validBrokerName} - Manager` : 'Manager';
     }
   }, [brokerInfo]);
   useEffect(() => {

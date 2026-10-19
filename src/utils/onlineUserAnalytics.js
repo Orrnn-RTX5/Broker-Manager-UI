@@ -184,9 +184,11 @@ export const enrichOnlineUserRows = (rows = [], accounts = []) => {
       ? rowEquity
       : (Number.isFinite(matchedEquity) ? matchedEquity : 0);
 
+    // Never invent a currency: when neither the session row nor the matched
+    // account reports one, the currency stays '' (explicit unknown state).
     const currency = cleanValue(row?.currency ?? row?.Currency)
       || cleanValue(matched?.currency ?? matched?.Currency)
-      || (matched ? 'USD' : '');
+      || '';
 
     return {
       ...row,

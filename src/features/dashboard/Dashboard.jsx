@@ -19,10 +19,20 @@ import { PERMISSIONS } from '../../utils/permissions';
 import './Dashboard.css';
 
 const integer = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
-const money = (value, compact = false, currency = 'USD') => new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: currency || 'USD', maximumFractionDigits: compact ? 1 : 0,
-  notation: compact ? 'compact' : 'standard',
-}).format(value);
+const money = (value, compact = false, currency = '') => {
+  if (!currency) {
+    // No reporting currency in scope (broker-wide multi-currency aggregates):
+    // render a currency-agnostic number rather than inventing one.
+    return new Intl.NumberFormat('en-US', {
+      maximumFractionDigits: compact ? 1 : 0,
+      notation: compact ? 'compact' : 'standard',
+    }).format(value);
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency, maximumFractionDigits: compact ? 1 : 0,
+    notation: compact ? 'compact' : 'standard',
+  }).format(value);
+};
 const moneyExact = (value, currency) => {
   try {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
@@ -214,11 +224,10 @@ export default function Dashboard() {
 
       <section className="cc-panel cc-activity-panel">
         <div className="cc-chart-toolbar">
-          <div><PanelTitle>Trading Activity & Account Equity</PanelTitle><div className="cc-chart-legend"><span><i className="is-volume" />Trading Volume (Lots)</span><span><i className="is-equity" />Account Equity (USD)</span></div></div>
+          <div><PanelTitle>Trading Activity & Account Equity</PanelTitle><div className="cc-chart-legend"><span><i className="is-volume" />Trading Volume (Lots)</span><span><i className="is-equity" />Account Equity</span></div></div>
           <div className="cc-chart-actions">
             {chartState !== 'Live broker data' && <span className={`cc-chart-data-state ${chartStateTone}`} role="status" aria-live="polite">{chartState}</span>}
             <div>{['1H','6H','24H','7D','30D'].map((item) => <button key={item} type="button" aria-pressed={range === item} title={`${intervalLabels[item]} intervals`} className={range === item ? 'is-active' : ''} onClick={() => setRange(item)}>{item}</button>)}</div>
-            <span className="cc-chart-currency" title="Reporting currency">USD</span>
           </div>
         </div>
         <div className="cc-chart-area">
