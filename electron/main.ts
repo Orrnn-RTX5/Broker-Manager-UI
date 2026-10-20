@@ -5,7 +5,7 @@ import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-const APP_ID = 'com.rtx5.brokermanager';
+const APP_ID = (process.env.APP_ID || '').trim() || 'com.broker.manager';
 const APP_PROTOCOL = 'rtx5-manager';
 const APP_HOST = 'app';
 const APP_ORIGIN = `${APP_PROTOCOL}://${APP_HOST}`;
@@ -525,7 +525,7 @@ const createWindow = async (devServerOrigin: string | null): Promise<void> => {
     height: 900,
     minWidth: 1200,
     minHeight: 760,
-    title: 'RTX-5 Broker Manager',
+    title: (process.env.APP_PRODUCT_NAME || '').trim() || 'Broker Manager',
     backgroundColor: '#080f1f',
     icon: path.join(getDistDirectory(), 'logo V2.ico'),
     frame: false,
