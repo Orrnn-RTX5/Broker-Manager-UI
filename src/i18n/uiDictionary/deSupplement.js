@@ -1,4 +1,4 @@
-// German interface phrases shared by dashboard, account dialogs and analytics.
+﻿// German interface phrases shared by dashboard, account dialogs and analytics.
 export default {
 'Show master password': 'Hauptpasswort anzeigen',
 'Hide master password': 'Hauptpasswort verbergen',
