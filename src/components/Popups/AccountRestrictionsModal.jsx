@@ -320,7 +320,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
                     <Field label="Markup">
                       <input type="number" step="1" value={spreadMarkup} onChange={e => setSpreadMarkup(Number(e.target.value))} className="ui-input ui-input-sm" style={{ width: 80 }} />
                     </Field>
-                    <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSpreadSet} disabled={saving || !canManipulateRestrictionTrades}>Set</button>
+                    <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSpreadSet} disabled={saving || !canManipulateRestrictionTrades || !hasSpreadSymbol(spreadSymbol)} title={!canManipulateRestrictionTrades ? 'Your role does not have permission to change spread overrides.' : (!hasSpreadSymbol(spreadSymbol) ? 'Enter a symbol before setting a spread override.' : undefined)}>Set</button>
                   </div>
                   {data?.spreadOverrides && Object.keys(data.spreadOverrides).length > 0 && (
                     <div className="text-[10px] flex gap-2 flex-wrap" style={{ color: 'var(--text-3)' }}>

@@ -492,20 +492,51 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   // Entity-aware close/cancel. Positions use the versioned POST manager API;
   // orders cancel via their adapter; deals are historical and cannot be deleted.
+  // Fail-closed for positions: the Trade tab gates its Close button on a known
+  // symbol, so ticket-only closes here must resolve the ticket's own symbol
+  // from the positions list already in scope and refuse when it is unknown or
+  // empty (no invented fallback; generic for all symbols). Orders cancel by
+  // ticket via orderDelete and their symbol is not in scope here, so the gate
+  // applies to positions only.
   const requestTradeClose = (trade) => {
     if (!requireTradeClosePermission()) return;
     if (entity === 'deal') {
       showResult.info('Deals are historical records and cannot be deleted from this view.');
       return;
     }
-    const positionDetails = entity === 'position'
-      ? positions.find(position => String(position.position) === String(trade.position))
+    const ticket = trade?.position ?? trade?.ticket;
+    const positionDetails = entity === 'position' && ticket !== undefined && ticket !== null
+      ? positions.find(position => String(position.position) === String(ticket))
       : undefined;
+    if (entity === 'position') {
+      const resolvedSymbol = [trade?.symbol, positionDetails?.symbol]
+        .map((value) => String(value ?? '').trim())
+        .find((value) => value !== '') ?? '';
+      if (!resolvedSymbol) {
+        showResult.error(`Cannot close position #${ticket ?? '—'}: the symbol is unknown. Reopen the account and try again.`);
+        return;
+      }
+      setPendingTradeClose({ ...positionDetails, ...trade, symbol: resolvedSymbol });
+      return;
+    }
     setPendingTradeClose({ ...positionDetails, ...trade });
   };
 
   const handleDeleteTrade = async (ticket) => {
     if (!requireTradeClosePermission()) return;
+    // Defense in depth behind requestTradeClose and the disabled confirm
+    // button: never send a position close when the ticket's symbol cannot be
+    // resolved from the positions list already in scope (or the pending
+    // confirmation row). Orders cancel by ticket and stay ungated here.
+    if (entity === 'position') {
+      const resolvedSymbol = [positions.find((position) => String(position.position) === String(ticket))?.symbol, pendingTradeClose?.symbol]
+        .map((value) => String(value ?? '').trim())
+        .find((value) => value !== '') ?? '';
+      if (!resolvedSymbol) {
+        showResult.error(`Cannot close position #${ticket ?? '—'}: the symbol is unknown. Reopen the account and try again.`);
+        return;
+      }
+    }
     setIsDeleting(true);
     const label = entity === 'order' ? `Cancel Order #${ticket}` : `Close Position #${ticket}`;
     try {
@@ -1327,8 +1358,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                               <button
                                 type="button"
                                 onClick={() => requestTradeClose(pos)}
-                                disabled={isDeleting || !canCloseTrades}
-                                title={!canCloseTrades ? TRADE_CLOSE_DENIED_MESSAGE : undefined}
+                                disabled={isDeleting || !canCloseTrades || (entity === 'position' && !String(pos.symbol ?? '').trim())}
+                                title={!canCloseTrades ? TRADE_CLOSE_DENIED_MESSAGE : (entity === 'position' && !String(pos.symbol ?? '').trim() ? 'Cannot close position: the symbol is unknown' : undefined)}
                                 className="account-position-close-button"
                               >
                                 Close
@@ -1782,8 +1813,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           {...ctxMenu}
           onClose={() => setCtxMenu(prev => ({ ...prev, isOpen: false }))}
           onModify={handleModifySLTP}
-          onCloseTrade={(ticket) => requestTradeClose({ position: ticket })}
-          canCloseTrades={canCloseTrades}
+          onCloseTrade={(ticket) => requestTradeClose({ ...(ctxMenu.data || {}), position: ticket })}
+          canCloseTrades={canCloseTrades && (entity !== 'position' || Boolean(String(ctxMenu.data?.symbol ?? positions.find((position) => String(position.position) === String(ctxMenu.data?.position))?.symbol ?? '').trim()))}
           canManipulateTrades={canManipulateTrades}
         />
       )}
@@ -1821,7 +1852,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             </div>
             <div className="trade-close-confirmation-actions">
               <button type="button" onClick={() => setPendingTradeClose(null)} disabled={isDeleting} className="trade-close-confirmation-cancel">{isOrderCancellation ? 'Keep order' : 'Cancel'}</button>
-              <button type="button" onClick={() => handleDeleteTrade(pendingTradeClose.position)} disabled={isDeleting} aria-busy={isDeleting} className="trade-close-confirmation-confirm">
+              <button type="button" onClick={() => handleDeleteTrade(pendingTradeClose.position)} disabled={isDeleting || (!isOrderCancellation && entity === 'position' && !String(pendingTradeClose.symbol ?? '').trim())} title={!isOrderCancellation && entity === 'position' && !String(pendingTradeClose.symbol ?? '').trim() ? 'Cannot close position: the symbol is unknown' : undefined} aria-busy={isDeleting} className="trade-close-confirmation-confirm">
                 {isDeleting && <Loader size={14} className="animate-spin" aria-hidden="true" />}
                 {isDeleting ? (isOrderCancellation ? 'Cancelling…' : 'Closing…') : (isOrderCancellation ? 'Cancel order' : 'Close position')}
               </button>
