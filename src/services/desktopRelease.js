@@ -1,10 +1,74 @@
 import { getRuntimeConfigValue } from '../config/backendTarget.js';
 
-const DEFAULT_RELEASE_API_URL = 'https://api.github.com/repos/rtx5-orrnn/rtx5-broker-manager-releases/releases/latest';
-const getReleaseApiUrl = () => getRuntimeConfigValue(
-  ['DESKTOP_RELEASE_API_URL', 'VITE_DESKTOP_RELEASE_API_URL'],
-  DEFAULT_RELEASE_API_URL
-);
+// Release channel configuration keys. The desktop release channel is
+// configuration only: runtime config (deployment-provided) or per-broker
+// broker config. There is intentionally no built-in default — a white-label
+// build must never query vendor infrastructure on its own.
+const RUNTIME_RELEASE_API_URL_KEYS = ['DESKTOP_RELEASE_API_URL', 'VITE_DESKTOP_RELEASE_API_URL'];
+
+// Broker-provided release channel fields (generic, tenant-agnostic). The
+// normalized broker object passes unknown fields through, so a platform
+// operator can publish the channel per broker without code changes.
+const BROKER_RELEASE_API_URL_KEYS = [
+  'desktop_release_api_url',
+  'desktopReleaseApiUrl',
+  'release_api_url',
+  'releaseApiUrl',
+  'DESKTOP_RELEASE_API_URL',
+  'VITE_DESKTOP_RELEASE_API_URL',
+];
+
+const RELEASE_CHANNEL_KEYS = [...BROKER_RELEASE_API_URL_KEYS, ...RUNTIME_RELEASE_API_URL_KEYS];
+
+export const RELEASE_CHANNEL_UNAVAILABLE_MESSAGE = 'Desktop update check is not configured for this broker.';
+
+const asChannelUrl = (value = '') => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const readChannelKey = (source = {}, key) => {
+  if (!source || typeof source !== 'object') return '';
+  if (Object.prototype.hasOwnProperty.call(source, key)) {
+    const direct = asChannelUrl(source[key]);
+    if (direct) return direct;
+  }
+  const env = source.env;
+  if (env && typeof env === 'object' && Object.prototype.hasOwnProperty.call(env, key)) {
+    const nested = asChannelUrl(env[key]);
+    if (nested) return nested;
+  }
+  return '';
+};
+
+// Pure helper: resolve the configured release channel from a plain config
+// object (runtime config snapshot and/or broker info). Returns the channel
+// URL, or null when no channel is configured. Never falls back to vendor
+// infrastructure.
+export const resolveReleaseChannel = (config = {}) => {
+  if (!config || typeof config !== 'object') return null;
+  for (const key of RELEASE_CHANNEL_KEYS) {
+    const value = readChannelKey(config, key);
+    if (value) return value;
+  }
+  return null;
+};
+
+// Impure wrapper: broker-provided channel wins when present, otherwise the
+// runtime (deployment) configuration. Returns url-or-null.
+export const getReleaseApiUrl = (brokerInfo = null) => {
+  const fromBroker = resolveReleaseChannel(brokerInfo || {});
+  if (fromBroker) return fromBroker;
+
+  const runtimeSnapshot = {};
+  for (const key of RUNTIME_RELEASE_API_URL_KEYS) {
+    runtimeSnapshot[key] = getRuntimeConfigValue([key]);
+  }
+  return resolveReleaseChannel(runtimeSnapshot);
+};
+
+export const isReleaseChannelConfigured = (brokerInfo = null) => Boolean(getReleaseApiUrl(brokerInfo));
+
 const INSTALLER_ASSET_PATTERN = /^RTX-5-Broker-Manager-Setup-.+\.exe$/i;
 
 export const selectDesktopInstallerAsset = (release = {}) => {
@@ -27,14 +91,21 @@ export const selectDesktopInstallerAsset = (release = {}) => {
   };
 };
 
-export const fetchLatestDesktopInstaller = async ({ fetchImpl = globalThis.fetch, signal } = {}) => {
+export const fetchLatestDesktopInstaller = async ({
+  fetchImpl = globalThis.fetch, signal, brokerInfo = null, releaseApiUrl = '',
+} = {}) => {
   if (typeof fetchImpl !== 'function') {
     throw new Error('Download service is not available in this browser.');
   }
 
-  const response = await fetchImpl(getReleaseApiUrl(), {
+  const channelUrl = asChannelUrl(releaseApiUrl) || getReleaseApiUrl(brokerInfo);
+  if (!channelUrl) {
+    throw new Error(RELEASE_CHANNEL_UNAVAILABLE_MESSAGE);
+  }
+
+  const response = await fetchImpl(channelUrl, {
     headers: {
-      Accept: 'application/vnd.github+json',
+      Accept: 'application/json',
     },
     signal,
   });
