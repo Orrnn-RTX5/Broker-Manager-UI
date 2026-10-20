@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LiveTradingState } from '../../services/liveTradingState.js';
+import { resolveTradeSymbol } from '../../utils/accountTradeSymbols.js';
 
 // SUI-M2: AccountDetails -> Trade -> SL/TP edits reset to 0 within ~250ms so
 // Modify/Update never enabled. The selected-row sync effect depended on the
@@ -296,11 +297,14 @@ test('real overlay still propagates an actual TP change so edits resync', () => 
 test('no invented symbol fallback: empty symbol stays empty', () => {
   assert.ok(!tabSource.includes("'EURUSD'"), 'component must not invent an EURUSD fallback anywhere in the flow');
   assert.ok(!tabSource.includes('"EURUSD"'), 'component must not invent an EURUSD fallback (double-quoted) anywhere in the flow');
-  const initAt = tabSource.indexOf('selectedTicketRow?.symbol || positions[0]?.symbol');
-  assert.ok(initAt !== -1, 'modalSymbol must still derive from the selected row or open positions');
-  const initSnippet = tabSource.slice(initAt, initAt + 120);
-  assert.ok(!initSnippet.includes('EURUSD'), 'modalSymbol initializer must not fall back to an invented symbol');
-  assert.ok(initSnippet.includes("|| ''"), 'empty symbol must stay empty (explicit empty-string fallback)');
+  // The initializer moved into resolveTradeSymbol (tenant-catalog pick):
+  // execute the REAL function instead of pinning its old inline shape.
+  assert.equal(resolveTradeSymbol({ selectedTicketRow: { symbol: 'BTCUSD' }, positions: [{ symbol: 'ETHUSD' }] }), 'BTCUSD', 'row symbol wins');
+  assert.equal(resolveTradeSymbol({ selectedTicketRow: null, positions: [{ symbol: '' }, { symbol: 'ETHUSD' }] }), 'ETHUSD', 'first non-empty position wins (later positions scanned)');
+  assert.equal(resolveTradeSymbol({ selectedTicketRow: null, positions: [], catalog: ['XAUUSD'] }), 'XAUUSD', 'catalog entry used only when row+positions are empty');
+  assert.equal(resolveTradeSymbol({ selectedTicketRow: null, positions: [], catalog: [] }), '', 'empty symbol stays empty');
+  assert.equal(resolveTradeSymbol({ selectedTicketRow: { symbol: '   ' }, positions: [{ symbol: '' }], catalog: [] }), '', 'whitespace-only symbol stays empty');
+  assert.equal(resolveTradeSymbol({}), '', 'missing inputs stay empty');
 });
 
 test('empty symbol disables the modify action through the real enablement path', () => {
