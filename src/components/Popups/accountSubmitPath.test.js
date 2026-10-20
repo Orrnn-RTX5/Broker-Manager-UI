@@ -478,3 +478,28 @@ test('sweep hardening: option lists never auto-select on the submit path', () =>
   assert.throws(() => buildNewAccountPayload(optionValues), /Please select an account group\./);
   assert.throws(() => buildSubmittableAccountPayload(optionValues), /Please select an account group\./);
 });
+
+// ds-7 REVIEW-B item 2 (Country optional UI, dead countryTouched ref removed):
+// Verified backend contract: Country is OPTIONAL free text, empty passes
+// through and is stored as-is. The modal therefore no longer marks Country
+// `required`. This REAL-helper case runs the exact modal submit path (group
+// pick + inheritGroupSettings + operator details) and proves empty Country
+// never throws in either builder. The resolver helpers themselves are
+// untouched and remain tested directly above.
+
+test('ds-7 REVIEW-B item 2: empty country passes through the exact modal submit path', () => {
+  const picked = 'Fixture\\Beta';
+  for (const empty of ['', '   ', undefined, null]) {
+    const form = {
+      ...buildInitialForm(),
+      Group: picked,
+      ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+      ...operatorDetails(),
+      Country: empty,
+    };
+    assert.doesNotThrow(() => buildNewAccountPayload(form));
+    assert.equal(buildNewAccountPayload(form).Country, '');
+    assert.doesNotThrow(() => buildSubmittableAccountPayload(form));
+    assert.equal(buildSubmittableAccountPayload(form).Country, '');
+  }
+});

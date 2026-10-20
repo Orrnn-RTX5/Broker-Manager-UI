@@ -512,3 +512,22 @@ test('sweep hardening: option lists never auto-select without an explicit pick',
     /Please select an account group\./,
   );
 });
+
+// ds-7 REVIEW-B item 2 (Country optional UI, dead countryTouched ref removed):
+// Verified backend contract: Country is OPTIONAL free text, empty passes
+// through and is stored as-is. The modal therefore no longer marks the
+// Country <Field> `required` (no `required` on the <select> either). These
+// REAL-helper cases prove empty Country never gates either builder. The
+// resolver helpers themselves are untouched and remain tested directly above.
+
+test('ds-7 REVIEW-B item 2: empty country never gates either builder (optional, stored as-is)', () => {
+  for (const empty of ['', '   ', undefined, null]) {
+    assert.doesNotThrow(() => buildNewAccountPayload(baseForm({ Country: empty })));
+    assert.equal(buildNewAccountPayload(baseForm({ Country: empty })).Country, '');
+    assert.doesNotThrow(() => buildSubmittableAccountPayload(baseForm({ Country: empty })));
+    assert.equal(buildSubmittableAccountPayload(baseForm({ Country: empty })).Country, '');
+  }
+  // A present value (e.g. broker-seeded) still passes through untouched.
+  assert.equal(buildNewAccountPayload(baseForm({ Country: 'Germany' })).Country, 'Germany');
+  assert.equal(buildSubmittableAccountPayload(baseForm({ Country: 'Germany' })).Country, 'Germany');
+});

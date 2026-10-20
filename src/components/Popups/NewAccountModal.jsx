@@ -221,7 +221,6 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // omitted fields.
   const leverageTouched = useRef(false);
   const currencyTouched = useRef(false);
-  const countryTouched = useRef(false);
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -278,7 +277,6 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     setResult(null);
     leverageTouched.current = false;
     currencyTouched.current = false;
-    countryTouched.current = false;
     // Reset path never prefills the first row: Group stays empty with the
     // "Select group…" placeholder so a reopened wizard fails closed until
     // the operator explicitly picks a group (inheritance then applies via
@@ -387,8 +385,8 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                       {ACCOUNT_MODE_CREATE_OPTIONS.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
                     </select>
                   </Field>
-                  <Field id="new-account-country" label="Country" required>
-                    <select id="new-account-country" className="ui-select" value={form.Country} onChange={(event) => { countryTouched.current = true; set('Country', event.target.value); }}>
+                  <Field id="new-account-country" label="Country">
+                    <select id="new-account-country" className="ui-select" value={form.Country} onChange={(event) => set('Country', event.target.value)}>
                       <option value="" disabled>Select country…</option>
                       {[...new Set([...COUNTRIES, form.Country].filter(Boolean))].sort().map((country) => <option key={country} value={country}>{country}</option>)}
                     </select>
