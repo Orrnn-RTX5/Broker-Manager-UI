@@ -8,6 +8,7 @@ import {
 } from '../../services/tradeApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
+import { hasSpreadSymbol, normalizeSpreadSymbol } from './accountSpreadSymbol.js';
 
 const Toggle = ({ label, checked, onChange, disabled }) => (
   <label className="flex items-center justify-between gap-2 py-1.5 cursor-pointer">
@@ -89,8 +90,10 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
     a_book_override: false, b_book_override: false, execution_delay_ms: 0, comment: '',
   });
 
-  // Spread/Execution/Book controls
-  const [spreadSymbol, setSpreadSymbol] = useState('EURUSD');
+  // Spread/Execution/Book controls. The spread symbol starts blank and the
+  // override refuses to submit blank: no invented symbol may reach the wire
+  // (a hardcoded default here would target the wrong symbol).
+  const [spreadSymbol, setSpreadSymbol] = useState('');
   const [spreadMarkup, setSpreadMarkup] = useState(0);
   const [execMode, setExecMode] = useState('market');
   const [execDelay, setExecDelay] = useState(0);
@@ -179,10 +182,11 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   const handleSpreadSet = async () => {
     if (!canManipulateRestrictionTrades) { showResult.error('Your role does not have permission to change spread overrides.'); return; }
     if (!hasRestriction) { showResult.info('Save a restriction first before setting spread overrides.'); return; }
+    if (!hasSpreadSymbol(spreadSymbol)) { showResult.error('Select a symbol before setting a spread override.'); return; }
     setSaving(true);
     try {
-      await accountSpreadSet({ login, symbol: spreadSymbol, markup: spreadMarkup });
-      showResult.success(`Spread markup set: ${spreadSymbol} = ${spreadMarkup}`);
+      await accountSpreadSet({ login, symbol: normalizeSpreadSymbol(spreadSymbol), markup: spreadMarkup });
+      showResult.success(`Spread markup set: ${normalizeSpreadSymbol(spreadSymbol)} = ${spreadMarkup}`);
     } catch (err) {
       showResult.error(`Error: ${err.message}`);
     } finally {
@@ -311,7 +315,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
                   <h4 className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>Per-Symbol Spread Override</h4>
                   <div className="flex gap-2 items-end">
                     <Field label="Symbol">
-                      <input type="text" value={spreadSymbol} onChange={e => setSpreadSymbol(e.target.value)} className="ui-input ui-input-sm" style={{ width: 120 }} />
+                      <input type="text" value={spreadSymbol} onChange={e => setSpreadSymbol(e.target.value)} className="ui-input ui-input-sm" style={{ width: 120 }} placeholder="Symbol" />
                     </Field>
                     <Field label="Markup">
                       <input type="number" step="1" value={spreadMarkup} onChange={e => setSpreadMarkup(Number(e.target.value))} className="ui-input ui-input-sm" style={{ width: 80 }} />
