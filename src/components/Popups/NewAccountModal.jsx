@@ -7,22 +7,27 @@ import {
   ACCOUNT_MODE_DEFAULT,
   buildSubmittableAccountPayload,
   countrySuggestions,
+  currencyOptions,
   inheritGroupSettings,
   resolveDefaultCountry,
+  resolveDefaultCurrency,
 } from './newAccountWizard';
 import { getBrokerInfo } from '../../services/brokerAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 const LEVERAGES = [1, 10, 25, 50, 100, 200, 300, 400, 500];
 // Country suggestion presets for the free-text Country input (datalist).
-// CURRENCIES/LEVERAGES deliberately stay <select> presets while Country is
-// free text: leverage/currency ranges are fully covered by these presets
-// plus group inheritance, and both are validated fail-closed in
-// buildNewAccountPayload — whereas Country is backend-optional free text
-// with an unbounded value space no preset list can cover. Exotic explicit
-// leverage/currency values outside the presets remain a known constraint.
+// LEVERAGES deliberately stays a <select> preset while Country is free text:
+// the leverage range is fully covered by the preset plus group inheritance,
+// and leverage is validated fail-closed in buildNewAccountPayload — whereas
+// Country is backend-optional free text with an unbounded value space no
+// preset list can cover. Currency options come from currencyOptions() (the
+// union of the loaded groups' allowed/deposit currencies, literal fallback
+// only when that union is empty); the current value is merged in at render
+// so an exotic inherited value stays visible. No currency is ever
+// preselected: Currency starts '' via resolveDefaultCurrency (no group
+// selected at open) and only group inheritance or an explicit pick sets it.
 const COUNTRIES = ['India', 'United States', 'United Kingdom', 'Australia', 'Canada', 'Germany', 'France', 'Japan'];
 
 const Field = ({ id, label, required = false, hint, children }) => (
@@ -190,9 +195,10 @@ const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasM
 const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // Sweep W5/W4: NO tenant-meaningful hardcoded defaults reach the wire.
   // Group starts '' (never auto-filled), Leverage starts '' (no 1:100
-  // placeholder), Currency starts '' (no USD default). Leverage and currency
-  // arrive only via explicit group inheritance (syncGroupDefaults) or an
-  // explicit operator pick; submit fails closed on empty group/leverage/
+  // placeholder), Currency starts '' (no USD default: resolveDefaultCurrency
+  // with no group selected emits ''). Leverage and currency arrive only via
+  // explicit group inheritance (syncGroupDefaults) or an explicit operator
+  // pick; submit fails closed on empty group/leverage/
   // currency/master_pass via buildSubmittableAccountPayload. Backend contract
   // mirror (verified read-only against the manager AccountCreate handler):
   // ONLY master_pass + Group are backend-required, so only those gate
@@ -201,14 +207,17 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // broker config carries one (resolveDefaultCountry over getBrokerInfo);
   // the backend stores Country exactly as sent (optional free text), so an
   // empty Country passes through untouched and no value is ever invented.
-  // CURRENCIES/LEVERAGES stay generic <select> presets with no entry
-  // auto-selected (empty initial + placeholder); COUNTRIES are suggestion
-  // presets for the free-text Country input (see the Country field below).
+  // UI-3b: the Currency <select> offers currencyOptions(groups) — the union
+  // of the loaded groups' allowed/deposit currencies, literal fallback only
+  // when that union is empty — with no entry auto-selected (empty initial +
+  // placeholder); LEVERAGES stays a generic <select> preset; COUNTRIES are
+  // suggestion presets for the free-text Country input (see the Country
+  // field below).
   const [form, setForm] = useState({
     Group: '',
     Leverage: '',
     FirstName: '', LastName: '', Email: '', Phone: '',
-    Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
+    Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: resolveDefaultCurrency(), AccountMode: ACCOUNT_MODE_DEFAULT,
     master_pass: '', investor_pass: '',
   });
 
@@ -301,11 +310,13 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     // syncGroupDefaults). Search text is cleared so it can never leak into
     // the next Group value. Country re-resolves from the broker config (empty
     // when the config carries none) so no default is ever invented here.
+    // Currency re-resolves with no group selected (always '') so the
+    // placeholder returns and nothing is preselected.
     setGroupSearch('');
     setForm({
       Group: '',
       Leverage: '',
-      FirstName: '', LastName: '', Email: '', Phone: '', Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: '',
+      FirstName: '', LastName: '', Email: '', Phone: '', Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: resolveDefaultCurrency(),
       AccountMode: ACCOUNT_MODE_DEFAULT,
       master_pass: '', investor_pass: '',
     });
@@ -395,7 +406,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                   <Field id="new-account-currency" label="Currency" required>
                     <select id="new-account-currency" className="ui-select" value={form.Currency} required onChange={(event) => { currencyTouched.current = true; set('Currency', event.target.value); }}>
                       <option value="" disabled>Select currency…</option>
-                      {[...new Set([...CURRENCIES, form.Currency].filter(Boolean))].sort().map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                      {[...new Set([...currencyOptions(groups), form.Currency].filter(Boolean))].sort().map((currency) => <option key={currency} value={currency}>{currency}</option>)}
                     </select>
                   </Field>
                   <Field id="new-account-mode" label="Account mode" required hint="Cannot be changed after creation">
