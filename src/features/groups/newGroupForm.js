@@ -9,21 +9,22 @@ import { readLeverageRatio } from './groupAccountRows.js';
  * Preserves the component's semantics for every path (fresh defaults plus
  * NEW_GROUP_FINANCIAL_DEFAULTS, presetName prefill, duplicate ' Copy' rename,
  * readLeverageRatio source leverage, canonical bookType normalization, and
- * symbol-array joining), with ONE behavior change: a fresh create (no
- * initialData/duplicateData source) starts with a blank leverage ('') instead
- * of the 100 display default, so the form is honest about what the wire
- * sends -- an untouched leverage is omitted by buildNewGroupPayload and
- * backend derivation governs. Edit/duplicate sources keep their values and
- * count as touched downstream via the component's leverageTouched ref.
+ * symbol-array joining). Leverage: a fresh create (no initialData/
+ * duplicateData source) starts blank (''); NewGroupModal pre-fills the
+ * broker's group default leverage when it resolves, and a top-level submit
+ * requires a whole number in the groupLeverage.js bounds. A source without a
+ * readable leverage also starts blank (never 0). Edit/duplicate sources keep
+ * their values and count as touched downstream via the component's
+ * leverageTouched ref.
  *
  * Tenant-agnostic: no tenant, broker, group, currency, or symbol literals.
  */
 export const buildNewGroupFormData = ({ initialData, duplicateData, presetName } = {}) => {
   const source = initialData || duplicateData;
   const data = { ...defaultPayload, ...(source ? {} : NEW_GROUP_FINANCIAL_DEFAULTS), ...(source || {}) };
-  if (source) data.leverage = readLeverageRatio(source) ?? data.leverage;
-  // Fresh creates show an honest blank leverage with a `Select leverage…`
-  // placeholder instead of the old 100 display default.
+  if (source) data.leverage = readLeverageRatio(source) ?? '';
+  // Fresh creates start blank with a `Select leverage…` placeholder until the
+  // broker default pre-fill (NewGroupModal) or the operator supplies a value.
   if (!source) data.leverage = '';
   if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
   // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.

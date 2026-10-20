@@ -2,6 +2,7 @@ import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
 import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, sameGroupName } from './groupAccountRows.js';
+import { resolveCreateLeverage } from './groupLeverage.js';
 
 export { buildAccountPatchFromGroup, describeGroupSave };
 
@@ -9,7 +10,9 @@ export const GROUP_DEFAULT_PAYLOAD = Object.freeze({
   name: '',
   description: '',
   currency: '',
-  leverage: 0,
+  // Blank, never a numeric default: a top-level create pre-fills the broker's
+  // group default or the operator enters one (groupLeverage.js).
+  leverage: '',
   marginCallLevel: 0,
   stopOutLevel: 0,
   commissionRate: 0,
@@ -178,18 +181,26 @@ export const resolveNewGroupTradeAllowed = ({ groups, parentGroup, tradeTouched 
  * - Omits blank policy strings so omitted-field backend derivation applies.
  * - Derives backend-canonical bookType from the visible routingMode choice.
  * - Omits a blank parentGroup/groupPurpose; validates purpose and self-parent.
- * - An untouched leverage (display default 100, never explicitly picked) is
- *   omitted so backend tenant/env/parent derivation (or its compiled
- *   fallback) governs; an explicit operator value (including a re-typed 100)
- *   is always sent. Follows the tradeTouched/parent-inheritance pattern:
- *   edit/duplicate sources count as touched, so callers pass
- *   leverageTouched explicitly and the flag itself is never a payload key.
+ * - Leverage (resolveCreateLeverage): a top-level group always sends a valid
+ *   whole-number leverage as an integer (the broker-default pre-fill counts),
+ *   since the backend refuses an omitted top-level leverage; with a parent
+ *   group an untouched or cleared leverage is omitted so the parent governs.
+ *   A blank, 0, fractional or out-of-range value is never sent; the create
+ *   forms block such a submit inline before this builder runs. Edit/duplicate
+ *   sources count as touched, so callers pass leverageTouched explicitly and
+ *   the flag itself is never a payload key.
  * - Never hardcodes a tenant/broker/currency: a blank currency is omitted and
  *   left for backend derivation.
  */
 export const buildNewGroupPayload = (formData = {}, { leverageTouched = true } = {}) => {
   const payload = pickGroupPayloadFields(formData);
-  if (!leverageTouched) delete payload.leverage;
+  const leverage = resolveCreateLeverage({
+    leverage: formData.leverage,
+    parentGroup: formData.parentGroup,
+    leverageTouched,
+  });
+  if (leverage.leverage === undefined) delete payload.leverage;
+  else payload.leverage = leverage.leverage;
   const routingText = String(payload.routingMode ?? '').trim();
   if (routingText !== '') {
     const canonical = bookTypeForRoutingMode(routingText);

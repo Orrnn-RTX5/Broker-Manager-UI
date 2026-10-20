@@ -8,10 +8,16 @@
 // them to per-field plain messages. Anything unrecognized passes through
 // untouched. No tenant, broker, currency, symbol, or rate values here: every
 // string is a global default-shape message.
+import { GROUP_LEVERAGE_RANGE_MESSAGE } from './groupLeverage.js';
+
 export const GROUP_POLICY_DEFAULT_MISSING = 'GROUP_POLICY_DEFAULT_MISSING';
 export const GROUP_POLICY_DEFAULT_INVALID = 'GROUP_POLICY_DEFAULT_INVALID';
+// An explicit leverage outside the allowed range (400 from GroupCreate).
+export const GROUP_LEVERAGE_INVALID = 'GROUP_LEVERAGE_INVALID';
 
-// Backend-covered policy fields (group_policy_defaults.go:20).
+// Backend-covered policy fields (group_policy_defaults.go:20), plus leverage:
+// a top-level create without leverage and no broker default answers
+// `GROUP_POLICY_DEFAULT_MISSING: leverage is omitted ...`.
 export const GROUP_POLICY_FIELDS = Object.freeze([
   'executionMode',
   'bookType',
@@ -19,6 +25,7 @@ export const GROUP_POLICY_FIELDS = Object.freeze([
   'stopOutLevel',
   'tradeAllowed',
   'demo',
+  'leverage',
 ]);
 
 const FIELD_ALIASES = Object.freeze({
@@ -28,6 +35,7 @@ const FIELD_ALIASES = Object.freeze({
   stopOutLevel: ['stopoutlevel', 'stop_out_level'],
   tradeAllowed: ['tradeallowed', 'trade_allowed'],
   demo: ['demo'],
+  leverage: ['leverage'],
 });
 
 // Per-field plain message for a missing default: the operator must supply
@@ -40,6 +48,7 @@ const MISSING_MESSAGES = Object.freeze({
   stopOutLevel: 'Enter a stop out level — this broker has no default.',
   tradeAllowed: 'Choose whether trading is allowed — this broker has no default.',
   demo: 'Choose whether this is a demo group — this broker has no default.',
+  leverage: 'Enter a leverage — this broker has no default.',
 });
 
 // Per-field plain message for an invalid default, naming the constraint the
@@ -53,6 +62,7 @@ const INVALID_MESSAGES = Object.freeze({
     'Stop out level must be a positive finite number and must not exceed the margin call level.',
   tradeAllowed: 'Trade allowed must be true or false.',
   demo: 'Demo must be true or false.',
+  leverage: GROUP_LEVERAGE_RANGE_MESSAGE,
 });
 
 const GENERIC_MISSING_MESSAGE =
@@ -101,10 +111,28 @@ export const parseGroupPolicyField = (message) => {
 
 const hasCode = (text, code) => text.includes(code);
 
+const isLeverageInvalid = (text, code) => code === GROUP_LEVERAGE_INVALID || hasCode(text, GROUP_LEVERAGE_INVALID);
+
+/**
+ * Form field a recognized group-policy server error belongs to, or null when
+ * the error is unrecognized or names no covered field. GROUP_LEVERAGE_INVALID
+ * always belongs to leverage.
+ */
+export const groupPolicyErrorField = (input) => {
+  const text = rawTextOf(input);
+  const code = codeOf(input);
+  if (isLeverageInvalid(text, code)) return 'leverage';
+  const recognized =
+    code === GROUP_POLICY_DEFAULT_MISSING || code === GROUP_POLICY_DEFAULT_INVALID ||
+    hasCode(text, GROUP_POLICY_DEFAULT_MISSING) || hasCode(text, GROUP_POLICY_DEFAULT_INVALID);
+  return recognized ? parseGroupPolicyField(text) : null;
+};
+
 /**
  * Map a group-policy server error to a per-field plain message.
  * - `GROUP_POLICY_DEFAULT_MISSING` → per-field "… this broker has no default."
  * - `GROUP_POLICY_DEFAULT_INVALID` → per-field message naming the constraint.
+ * - `GROUP_LEVERAGE_INVALID` → the leverage range message.
  * - Unknown errors pass through untouched (the original message text).
  * Raw codes never appear in a mapped message: an unparseable field falls
  * back to a generic friendly message for a recognized code.
@@ -113,6 +141,7 @@ export const mapGroupPolicyError = (input) => {
   const text = rawTextOf(input);
   if (!text) return text;
   const code = codeOf(input);
+  if (isLeverageInvalid(text, code)) return INVALID_MESSAGES.leverage;
   const isMissing = code === GROUP_POLICY_DEFAULT_MISSING || hasCode(text, GROUP_POLICY_DEFAULT_MISSING);
   const isInvalid = code === GROUP_POLICY_DEFAULT_INVALID || hasCode(text, GROUP_POLICY_DEFAULT_INVALID);
   if (!isMissing && !isInvalid) return text;

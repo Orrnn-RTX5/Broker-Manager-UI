@@ -10,11 +10,14 @@ import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
 import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
+import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
+import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
 import {
+  GROUP_LEVERAGE_INVALID,
   GROUP_POLICY_DEFAULT_INVALID,
   GROUP_POLICY_DEFAULT_MISSING,
+  groupPolicyErrorField,
   mapGroupPolicyError,
-  parseGroupPolicyField,
 } from '../groupPolicyErrors.js';
 import {
   LEVERAGE_PRESETS,
@@ -182,7 +185,9 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', 
 const CUSTOM_OPTION = '__custom__';
 
 // Dropdown of standard values with a "Custom…" entry that reveals a free input.
-const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlaceholder, error = null }) => {
+// clearedValue is what a cleared custom box reports (leverage passes '' so a
+// cleared box is never sent as 0).
+const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlaceholder, error = null, hint = null, clearedValue = 0 }) => {
   const isPreset = isPresetValue(presets, value);
   const [customOpen, setCustomOpen] = useState(() => !isPreset && Number(value) > 0);
   // The typed text is kept as-is so partial decimals like "0." survive while typing.
@@ -223,11 +228,12 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
             const raw = e.target.value.trim();
             if (!/^\d*\.?\d*$/.test(raw)) return;
             setDraft(raw);
-            onChange(raw === '' || raw === '.' ? 0 : Number(raw));
+            onChange(raw === '' || raw === '.' ? clearedValue : Number(raw));
           }}
           className="group-create-control"
         />
       )}
+      {hint ? <p className="group-create-note">{hint}</p> : null}
     </div>
   );
 };
@@ -237,6 +243,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
+  const isFreshCreate = !initialData && !duplicateData;
   const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -249,11 +256,14 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   // inheritance never overwrites them; an explicit check/uncheck always wins.
   const tradeTouched = useRef(Boolean(initialData || duplicateData));
   // Same ref pattern for leverage: a fresh create starts blank (with a
-  // `Select leverage…` placeholder) and an untouched leverage is omitted on
-  // create so backend tenant/env/parent derivation governs; edit/duplicate
-  // sources count as touched and any explicit operator pick (including a
-  // typed 100) is always sent.
+  // `Select leverage…` placeholder) and is pre-filled from the broker's group
+  // default when one resolves. A top-level create always sends a whole-number
+  // leverage (pre-filled or entered) and is blocked inline otherwise; with a
+  // parent group an untouched leverage is omitted so the parent governs.
+  // Edit/duplicate sources count as touched and are always sent.
   const leverageTouched = useRef(Boolean(initialData || duplicateData));
+  const [leveragePrefilled, setLeveragePrefilled] = useState(false);
+  const [leverageDefaultMissing, setLeverageDefaultMissing] = useState(false);
   const parentSearch = String(formData.parentGroup ?? '').trim();
   const { groups: parentGroups, loading: parentLoading } = useGroupList({
     limit: 100,
@@ -278,6 +288,24 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     });
     setFormData((prev) => (prev.tradeAllowed === next ? prev : { ...prev, tradeAllowed: next }));
   }, [parentGroups, parentLoading, parentSearch]);
+
+  // Fresh creates read the broker's default group leverage once. A miss
+  // (null, refused, unavailable) leaves the field blank with a hint.
+  useEffect(() => {
+    if (!isFreshCreate) return undefined;
+    let cancelled = false;
+    fetchBrokerDefaultLeverage().then((brokerLeverage) => {
+      if (cancelled) return;
+      if (brokerLeverage === null) {
+        setLeverageDefaultMissing(true);
+        return;
+      }
+      if (leverageTouched.current) return;
+      setFormData((prev) => (isBlankLeverage(prev.leverage) ? { ...prev, leverage: brokerLeverage } : prev));
+      setLeveragePrefilled(true);
+    });
+    return () => { cancelled = true; };
+  }, [isFreshCreate]);
 
   const handleChange = (key, val) => {
     if (key === 'tradeAllowed') tradeTouched.current = true;
@@ -322,6 +350,18 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
       setFieldErrors({});
       return;
     }
+    if (!isEditing) {
+      const leverageCheck = resolveCreateLeverage({
+        leverage: formData.leverage,
+        parentGroup: formData.parentGroup,
+        leverageTouched: leverageTouched.current,
+      });
+      if (leverageCheck.error) {
+        setError(null);
+        setFieldErrors({ leverage: leverageCheck.error });
+        return;
+      }
+    }
 
     try {
       setLoading(true);
@@ -358,10 +398,12 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
       const isPolicyError =
         raw.includes(GROUP_POLICY_DEFAULT_MISSING) ||
         raw.includes(GROUP_POLICY_DEFAULT_INVALID) ||
+        raw.includes(GROUP_LEVERAGE_INVALID) ||
         code === GROUP_POLICY_DEFAULT_MISSING ||
-        code === GROUP_POLICY_DEFAULT_INVALID;
+        code === GROUP_POLICY_DEFAULT_INVALID ||
+        code === GROUP_LEVERAGE_INVALID;
       if (isPolicyError) {
-        const field = parseGroupPolicyField(raw);
+        const field = groupPolicyErrorField(err);
         if (field) {
           setFieldErrors({ [field]: mapped });
           setError(null);
@@ -428,7 +470,18 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
           <section className="group-create-panel">
             <h3>Financial</h3>
             <div className="group-create-grid">
-              <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage…" customPlaceholder="Ratio, e.g. 150 for 1:150" />
+              <PresetSelect
+                key={leveragePrefilled ? 'leverage-prefilled' : 'leverage'}
+                label="Leverage"
+                value={formData.leverage}
+                presets={LEVERAGE_PRESETS}
+                onChange={(v) => handleChange('leverage', v)}
+                clearedValue=""
+                placeholder="Select leverage…"
+                customPlaceholder="Ratio, e.g. 150 for 1:150"
+                error={fieldErrors.leverage}
+                hint={leverageDefaultMissing && isBlankLeverage(formData.leverage) && String(formData.parentGroup ?? '').trim() === '' ? GROUP_LEVERAGE_NO_DEFAULT_HINT : null}
+              />
               <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" error={fieldErrors.marginCallLevel} />
               <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" error={fieldErrors.stopOutLevel} />
               <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />

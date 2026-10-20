@@ -15,9 +15,12 @@ export const SPREAD_MARKUP_PRESETS = [
   ...[1, 2, 3, 5, 10, 15, 20, 30, 50].map((points) => ({ value: points, label: `${points} point${points === 1 ? '' : 's'}` })),
 ];
 
-/** Defaults for a brand-new group (edit and duplicate keep the source values). */
+/**
+ * Defaults for a brand-new group (edit and duplicate keep the source values).
+ * Leverage has no client-side default: the create form pre-fills the broker's
+ * group default leverage or requires the operator to enter one.
+ */
 export const NEW_GROUP_FINANCIAL_DEFAULTS = {
-  leverage: 100,
   marginCallLevel: 100,
   stopOutLevel: 50,
   spreadMarkup: 0,
