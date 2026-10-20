@@ -22,6 +22,18 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState(null);
+  const [applyError, setApplyError] = useState(null);
+
+  // Reset the apply report when the viewed group changes. Done during render
+  // (the documented adjust-state-during-render pattern), never in an effect
+  // hook: this file must contain no effect hooks so viewing can never write.
+  const [lastGroupKey, setLastGroupKey] = useState(null);
+  const groupKey = `${groupName ?? ''}::${groupLeverage ?? ''}`;
+  if (lastGroupKey !== groupKey) {
+    setLastGroupKey(groupKey);
+    setApplyResult(null);
+    setApplyError(null);
+  }
 
   const rows = useMemo(
     () => accountsInGroup(data?.rows, groupName, { leverage: groupLeverage }),
@@ -37,8 +49,10 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const canApply = rows.length > 0 && groupRatio !== null && !applying;
 
   const handleConfirmApply = async () => {
+    if (applying) return;
     setConfirmOpen(false);
     setApplying(true);
+    setApplyError(null);
     try {
       const result = await applyGroupLeverage({
         members: rows.map((row) => row.account),
@@ -46,14 +60,14 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         confirm: true,
         updateAccount: updateManagerAccount,
       });
-      if (result.succeeded > 0) {
-        const memberLogins = new Set(rows.map((row) => row.account?.login));
+      if (result.succeeded > 0 && Array.isArray(result.succeededLogins) && result.succeededLogins.length > 0) {
+        const succeededSet = new Set(result.succeededLogins);
         queryClient.setQueriesData({ queryKey: ['sidebar-accounts'] }, (current) => {
           if (!current?.rows) return current;
           return {
             ...current,
             rows: current.rows.map((account) => (
-              memberLogins.has(account?.login)
+              succeededSet.has(account?.login)
                 ? { ...account, leverage: groupRatio, Leverage: groupRatio }
                 : account
             )),
@@ -61,6 +75,8 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         });
       }
       setApplyResult(result);
+    } catch (err) {
+      setApplyError(err?.message || 'Could not apply group leverage.');
     } finally {
       setApplying(false);
     }
@@ -69,10 +85,12 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const applyMessage = applying
     ? 'Applying group leverage…'
     : applyResult && applyResult.total === 0
-      ? `All ${rows.length} accounts already use group leverage 1 : ${groupRatio}.`
+      ? (groupRatio === null || groupRatio === undefined
+        ? 'Group leverage is not set for this group, so there is nothing to apply.'
+        : `All ${rows.length} accounts already use group leverage 1 : ${groupRatio}.`)
       : applyResult
         ? `Applied group leverage to ${applyResult.succeeded} of ${applyResult.total} accounts.`
-          + (applyResult.failed > 0 ? ` ${applyResult.failed} could not be updated.` : '')
+        + (applyResult.failed > 0 ? ` ${applyResult.failed} could not be updated.` : '')
         : null;
 
   const emptyMessage = error
@@ -103,7 +121,7 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         <span className="groups-accounts-count" role="status">
           {isLoading ? '' : `${visibleRows.length} of ${rows.length} account${rows.length === 1 ? '' : 's'}`}
         </span>
-        <button type="button" className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm" title="Refresh accounts" aria-label="Refresh accounts" disabled={isFetching} onClick={() => refetch()}>
+        <button type="button" className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm" title="Refresh accounts" aria-label="Refresh accounts" disabled={isFetching || applying} onClick={() => refetch()}>
           {isFetching ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
         </button>
       </div>
@@ -112,13 +130,15 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
           type="button"
           className="ui-btn ui-btn-secondary ui-btn-sm"
           disabled={!canApply}
-          onClick={() => { setApplyResult(null); setConfirmOpen(true); }}
+          title={groupRatio === null || groupRatio === undefined ? 'Group leverage is not set for this group' : `Apply group leverage to all ${rows.length} accounts in this group`}
+          onClick={() => { setApplyResult(null); setApplyError(null); setConfirmOpen(true); }}
         >
-          {`Apply group leverage to ${rows.length} accounts`}
+          {`Apply group leverage to all ${rows.length} accounts in group`}
         </button>
       </div>
       {applyMessage && <p className="groups-props-empty" role="status">{applyMessage}</p>}
-      {confirmOpen && (() => {
+      {applyError && <p className="groups-props-error" role="alert">{applyError}</p>}
+      {confirmOpen && !applying && (() => {
         const copy = buildApplyConfirmCopy({ groupRatio, count: rows.length });
         return (
           <DepositDialog

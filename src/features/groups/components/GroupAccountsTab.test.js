@@ -1,229 +1,245 @@
-import test, { after } from 'node:test';
+import test, { after, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createElement as h } from 'react';
-import { renderToString } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import esbuild from 'esbuild';
-const { transformSync } = esbuild;
+import { Buffer } from 'node:buffer';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+import { JSDOM } from 'jsdom';
 
-// SUI-M1 redo (MONITOR OVERRIDE): the group-leverage sync is the owner team's
-// intended feature, so the Accounts tab keeps an EXPLICIT, confirmed apply
-// path instead of the deleted auto-PATCH effect. Viewing the tab
-// (open/render/refresh/search/select) must NEVER write.
+// SUI-M1 P0: opening a group's Accounts tab must never write to accounts.
+// These tests RENDER the real GroupAccountsTab (real React, real react-query,
+// real DepositDialog confirm) in jsdom with react-dom/client, so effects,
+// clicks and the confirm flow actually execute. Only the network edges are
+// replaced: the account list query, the account write service.
+// The apply flow + confirm copy come from the real groupLeverageApply module.
 //
-// Everything asserted here runs against the REAL artifacts, never mirrored
-// logic:
-// - the real GroupAccountsTab.jsx, JSX-transformed only (esbuild, already in
-//   node_modules) so plain node --test can load it; no source line is
-//   rewritten. The compiled copy lives in a temp dir and is removed in after().
-// - the real accountsInGroup display mapper (loaded by the compiled tab).
-// - the real exported applyGroupLeverage flow for the button path.
-// - the real react-query provider/client; only the data hook itself is
-//   stubbed (canned rows, no network), the query-options factory is
-//   redirected (node ESM rejects its extensionless import; the stub keeps
-//   the same queryKey shape and is ignored by the stubbed hook), and the
-//   account-update service is a COUNTING stub so the tests can prove zero
-//   writes on render.
-//
-// Generic fixtures only: synthetic group names with placeholder values. No
-// tenant, broker, host, or account identifiers.
+// Generic fixtures only: synthetic group names, logins and ratios. No tenant,
+// broker, host, or account identifiers.
 
-const here = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-// Compiled copies live under the worktree's node_modules (gitignored, removed
-// in after()) so bare imports in the compiled tab (react, lucide-react,
-// @tanstack/react-query) resolve exactly as they do for the real source.
-const nodeModulesDir = dirname(dirname(require.resolve('react/package.json')));
-const fileUrl = (path) => pathToFileURL(path).href;
+const GROUP = 'Fixture/Standard';
 
-const GROUP_NAME = 'Fixture/Standard';
-const GROUP_LEVERAGE = 200;
-
-// login 900001 differs (100 vs 200) and updates cleanly; 900002 differs and
-// the stub rejects it; 900003 already matches and must be skipped; 900004 is
-// outside the group and must never appear.
-const stubAccounts = () => ([
-  { login: '900001', Name: 'Fixture Member One', group: GROUP_NAME, leverage: 100, balance: 5000, equity: 5000 },
-  { login: '900002', Name: 'Fixture Member Two', group: GROUP_NAME, Leverage: 50, balance: 10, equity: 10 },
-  { login: '900003', Name: 'Fixture Member Three', group: GROUP_NAME, Leverage: 200, balance: 7, equity: 7 },
-  { login: '900004', Name: 'Fixture Outsider', group: 'Fixture/Other', leverage: 200, balance: 7, equity: 7 },
-]);
-
-const cacheDir = join(nodeModulesDir, '.cache', `sui-m1-tab-${Date.now()}-${Math.floor(Math.random() * 1000000)}`);
-mkdirSync(cacheDir, { recursive: true });
-
-const stubDir = cacheDir;
-writeFileSync(join(stubDir, 'managerAccountApi.stub.mjs'), `
-export const calls = [];
-export const updateManagerAccount = async (login, payload) => {
-  calls.push({ login, payload });
-  if (String(login) === '900002') throw new Error('rejected for fixture member two');
-  return { ok: true };
-};
-export const createManagerAccount = async () => { throw new Error('not stubbed'); };
-export const deleteManagerAccount = async () => { throw new Error('not stubbed'); };
-export default { createManagerAccount, deleteManagerAccount, updateManagerAccount };
-`);
-
-// Stubbed data hook: re-exports the real react-query package and overrides
-// only useQuery with canned rows (no network). Everything else stays real.
-writeFileSync(join(stubDir, 'reactQuery.stub.mjs'), `
-export * from '@tanstack/react-query';
-export const useQuery = () => ({
-  data: globalThis.__SUI_M1_ROWS__ || { rows: [] },
-  isLoading: false,
-  isFetching: false,
-  error: null,
-  refetch: () => Promise.resolve({}),
-});
-`);
-
-// Sidebar query-options factory: node ESM cannot load the real module
-// (it uses a bundler-style extensionless import), so it is redirected to a
-// stub with the same queryKey shape. The stubbed useQuery ignores the
-// options object entirely and serves canned rows, so no query behavior is
-// asserted through this stub.
-writeFileSync(join(stubDir, 'sidebarAccounts.stub.mjs'), `
-export const getSidebarAccountsQueryOptions = (search = '') => ({
-  queryKey: ['sidebar-accounts', String(search || '').trim()],
-  queryFn: () => Promise.resolve({ rows: [] }),
-  staleTime: 5 * 60 * 1000,
-});
-`);
-// Shared confirm dialog: the real DepositDialog pulls in a CSS import that
-// plain node cannot load, so it is redirected to a stub that renders the
-// exact props it receives (the dialog only appears after an explicit click,
-// never on mount, so mount assertions are unaffected; prop-passing is).
-writeFileSync(join(stubDir, 'depositDialog.stub.mjs'), `
-import { createElement as h } from 'react';
-export default function DepositDialog({ status, title, message, confirmLabel, onConfirm, onDismiss }) {
-  return h('div', {
-    className: 'deposit-dialog-stub',
-    'data-status': status,
-    'data-title': title,
-    'data-message': message,
-    'data-confirm-label': confirmLabel,
-  });
+// ---- DOM (must exist before react-dom is evaluated) -----------------------
+const dom = new JSDOM('<!doctype html><html><body></body></html>');
+globalThis.window = dom.window;
+globalThis.document = dom.window.document;
+for (const key of ['HTMLElement', 'HTMLDialogElement', 'Node', 'Element', 'MouseEvent', 'getComputedStyle']) {
+  if (!(key in globalThis)) globalThis[key] = dom.window[key];
 }
-`);
-// Compile the REAL tab: JSX syntax transform only, then point its imports at
-// the real row mapper and at the stubs above.
-const compiled = transformSync(readFileSync(join(here, 'GroupAccountsTab.jsx'), 'utf8'), {
-  loader: 'jsx',
-  jsx: 'automatic',
-}).code
-  .replaceAll('../../../services/managerAccountApi.js', fileUrl(join(stubDir, 'managerAccountApi.stub.mjs')))
-  .replaceAll('../../../services/sidebarAccounts.js', fileUrl(join(stubDir, 'sidebarAccounts.stub.mjs')))
-  .replaceAll('../groupAccountRows.js', fileUrl(join(here, '..', 'groupAccountRows.js')))
-  .replaceAll('./groupLeverageApply.js', fileUrl(join(here, 'groupLeverageApply.js')))
-  .replaceAll('../../../components/Popups/DepositDialog.jsx', fileUrl(join(stubDir, 'depositDialog.stub.mjs')))
-  .replaceAll('@tanstack/react-query', fileUrl(join(stubDir, 'reactQuery.stub.mjs')));
-writeFileSync(join(cacheDir, 'GroupAccountsTab.compiled.mjs'), compiled);
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom has <dialog> but no modal top layer; DepositDialog only needs open/close.
+const dialogProto = dom.window.HTMLDialogElement.prototype;
+if (typeof dialogProto.showModal !== 'function') dialogProto.showModal = function showModal() { this.setAttribute('open', ''); };
+if (typeof dialogProto.close !== 'function') dialogProto.close = function close() { this.removeAttribute('open', ''); };
 
-const tabModule = await import(fileUrl(join(cacheDir, 'GroupAccountsTab.compiled.mjs')));
-const updateStub = await import(fileUrl(join(stubDir, 'managerAccountApi.stub.mjs')));
-// The apply flow lives in its own plain-.js module (no JSX/CSS), so the test
-// imports the REAL helpers directly — no transform, no mirror.
-const { applyGroupLeverage, buildApplyConfirmCopy } = await import('./groupLeverageApply.js');
-const GroupAccountsTab = tabModule.default;
+// ---- Recorded network edges -----------------------------------------------
+const host = {
+  rows: [],
+  fetches: 0,
+  updateCalls: [],
+  rejectLogins: new Set(),
+};
+globalThis.__groupAccountsTabHost = host;
 
-after(() => {
-  rmSync(cacheDir, { recursive: true, force: true });
-});
-
-const renderTab = () => {
-  globalThis.__SUI_M1_ROWS__ = { rows: stubAccounts(), total: 4, hasMore: false, nextOffset: 4 };
-  const client = new QueryClient();
-  return renderToString(
-    h(QueryClientProvider, { client }, h(GroupAccountsTab, { groupName: GROUP_NAME, groupLeverage: GROUP_LEVERAGE })),
-  );
+const STUBS = {
+  sidebarAccounts: `
+    const host = globalThis.__groupAccountsTabHost;
+    export const getSidebarAccountsQueryOptions = (search = '') => ({
+      queryKey: ['sidebar-accounts', String(search || '').trim()],
+      queryFn: async () => { host.fetches += 1; return { rows: host.rows.map((row) => ({ ...row })) }; },
+      staleTime: 5 * 60 * 1000,
+    });
+  `,
+  managerAccountApi: `
+    const host = globalThis.__groupAccountsTabHost;
+    export const updateManagerAccount = async (login, payload) => {
+      host.updateCalls.push([String(login), payload]);
+      if (host.rejectLogins.has(String(login))) throw new Error('Rejected by server');
+      return { success: true };
+    };
+    export const createManagerAccount = async () => { throw new Error('createManagerAccount must not be called'); };
+    export const deleteManagerAccount = async () => { throw new Error('deleteManagerAccount must not be called'); };
+  `,
 };
 
-test('react-dom/server renders the real tab component', () => {
-  assert.equal(typeof renderToString, 'function', 'react-dom/server must be available');
-  assert.equal(typeof GroupAccountsTab, 'function', 'the real tab component must load');
-  assert.equal(typeof applyGroupLeverage, 'function', 'the real apply flow must be exported');
-  assert.equal(typeof buildApplyConfirmCopy, 'function', 'the real confirm copy must be exported');
+// Bundle only the tab and its in-repo imports (JSX, CSS). Packages stay
+// external and load through Node itself, resolved exactly as this file
+// resolves them, so the tab and this test share one React and one
+// react-query instance (and React's act() uses Node timers).
+const bundled = await build({
+  entryPoints: [fileURLToPath(new URL('./GroupAccountsTab.jsx', import.meta.url))],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'neutral',
+  jsx: 'automatic',
+  loader: { '.css': 'empty' },
+  logLevel: 'silent',
+  plugins: [{
+    name: 'group-accounts-tab-host',
+    setup(builder) {
+      builder.onResolve({ filter: /(sidebarAccounts|managerAccountApi)(\.js)?$/ }, ({ path }) => ({
+        path: path.match(/(sidebarAccounts|managerAccountApi)/)[1],
+        namespace: 'group-accounts-tab-host',
+      }));
+      builder.onLoad({ filter: /.*/, namespace: 'group-accounts-tab-host' }, ({ path }) => ({ loader: 'js', contents: STUBS[path] }));
+      builder.onResolve({ filter: /^[@a-z]/i }, ({ path }) => (
+        /^[a-z]:[\\/]/i.test(path) ? undefined : { path: import.meta.resolve(path), external: true }
+      ));
+    },
+  }],
+});
+const { default: GroupAccountsTab } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
+// The confirm copy lives in a plain-.js module: import the REAL helper
+// directly, no transform. (The apply flow itself is exercised through the UI
+// button path above, not called directly.)
+const { buildApplyConfirmCopy } = await import('./groupLeverageApply.js');
+const { createElement, act } = await import('react');
+const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+
+// ---- Render helpers --------------------------------------------------------
+let mounted = null;
+
+const settle = async () => {
+  for (let i = 0; i < 5; i += 1) {
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); });
+  }
+};
+
+const renderTab = async (props) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(container);
+  const element = (next) => createElement(QueryClientProvider, { client: queryClient }, createElement(GroupAccountsTab, next));
+  await act(async () => { root.render(element(props)); });
+  await settle();
+  mounted = { container, root, queryClient };
+  return {
+    container,
+    rerender: async (next) => { await act(async () => { root.render(element(next)); }); await settle(); },
+  };
+};
+
+// Unmount and drop the query cache so no react-query gc timer outlives a test.
+const unmountTab = async () => {
+  if (!mounted) return;
+  await act(async () => { mounted.root.unmount(); });
+  mounted.queryClient.clear();
+  mounted.container.remove();
+  mounted = null;
+};
+
+const buttonByText = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent.includes(text));
+const buttonByExactText = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent === text);
+const click = async (element) => {
+  await act(async () => { element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  await settle();
+};
+
+// 900001 differs (100 vs 200) and updates cleanly; 900002 differs (50) and the
+// stub rejects it; 900003 already matches and must be skipped; 900004 has no
+// leverage; 900009 is outside the group and must never appear or update.
+const member = (login, leverage, extra = {}) => ({ login, Name: `Fixture ${login}`, group: GROUP, leverage, balance: 100, equity: 100, ...extra });
+
+beforeEach(() => {
+  host.rows = [
+    member('900001', 100),
+    member('900002', 50, { leverage: undefined, Leverage: 50 }),
+    member('900003', 200),
+    member('900004', undefined),
+    { login: '900009', Name: 'Fixture outsider', group: 'Fixture/Other', leverage: 10 },
+  ];
+  host.fetches = 0;
+  host.updateCalls.length = 0;
+  host.rejectLogins = new Set();
 });
 
-test('(a) RENDER: member rows render, Apply button shows the count, zero update calls', () => {
-  updateStub.calls.length = 0;
-  const html = renderTab();
+afterEach(() => unmountTab());
 
-  assert.ok(html.includes('Fixture Member One'), 'member one must render');
-  assert.ok(html.includes('Fixture Member Two'), 'member two must render');
-  assert.ok(html.includes('Fixture Member Three'), 'member three must render');
-  assert.ok(!html.includes('Fixture Outsider'), 'accounts outside the group must not render');
-  assert.ok(
-    html.includes('Apply group leverage to 3 accounts'),
-    'the Apply button must show the current member count',
-  );
-  assert.equal(updateStub.calls.length, 0, 'rendering the tab must perform zero account updates');
+// jsdom keeps the event loop alive until its window is closed.
+after(() => { dom.window.close(); });
+
+// ---- Tests ----------------------------------------------------------------
+test('mounting the tab performs zero account writes, even with effects running', async () => {
+  const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
+
+  assert.equal(host.fetches, 1, 'the tab must load the shared account list');
+  assert.equal(view.container.querySelectorAll('tbody tr').length, 4, 'all four members render, the outsider does not');
+  assert.deepEqual(host.updateCalls, [], 'mounting the tab must not call updateManagerAccount');
+
+  // The old effect re-ran on leverage and data changes; neither may write now.
+  await view.rerender({ groupName: GROUP, groupLeverage: 400 });
+  await click(view.container.querySelector('button[aria-label="Refresh accounts"]'));
+  assert.equal(host.fetches, 2, 'Refresh re-reads the list');
+  assert.deepEqual(host.updateCalls, [], 'changing group leverage or refreshing must not write');
 });
 
-test('(a) RENDER: no confirm dialog on mount, remount is write-free', () => {
-  updateStub.calls.length = 0;
-  const first = renderTab();
-  assert.ok(!first.includes('role="alertdialog"'), 'mount must not show any confirm dialog');
-  assert.ok(!first.includes('groups-apply-desc'), 'mount must not render confirm copy');
-  assert.ok(!first.includes('deposit-dialog'), 'mount must not render the shared confirm dialog');
-  const second = renderTab();
-  assert.ok(second.includes('Apply group leverage to 3 accounts'), 'remount must render the same Apply button');
-  assert.equal(updateStub.calls.length, 0, 'mounting and remounting must perform zero account updates');
+test('Apply button shows the live member count; no confirm dialog on mount', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  const button = buttonByText('Apply group leverage');
+  assert.ok(button, 'the Apply button must render');
+  assert.match(button.textContent, /Apply group leverage to all 4 accounts in group/, 'the button shows the member count');
+  assert.equal(document.querySelector('dialog'), null, 'mount must not render any confirm dialog');
+  assert.deepEqual(host.updateCalls, [], 'mount performs zero writes');
 });
 
-test('(c) CONFIRM COPY: shared-dialog props carry the count and ratio', () => {
-  const copy = buildApplyConfirmCopy({ groupRatio: 200, count: 3 });
-  assert.deepEqual(copy, {
+test('clicking Apply and confirming updates only differing members', async () => {
+  const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+
+  const dialog = document.querySelector('dialog');
+  assert.ok(dialog, 'the confirm dialog opens');
+  assert.match(dialog.textContent, /Apply group leverage/);
+  assert.match(dialog.textContent, /Only accounts with a different leverage will be updated\./);
+  assert.deepEqual(host.updateCalls, [], 'opening the dialog does not write');
+
+  await click(buttonByExactText('Apply'));
+
+  assert.deepEqual(host.updateCalls, [
+    ['900001', { Leverage: 200 }],
+    ['900002', { Leverage: 200 }],
+  ]);
+  assert.equal(host.fetches, 1, 'no refetch — succeeded rows are patched in the cache');
+  const body = view.container.textContent;
+  assert.match(body, /Applied group leverage to 2 of 2 accounts\./);
+});
+
+test('cancel writes nothing and reports nothing', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Cancel'));
+  assert.deepEqual(host.updateCalls, []);
+});
+
+test('partial failure patches only succeeded rows', async () => {
+  host.rejectLogins = new Set(['900002']);
+  const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.equal(host.updateCalls.length, 2, 'a rejected account does not stop the others');
+  const status = document.body.textContent;
+  assert.match(status, /Applied group leverage to 1 of 2 accounts\./);
+  const rows = [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.textContent);
+  assert.ok(rows.some((text) => text.includes('900001') && text.includes('1 : 200')), 'succeeded row shows the new ratio');
+  assert.ok(rows.some((text) => text.includes('900002') && text.includes('1 : 50')), 'failed row keeps its own ratio');
+});
+
+test('tab source keeps writes out of effects', () => {
+  const source = readFileSync(fileURLToPath(new URL('./GroupAccountsTab.jsx', import.meta.url)), 'utf8');
+  assert.ok(!/\buseEffect\b/.test(source), 'GroupAccountsTab must not use effects; writes belong to the confirm handler only');
+});
+
+test('confirm copy names the ratio and count', () => {
+  assert.deepEqual(buildApplyConfirmCopy({ groupRatio: 200, count: 3 }), {
     title: 'Apply group leverage',
     message: 'Apply group leverage 1 : 200 to 3 accounts? Only accounts with a different leverage will be updated.',
     confirmLabel: 'Apply',
   });
-});
-
-test('(b) button path: confirm=false performs zero updates', async () => {
-  updateStub.calls.length = 0;
-  const result = await applyGroupLeverage({
-    members: stubAccounts(),
-    groupLeverage: GROUP_LEVERAGE,
-    confirm: false,
-    updateAccount: updateStub.updateManagerAccount,
+  assert.deepEqual(buildApplyConfirmCopy({ groupRatio: null, count: 3 }), {
+    title: 'Apply group leverage',
+    message: 'Group leverage is not set for this group, so there is nothing to apply.',
+    confirmLabel: 'Apply',
   });
-  assert.deepEqual(result, { succeeded: 0, failed: 0, total: 0 });
-  assert.equal(updateStub.calls.length, 0, 'without confirmation nothing may be written');
-});
-
-test('(b) button path: confirm=true updates only differing members, reports succeeded/failed', async () => {
-  updateStub.calls.length = 0;
-  const result = await applyGroupLeverage({
-    members: stubAccounts().filter((account) => account.login !== '900004'),
-    groupLeverage: GROUP_LEVERAGE,
-    confirm: true,
-    updateAccount: updateStub.updateManagerAccount,
-  });
-  assert.deepEqual(
-    updateStub.calls.map((call) => call.login),
-    ['900001', '900002'],
-    'only members whose leverage differs are updated, in row order',
-  );
-  for (const call of updateStub.calls) {
-    assert.deepEqual(call.payload, { Leverage: 200 }, 'each update carries the group ratio');
-  }
-  assert.deepEqual(result, { succeeded: 1, failed: 1, total: 2 });
-});
-
-test('(b) button path: unparsable group leverage performs zero updates', async () => {
-  updateStub.calls.length = 0;
-  const result = await applyGroupLeverage({
-    members: stubAccounts(),
-    groupLeverage: null,
-    confirm: true,
-    updateAccount: updateStub.updateManagerAccount,
-  });
-  assert.deepEqual(result, { succeeded: 0, failed: 0, total: 0 });
-  assert.equal(updateStub.calls.length, 0, 'an unknown group ratio must not touch any account');
 });

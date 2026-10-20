@@ -19,20 +19,26 @@ import { readLeverageRatio } from '../groupAccountRows.js';
 export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount }) => {
   const leverage = readLeverageRatio({ leverage: groupLeverage });
   if (!confirm || !leverage || typeof updateAccount !== 'function') {
-    return { succeeded: 0, failed: 0, total: 0 };
+    return { succeeded: 0, failed: 0, total: 0, succeededLogins: [] };
   }
-  const stale = (members || []).filter((member) => readLeverageRatio(member) !== leverage);
+  const candidates = (members || []).filter((member) => {
+    const login = member?.login;
+    return login !== undefined && login !== null && String(login).trim() !== '';
+  });
+  const stale = candidates.filter((member) => (readLeverageRatio(member) ?? leverage) !== leverage);
   let succeeded = 0;
   let failed = 0;
+  const succeededLogins = [];
   for (const member of stale) {
     try {
       await updateAccount(member.login, { Leverage: leverage });
       succeeded += 1;
+      succeededLogins.push(member.login);
     } catch {
       failed += 1;
     }
   }
-  return { succeeded, failed, total: stale.length };
+  return { succeeded, failed, total: stale.length, succeededLogins };
 };
 
 /**
@@ -40,8 +46,18 @@ export const applyGroupLeverage = async ({ members, groupLeverage, confirm, upda
  * app's shared DepositDialog (status="confirm") rather than a bespoke dialog.
  * Pure so the exact title/message/labels are unit-testable.
  */
-export const buildApplyConfirmCopy = ({ groupRatio, count }) => ({
-  title: 'Apply group leverage',
-  message: `Apply group leverage 1 : ${groupRatio} to ${count} accounts? Only accounts with a different leverage will be updated.`,
-  confirmLabel: 'Apply',
-});
+export const buildApplyConfirmCopy = ({ groupRatio, count }) => {
+  const ratio = Number(groupRatio);
+  if (groupRatio === null || groupRatio === undefined || !Number.isFinite(ratio) || ratio <= 0) {
+    return {
+      title: 'Apply group leverage',
+      message: 'Group leverage is not set for this group, so there is nothing to apply.',
+      confirmLabel: 'Apply',
+    };
+  }
+  return {
+    title: 'Apply group leverage',
+    message: `Apply group leverage 1 : ${groupRatio} to ${count} accounts? Only accounts with a different leverage will be updated.`,
+    confirmLabel: 'Apply',
+  };
+};
