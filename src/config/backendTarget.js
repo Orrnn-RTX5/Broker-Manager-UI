@@ -291,7 +291,10 @@ const sanitizeWebBackendCandidate = (candidate = '') => {
   const host = hostnameFromUrl(normalized);
   if (!host) return '';
   if (host.toLowerCase() === 'services.myprop.trad.app') return 'https://services.myprop.trade';
-  if (isIpAddress(host)) return '';
+  // Loopback is accepted so local/dev/test stacks (discovery records without
+  // backend URLs + loopback API_HOST) can sign in; every other IP stays
+  // rejected exactly as before.
+  if (isIpAddress(host) && !isLocalHost(host)) return '';
   if (isUiOnlyHost(host)) return '';
 
   return normalized;
@@ -539,7 +542,8 @@ const sanitizeWebWsCandidate = (candidate = '') => {
   const wsUrl = toWsUrl(candidate, 'wss');
   const host = hostnameFromUrl(wsUrl);
   if (!host) return '';
-  if (isIpAddress(host)) return '';
+  // Same loopback carve-out as the HTTP sanitizer above: local stacks only.
+  if (isIpAddress(host) && !isLocalHost(host)) return '';
   if (isUiOnlyHost(host)) return '';
 
   try {
