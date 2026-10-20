@@ -112,7 +112,7 @@ export default {
   'Set separate master and investor passwords.': '取引用と閲覧専用のパスワードを別々に設定してください。',
   'Showing first 100 matches. Search to narrow.': '最初の100件を表示しています。検索して絞り込んでください。',
   'Sign in to access your manager dashboard': 'ログインしてマネージャーダッシュボードを開きます',
-  'Sign in to the Broker Manager management dashboard': 'Broker Manager管理ダッシュボードにログイン',
+  'Sign in to the Broker Manager dashboard': 'Broker Manager管理ダッシュボードにログイン',
   'Some open positions could not be loaded.': '一部の保有ポジションを読み込めませんでした。',
   'Swap plus commission for this order.': 'この注文のスワップと手数料の合計です。',
   'These reports are not available yet. Filters will apply once reporting is connected; individual accounts are available in the account list.': 'これらのレポートはまだ利用できません。レポート機能の接続後にフィルターが適用されます。個別の口座は口座一覧で確認できます。',

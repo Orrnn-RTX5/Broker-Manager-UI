@@ -93,7 +93,7 @@ export default {
   'Set separate master and investor passwords.': 'Ana erişim ve yatırımcı erişimi için ayrı parolalar belirleyin.',
   'Showing first 100 matches. Search to narrow.': 'İlk 100 eşleşme gösteriliyor. Aramayı daraltın.',
   'Sign in to access your manager dashboard': 'Yönetim paneline erişmek için giriş yapın',
-  'Sign in to the Broker Manager management dashboard': 'Broker Manager yönetim paneline giriş yapın',
+  'Sign in to the Broker Manager dashboard': 'Broker Manager yönetim paneline giriş yapın',
   'Some open positions could not be loaded.': 'Bazı açık pozisyonlar yüklenemedi.',
   'Swap plus commission for this order.': 'Bu emir için swap ve komisyon toplamı.',
   'These reports are not available yet. Filters will apply once reporting is connected; individual accounts are available in the account list.': 'Bu raporlar henüz kullanılamıyor. Raporlama bağlandığında filtreler uygulanacak. Tekil hesaplara hesap listesinden erişebilirsiniz.',

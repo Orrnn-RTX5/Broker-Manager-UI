@@ -856,8 +856,6 @@ export default {
   "Broker Manager ID": "ID Broker Manager",
   "Broker Manager": "Broker Manager",
   "Broker Manager v2.6.0": "Broker Manager v2.6.0",
-  "Broker Manager-Demo": "Broker Manager-Démo",
-  "Broker Manager-Live": "Broker Manager-En direct",
   "Rust": "Rust",
   "rust": "rust",
   "RUST": "RUST",

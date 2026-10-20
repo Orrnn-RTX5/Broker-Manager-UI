@@ -415,8 +415,6 @@ export default {
   "Risk Settings": "जोखिम सेटिंग्स",
   "Role": "भूमिका",
   "Broker Manager": "ब्रोकर मैनेजर",
-  "Broker Manager-Demo": "ब्रोकर मैनेजर-डेमो",
-  "Broker Manager-Live": "ब्रोकर मैनेजर-लाइव",
   "Rust Canary": "Rust Canary",
   "S/L": "एस/एल",
   "Save": "सहेजें",

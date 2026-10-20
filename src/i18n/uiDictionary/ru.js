@@ -414,8 +414,6 @@ export default {
   "Risk Settings": "Настройки риска",
   "Role": "Роль",
   "Broker Manager": "Broker Manager",
-  "Broker Manager-Demo": "Broker Manager-Демо",
-  "Broker Manager-Live": "Broker Manager-Реальный",
   "Rust Canary": "Rust Canary",
   "S/L": "S/L",
   "Save": "Сохранить",

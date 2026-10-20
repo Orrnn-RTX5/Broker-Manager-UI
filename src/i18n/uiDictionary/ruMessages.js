@@ -94,7 +94,7 @@ export default {
   'Set separate master and investor passwords.': 'Установите отдельные основной и инвесторский пароли.',
   'Showing first 100 matches. Search to narrow.': 'Показаны первые 100 совпадений. Уточните поиск.',
   'Sign in to access your manager dashboard': 'Войдите для доступа к панели менеджера',
-  'Sign in to the Broker Manager management dashboard': 'Войдите в панель управления Broker Manager',
+  'Sign in to the Broker Manager dashboard': 'Войдите в панель управления Broker Manager',
   'Some open positions could not be loaded.': 'Некоторые открытые позиции не удалось загрузить.',
   'Swap plus commission for this order.': 'Своп и комиссия по этому ордеру.',
   'These reports are not available yet. Filters will apply once reporting is connected; individual accounts are available in the account list.': 'Эти отчёты пока недоступны. Фильтры заработают после подключения отчётности. Отдельные счета доступны в списке счетов.',
