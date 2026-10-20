@@ -182,7 +182,7 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
   const handleSpreadSet = async () => {
     if (!canManipulateRestrictionTrades) { showResult.error('Your role does not have permission to change spread overrides.'); return; }
     if (!hasRestriction) { showResult.info('Save a restriction first before setting spread overrides.'); return; }
-    if (!hasSpreadSymbol(spreadSymbol)) { showResult.error('Select a symbol before setting a spread override.'); return; }
+    if (!hasSpreadSymbol(spreadSymbol)) { showResult.error('Enter a symbol before setting a spread override.'); return; }
     setSaving(true);
     try {
       await accountSpreadSet({ login, symbol: normalizeSpreadSymbol(spreadSymbol), markup: spreadMarkup });
