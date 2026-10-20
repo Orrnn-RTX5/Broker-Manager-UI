@@ -144,6 +144,16 @@ test('(a) RENDER: member rows render, Apply button shows the count, zero update 
   assert.equal(updateStub.calls.length, 0, 'rendering the tab must perform zero account updates');
 });
 
+test('(a) RENDER: no confirm dialog on mount, remount is write-free', () => {
+  updateStub.calls.length = 0;
+  const first = renderTab();
+  assert.ok(!first.includes('role="alertdialog"'), 'mount must not show any confirm dialog');
+  assert.ok(!first.includes('groups-apply-desc'), 'mount must not render confirm copy');
+  const second = renderTab();
+  assert.ok(second.includes('Apply group leverage to 3 accounts'), 'remount must render the same Apply button');
+  assert.equal(updateStub.calls.length, 0, 'mounting and remounting must perform zero account updates');
+});
+
 test('(b) button path: confirm=false performs zero updates', async () => {
   updateStub.calls.length = 0;
   const result = await applyGroupLeverage({
