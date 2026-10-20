@@ -125,8 +125,8 @@ test('new groups omit blank policy strings so backend derivation applies, preser
   const payload = buildGroupSavePayload(initial, form, { isNew: true });
 
   assert.equal(payload.name, 'Nexa/standard');
-  assert.equal(payload.routingMode, 'b_book');
-  assert.equal(payload.bookType, 'b');
+  assert.ok(!('routingMode' in payload), 'untouched routingMode is omitted so the server resolves it');
+  assert.ok(!('bookType' in payload), 'no derived bookType without an explicit routing choice');
   assert.equal(payload.commissionRate, 7);
   assert.equal(payload.tradeAllowed, true);
   assert.deepEqual(payload.symbolsAllowed, ['EURUSD', 'GBPUSD']);
@@ -184,6 +184,24 @@ test('visible Book choice maps to backend-canonical bookType values, never displ
   assert.equal(hybrid.bookType, 'hybrid');
   const aBook = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Main/a', routingMode: 'a_book', bookType: 'A-Book' });
   assert.equal(aBook.bookType, 'a');
+});
+
+test('untouched routingMode sends no routing literal; an explicit choice still flows through', () => {
+  assert.equal(GROUP_DEFAULT_PAYLOAD.routingMode, '');
+  const fresh = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Main/fresh' });
+  assert.ok(!('routingMode' in fresh), 'untouched routingMode must be omitted for server resolution');
+  assert.ok(!('bookType' in fresh), 'no derived bookType without an explicit routing choice');
+  const wire = JSON.stringify(fresh);
+  for (const mode of Object.keys(ROUTING_TO_BOOK_TYPE)) {
+    assert.ok(!wire.includes(mode), `wire payload must carry no routing literal when untouched (found ${mode})`);
+  }
+  // Explicit choices pass through with their canonical bookType derivation
+  // intact; modes are drawn from the real constant, never mirrored literals.
+  for (const [mode, canonical] of Object.entries(ROUTING_TO_BOOK_TYPE)) {
+    const payload = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Main/pick', routingMode: mode });
+    assert.equal(payload.routingMode, mode);
+    assert.equal(payload.bookType, canonical);
+  }
 });
 
 test('new groups default to tradeAllowed true while an explicit false is preserved', () => {

@@ -11,6 +11,12 @@ import { useGroupList } from '../../../hooks/useGroupList';
 import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
 import {
+  GROUP_POLICY_DEFAULT_INVALID,
+  GROUP_POLICY_DEFAULT_MISSING,
+  mapGroupPolicyError,
+  parseGroupPolicyField,
+} from '../groupPolicyErrors.js';
+import {
   LEVERAGE_PRESETS,
   MARGIN_CALL_PRESETS,
   SPREAD_MARKUP_PRESETS,
@@ -35,15 +41,39 @@ const InputGroup = ({ label, type = 'text', value, onChange }) => (
   </label>
 );
 
-const CheckField = ({ label, checked, onChange }) => (
-  <label className="group-create-check">
-    <input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} />
-    <span>{label}</span>
-  </label>
+// Per-field server error: the form-level alert pattern below (role=alert,
+// AlertCircle + message) adapted to a single field. Fields stay optional in
+// the UI — no required markers; the backend 400 path handles missing values
+// and the raw policy code never renders.
+const FieldError = ({ id, message }) => (
+  <p id={id} className="group-create-error group-create-field-error" role="alert">
+    <AlertCircle size={14} />
+    <span>{message}</span>
+  </p>
 );
 
-const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select' }) => {
+const CheckField = ({ label, checked, onChange, error = null }) => {
+  const errorId = useId();
+  return (
+    <>
+      <label className="group-create-check">
+        <input
+          type="checkbox"
+          checked={Boolean(checked)}
+          onChange={(event) => onChange(event.target.checked)}
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={error ? errorId : undefined}
+        />
+        <span>{label}</span>
+      </label>
+      {error ? <FieldError id={errorId} message={error} /> : null}
+    </>
+  );
+};
+
+const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', error = null }) => {
   const labelId = useId();
+  const fieldErrorId = useId();
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -107,6 +137,8 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select' }
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-labelledby={labelId}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={error ? fieldErrorId : undefined}
         onClick={() => {
           if (open) setOpen(false);
           else { placeMenu(); setOpen(true); }
@@ -115,6 +147,7 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select' }
         <span>{selected ? selected.label : placeholder}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </button>
+      {error ? <FieldError id={fieldErrorId} message={error} /> : null}
       {open && box && createPortal(
         <div
           ref={menuRef}
@@ -149,7 +182,7 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select' }
 const CUSTOM_OPTION = '__custom__';
 
 // Dropdown of standard values with a "Custom…" entry that reveals a free input.
-const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlaceholder }) => {
+const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlaceholder, error = null }) => {
   const isPreset = isPresetValue(presets, value);
   const [customOpen, setCustomOpen] = useState(() => !isPreset && Number(value) > 0);
   // The typed text is kept as-is so partial decimals like "0." survive while typing.
@@ -163,6 +196,7 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
         label={label}
         value={selectValue}
         placeholder={placeholder}
+        error={error}
         options={[
           ...presets.map((preset) => ({ value: String(preset.value), label: preset.label })),
           { value: CUSTOM_OPTION, label: 'Custom...' },
@@ -206,6 +240,9 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Mapped GROUP_POLICY server errors, keyed by policy field and rendered
+  // inline on the named field. Cleared per field on edit and on resubmit.
+  const [fieldErrors, setFieldErrors] = useState({});
   const [permissionDenied, setPermissionDenied] = useState(false);
 
   // Duplicate/edit sources keep their value and count as touched, so parent
@@ -245,6 +282,15 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   const handleChange = (key, val) => {
     if (key === 'tradeAllowed') tradeTouched.current = true;
     if (key === 'leverage') leverageTouched.current = true;
+    // Editing a field clears its inline policy error; the visible Book choice
+    // edits routingMode, which carries the backend-canonical bookType error.
+    setFieldErrors((prev) => {
+      if (!prev[key] && !(key === 'routingMode' && prev.bookType)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      if (key === 'routingMode') delete next.bookType;
+      return next;
+    });
     setFormData(prev => {
       const next = { ...prev, [key]: val };
       // Sync backend-canonical bookType with the visible routingMode choice.
@@ -273,12 +319,14 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     });
     if (fieldError) {
       setError(fieldError);
+      setFieldErrors({});
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
+      setFieldErrors({});
 
       const payload = isEditing
         ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
@@ -300,7 +348,31 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
       if (onSuccess) onSuccess(saved);
       onClose();
     } catch (err) {
-      setError(err.message);
+      // Mapped GROUP_POLICY errors render inline on the named field; the raw
+      // code never renders. A recognized code with no parseable field falls
+      // back to the mapper's generic friendly text at form level. Unknown
+      // errors keep the existing verbatim form-level passthrough.
+      const mapped = mapGroupPolicyError(err);
+      const raw = err instanceof Error ? err.message : String(err?.message ?? err ?? '');
+      const code = err && typeof err === 'object' && !(err instanceof Error) ? err.code : undefined;
+      const isPolicyError =
+        raw.includes(GROUP_POLICY_DEFAULT_MISSING) ||
+        raw.includes(GROUP_POLICY_DEFAULT_INVALID) ||
+        code === GROUP_POLICY_DEFAULT_MISSING ||
+        code === GROUP_POLICY_DEFAULT_INVALID;
+      if (isPolicyError) {
+        const field = parseGroupPolicyField(raw);
+        if (field) {
+          setFieldErrors({ [field]: mapped });
+          setError(null);
+        } else {
+          setFieldErrors({});
+          setError(mapped);
+        }
+      } else {
+        setFieldErrors({});
+        setError(err instanceof Error ? err.message : mapped);
+      }
     } finally {
       setLoading(false);
     }
@@ -347,8 +419,8 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
             </div>
             <p className="group-create-note">Leave currency, execution, parent, or purpose blank to use backend derivation. A blank currency is omitted, never hardcoded.</p>
             <div className="group-create-checks">
-              <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} />
-              <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} />
+              <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} error={fieldErrors.demo} />
+              <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} error={fieldErrors.tradeAllowed} />
               <CheckField label="Negative balance protection" checked={formData.negativeBalanceProtection} onChange={(v) => handleChange('negativeBalanceProtection', v)} />
             </div>
           </section>
@@ -357,8 +429,8 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
             <h3>Financial</h3>
             <div className="group-create-grid">
               <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage…" customPlaceholder="Ratio, e.g. 150 for 1:150" />
-              <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" />
-              <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" />
+              <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" error={fieldErrors.marginCallLevel} />
+              <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" error={fieldErrors.stopOutLevel} />
               <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
             </div>
             {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
@@ -373,6 +445,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
                 label="Execution mode"
                 value={formData.executionMode || ''}
                 placeholder="Select"
+                error={fieldErrors.executionMode}
                 options={EXECUTION_MODE_OPTIONS.some((option) => option.value === formData.executionMode)
                   ? EXECUTION_MODE_OPTIONS
                   : formData.executionMode
@@ -383,6 +456,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
               <GroupChoice
                 label="Book"
                 value={formData.routingMode}
+                error={fieldErrors.bookType}
                 options={[
                   { value: 'b_book', label: 'B-Book' },
                   { value: 'a_book', label: 'A-Book' },

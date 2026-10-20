@@ -135,8 +135,9 @@ test('fresh-create submit path: keys within allowed fields, blanks absent, symbo
   for (const key of ['currency', 'executionMode', 'accountType', 'parentGroup', 'groupPurpose']) {
     assert.ok(!(key in payload), `blank ${key} must be omitted so backend derivation applies`);
   }
-  // Default routingMode b_book derives the canonical backend bookType.
-  assert.equal(payload.bookType, 'b');
+  // Untouched routingMode is omitted so backend derivation governs (no b_book default).
+  assert.ok(!('routingMode' in payload), 'untouched routingMode must be omitted for backend derivation');
+  assert.ok(!('bookType' in payload), 'no derived bookType without an explicit routing choice');
   assert.ok('tradeAllowed' in payload);
   assert.equal(typeof payload.tradeAllowed, 'boolean');
   assert.equal(payload.tradeAllowed, true);

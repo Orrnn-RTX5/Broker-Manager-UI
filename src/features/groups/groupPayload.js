@@ -25,7 +25,7 @@ export const GROUP_DEFAULT_PAYLOAD = Object.freeze({
   demo: false,
   accountType: '',
   lotDivisor: 0,
-  routingMode: 'b_book',
+  routingMode: '',
   symbolsAllowed: [],
   symbolsBlocked: [],
   parentGroup: '',
