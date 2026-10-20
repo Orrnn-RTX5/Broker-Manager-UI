@@ -30,6 +30,17 @@ import {
   TRADE_MUTATION_DENIED_MESSAGE,
 } from './accountTradePermissions';
 import { joinMoneyAmount } from './accountTransactionCopy.js';
+import {
+  DEFAULT_MANAGER_TRANSACTION_TYPE,
+  buildManagerTransactionConfirmation,
+  buildManagerTransactionFailurePrefix,
+  buildManagerTransactionSuccessMessage,
+  getManagerTransactionActionLabel,
+  getManagerTransactionOptions,
+  getManagerTransactionPendingLabel,
+  getManagerTransactionPendingNoun,
+  resolveManagerTransactionType,
+} from './accountFinanceOps.js';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
@@ -275,6 +286,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [depositAmount, setDepositAmount] = useState('');
   const [depositComment, setDepositComment] = useState('');
+  const [transactionType, setTransactionType] = useState(DEFAULT_MANAGER_TRANSACTION_TYPE);
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositSuccess, setDepositSuccess] = useState(null);
@@ -882,6 +894,18 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     };
     setDepositError(null);
     setDepositSuccess(null);
+    // The selector only offers supported types, but the submit path still
+    // resolves fail-closed so a tampered selection can never be submitted as
+    // the wrong transaction kind. All four types share the same permission
+    // gate, validation, and idempotency flow below.
+    let transactionTypeKey;
+    try {
+      transactionTypeKey = resolveManagerTransactionType(transactionType);
+    } catch {
+      reportFailure('Unsupported transaction type selected.');
+      return;
+    }
+    const transactionActionLabel = getManagerTransactionActionLabel(transactionTypeKey);
     if (!canManageFinances) {
       reportFailure('Your role does not have permission to manage account funds.');
       return;
@@ -915,7 +939,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     if (depositConfirmationRef.current || isDepositing) return;
     const confirmed = await new Promise((resolve) => {
       depositConfirmationRef.current = resolve;
-      setDepositConfirmation(`Deposit ${joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue)} into account #${parsedLogin}?`);
+      setDepositConfirmation(buildManagerTransactionConfirmation(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin));
     });
     if (!confirmed) return;
 
@@ -924,24 +948,24 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setDepositSuccess(null);
 
     try {
-      const result = await submitManagerTransaction('deposit', {
+      const result = await submitManagerTransaction(transactionTypeKey, {
         login: parsedLogin,
         amount: amountVal,
         comment: depositComment.trim(),
       });
 
       if (result && typeof result === 'object' && (result.success === false || result.ok === false)) {
-        throw new Error(result.error || result.message || 'Deposit failed');
+        throw new Error(result.error || result.message || `${transactionActionLabel} failed`);
       }
 
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      const successMessage = `Deposited ${joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue)} into account #${parsedLogin} successfully.`;
+      const successMessage = buildManagerTransactionSuccessMessage(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin);
       setDepositSuccess(typeof responseMessage === 'string' && responseMessage ? `${successMessage} ${responseMessage}` : successMessage);
       setDepositAmount('');
       setDepositComment('');
-      // Refresh failures must never turn a completed deposit into a failed deposit.
+      // Refresh failures must never turn a completed transaction into a failed transaction.
       void Promise.resolve().then(() => onAccountUpdated?.(loginId)).catch(() => {});
 
       // Do not wait for the next grid/websocket interval after the backend has
@@ -949,11 +973,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       void loadAccountDetails(loginId, { force: true })
         .catch(() => {
           setDepositSuccess((message) => message
-            ? `${message} The balance could not be refreshed. Reopen the account to check it; do not repeat the deposit.`
+            ? `${message} The balance could not be refreshed. Reopen the account to check it; do not repeat the transaction.`
             : message);
         });
     } catch (err) {
-      reportFailure(`Deposit for account #${parsedLogin}: ${err?.message || 'The result could not be confirmed. Check account history before trying again.'}`);
+      reportFailure(`${buildManagerTransactionFailurePrefix(transactionTypeKey, parsedLogin)}: ${err?.message || 'The result could not be confirmed. Check account history before trying again.'}`);
     } finally {
       setIsDepositing(false);
     }
@@ -1600,7 +1624,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 <div className="account-transaction-card">
                   <div className="account-transaction-header">
                     <h2 className="text-[12px] font-bold   tracking-wide uppercase">
-                      Deposit funds
+                      {getManagerTransactionActionLabel(transactionType)} funds
                     </h2>
                   </div>
 
@@ -1619,6 +1643,25 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                         {depositSuccess}
                       </div>
                     )}
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="transaction-type" className="text-[12px] font-medium">Type *</label>
+                      <select
+                        id="transaction-type"
+                        value={transactionType}
+                        disabled={isDepositing || !canManageFinances}
+                        onChange={(e) => {
+                          setTransactionType(resolveManagerTransactionType(e.target.value));
+                          setDepositError(null);
+                          setDepositSuccess(null);
+                        }}
+                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
+                      >
+                        {getManagerTransactionOptions().map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
 
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="transaction-amount" className="text-[12px] font-medium">Amount *</label>
@@ -1660,7 +1703,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
                       className="account-transaction-submit"
                     >
-                      {isDepositing ? 'Depositing...' : 'Deposit'}
+                      {isDepositing ? getManagerTransactionPendingLabel(transactionType) : getManagerTransactionActionLabel(transactionType)}
                     </button>
                     {!canManageFinances && <p role="status">Your role does not have permission to manage account funds.</p>}
                   </form>
@@ -1753,7 +1796,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     {(depositConfirmation || isDepositing || depositSuccess || depositError) && (
       <DepositDialog
         status={depositConfirmation ? 'confirm' : isDepositing ? 'pending' : depositError ? 'error' : 'success'}
-        message={depositConfirmation || (isDepositing ? 'Waiting for the broker to confirm your deposit. Please do not submit it again.' : depositError || depositSuccess)}
+        message={depositConfirmation || (isDepositing ? `Waiting for the broker to confirm your ${getManagerTransactionPendingNoun(transactionType)}. Please do not submit it again.` : depositError || depositSuccess)}
         onConfirm={() => finishDepositConfirmation(true)}
         onDismiss={() => { finishDepositConfirmation(false); setDepositError(null); setDepositSuccess(null); }}
       />
