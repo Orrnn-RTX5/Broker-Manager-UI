@@ -7,7 +7,7 @@ import { useLivePositions } from '../../hooks/useLiveTrading';
 import { fetchAllPositionsDataset, getPositionsPage, invalidateGlobalPositionsCache } from '../../services/api';
 import { getDealerQueue } from '../../services/tradeApi';
 import { getDataAccessScope } from '../../services/dataAccessScope.js';
-import { subscribeToPositionSync } from '../../services/positionSync';
+import { subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
 import { liveTradingState } from '../../services/liveTradingState.js';
 import { PERMISSIONS } from '../../utils/permissions.js';
 import { TRADE_COLUMNS, tradeCells } from './terminalTrades.js';
