@@ -177,7 +177,7 @@ const withProtocol = (value = '', defaultProtocol = 'https') => {
 };
 
 const isIpAddress = (host = '') => /^(\d{1,3}\.){3}\d{1,3}$/.test(String(host || '').trim());
-const isLocalHost = (host = '') => /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(String(host || '').trim());
+const isLocalHost = (host = '') => /^(localhost|127\.0\.0\.1|\[?::1\]?)$/i.test(String(host || '').trim());
 
 const hostnameFromUrl = (value = '') => {
   try {
@@ -278,6 +278,9 @@ export const isTestBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
 
 const isUiOnlyHost = (host = '') => /^(admin|client|manager)\./i.test(host);
 
+// Unspecified addresses are never valid backend targets.
+const isUnspecifiedHost = (host = '') => /^(0\.0\.0\.0|\[?::\]?)$/i.test(String(host || '').trim());
+
 const normalizeDomainCandidate = (candidate = '') => {
   const value = String(candidate || '').trim();
   if (!value) return '';
@@ -292,8 +295,9 @@ const sanitizeWebBackendCandidate = (candidate = '') => {
   if (!host) return '';
   if (host.toLowerCase() === 'services.myprop.trad.app') return 'https://services.myprop.trade';
   // Loopback is accepted so local/dev/test stacks (discovery records without
-  // backend URLs + loopback API_HOST) can sign in; every other IP stays
-  // rejected exactly as before.
+  // backend URLs + loopback API_HOST) can sign in; unspecified addresses and
+  // every other IP stay rejected exactly as before.
+  if (isUnspecifiedHost(host)) return '';
   if (isIpAddress(host) && !isLocalHost(host)) return '';
   if (isUiOnlyHost(host)) return '';
 
@@ -543,6 +547,7 @@ const sanitizeWebWsCandidate = (candidate = '') => {
   const host = hostnameFromUrl(wsUrl);
   if (!host) return '';
   // Same loopback carve-out as the HTTP sanitizer above: local stacks only.
+  if (isUnspecifiedHost(host)) return '';
   if (isIpAddress(host) && !isLocalHost(host)) return '';
   if (isUiOnlyHost(host)) return '';
 
@@ -618,7 +623,11 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
 
   const backendUrl = resolveBrokerBackendUrl(brokerInfo, fallbackUrl);
   const defaultProtocol = backendUrl.startsWith('https://') ? 'wss' : 'ws';
-  return buildWsEndpoint(toWsUrl(backendUrl || fallbackUrl, defaultProtocol), path);
+  // The raw fallback must pass the same sanitizer: an unspecified or
+  // non-loopback-IP fallback is not a valid target either.
+  const clean = sanitizeWebWsCandidate(backendUrl || fallbackUrl);
+  if (!clean) return '';
+  return buildWsEndpoint(toWsUrl(clean, defaultProtocol), path);
 };
 
 export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {

@@ -17,15 +17,30 @@ test('loopback API_HOST resolves when the broker record carries no backend URL',
     resolveBrokerBackendUrl({ broker_id: 'qa-broker', server: 'qa-server' }, 'http://localhost:8091'),
     'http://localhost:8091',
   );
+  assert.equal(
+    resolveBrokerBackendUrl({ broker_id: 'qa-broker', server: 'qa-server' }, 'http://[::1]:5223'),
+    'http://[::1]:5223',
+  );
 });
 
 test('non-loopback IPs are still rejected', () => {
   assert.equal(resolveBrokerBackendUrl({ broker_id: 'qa-broker' }, 'http://192.168.1.38:8091'), '');
   assert.equal(resolveBrokerBackendUrl({ broker_id: 'qa-broker' }, 'http://10.0.0.5:8091'), '');
+  assert.equal(resolveBrokerBackendUrl({ broker_id: 'qa-broker' }, 'http://203.0.113.7:8091'), '');
   assert.equal(resolveBrokerBackendUrl({}, ''), '');
+});
+
+test('unspecified addresses are rejected, never valid backends', () => {
+  assert.equal(resolveBrokerBackendUrl({ broker_id: 'qa-broker' }, 'http://0.0.0.0:8091'), '');
+  assert.equal(resolveBrokerBackendUrl({ broker_id: 'qa-broker' }, 'http://[::]:8091'), '');
 });
 
 test('loopback WS_HOST resolves for the live stack', () => {
   const url = resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://127.0.0.1:5223');
   assert.ok(String(url).includes('127.0.0.1'), 'loopback WS host must survive sanitizing');
+  const v6 = resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://[::1]:5223');
+  assert.ok(String(v6).includes('::1'), 'IPv6 loopback WS host must survive sanitizing');
+  assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://0.0.0.0:8091'), '');
+  assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://[::]:8091'), '');
+  assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://192.168.1.38:8091'), '');
 });
