@@ -13,7 +13,7 @@ test('accounts inside a group keep login, name and money, and ignore other group
   assert.equal(rows[0].leverage, '1 : 100');
   assert.equal(accountsInGroup([
     { login: '200004', Name: 'dipanita das', group: 'dipannita', leverage: 100 },
-  ], 'dipannita', { leverage: 20 })[0].leverage, '1 : 20');
+  ], 'dipannita', { leverage: 20 })[0].leverage, '1 : 100');
   assert.equal(rows[0].balance, (99853.74).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   assert.deepEqual(accountsByGroupName([
     { login: '200023', group: 'Auj/demo', Name: 'Arena Phase1' },
@@ -25,4 +25,14 @@ test('accounts inside a group keep login, name and money, and ignore other group
     { group: 'YoPips Demo' },
     { group: 'yopips demo' },
   ]).get('yopips demo'), 2);
+});
+
+test('account leverage wins over the group fallback', () => {
+  const rows = accountsInGroup([
+    { login: '200004', group: 'dipannita', leverage: 100 },
+    { login: '200005', group: 'dipannita' },
+  ], 'dipannita', { leverage: 500 });
+
+  assert.equal(rows[0].leverage, '1 : 100');
+  assert.equal(rows[1].leverage, '1 : 500');
 });

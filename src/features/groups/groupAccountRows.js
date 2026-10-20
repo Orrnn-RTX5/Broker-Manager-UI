@@ -37,13 +37,13 @@ export const readLeverageRatio = (settings) => {
 const groupLeverage = (settings) => readLeverageRatio(settings);
 
 export const toGroupAccountRow = (account, groupSettings) => {
-  const leverage = groupLeverage(groupSettings) ?? pick(account, ['leverage', 'Leverage']);
+  const leverage = readLeverageRatio(account) ?? groupLeverage(groupSettings);
   return {
     account,
     login: account.login,
     name: account.Name || '',
     email: pick(account, ['email', 'Email', 'username', 'Username']),
-    leverage: leverage === '' ? '' : `1 : ${leverage}`,
+    leverage: leverage === null ? '' : `1 : ${leverage}`,
     balance: money(pick(account, ['balance', 'Balance'])),
     equity: money(pick(account, ['equity', 'Equity'])),
   };
