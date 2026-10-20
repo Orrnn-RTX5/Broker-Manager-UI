@@ -354,6 +354,70 @@ export const expireSession = (reason = 'token_expired') => {
   if (hadSession) dispatchAuthEvent(SESSION_EXPIRED_EVENT, { reason });
 };
 
+// Server session revoke on logout — endpoint status, verified read-only
+// against the manager-backend route table (Broker-Backend-V2,
+// services/RTX5-Manager-Admin-Backend/manager-backend/main.go + swagger.yaml):
+//   POST /api/v1/manager/auth/login    EXISTS (h.Connect)
+//   POST /api/v1/manager/auth/refresh  EXISTS (h.RefreshToken)
+//   GET  /api/v1/manager/auth/me       EXISTS (h.SessionInfo)
+//   POST /api/v1/manager/auth/logout   MISSING — no self-service logout
+//   POST /api/v1/manager/auth/revoke   MISSING — no self-service revoke
+// Not usable as a tenant-agnostic self logout: gateway
+// DELETE /api/v2/auth/sessions[/{id}] revokes gateway JWT trader sessions, not
+// manager opaque sessions; legacy GET /Disconnect?id=TOKEN requires the
+// server_admin permission; POST
+// /api/v1/manager/access/managers/{target}/sessions/revoke requires
+// staff.sessions.revoke (an admin revoking someone else). So logout calls no
+// invented endpoint and invalidates locally instead.
+// PROPOSED ds-3 CONTRACT (tenant-agnostic; identity comes from the Bearer):
+//   POST /api/v1/manager/auth/logout
+//   credentials: 'same-origin', Authorization: Bearer <access token>
+//   body: { "refresh_token": "<refresh token>" }
+//   success: 200 { "success": true } — idempotent: unknown/expired tokens
+//     also return 200. Deletes the access-token session, invalidates the
+//     refresh-token rotation chain, and bumps the session revision so WS
+//     tickets and revalidation fail closed.
+const BROKER_INFO_STORAGE_KEY = 'broker_info';
+
+const removeStoredBrokerInfoCopies = () => {
+  // clearBrokerInfo() only drops the sessionStorage copy; the localStorage
+  // mirror (written when the key already exists there) must go too, or the
+  // next login reopens the previous broker.
+  for (const name of ['sessionStorage', 'localStorage']) {
+    try {
+      const fromWindow = typeof window === 'undefined' ? null : window[name];
+      if (fromWindow) fromWindow.removeItem(BROKER_INFO_STORAGE_KEY);
+      const direct = typeof globalThis !== 'undefined' ? globalThis[name] : null;
+      if (direct && direct !== fromWindow) direct.removeItem(BROKER_INFO_STORAGE_KEY);
+    } catch {
+      // Storage can be unavailable; logout still succeeds.
+    }
+  }
+};
+
+/**
+ * Logout sequence: best-effort remote revoke BEFORE local clear, then always
+ * clear locally even when the revoke fails (fail-closed locally,
+ * best-effort remotely). Pass { revokeSession } once ds-3 adds the endpoint;
+ * until then logout is local-only and this resolves after clearing.
+ *
+ * - revokeSession: async (snapshot) => void transport using the pre-clear
+ *   snapshot tokens. Throwing/rejecting never blocks or undoes local logout.
+ */
+export const performLogoutSequence = async ({ revokeSession = null } = {}) => {
+  const snapshot = getAuthSnapshot();
+  if (typeof revokeSession === 'function') {
+    try {
+      await revokeSession(snapshot);
+    } catch {
+      // Best-effort remote revoke; the local logout below still runs.
+    }
+  }
+  clearSession();
+  removeStoredBrokerInfoCopies();
+  return snapshot;
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const readRefreshLock = () => {
@@ -514,5 +578,6 @@ export default {
   clearSession,
   isTabScopedExpiry,
   expireSession,
+  performLogoutSequence,
   refreshSession,
 };

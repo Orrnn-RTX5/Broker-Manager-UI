@@ -367,12 +367,27 @@ function App() {
     invalidateRealtimeCaches();
     invalidateSymbolManagementData();
     clearStoredTerminalPage();
-    authService.clearSession();
-    queryClient.clear();
-    clearBrokerInfo();
-    sessionSnapshotRef.current = null;
-    setSessionVersion((value) => value + 1);
-    setIsAuthenticated(false);
+    // performLogoutSequence best-effort revokes the server session BEFORE
+    // clearing local state, then always clears locally even if the revoke
+    // fails (fail-closed locally, best-effort remotely). No revoke transport
+    // exists yet — see authService for the ds-3 proposal — so today this
+    // clears local state. The refresh scheduler stops via the effect cleanup
+    // when isAuthenticated flips below. finishLogout runs on both paths so a
+    // revoke failure can never leave the UI half-logged.
+    const finishLogout = () => {
+      queryClient.clear();
+      clearBrokerInfo();
+      sessionSnapshotRef.current = null;
+      setSessionVersion((value) => value + 1);
+      setIsAuthenticated(false);
+    };
+    try {
+      const sequence = authService.performLogoutSequence();
+      if (sequence && typeof sequence.then === 'function') sequence.then(finishLogout, finishLogout);
+      else finishLogout();
+    } catch {
+      finishLogout();
+    }
   };
 
   return (
