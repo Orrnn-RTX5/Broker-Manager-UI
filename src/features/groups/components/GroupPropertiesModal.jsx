@@ -7,6 +7,8 @@ import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../serv
 import { GROUP_DEFAULT_PAYLOAD, bookTypeForRoutingMode, buildGroupSavePayload, submitGroup, toSymbolList } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
+import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
+import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
 import { ROUTING_LABELS } from '../groupTree.js';
 import {
   GROUP_SYMBOL_FILTERS,
@@ -40,7 +42,9 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     ...GROUP_DEFAULT_PAYLOAD,
     ...(group?.isNew ? NEW_GROUP_FINANCIAL_DEFAULTS : {}),
     ...group,
-    leverage: readLeverageRatio(group) || (group?.isNew ? NEW_GROUP_FINANCIAL_DEFAULTS.leverage : 0),
+    // A new group starts blank: the broker's group default pre-fills it below,
+    // else the operator must enter one (no leverage literal default).
+    leverage: readLeverageRatio(group) || (group?.isNew ? '' : 0),
     name: String(group?.name ?? ''),
     symbolsAllowed: toSymbolList(group?.symbolsAllowed),
     symbolsBlocked: toSymbolList(group?.symbolsBlocked),
@@ -56,6 +60,25 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [leverageError, setLeverageError] = useState(null);
+  const [leverageDefaultMissing, setLeverageDefaultMissing] = useState(false);
+  const isNewGroup = Boolean(group?.isNew);
+
+  // A new group (OK creates it top-level) reads the broker's default group
+  // leverage once; a miss leaves the field blank with a hint.
+  useEffect(() => {
+    if (!isNewGroup) return undefined;
+    let cancelled = false;
+    fetchBrokerDefaultLeverage().then((brokerLeverage) => {
+      if (cancelled) return;
+      if (brokerLeverage === null) {
+        setLeverageDefaultMissing(true);
+        return;
+      }
+      setForm((prev) => (isBlankLeverage(prev.leverage) ? { ...prev, leverage: brokerLeverage } : prev));
+    });
+    return () => { cancelled = true; };
+  }, [isNewGroup]);
 
   // While an account window is open on top, Escape belongs to it.
   useEffect(() => {
@@ -65,14 +88,17 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose, openAccount]);
 
-  const update = (key, value) => setForm((prev) => {
-    const next = { ...prev, [key]: value };
-    if (key === 'routingMode') {
-      const canonical = bookTypeForRoutingMode(value);
-      if (canonical) next.bookType = canonical;
-    }
-    return next;
-  });
+  const update = (key, value) => {
+    if (key === 'leverage') setLeverageError(null);
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === 'routingMode') {
+        const canonical = bookTypeForRoutingMode(value);
+        if (canonical) next.bookType = canonical;
+      }
+      return next;
+    });
+  };
 
   const symbolRows = useMemo(
     () => (overridesView ? overridesView.rows.map((row) => applyStagedOverride(row, stagedOverrides)) : []),
@@ -104,6 +130,14 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
   const handleSave = async () => {
     if (!canManageGroups) { setPermissionDenied(true); return; }
+    if (group.isNew) {
+      const leverageCheck = resolveCreateLeverage({ leverage: form.leverage, parentGroup: form.parentGroup, leverageTouched: true });
+      if (leverageCheck.error) {
+        setLeverageError(leverageCheck.error);
+        setTab('Margin');
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -197,9 +231,15 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                   <span>Leverage:</span>
                   <div className="groups-props-inline">
                     <span className="groups-props-prefix">1 :</span>
-                    <input className="ui-input ui-input-sm groups-props-number" type="number" min="0" step="1" aria-label="Leverage" value={numberValue(form.leverage)} onChange={(event) => update('leverage', toNumber(event.target.value))} />
+                    <input className="ui-input ui-input-sm groups-props-number" type="number" min="0" step="1" aria-label="Leverage" value={numberValue(form.leverage)} onChange={(event) => update('leverage', isNewGroup && event.target.value === '' ? '' : toNumber(event.target.value))} />
                   </div>
                 </label>
+                {leverageError && (
+                  <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{leverageError}</span></div>
+                )}
+                {isNewGroup && leverageDefaultMissing && isBlankLeverage(form.leverage) && !leverageError && (
+                  <p className="group-create-note">{GROUP_LEVERAGE_NO_DEFAULT_HINT}</p>
+                )}
               </div>
             </div>
           )}
