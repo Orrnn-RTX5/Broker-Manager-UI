@@ -108,7 +108,8 @@ const AccountTradeTab = ({
   // Fail-closed: empty symbol stays empty (no invented fallback) and gates
   // modify/close actions. Generic for all symbols; no symbol source invented here.
   const hasTradeSymbol = Boolean(String(modalSymbol || '').trim());
-  const canUpdateTrade = Boolean(selectedTicketRow) && hasTradeSymbol && (stopsChanged || volumeChanged) && canManipulateTrades && !isUpdatingTrade && !isPlacingTrade;
+  const hasTradeTicket = Boolean(selectedTicketRow?.position || selectedTicketRow?.ticket);
+  const canUpdateTrade = Boolean(selectedTicketRow) && hasTradeTicket && hasTradeSymbol && (stopsChanged || volumeChanged) && canManipulateTrades && !isUpdatingTrade && !isPlacingTrade;
   useEffect(() => {
     onUpdateState?.({ canUpdate: canUpdateTrade, busy: isUpdatingTrade || isPlacingTrade });
   }, [canUpdateTrade, isUpdatingTrade, isPlacingTrade, onUpdateState]);
@@ -128,6 +129,7 @@ const AccountTradeTab = ({
   useEffect(() => {
     isAutoPipTrackRef.current = isAutoPipTrack;
   }, [isAutoPipTrack]);
+  const lastSyncedRowRef = useRef({});
 
   const digits = getSymbolDigits(modalSymbol);
   const pipMultiplier = getPipMultiplier(digits);
@@ -138,32 +140,76 @@ const AccountTradeTab = ({
   // (overlayRows) rebuilds the row identity on every live tick, which used to
   // wipe in-progress SL/TP edits within ~250ms so Modify never enabled. Only
   // an actual change of ticket/values resets the edit fields.
+  // Numeric deps are Number()-normalized so HTTP-number vs WS-string forms
+  // (e.g. 1.1 vs "1.1") compare equal and never resync/wipe edits. Symbol and
+  // comment are tracked so server-only changes resync their own field, while
+  // field-level guards below keep a comment/symbol/digits-only change from
+  // wiping in-progress SL/TP edits. A digits-only change (manual symbol
+  // switch) preserves edits; formatting follows the row symbol on ticket or
+  // value changes.
   useEffect(() => {
-    if (selectedTicketRow) {
-      if (selectedTicketRow.symbol) {
-        setModalSymbol(selectedTicketRow.symbol);
-      }
-      setTradeSL(
-        selectedTicketRow.priceSl
-          ? Number(selectedTicketRow.priceSl).toFixed(digits)
-          : (0).toFixed(digits)
-      );
-      setTradeTP(
-        selectedTicketRow.priceTp
-          ? Number(selectedTicketRow.priceTp).toFixed(digits)
-          : (0).toFixed(digits)
-      );
-      if (selectedTicketRow.volume || selectedTicketRow.lots) {
+    if (!selectedTicketRow) {
+      lastSyncedRowRef.current = {};
+      return;
+    }
+    const ticket = selectedTicketRow.position ?? selectedTicketRow.ticket;
+    const ticketKey = String(ticket ?? '');
+    const prev = lastSyncedRowRef.current || {};
+    const ticketChanged = ticketKey !== prev.ticketKey;
+    const rowSymbol = selectedTicketRow.symbol ?? '';
+    const rowComment = selectedTicketRow.comment ?? '';
+    const rowSl = Number(selectedTicketRow.priceSl ?? 0);
+    const rowTp = Number(selectedTicketRow.priceTp ?? 0);
+    const rowVolRaw = selectedTicketRow.volume ?? selectedTicketRow.lots;
+    const rowVol = Number(rowVolRaw ?? 0);
+    // Fail-closed symbol: follow the row exactly and clear on empty so a
+    // sparse row never inherits the prior real symbol (stale-symbol bypass).
+    if (ticketChanged || rowSymbol !== prev.symbol) {
+      setModalSymbol(rowSymbol || '');
+    }
+    // Formatting follows the row symbol so a ticket switch formats correctly
+    // even before modalSymbol state settles.
+    const formatDigits = rowSymbol ? getSymbolDigits(rowSymbol) : digits;
+    if (ticketChanged || rowSl !== prev.sl) {
+      setTradeSL(Number.isFinite(rowSl) ? rowSl.toFixed(formatDigits) : (0).toFixed(formatDigits));
+    }
+    if (ticketChanged || rowTp !== prev.tp) {
+      setTradeTP(Number.isFinite(rowTp) ? rowTp.toFixed(formatDigits) : (0).toFixed(formatDigits));
+    }
+    // Sparse rows reset to defaults on ticket change instead of carrying over
+    // the prior ticket's volume/comment; same-ticket updates only touch the
+    // field whose server value actually moved.
+    if (ticketChanged) {
+      if (rowVolRaw || rowVol) {
         setTradeVolume(String(selectedTicketRow.volume || selectedTicketRow.lots));
+      } else {
+        setTradeVolume('0.01');
       }
-      if (selectedTicketRow.comment) {
-        setTradeComment(String(selectedTicketRow.comment));
+      setTradeComment(rowComment ? String(rowComment) : '');
+    } else {
+      if (rowVol !== prev.vol) {
+        if (rowVolRaw || rowVol) {
+          setTradeVolume(String(selectedTicketRow.volume || selectedTicketRow.lots));
+        } else {
+          setTradeVolume('0.01');
+        }
+      }
+      if (rowComment !== prev.comment) {
+        setTradeComment(rowComment ? String(rowComment) : '');
       }
     }
+    lastSyncedRowRef.current = {
+      ticketKey,
+      symbol: rowSymbol,
+      comment: rowComment,
+      sl: rowSl,
+      tp: rowTp,
+      vol: rowVol,
+    };
   // Intentionally narrowed: exhaustive-deps cannot see that the row object
   // identity churns on every live tick, so the object itself must stay out.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTicketRow?.position ?? selectedTicketRow?.ticket, selectedTicketRow?.priceSl, selectedTicketRow?.priceTp, selectedTicketRow?.volume ?? selectedTicketRow?.lots, digits]);
+  }, [Number(selectedTicketRow?.position ?? selectedTicketRow?.ticket ?? 0), Number(selectedTicketRow?.priceSl ?? 0), Number(selectedTicketRow?.priceTp ?? 0), Number(selectedTicketRow?.volume ?? selectedTicketRow?.lots ?? 0), selectedTicketRow?.symbol, selectedTicketRow?.comment, digits]);
 
   // Available symbols list
   const availableSymbols = useMemo(() => {
@@ -207,6 +253,7 @@ const AccountTradeTab = ({
   }, [modalSymbol]);
   // Adjust SL / TP values
   const adjustValue = (setter, amount) => {
+    isAutoPipTrackRef.current = false;
     setIsAutoPipTrack(false);
     setter((prev) => {
       const val = parseFloat(prev);
@@ -255,6 +302,7 @@ const AccountTradeTab = ({
       }
     };
     setIsUpdatingTrade(true);
+    isAutoPipTrackRef.current = false;
     setIsAutoPipTrack(false);
     try {
       if (stopsChanged) {
@@ -749,7 +797,7 @@ const AccountTradeTab = ({
                 <input
                   type="checkbox"
                   checked={isAutoPipTrack}
-                  onChange={(e) => setIsAutoPipTrack(e.target.checked)}
+                  onChange={(e) => { isAutoPipTrackRef.current = e.target.checked; setIsAutoPipTrack(e.target.checked); }}
                   className="rounded bg-[var(--surface-2)] border-[var(--border)] text-blue-500 focus:ring-0 w-3.5 h-3.5"
                 />
                 <span>Auto-track live ticks</span>
@@ -782,6 +830,7 @@ const AccountTradeTab = ({
                   aria-label="Stop loss"
                   onChange={(e) => {
                     setTradeSL(e.target.value);
+                    isAutoPipTrackRef.current = false;
                     setIsAutoPipTrack(false);
                   }}
                   className="flex-1 h-full text-center font-mono text-[12px] font-bold text-white bg-transparent focus:outline-none"
@@ -836,6 +885,7 @@ const AccountTradeTab = ({
                   aria-label="Take profit"
                   onChange={(e) => {
                     setTradeTP(e.target.value);
+                    isAutoPipTrackRef.current = false;
                     setIsAutoPipTrack(false);
                   }}
                   className="flex-1 h-full text-center font-mono text-[12px] font-bold text-white bg-transparent focus:outline-none"
@@ -915,8 +965,8 @@ const AccountTradeTab = ({
             <button
               type="button"
               onClick={() => handlePlaceTrade('sell')}
-              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades}
-              title={selectedTicketRow ? 'Clear the selected position to place a new order' : 'Place SELL market order'}
+              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol}
+              title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : 'Place SELL market order')}
               className="bg-blue-500/10 border border-blue-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-blue-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="text-[10px] font-extrabold text-blue-400 uppercase tracking-wider mb-0.5">
@@ -929,8 +979,8 @@ const AccountTradeTab = ({
             <button
               type="button"
               onClick={() => handlePlaceTrade('buy')}
-              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades}
-              title={selectedTicketRow ? 'Clear the selected position to place a new order' : 'Place BUY market order'}
+              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol}
+              title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : 'Place BUY market order')}
               className="bg-red-500/10 border border-red-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-red-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="text-[10px] font-extrabold text-red-400 uppercase tracking-wider mb-0.5">

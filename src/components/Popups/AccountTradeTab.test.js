@@ -227,6 +227,11 @@ test('missing rows keep every real sync dep readable so the guard holds', () => 
     values.forEach((value, index) => {
       if (index === digitsIndex) {
         assert.equal(value, EURUSD_DIGITS, 'digits dep never depends on the row');
+      } else if (deps[index].includes('Number(')) {
+        // HOLD-2 intentional change: Number()-normalized numeric deps read 0
+        // (not undefined) for a missing row so HTTP-number vs WS-string forms
+        // compare equal and never flap/resync. Symbol/comment stay undefined.
+        assert.equal(value, 0, 'Number-normalized numeric dep must read 0 for an ' + label + ' row (' + deps[index] + ')');
       } else {
         assert.equal(value, undefined, 'row-derived dep must read undefined for an ' + label + ' row (' + deps[index] + ')');
       }
@@ -234,9 +239,10 @@ test('missing rows keep every real sync dep readable so the guard holds', () => 
   }
   const start = tabSource.indexOf(SYNC_ANCHOR);
   const end = tabSource.indexOf(NEXT_SECTION, start);
+  const syncBlock = tabSource.slice(start, end);
   assert.ok(
-    tabSource.slice(start, end).includes('if (selectedTicketRow)'),
-    'the sync effect must guard its body against a missing selected row'
+    syncBlock.includes('if (selectedTicketRow)') || syncBlock.includes('if (!selectedTicketRow)'),
+    'the sync effect must guard its body against a missing selected row (early-return on empty is the HOLD-1/3 fail-closed form)'
   );
   const fresh = new LiveTradingState();
   assert.deepEqual(fresh.overlayRows([]), [], 'the real overlay maps no rows to no rows');
@@ -348,4 +354,229 @@ test('symbol list invents no symbols: built only from live sources', () => {
   assert.ok(listBlock.includes('modalSymbol'), 'symbol list must include the current symbol');
   assert.ok(listBlock.includes('positions'), 'symbol list must include open-position symbols');
   assert.ok(listBlock.includes('storeSymbols'), 'symbol list must include live-feed symbols');
+});
+
+// HOLD-1 stale-symbol bypass: an empty-symbol row must clear modalSymbol so it
+// cannot inherit the prior real symbol and defeat hasTradeSymbol. Asserts the
+// REAL sync effect body (never mirrored logic) plus the REAL overlay path for
+// a sparse empty-symbol row and the REAL hasTradeSymbol gate.
+test('HOLD-1 empty-symbol row clears modalSymbol instead of inheriting the prior symbol', () => {
+  const start = tabSource.indexOf(SYNC_ANCHOR);
+  const end = tabSource.indexOf(NEXT_SECTION, start);
+  assert.ok(start !== -1 && end > start, 'sync effect block must exist');
+  const block = tabSource.slice(start, end);
+  assert.ok(!block.includes('if (selectedTicketRow.symbol)'), 'vulnerable guarded-only symbol set must be gone');
+  assert.ok(block.includes('setModalSymbol(rowSymbol'), 'symbol must follow the row exactly');
+  assert.ok(block.includes("|| ''"), 'empty row symbol must clear to empty (fail-closed, no inheritance)');
+  assert.ok(block.includes('ticketChanged || rowSymbol'), 'symbol resync must fire on ticket change or server symbol change');
+  // REAL sparse row through the REAL overlay: no live entry, so the empty
+  // symbol passes through untouched (the exact bypass condition).
+  const fresh = new LiveTradingState();
+  const sparse = fresh.overlayRows([{ ...snapshotRow(), symbol: '' }])[0];
+  assert.equal(sparse.symbol, '', 'sparse empty-symbol row must reach the tab as empty');
+  // REAL gate: the cleared empty symbol must fail closed.
+  const gateAt = tabSource.indexOf('const hasTradeSymbol');
+  const gateLine = tabSource.slice(gateAt, tabSource.indexOf('\n', gateAt));
+  const initExpr = gateLine.slice(gateLine.indexOf('=') + 1).replace(/;[\s\S]*$/, '').trim();
+  const evalGate = (symbol) => new Function('modalSymbol', 'return (' + initExpr + ');')(symbol);
+  assert.equal(evalGate(''), false, 'cleared empty symbol must fail the trade gate');
+  assert.equal(evalGate(sparse.symbol), false, 'sparse-row symbol must fail the trade gate');
+});
+
+// HOLD-2 raw-type flap: Number()-normalized numeric deps must treat
+// HTTP-number vs WS-string forms as identical so edits are never wiped.
+test('HOLD-2 Number-normalized deps ignore HTTP-number vs WS-string type flaps', () => {
+  const deps = readSyncEffectDeps();
+  for (const fragment of ['priceSl', 'priceTp', 'volume']) {
+    const dep = deps.find((d) => d.includes(fragment));
+    assert.ok(dep, 'numeric dep must exist for ' + fragment);
+    assert.ok(dep.includes('Number(') && dep.includes('?? 0'), 'numeric dep must normalize via Number(x ?? 0): ' + dep);
+  }
+  const ticketDep = deps.find((d) => d.includes('position') && d.includes('ticket'));
+  assert.ok(ticketDep.includes('Number('), 'ticket dep must normalize via Number(): ' + ticketDep);
+  // REAL dep evaluation: same values, different JS types (HTTP number vs
+  // WS string) must leave every sync dep untouched.
+  const asNumbers = { ...snapshotRow(), priceSl: 1.1, priceTp: 1.2, volume: 0.5, position: 42 };
+  const asStrings = { ...snapshotRow(), priceSl: '1.1', priceTp: '1.2', volume: '0.5', position: '42' };
+  const before = syncDepValues(deps, asNumbers, EURUSD_DIGITS);
+  const after = syncDepValues(deps, asStrings, EURUSD_DIGITS);
+  assert.deepEqual(after, before, 'number vs string forms of the same values must evaluate identically');
+  assert.ok(!syncWouldResync(before, after), 'a raw-type flap must not re-run the sync effect (edits survive)');
+});
+
+// HOLD-3 sparse-row carryover: ticket change with missing volume/comment must
+// reset to defaults instead of preserving the prior ticket's values.
+test('HOLD-3 ticket change resets sparse volume/comment to defaults', () => {
+  const start = tabSource.indexOf(SYNC_ANCHOR);
+  const end = tabSource.indexOf(NEXT_SECTION, start);
+  const block = tabSource.slice(start, end);
+  assert.ok(block.includes('ticketChanged'), 'effect must distinguish a ticket change from a same-ticket update');
+  assert.ok(block.includes("setTradeVolume('0.01')"), 'sparse volume must reset to the 0.01 default');
+  assert.ok(block.includes('setTradeComment(rowComment'), 'comment must follow the row with an empty default');
+  // REAL dep evaluation: a missing volume/comment reads as the normalized
+  // default, which differs from a real value so the reset path fires.
+  const deps = readSyncEffectDeps();
+  const full = { ...snapshotRow(), volume: 0.5, comment: 'first' };
+  const sparse = { ...snapshotRow(), position: 43 };
+  delete sparse.volume;
+  delete sparse.comment;
+  const before = syncDepValues(deps, full, EURUSD_DIGITS);
+  const after = syncDepValues(deps, sparse, EURUSD_DIGITS);
+  assert.ok(syncWouldResync(before, after), 'switching to a sparse ticket must re-run the sync effect for a reset');
+  // REAL overlay: a sparse row without live data passes through missing its
+  // fields (the exact carryover condition the defaults guard against).
+  const fresh = new LiveTradingState();
+  const orphan = fresh.overlayRows([{ login: '1001', position: 99 }])[0];
+  assert.equal(orphan.volume ?? orphan.lots, undefined, 'sparse row carries no volume through the real overlay');
+  assert.equal(orphan.comment, undefined, 'sparse row carries no comment through the real overlay');
+});
+
+// HOLD-4 auto-track ref race: manual edit/adjust handlers must clear the ref
+// synchronously, not one render later via the mirror effect.
+test('HOLD-4 manual edits clear isAutoPipTrackRef synchronously', () => {
+  const mirrorAt = tabSource.indexOf('const isAutoPipTrackRef');
+  assert.ok(mirrorAt !== -1, 'auto-track ref must exist');
+  const refSyncs = tabSource.split('isAutoPipTrackRef.current = false').length - 1;
+  assert.ok(refSyncs >= 4, 'manual paths (adjust + SL/TP edits + update) must clear the ref synchronously, found ' + refSyncs);
+  assert.ok(tabSource.includes('isAutoPipTrackRef.current = e.target.checked'), 'checkbox must mirror synchronously both ways');
+  const adjustAt = tabSource.indexOf('const adjustValue');
+  const adjustWindow = tabSource.slice(adjustAt, adjustAt + 300);
+  assert.ok(
+    adjustWindow.indexOf('isAutoPipTrackRef.current = false') !== -1 &&
+    adjustWindow.indexOf('isAutoPipTrackRef.current = false') < adjustWindow.indexOf('setIsAutoPipTrack(false)'),
+    'adjustValue must clear the ref before queueing state (synchronous, no one-render race)'
+  );
+  const slInput = tabSource.indexOf('aria-label="Stop loss"');
+  const slWindow = tabSource.slice(slInput, slInput + 400);
+  assert.ok(slWindow.includes('isAutoPipTrackRef.current = false'), 'SL manual edit must clear the ref synchronously');
+  const tpInput = tabSource.indexOf('aria-label="Take profit"');
+  const tpWindow = tabSource.slice(tpInput, tpInput + 400);
+  assert.ok(tpWindow.includes('isAutoPipTrackRef.current = false'), 'TP manual edit must clear the ref synchronously');
+  // REAL tick condition: live ticks rebuild rows every tick, so a one-render
+  // ref delay would let one auto-track write win after the manual edit.
+  const state = new LiveTradingState();
+  ingestSnapshot(state);
+  state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 10, profit: 3 }));
+  const first = state.overlayRows([snapshotRow()])[0];
+  state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 11, profit: 4 }));
+  const second = state.overlayRows([snapshotRow()])[0];
+  assert.notEqual(first, second, 'live ticks keep arriving while the user edits (race window is real)');
+});
+
+// HOLD-5 digits-driven wipe: a digits-only change (manual symbol switch with
+// the same ticket/values) must preserve in-progress edits via field guards.
+test('HOLD-5 digits-only change preserves in-progress edits via field guards', () => {
+  const deps = readSyncEffectDeps();
+  const start = tabSource.indexOf(SYNC_ANCHOR);
+  const end = tabSource.indexOf(NEXT_SECTION, start);
+  const block = tabSource.slice(start, end);
+  assert.ok(block.includes('ticketChanged || rowSl !== prev.sl'), 'SL must only resync on ticket or server-SL change');
+  assert.ok(block.includes('ticketChanged || rowTp !== prev.tp'), 'TP must only resync on ticket or server-TP change');
+  assert.ok(block.includes('if (ticketChanged || rowSymbol'), 'symbol path must be guarded, never unconditional');
+  // REAL dep evaluation on REAL overlay rows: identical ticket/values with a
+  // fresh identity per tick keep every row-derived dep stable; only the
+  // digits slot moves, and the guards above ensure that move wipes nothing.
+  const state = new LiveTradingState();
+  ingestSnapshot(state);
+  state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 10, profit: 3 }));
+  const first = state.overlayRows([snapshotRow()])[0];
+  state.ingest(frame({ update_kind: 'pnl', state_version: '1', price_time_msc: 11, profit: 4 }));
+  const second = state.overlayRows([snapshotRow()])[0];
+  const before = syncDepValues(deps, first, EURUSD_DIGITS);
+  const afterSameDigits = syncDepValues(deps, second, EURUSD_DIGITS);
+  assert.deepEqual(afterSameDigits, before, 'identical ticks leave every sync dep untouched');
+  const afterDigitsFlip = syncDepValues(deps, second, 3);
+  const digitsIndex = deps.findIndex((dep) => dep.trim() === 'digits');
+  before.forEach((value, index) => {
+    if (index === digitsIndex) return;
+    assert.ok(Object.is(value, afterDigitsFlip[index]), 'only the digits dep may move on a digits-only change (slot ' + index + ': ' + deps[index] + ')');
+  });
+  assert.ok(!Object.is(before[digitsIndex], afterDigitsFlip[digitsIndex]), 'digits-only change moves only the digits dep');
+});
+
+// HOLD-6 missing symbol/comment deps + cross-field wipe: server-only comment
+// or symbol changes must resync their own field without wiping SL/TP edits.
+test('HOLD-6 comment/symbol-only server changes resync without wiping SL/TP', () => {
+  const deps = readSyncEffectDeps();
+  assert.ok(deps.some((dep) => dep.includes('?.symbol')), 'sync effect must track the symbol primitive');
+  assert.ok(deps.some((dep) => dep.includes('?.comment')), 'sync effect must track the comment primitive');
+  const start = tabSource.indexOf(SYNC_ANCHOR);
+  const end = tabSource.indexOf(NEXT_SECTION, start);
+  const block = tabSource.slice(start, end);
+  assert.ok(block.includes('if (rowComment !== prev.comment)'), 'comment-only change must touch only the comment field');
+  assert.ok(block.includes('if (ticketChanged || rowSl !== prev.sl)'), 'comment/symbol-only change must not touch SL');
+  assert.ok(block.includes('if (ticketChanged || rowTp !== prev.tp)'), 'comment/symbol-only change must not touch TP');
+  // REAL server-only comment change through the REAL LiveTradingState path:
+  // only the comment dep may move; SL/TP/volume/ticket/symbol stay stable.
+  const state = new LiveTradingState();
+  ingestSnapshot(state, { comment: 'first' });
+  const beforeRow = state.overlayRows([{ ...snapshotRow(), comment: 'first' }])[0];
+  assert.equal(beforeRow.comment, 'first', 'first comment must flow through the real overlay');
+  state.ingest(frame({ update_kind: 'snapshot', state_version: '2', sl: 1.1, tp: 1.2, lots: 0.5, symbol: 'EURUSD', side: 'buy', comment: 'second', price_time_msc: 20 }));
+  const afterRow = state.overlayRows([{ ...snapshotRow(), comment: 'second' }])[0];
+  assert.equal(afterRow.comment, 'second', 'updated comment must flow through the real overlay');
+  assert.equal(afterRow.priceSl, 1.1, 'SL must be preserved alongside the comment change');
+  assert.equal(afterRow.priceTp, 1.2, 'TP must be preserved alongside the comment change');
+  const before = syncDepValues(deps, beforeRow, EURUSD_DIGITS);
+  const after = syncDepValues(deps, afterRow, EURUSD_DIGITS);
+  const commentIndex = deps.findIndex((dep) => dep.includes('?.comment'));
+  assert.ok(!Object.is(before[commentIndex], after[commentIndex]), 'a comment-only change must move the comment dep');
+  before.forEach((value, index) => {
+    if (index === commentIndex) return;
+    assert.ok(Object.is(value, after[index]), 'only the comment dep may move on a comment-only change (slot ' + index + ': ' + deps[index] + ')');
+  });
+  // REAL symbol-only evaluation: same ticket/values, different symbol moves
+  // only the symbol dep, so SL/TP guards hold it without wiping.
+  const symBefore = syncDepValues(deps, { ...snapshotRow(), symbol: 'EURUSD' }, EURUSD_DIGITS);
+  const symAfter = syncDepValues(deps, { ...snapshotRow(), symbol: 'TESTSYM' }, EURUSD_DIGITS);
+  const symbolIndex = deps.findIndex((dep) => dep.includes('?.symbol'));
+  assert.ok(!Object.is(symBefore[symbolIndex], symAfter[symbolIndex]), 'a symbol-only change must move the symbol dep');
+  symBefore.forEach((value, index) => {
+    if (index === symbolIndex) return;
+    if (deps[index].trim() === 'digits') return;
+    assert.ok(Object.is(value, symAfter[index]), 'only the symbol dep may move on a symbol-only change (slot ' + index + ': ' + deps[index] + ')');
+  });
+});
+
+// HOLD-7 canUpdateTrade ticket check: Modify must stay disabled without a
+// ticket (fail-open button becomes fail-closed).
+test('HOLD-7 modify enablement requires a ticket', () => {
+  const ticketAt = tabSource.indexOf('const hasTradeTicket');
+  assert.ok(ticketAt !== -1, 'a ticket gate must exist');
+  const ticketLine = tabSource.slice(ticketAt, tabSource.indexOf('\n', ticketAt));
+  assert.ok(ticketLine.includes('position') && ticketLine.includes('ticket'), 'ticket gate must cover position/ticket identity');
+  const updateAt = tabSource.indexOf('const canUpdateTrade');
+  assert.ok(updateAt !== -1, 'the real modify enablement path must exist');
+  const updateLine = tabSource.slice(updateAt, tabSource.indexOf('\n', updateAt));
+  assert.ok(updateLine.includes('hasTradeTicket'), 'modify enablement must gate on a ticket (fail-closed)');
+  assert.ok(updateLine.includes('hasTradeSymbol'), 'modify enablement must keep the symbol gate');
+  // Evaluate the REAL ticket gate expression (never a reimplementation).
+  const initExpr = ticketLine.slice(ticketLine.indexOf('=') + 1).replace(/;[\s\S]*$/, '').trim();
+  const evalTicket = (row) => new Function('selectedTicketRow', 'return (' + initExpr + ');')(row);
+  assert.equal(evalTicket({ position: 42, ticket: 42 }), true, 'a row with a ticket must pass');
+  assert.equal(evalTicket({ ticket: 43 }), true, 'a ticket-only row must pass');
+  assert.equal(evalTicket({ position: 42 }), true, 'a position-only row must pass');
+  assert.equal(evalTicket({}), false, 'a ticketless row must fail closed');
+  assert.equal(evalTicket(null), false, 'a null row must fail closed');
+  assert.equal(evalTicket(undefined), false, 'a missing row must fail closed');
+  assert.ok(tabSource.includes('disabled={!canUpdateTrade}'), 'Modify button must stay bound to the gated flag');
+});
+
+// HOLD-8 BUY/SELL buttons: disabled on empty symbol with a reasoned title so
+// they cannot error-toast in a loop.
+test('HOLD-8 BUY/SELL disable on empty symbol with a reasoned title', () => {
+  for (const op of ['sell', 'buy']) {
+    const callAt = tabSource.indexOf("handlePlaceTrade('" + op + "')");
+    assert.ok(callAt !== -1, 'the real ' + op.toUpperCase() + ' call site must exist');
+    const window = tabSource.slice(Math.max(0, callAt - 500), callAt + 600);
+    assert.ok(window.includes('!hasTradeSymbol'), op.toUpperCase() + ' button must disable on empty symbol');
+    assert.ok(window.includes('Select a symbol before placing an order'), op.toUpperCase() + ' button must explain the empty-symbol disablement');
+  }
+  // REAL gate: empty symbols disable, a real symbol enables (row/gating path).
+  const gateAt = tabSource.indexOf('const hasTradeSymbol');
+  const gateLine = tabSource.slice(gateAt, tabSource.indexOf('\n', gateAt));
+  const initExpr = gateLine.slice(gateLine.indexOf('=') + 1).replace(/;[\s\S]*$/, '').trim();
+  const evalGate = (symbol) => new Function('modalSymbol', 'return (' + initExpr + ');')(symbol);
+  assert.equal(evalGate(''), false, 'empty symbol must disable BUY/SELL');
+  assert.equal(evalGate('TESTSYM'), true, 'a real symbol must enable BUY/SELL (other gates permitting)');
 });
