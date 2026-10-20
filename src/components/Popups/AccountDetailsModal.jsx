@@ -39,6 +39,7 @@ import {
   getManagerTransactionOptions,
   getManagerTransactionPendingLabel,
   getManagerTransactionPendingNoun,
+  isTransferType,
   resolveManagerTransactionType,
   resolveTransferDestination,
 } from './accountFinanceOps.js';
@@ -1704,7 +1705,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                       />
                     </div>
 
-                    {transactionType === 'transfer' && (
+                    {isTransferType(transactionType) && (
                       <div className="flex flex-col gap-1.5">
                         <label htmlFor="transaction-to-login" className="text-[11px] font-normal">To login *</label>
                         <input

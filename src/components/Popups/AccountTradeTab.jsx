@@ -660,6 +660,11 @@ const AccountTradeTab = ({
                 }}
                 className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-white font-bold text-[12px] font-mono focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
               >
+                {availableSymbols.length === 0 && (
+                  <option value="" disabled>
+                    Select symbol…
+                  </option>
+                )}
                 {availableSymbols.map((sym) => (
                   <option key={sym} value={sym}>
                     {sym}

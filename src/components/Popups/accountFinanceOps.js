@@ -104,9 +104,6 @@ export function resolveTransferDestination(value, fromLogin) {
     throw new TypeError(`Invalid transfer destination login: ${String(value)} must be a positive integer.`);
   }
   if (typeof raw === 'string' && !/^\d+$/.test(raw)) {
-    if (raw === '') {
-      throw new TypeError('Transfer destination login is required.');
-    }
     throw new TypeError(`Invalid transfer destination login: ${String(value)} must be a positive integer.`);
   }
   const num = typeof raw === 'number' ? raw : Number(raw);
