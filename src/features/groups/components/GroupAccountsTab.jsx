@@ -4,6 +4,8 @@ import { Loader2, RefreshCw, Search, Users } from 'lucide-react';
 import { getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
 import { updateManagerAccount } from '../../../services/managerAccountApi.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../groupAccountRows.js';
+import { applyGroupLeverage, buildApplyConfirmCopy } from './groupLeverageApply.js';
+import DepositDialog from '../../../components/Popups/DepositDialog.jsx';
 
 // Lists the trading accounts that belong to one group, from the shared account list.
 // Viewing this tab never writes to accounts: opening, rendering, refreshing,
@@ -11,24 +13,6 @@ import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../gr
 // member accounts happens solely through the explicit "Apply group leverage"
 // button below, which asks for confirmation first and then reports
 // succeeded/failed counts. There is intentionally no effect that writes.
-export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount }) => {
-  const leverage = readLeverageRatio({ leverage: groupLeverage });
-  if (!confirm || !leverage || typeof updateAccount !== 'function') {
-    return { succeeded: 0, failed: 0, total: 0 };
-  }
-  const stale = (members || []).filter((member) => readLeverageRatio(member) !== leverage);
-  let succeeded = 0;
-  let failed = 0;
-  for (const member of stale) {
-    try {
-      await updateAccount(member.login, { Leverage: leverage });
-      succeeded += 1;
-    } catch {
-      failed += 1;
-    }
-  }
-  return { succeeded, failed, total: stale.length };
-};
 
 const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const queryClient = useQueryClient();
@@ -134,19 +118,19 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         </button>
       </div>
       {applyMessage && <p className="groups-props-empty" role="status">{applyMessage}</p>}
-      {confirmOpen && (
-        <div role="presentation" style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.45)', zIndex: 60 }}>
-          <div role="alertdialog" aria-modal="true" aria-label="Apply group leverage" aria-describedby="groups-apply-desc" style={{ maxWidth: 420, padding: 16, borderRadius: 8, background: 'var(--surface, #fff)' }}>
-            <p id="groups-apply-desc" className="groups-props-empty">
-              {`Apply group leverage 1 : ${groupRatio} to ${rows.length} accounts? Only accounts with a different leverage will be updated.`}
-            </p>
-            <div className="groups-props-inline">
-              <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleConfirmApply}>Apply</button>
-              <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setConfirmOpen(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmOpen && (() => {
+        const copy = buildApplyConfirmCopy({ groupRatio, count: rows.length });
+        return (
+          <DepositDialog
+            status="confirm"
+            title={copy.title}
+            message={copy.message}
+            confirmLabel={copy.confirmLabel}
+            onConfirm={handleConfirmApply}
+            onDismiss={() => setConfirmOpen(false)}
+          />
+        );
+      })()}
       {error && (
         <div className="groups-props-error" role="alert">
           <span>{error.message || 'Failed to load accounts.'}</span>

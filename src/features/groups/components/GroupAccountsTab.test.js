@@ -53,7 +53,7 @@ const stubAccounts = () => ([
   { login: '900004', Name: 'Fixture Outsider', group: 'Fixture/Other', leverage: 200, balance: 7, equity: 7 },
 ]);
 
-const cacheDir = join(nodeModulesDir, '.cache', `sui-m1-tab-${process.pid}`);
+const cacheDir = join(nodeModulesDir, '.cache', `sui-m1-tab-${Date.now()}-${Math.floor(Math.random() * 1000000)}`);
 mkdirSync(cacheDir, { recursive: true });
 
 const stubDir = cacheDir;
@@ -94,6 +94,22 @@ export const getSidebarAccountsQueryOptions = (search = '') => ({
   staleTime: 5 * 60 * 1000,
 });
 `);
+// Shared confirm dialog: the real DepositDialog pulls in a CSS import that
+// plain node cannot load, so it is redirected to a stub that renders the
+// exact props it receives (the dialog only appears after an explicit click,
+// never on mount, so mount assertions are unaffected; prop-passing is).
+writeFileSync(join(stubDir, 'depositDialog.stub.mjs'), `
+import { createElement as h } from 'react';
+export default function DepositDialog({ status, title, message, confirmLabel, onConfirm, onDismiss }) {
+  return h('div', {
+    className: 'deposit-dialog-stub',
+    'data-status': status,
+    'data-title': title,
+    'data-message': message,
+    'data-confirm-label': confirmLabel,
+  });
+}
+`);
 // Compile the REAL tab: JSX syntax transform only, then point its imports at
 // the real row mapper and at the stubs above.
 const compiled = transformSync(readFileSync(join(here, 'GroupAccountsTab.jsx'), 'utf8'), {
@@ -103,13 +119,17 @@ const compiled = transformSync(readFileSync(join(here, 'GroupAccountsTab.jsx'), 
   .replaceAll('../../../services/managerAccountApi.js', fileUrl(join(stubDir, 'managerAccountApi.stub.mjs')))
   .replaceAll('../../../services/sidebarAccounts.js', fileUrl(join(stubDir, 'sidebarAccounts.stub.mjs')))
   .replaceAll('../groupAccountRows.js', fileUrl(join(here, '..', 'groupAccountRows.js')))
+  .replaceAll('./groupLeverageApply.js', fileUrl(join(here, 'groupLeverageApply.js')))
+  .replaceAll('../../../components/Popups/DepositDialog.jsx', fileUrl(join(stubDir, 'depositDialog.stub.mjs')))
   .replaceAll('@tanstack/react-query', fileUrl(join(stubDir, 'reactQuery.stub.mjs')));
 writeFileSync(join(cacheDir, 'GroupAccountsTab.compiled.mjs'), compiled);
 
 const tabModule = await import(fileUrl(join(cacheDir, 'GroupAccountsTab.compiled.mjs')));
 const updateStub = await import(fileUrl(join(stubDir, 'managerAccountApi.stub.mjs')));
+// The apply flow lives in its own plain-.js module (no JSX/CSS), so the test
+// imports the REAL helpers directly — no transform, no mirror.
+const { applyGroupLeverage, buildApplyConfirmCopy } = await import('./groupLeverageApply.js');
 const GroupAccountsTab = tabModule.default;
-const { applyGroupLeverage } = tabModule;
 
 after(() => {
   rmSync(cacheDir, { recursive: true, force: true });
@@ -127,6 +147,7 @@ test('react-dom/server renders the real tab component', () => {
   assert.equal(typeof renderToString, 'function', 'react-dom/server must be available');
   assert.equal(typeof GroupAccountsTab, 'function', 'the real tab component must load');
   assert.equal(typeof applyGroupLeverage, 'function', 'the real apply flow must be exported');
+  assert.equal(typeof buildApplyConfirmCopy, 'function', 'the real confirm copy must be exported');
 });
 
 test('(a) RENDER: member rows render, Apply button shows the count, zero update calls', () => {
@@ -149,9 +170,19 @@ test('(a) RENDER: no confirm dialog on mount, remount is write-free', () => {
   const first = renderTab();
   assert.ok(!first.includes('role="alertdialog"'), 'mount must not show any confirm dialog');
   assert.ok(!first.includes('groups-apply-desc'), 'mount must not render confirm copy');
+  assert.ok(!first.includes('deposit-dialog'), 'mount must not render the shared confirm dialog');
   const second = renderTab();
   assert.ok(second.includes('Apply group leverage to 3 accounts'), 'remount must render the same Apply button');
   assert.equal(updateStub.calls.length, 0, 'mounting and remounting must perform zero account updates');
+});
+
+test('(c) CONFIRM COPY: shared-dialog props carry the count and ratio', () => {
+  const copy = buildApplyConfirmCopy({ groupRatio: 200, count: 3 });
+  assert.deepEqual(copy, {
+    title: 'Apply group leverage',
+    message: 'Apply group leverage 1 : 200 to 3 accounts? Only accounts with a different leverage will be updated.',
+    confirmLabel: 'Apply',
+  });
 });
 
 test('(b) button path: confirm=false performs zero updates', async () => {
