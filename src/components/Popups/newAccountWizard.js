@@ -181,6 +181,113 @@ export const inheritGroupSettings = ({ groups, groupName, leverageTouched, curre
 };
 
 /**
+ * Literal Currency <select> fallback: the exact generic option set the modal
+ * rendered before UI-3b. Used ONLY when the groups union below is empty (no
+ * group reports a currency). Generic ISO-style codes, no tenant meaning.
+ */
+export const CURRENCY_FALLBACK_OPTIONS = Object.freeze([
+  'USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY',
+]);
+
+const GROUP_CURRENCY_LIST_KEYS = ['currencies', 'currencyOptions', 'allowedCurrencies'];
+
+const GROUP_CURRENCY_OBJECT_KEYS = ['code', 'value', 'name', 'label'];
+
+const GROUP_CURRENCY_SINGLE_KEYS = ['currency', 'Currency', 'deposit_currency', 'depositCurrency'];
+
+/**
+ * Normalized currency codes from a backend list value. Strings pass through
+ * normalizeCurrencyCode (trimmed/uppercased, pattern-checked);
+ * {code,value,name,label} objects contribute the first usable string among
+ * those keys (in that order); one nested array level contributes its string
+ * elements. Numbers/booleans/null/deeper containers yield nothing — never
+ * String()-coerced, so a `123` or `true` entry can never become an option. A
+ * non-array value yields [] (fail-closed: never invent entries from a scalar).
+ */
+const currencyCodesFromList = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const pushEntry = (entry) => {
+    if (typeof entry === 'string') {
+      const code = normalizeCurrencyCode(entry);
+      if (code) out.push(code);
+      return;
+    }
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      for (const key of GROUP_CURRENCY_OBJECT_KEYS) {
+        const code = normalizeCurrencyCode(entry[key]);
+        if (code) {
+          out.push(code);
+          break;
+        }
+      }
+    }
+  };
+  for (const entry of raw) {
+    if (Array.isArray(entry)) {
+      for (const nested of entry) pushEntry(nested);
+      continue;
+    }
+    pushEntry(entry);
+  }
+  return out;
+};
+
+/**
+ * A single group record's allowed-currency list
+ * (currencies/currencyOptions/allowedCurrencies — first non-nullish key wins,
+ * mirroring the broker country-list concept), or [] when the record carries
+ * none. Strict strings-only per branch convention (see currencyCodesFromList).
+ */
+export const groupCurrencyListOf = (groupRecord) => {
+  if (!groupRecord || typeof groupRecord !== 'object' || Array.isArray(groupRecord)) return [];
+  let raw;
+  for (const key of GROUP_CURRENCY_LIST_KEYS) {
+    if (groupRecord[key] !== undefined && groupRecord[key] !== null) {
+      raw = groupRecord[key];
+      break;
+    }
+  }
+  return currencyCodesFromList(raw);
+};
+
+/**
+ * Currency options for the wizard's Currency <select>: the UNION of the
+ * groups' allowed/deposit currencies (each row's allowed-currency list plus
+ * its single deposit currency via groupCurrencyOf's keys) — distinct values
+ * in stable first-seen (row) order. Falls back to CURRENCY_FALLBACK_OPTIONS
+ * ONLY when the union is empty. Never preselects: selection stays the
+ * modal's job (resolveDefaultCurrency / inheritGroupSettings).
+ */
+export const currencyOptions = (groups = []) => {
+  const seen = new Set();
+  const out = [];
+  const push = (code) => {
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    out.push(code);
+  };
+  for (const entry of groups || []) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    for (const code of groupCurrencyListOf(entry)) push(code);
+    push(normalizeCurrencyCode(readFirstString(entry, GROUP_CURRENCY_SINGLE_KEYS)));
+  }
+  if (out.length === 0) return [...CURRENCY_FALLBACK_OPTIONS];
+  return out;
+};
+
+/**
+ * Initial Currency for the wizard. Binding product decision (UI-3b): NEVER
+ * preselected — always '' in every case (no group, any group, touched or
+ * not). The placeholder stays until the operator picks explicitly or group
+ * inheritance (inheritGroupSettings) sets a value after an explicit group
+ * pick. The argument is accepted (and ignored) so callers keep a single
+ * explicit seam; nothing is ever derived from it.
+ */
+// eslint-disable-next-line no-unused-vars
+export const resolveDefaultCurrency = ({ groups = [], groupName = '', currencyTouched = false } = {}) => '';
+
+/**
  * Broker-configured country LIST as trimmed names, or [] when the broker
  * config carries none. Reads only the generic broker-list keys (countries,
  * countryOptions, allowedCountries — first non-nullish key wins, mirroring
