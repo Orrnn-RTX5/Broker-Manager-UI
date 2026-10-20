@@ -90,11 +90,11 @@ const { useDealerMenu } = await import(`data:text/javascript;base64,${Buffer.fro
 
 const flush = () => new Promise((resolve) => { setTimeout(resolve, 10); });
 
-const renderMenu = () => {
+const renderMenu = (onRefresh = () => { hookState.refreshed = (hookState.refreshed || 0) + 1; }) => {
   hookState.cursor = 0;
   // Test host drives the real hook outside React; state is stubbed above.
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useDealerMenu(() => { hookState.refreshed = (hookState.refreshed || 0) + 1; });
+  return useDealerMenu(onRefresh);
 };
 
 const flipPosition = () => {
@@ -167,7 +167,9 @@ test('a rejected dealer action surfaces an error to the operator', async () => {
   await flush();
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'error');
-  assert.match(resultCalls[0].args[0], /Error: No price/);
+  // Error feedback is a structured { message, code, status } payload so the
+  // dialog's code field survives (intentional shape change; prefix kept).
+  assert.match(resultCalls[0].args[0].message, /Error: No price/);
   assert.equal(hookState.refreshed, 0);
 });
 
@@ -178,7 +180,9 @@ test('an application-level rejection surfaced to the operator reads as failure',
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'result');
   assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'error');
-  assert.equal(hookState.refreshed, 1);
+  // Error-classified payloads never refresh (intentional change: exec
+  // re-classifies via normalizeResult and treats them like the catch path).
+  assert.equal(hookState.refreshed, 0);
 });
 
 test('a Change Price success surfaces the server result to the operator', async () => {
@@ -202,7 +206,7 @@ test('a Change Price failure surfaces an error to the operator', async () => {
   await flush();
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'error');
-  assert.match(resultCalls[0].args[0], /Error: Invalid price/);
+  assert.match(resultCalls[0].args[0].message, /Error: Invalid price/);
   assert.equal(hookState.refreshed, 0);
 });
 
@@ -228,7 +232,10 @@ test('a Force Close application-level rejection reads as failure', async () => {
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'result');
   assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'error');
-  assert.equal(hookState.refreshed, 1);
+  // Error-classified payloads never refresh and leave the prompt open
+  // (intentional change, matching catch-path semantics).
+  assert.equal(hookState.refreshed, 0);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open on error');
 });
 
 test('an Approve Order success surfaces the server result to the operator', async () => {
@@ -251,7 +258,7 @@ test('a Reject Order failure surfaces an error to the operator', async () => {
   await flush();
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'error');
-  assert.match(resultCalls[0].args[0], /Error: Order reject failed/);
+  assert.match(resultCalls[0].args[0].message, /Error: Order reject failed/);
   assert.equal(hookState.refreshed, 0);
 });
 
@@ -265,5 +272,71 @@ test('a Reject Order application-level rejection reads as failure', async () => 
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'result');
   assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'error');
-  assert.equal(hookState.refreshed, 1);
+  // Error-classified payloads never refresh and leave the prompt open
+  // (intentional change, matching catch-path semantics).
+  assert.equal(hookState.refreshed, 0);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open on error');
+});
+
+test('a text-classified failure payload shows an error with no refresh and the prompt stays open', async () => {
+  // Passes the explicit-flag transport check (success: true, no error
+  // member) but normalizeResult types the wording as error.
+  stubs.positionPriceChange = async () => ({ success: true, message: 'Failed to update price' });
+  submitPositionDialog('Change Price', { new_price: 1.5 });
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'result');
+  assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'error');
+  assert.equal(hookState.refreshed, 0);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open on error');
+});
+
+test('a throwing onRefresh queues a single dialog and still closes the prompt', async () => {
+  stubs.positionPriceChange = async () => ({ success: true, message: 'Price updated' });
+  hookState.cursor = 0;
+  const menu = useDealerMenu(() => { throw new Error('refresh boom'); });
+  const action = menu.getPositionActions({ position: 101, login: '1001', priceOpen: 1.1, volume: 1, priceCurrent: 1.2 }).find((a) => a.text === 'Change Price');
+  action.onClick();
+  const dialog = hookState.slots[0];
+  assert.ok(dialog && typeof dialog.onSubmit === 'function', 'Change Price must open a dialog');
+  dialog.onSubmit({ new_price: 1.5 });
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'success');
+  assert.equal(hookState.slots[0], null, 'prompt must close even when refresh throws');
+});
+
+test('a non-Error throw surfaces a safe message that never renders "Error: undefined"', async () => {
+  stubs.positionFlip = async () => { throw 'boom'; };
+  flipPosition();
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'error');
+  assert.match(resultCalls[0].args[0].message, /Error: boom/);
+  assert.doesNotMatch(resultCalls[0].args[0].message, /undefined/);
+  assert.equal(hookState.refreshed, 0);
+});
+
+test('an empty throw surfaces a safe fallback message', async () => {
+  stubs.positionFlip = async () => { throw undefined; };
+  flipPosition();
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'error');
+  assert.match(resultCalls[0].args[0].message, /Error: Unknown error/);
+  assert.doesNotMatch(resultCalls[0].args[0].message, /undefined/);
+  assert.equal(hookState.refreshed, 0);
+});
+
+test('a transport error preserves its code through the error feedback', async () => {
+  stubs.positionFlip = async () => {
+    throw Object.assign(new Error('No price'), { code: 'MT_RET_ERR_TRADE_TIMEOUT', status: 500 });
+  };
+  flipPosition();
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'error');
+  assert.match(resultCalls[0].args[0].message, /Error: No price/);
+  assert.equal(normalizeResult(resultCalls[0].args[0]).code, 'MT_RET_ERR_TRADE_TIMEOUT');
+  assert.equal(hookState.refreshed, 0);
 });

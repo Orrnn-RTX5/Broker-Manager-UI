@@ -1,4 +1,5 @@
 import { showResult } from '../store/resultDialogStore.js';
+import { normalizeResult } from '../utils/resultMessage.js';
 import { createElement, useState } from 'react';
 import {
   ArrowLeftRight,
@@ -32,20 +33,49 @@ export const useDealerMenu = (onRefresh) => {
   const exec = async (fn) => {
     setLoading(true);
     try {
-      // NOTE (stub-vs-transport split): the real transport throws first —
-      // apiClient.request() runs throwIfErrorPayload before resolving, so a
-      // { success: false } payload never reaches this success path in
-      // production (it lands in catch below, without refresh). showResult
-      // still classifies via normalizeResult (resultDialogStore) as defense
-      // in depth, which is why a unit stub resolving { success: false }
-      // straight into exec() renders as an error dialog yet still refreshes
-      // — stub order differs from transport order.
+      // NOTE (stub-vs-transport split): apiClient.request() runs
+      // throwIfErrorPayload before resolving, so an explicit-flag failure
+      // (e.g. { success: false }, { ok: false }, or an `error` member) never
+      // reaches this success path in production — it lands in catch below,
+      // without refresh and without closing the prompt. That guarantee is
+      // scoped to apiClient.request(): rawRequest returns the raw Response,
+      // responseType 'text' returns plain text early, and fetchManagerJson
+      // (tradeApi, via managerFetch) only throws on HTTP errors, so those
+      // paths bypass the check. Text/regex-classified failures (e.g. a
+      // { success: true } payload whose wording normalizeResult —
+      // utils/resultMessage.js:87 — types as error) DO reach here, so exec
+      // re-classifies via normalizeResult and treats them exactly like the
+      // catch path: show the error with no refresh and no close. Only a
+      // success closes the prompt and refreshes.
       const result = await fn();
+      if (normalizeResult(result).type === 'error') {
+        showResult(result);
+        return;
+      }
       showResult(result);
-      onRefresh?.();
+      try {
+        await onRefresh?.();
+      } catch {
+        // Refresh is best-effort; a throwing onRefresh must neither queue a
+        // second dialog via the catch below nor leave the prompt stuck. The
+        // stale grid self-corrects via polling.
+      }
       setDialog(null);
     } catch (err) {
-      showResult.error(`Error: ${err.message}`);
+      // Non-Error throws (strings, undefined, objects without message) must
+      // never render as "Error: undefined"; the 'Error: ' prefix is kept.
+      const raw = err instanceof Error
+        ? err.message
+        : (typeof err === 'string' ? err : (err?.message ?? (err == null ? undefined : String(err))));
+      const detail = raw || 'Unknown error';
+      // Preserve the code/status throwIfErrorPayload attaches so the
+      // dialog's code field survives (normalizeResult reads code/status off
+      // an object payload).
+      showResult.error({
+        message: `Error: ${detail}`,
+        code: err?.code,
+        status: err?.status,
+      });
     } finally {
       setLoading(false);
     }
