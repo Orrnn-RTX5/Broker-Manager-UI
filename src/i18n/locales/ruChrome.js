@@ -1,10 +1,10 @@
 export default {
   'edit.excelCompatible': 'Совместимо с Excel',
-  'tools.connectedLive': 'Подключено к RTX5-Live', 'tools.feedReconnecting': 'Переподключение потока',
+  'tools.connectedLive': 'Подключено к Live', 'tools.feedReconnecting': 'Переподключение потока',
   'tools.feedReconnectingTitle': 'Переподключение рыночного потока', 'tools.subscribedSymbols': 'Инструменты по подписке',
   'tools.dbHealthy': 'Подключение к базе данных исправно', 'tools.apiHealthy': 'Manager API работает', 'tools.globalSettings': 'Общие настройки',
   'window.dealer': 'Дилер', 'window.groups': 'Группы', 'help.topics': 'Разделы справки', 'help.releaseNotes': 'Описание изменений',
-  'help.checkUpdates': 'Проверить обновления', 'help.contact': 'Контакты и поддержка', 'help.about': 'О RTX5 Manager',
+  'help.checkUpdates': 'Проверить обновления', 'help.contact': 'Контакты и поддержка', 'help.about': 'О Manager',
   'tabs.liquidity': 'Ликвидность', 'tabs.riskMonitor': 'Мониторинг рисков', 'tabs.quickNavigation': 'Быстрая навигация',
   'tabs.openQuickNavigation': 'Открыть быструю навигацию', 'tabs.openWorkspaces': 'Открыть рабочие области',
   'tabs.allOpen': 'Все рабочие области уже открыты.', 'bar.notifications': 'Уведомления', 'bar.unread': 'Непрочитанных: {count}',
