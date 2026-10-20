@@ -24,7 +24,7 @@
     "desktop:main:watch": "tsup --config tsup.electron.config.ts --watch",
     "desktop:run": "npm run build:desktop && electron . --use-dist",
     "dist": "npm run build:desktop && electron-builder --win --x64 --publish never",
-    "release": "npm run build:desktop && electron-builder --win --x64 --publish always",
+    "release": "npm run build:desktop && node scripts/release-desktop.cjs",
     "lint": "eslint .",
     "test": "node --test \"src/**/*.test.js\"",
     "preview": "vite preview"
@@ -46,15 +46,6 @@
     "extraMetadata": {
       "main": "dist-electron/main.cjs"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "rtx5-orrnn",
-        "repo": "rtx5-broker-manager-releases",
-        "private": false,
-        "releaseType": "release"
-      }
-    ],
     "win": {
       "icon": "public/logo V2.ico",
       "target": [
