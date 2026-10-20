@@ -3,8 +3,9 @@ import { fetchManagerApi } from './managerFetch.js';
 // Bug reporting from the Manager UI.
 //
 // The report goes to the broker's manager backend, which forwards it to the
-// RTX5 control plane. Nothing about a bug report is stored in the broker's own
-// database, and the browser never talks to object storage directly.
+// platform support service. Nothing about a bug report is stored in the
+// broker's own database, and the browser never talks to object storage
+// directly.
 //
 // Identity is deliberately not sent from here: the backend derives the broker,
 // the login and whether this is a manager or an admin session from the session

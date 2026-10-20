@@ -29,6 +29,7 @@ import {
   TRADE_CLOSE_DENIED_MESSAGE,
   TRADE_MUTATION_DENIED_MESSAGE,
 } from './accountTradePermissions';
+import { joinMoneyAmount } from './accountTransactionCopy.js';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
@@ -914,7 +915,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     if (depositConfirmationRef.current || isDepositing) return;
     const confirmed = await new Promise((resolve) => {
       depositConfirmationRef.current = resolve;
-      setDepositConfirmation(`Deposit ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyValue} into account #${parsedLogin}?`);
+      setDepositConfirmation(`Deposit ${joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue)} into account #${parsedLogin}?`);
     });
     if (!confirmed) return;
 
@@ -936,7 +937,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      const successMessage = `Deposited ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyValue} into account #${parsedLogin} successfully.`;
+      const successMessage = `Deposited ${joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue)} into account #${parsedLogin} successfully.`;
       setDepositSuccess(typeof responseMessage === 'string' && responseMessage ? `${successMessage} ${responseMessage}` : successMessage);
       setDepositAmount('');
       setDepositComment('');
@@ -1156,7 +1157,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
                   <div className="account-overview-details">
                     <div><span>Location</span><strong>{countryCityValue || '-'}</strong></div>
-                    <div><span>RTX5 ID</span><strong className="tabular">{getFieldValue('MQID') || '-'}</strong></div>
+                    <div><span>MQID</span><strong className="tabular">{getFieldValue('MQID') || '-'}</strong></div>
                     <div><span>Phone</span><strong>{getFieldValue('Phone') || '-'}</strong></div>
                     <div><span>Email</span><a href="#">{getFieldValue('Email') || '-'}</a></div>
                   </div>
@@ -1328,39 +1329,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                     <div className="p-1 px-2 border-r border-[#333]">Asset</div>
                     <div className="p-1 px-2 border-r border-[#333] text-right">Volume</div>
                     <div className="p-1 px-2 border-r border-[#333] text-right">Rate</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">USD</div>
+                    <div className="p-1 px-2 border-r border-[#333] text-right">Value</div>
                     <div className="p-1 px-2 text-center">Graph</div>
                   </div>
                   {/* Rows */}
                   <div className="flex flex-col text-[12px] font-sans text-gray-800 dark:text-gray-200">
-                    <div className="grid grid-cols-[140px_1fr_1fr_1fr_160px] border-b border-[#333]">
-                      <div className="p-1 px-2 border-r border-[#333] flex items-center gap-1.5"><span className="text-[#d4b455] font-bold border border-[#d4b455] rounded-sm px-1 text-[10px] leading-tight">$</span> GOLD.FUTURE</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">2</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">1.00</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">2 000.00</div>
-                      <div className="p-1 px-1 flex items-center gap-1">
-                        <div className="flex-1 flex justify-end"></div>
-                        <div className="w-[1px] h-3 bg-gray-500"></div>
-                        <div className="flex-1 flex justify-start pl-1">
-                          <div className="w-3 h-3 bg-[#3d5afe] border border-gray-300 dark:border-gray-600"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[140px_1fr_1fr_1fr_160px] border-b border-[#333]">
-                      <div className="p-1 px-2 border-r border-[#333] flex items-center gap-1.5"><span className="text-[#d4b455] font-bold border border-[#d4b455] rounded-sm px-1 text-[10px] leading-tight">$</span> USD</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">-233.664M</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">1.00</div>
-                      <div className="p-1 px-2 border-r border-[#333] text-right">-233 664.00</div>
-                      <div className="p-1 px-1 flex items-center gap-1">
-                        <div className="flex-1 flex justify-end pr-1">
-                          <div className="w-12 h-3 bg-[#ef5350] border border-gray-300 dark:border-gray-600"></div>
-                        </div>
-                        <div className="w-[1px] h-3 bg-gray-500"></div>
-                        <div className="flex-1 flex justify-start pl-1">
-                          <div className="w-3 h-3 bg-[#e53935] border border-gray-300 dark:border-gray-600"></div>
-                        </div>
-                      </div>
-                    </div>
+                    <div role="status" className="p-1 px-2 border-b border-[#333] text-center">No exposure breakdown is available for the account.</div>
                   </div>
                   {/* Summary Footer */}
                   <div className="bg-[#3e3e42] mt-auto">
@@ -1385,7 +1359,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                 <div className="w-[200px] flex flex-col items-center justify-start pt-6 border border-[#333] bg-[#1a1a1c] relative flex-shrink-0">
                   <span className="text-[12px] text-gray-800 dark:text-gray-200 mb-6 font-sans">Long Positions</span>
                   <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#717bf5] to-[#121c9c] border border-gray-300 dark:border-gray-600 shadow-xl flex items-center justify-center">
-                    <span className="text-[11px] text-gray-900 dark:text-white/90 drop-shadow-md relative -left-6 bg-transparent mix-blend-screen border-none outline-none z-10 font-sans tracking-wide">GOLD.FUTURE</span>
                   </div>
                 </div>
               </div>

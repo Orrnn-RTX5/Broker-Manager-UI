@@ -8,12 +8,11 @@ import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
-import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, GROUP_DEFAULT_PAYLOAD as defaultPayload, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
-import { readLeverageRatio } from '../groupAccountRows.js';
+import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
+import { buildNewGroupFormData } from '../newGroupForm.js';
 import {
   LEVERAGE_PRESETS,
   MARGIN_CALL_PRESETS,
-  NEW_GROUP_FINANCIAL_DEFAULTS,
   SPREAD_MARKUP_PRESETS,
   STOP_OUT_PRESETS,
   isPresetValue,
@@ -204,29 +203,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
-  const [formData, setFormData] = useState(() => {
-    const source = initialData || duplicateData;
-    const data = { ...defaultPayload, ...(source ? {} : NEW_GROUP_FINANCIAL_DEFAULTS), ...(source || {}) };
-    if (source) data.leverage = readLeverageRatio(source) ?? data.leverage;
-    if (duplicateData) data.name = `${duplicateData.name || 'New Group'} Copy`;
-    // "Add group" inside a folder pre-fills the folder path, e.g. `PREP\demo\`.
-    if (!source && presetName) data.name = presetName;
-    // New groups trade by default; edits and duplicates keep their source value.
-    if (!source) data.tradeAllowed = true;
-    // The visible Book choice is routingMode; bookType is its backend-canonical
-    // value (b/a/hybrid), never a display label.
-    if (!source && data.routingMode) {
-      const canonical = bookTypeForRoutingMode(data.routingMode);
-      if (canonical) data.bookType = canonical;
-    }
-    if (source && data.routingMode) {
-      const canonical = bookTypeForRoutingMode(data.routingMode);
-      if (canonical) data.bookType = canonical;
-    }
-    if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
-    if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
-    return data;
-  });
+  const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -234,10 +211,11 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   // Duplicate/edit sources keep their value and count as touched, so parent
   // inheritance never overwrites them; an explicit check/uncheck always wins.
   const tradeTouched = useRef(Boolean(initialData || duplicateData));
-  // Same ref pattern for leverage: the display default (100) is shown but an
-  // untouched leverage is omitted on create so backend tenant/env/parent
-  // derivation governs; edit/duplicate sources count as touched and any
-  // explicit operator pick (including a re-typed 100) is always sent.
+  // Same ref pattern for leverage: a fresh create starts blank (with a
+  // `Select leverage…` placeholder) and an untouched leverage is omitted on
+  // create so backend tenant/env/parent derivation governs; edit/duplicate
+  // sources count as touched and any explicit operator pick (including a
+  // typed 100) is always sent.
   const leverageTouched = useRef(Boolean(initialData || duplicateData));
   const parentSearch = String(formData.parentGroup ?? '').trim();
   const { groups: parentGroups, loading: parentLoading } = useGroupList({
@@ -378,7 +356,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
           <section className="group-create-panel">
             <h3>Financial</h3>
             <div className="group-create-grid">
-              <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage" customPlaceholder="Ratio, e.g. 150 for 1:150" />
+              <PresetSelect label="Leverage" value={formData.leverage} presets={LEVERAGE_PRESETS} onChange={(v) => handleChange('leverage', v)} placeholder="Select leverage…" customPlaceholder="Ratio, e.g. 150 for 1:150" />
               <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" />
               <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" />
               <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
