@@ -24,3 +24,17 @@ test('Find menu item uses a stable callback, never a render-time ref pass', () =
   assert.ok(!src.includes('menuAction(focusSearch)'), 'bare ref-reading function must not be passed during render');
   assert.ok(!src.includes('menuAction(() => focusSearch())'), 'wrapped ref-reading function must not be passed during render');
 });
+
+test('folder/selection/intent sync uses render-phase adjustments, not setState in effects', () => {
+  assert.ok(src.includes('const [prevFolderKey, setPrevFolderKey] = useState(folder);'), 'folder reset must track the previous folder');
+  assert.ok(src.includes('if (prevFolderKey !== folder) {'), 'folder reset must compare during render');
+  assert.ok(src.includes('const [prevNavigatorRowKey, setPrevNavigatorRowKey] = useState(null);'), 'navigator selection must track its sync key');
+  assert.ok(src.includes('const [prevNavIntentKey, setPrevNavIntentKey] = useState(null);'), 'navigator intents must track their sync key');
+  assert.ok(src.includes("if (navigatorGroup) setSelectedId(`group:${navigatorGroup}`);"), 'navigator selection must apply during render');
+  assert.ok(src.includes('setPropertiesGroup(navIntentGroup);'), 'properties intent must apply during render');
+  // The remaining effects must only do external sync (scroll/navigate), never setState.
+  const scrollFx = src.slice(src.indexOf('// A group picked in the Navigator is scrolled into view'));
+  assert.ok(!/set[A-Z]\w*\(/.test(scrollFx.slice(0, scrollFx.indexOf('}, [folder, navigatorGroup, loading]);'))), 'scroll effect must not call setState');
+  const navFx = src.slice(src.indexOf('navigate(`${location.pathname}${location.search}`, { replace: true, state: null });'));
+  assert.ok(navFx.includes('return undefined;'), 'intent effect must navigate then end without setState');
+});

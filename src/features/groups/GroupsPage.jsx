@@ -88,49 +88,73 @@ const GroupsPage = () => {
   const searchInputRef = useRef(null);
   const handlersRef = useRef({});
 
-  // Opening another folder clears the selection and returns to the folder tab.
-  useEffect(() => {
+  // Folder/selection/intent sync as render-phase adjustments (not effects),
+  // per React docs ("storing information from previous renders"): router
+  // state (location.search/state) flows into local state during render, so no
+  // intermediate paint carries stale selection and no set-state-in-effect
+  // violation remains. External side-effects (scroll, navigate) stay in the
+  // effects below. Application is idempotent (same values), so refetch churn
+  // only re-applies identical state and React bails out without re-rendering.
+  const [prevFolderKey, setPrevFolderKey] = useState(folder);
+  if (prevFolderKey !== folder) {
+    // Opening another folder clears the selection and returns to the folder tab.
+    setPrevFolderKey(folder);
     setSelectedId(null);
     setSelectedLogin(null);
     setOpenedGroup(null);
     setAllGroups(false);
     setContextMenu(null);
-  }, [folder]);
+  }
 
-  // A group picked in the Navigator is selected in its folder and scrolled into
-  // view; the click also asks (through navigation state) for its properties.
+  const [prevNavigatorRowKey, setPrevNavigatorRowKey] = useState(null);
+  const navigatorRowKey = `${folder} ${navigatorGroup} ${loading}`;
+  if (prevNavigatorRowKey !== navigatorRowKey) {
+    // A group picked in the Navigator is selected in its folder. Key mirrors
+    // the scroll effect deps below, so reselection timing matches exactly.
+    setPrevNavigatorRowKey(navigatorRowKey);
+    if (navigatorGroup) setSelectedId(`group:${navigatorGroup}`);
+  }
+  // A group picked in the Navigator is scrolled into view (external DOM
+  // sync stays in the effect); selection itself is applied above.
   useEffect(() => {
-    if (!navigatorGroup) return;
+    if (!navigatorGroup) return undefined;
     const rowId = `group:${navigatorGroup}`;
-    setSelectedId(rowId);
     const frame = requestAnimationFrame(() => {
       document.querySelector(`[data-node-id="${CSS.escape(rowId)}"]`)?.scrollIntoView({ block: 'nearest' });
     });
     return () => cancelAnimationFrame(frame);
   }, [folder, navigatorGroup, loading]);
 
+  // One-shot Navigator intents (open properties / open accounts) arrive via
+  // location.state and are consumed below: local state applies during render,
+  // the state-clearing navigation stays in the effect.
+  const navIntentGroup = navigatorGroup ? groups.find((item) => groupRowNode(item).name === navigatorGroup) : undefined;
+  const navIntentGroupName = navIntentGroup ? groupRowNode(navIntentGroup).name : '';
+  const [prevNavIntentKey, setPrevNavIntentKey] = useState(null);
+  const navIntentKey = `${navigatorGroup} ${location.state?.openGroupProperties ? 'props' : ''}${location.state?.openGroupAccounts ? 'accts' : ''}${location.state?.openAccountLogin ?? ''} ${navIntentGroupName} ${groups.length}`;
+  if (prevNavIntentKey !== navIntentKey) {
+    setPrevNavIntentKey(navIntentKey);
+    if (navIntentGroup && location.state?.openGroupProperties) {
+      setPropertiesGroup(navIntentGroup);
+    }
+    if (navIntentGroup && location.state?.openGroupAccounts) {
+      // A leaf group chosen in the Navigator opens its account list, same as the folder view.
+      const login = location.state.openAccountLogin ? String(location.state.openAccountLogin) : null;
+      setAllGroups(false);
+      setOpenedGroup(navIntentGroup);
+      setSelectedId(null);
+      setSelectedLogin(login);
+      setSearch('');
+      if (login) setPropertiesGroup(navIntentGroup);
+    }
+  }
   useEffect(() => {
-    if (!navigatorGroup || !location.state?.openGroupProperties) return;
-    const group = groups.find((item) => groupRowNode(item).name === navigatorGroup);
-    if (!group) return;
-    setPropertiesGroup(group);
+    if (!navigatorGroup) return undefined;
+    if (!location.state?.openGroupProperties && !location.state?.openGroupAccounts) return undefined;
+    if (!navIntentGroup) return undefined;
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-  }, [navigatorGroup, groups, location.state, location.pathname, location.search, navigate]);
-
-  // A leaf group chosen in the Navigator opens its account list, same as the folder view.
-  useEffect(() => {
-    if (!navigatorGroup || !location.state?.openGroupAccounts) return;
-    const group = groups.find((item) => groupRowNode(item).name === navigatorGroup);
-    if (!group) return;
-    setAllGroups(false);
-    const login = location.state.openAccountLogin ? String(location.state.openAccountLogin) : null;
-    setOpenedGroup(group);
-    setSelectedId(null);
-    setSelectedLogin(login);
-    setSearch('');
-    if (login) setPropertiesGroup(group);
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-  }, [navigatorGroup, groups, location.state, location.pathname, location.search, navigate]);
+    return undefined;
+  }, [navigatorGroup, location.state, navIntentGroup, location.pathname, location.search, navigate]);
 
   const folderRows = useMemo(() => getGroupFolderRows(groups, folder), [groups, folder]);
   const allRows = useMemo(() => groups.map(groupRowNode), [groups]);
