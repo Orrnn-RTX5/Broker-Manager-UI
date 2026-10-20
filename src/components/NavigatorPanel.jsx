@@ -57,17 +57,22 @@ const RenameIcon = ({ size = 14, color = '#38bdf8' }) => (
   </svg>
 );
 
+// Sweep SUI-M7: none of these entries has a real handler in scope (server
+// session control lives in MenuBar; no password/delete-account flow exists
+// for server/report nodes), so every entry stays disabled with an explicit
+// reason instead of rendering a dead clickable item. Do NOT add onClick
+// stubs here — wire a real handler or keep the item disabled.
 const SERVER_CONTEXT_MENU_ITEMS = [
-  { action: 'connect', label: 'Connect to the Server', icon: LogIn, tone: 'connect', shortcut: 'Enter' },
-  { action: 'disconnect', label: 'Disconnect from the Server', icon: Unplug, disabled: true },
+  { action: 'connect', label: 'Connect to the Server', icon: LogIn, tone: 'connect', shortcut: 'Enter', disabled: true, disabledReason: 'Server connection is not available from the navigator yet' },
+  { action: 'disconnect', label: 'Disconnect from the Server', icon: Unplug, disabled: true, disabledReason: 'Server disconnection is not available from the navigator yet' },
 ];
 
 const DAILY_REPORT_CONTEXT_MENU_ITEMS = [
-  { action: 'connect', label: 'Connect to the Server', icon: LogIn, tone: 'connect', shortcut: 'Enter' },
-  { action: 'disconnect', label: 'Disconnect from the Server', icon: Unplug, tone: 'danger' },
+  { action: 'connect', label: 'Connect to the Server', icon: LogIn, tone: 'connect', shortcut: 'Enter', disabled: true, disabledReason: 'Server connection is not available from the navigator yet' },
+  { action: 'disconnect', label: 'Disconnect from the Server', icon: Unplug, tone: 'danger', disabled: true, disabledReason: 'Server disconnection is not available from the navigator yet' },
   { separator: true },
-  { action: 'change-password', label: 'Change Password', icon: Lock, tone: 'password' },
-  { action: 'delete-account', label: 'Delete the Account', icon: X, tone: 'danger', shortcut: 'Delete' },
+  { action: 'change-password', label: 'Change Password', icon: Lock, tone: 'password', disabled: true, disabledReason: 'Password change is not available yet' },
+  { action: 'delete-account', label: 'Delete the Account', icon: X, tone: 'danger', shortcut: 'Delete', disabled: true, disabledReason: 'Account deletion is not available from the navigator yet' },
 ];
 
 const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu }) => {
@@ -194,6 +199,7 @@ const NavigatorContextMenu = ({ x, y, items, ariaLabel, onClose, isAnalyticsMenu
               aria-expanded={item.hasSubmenu ? isSubmenuOpen : undefined}
               aria-disabled={item.disabled || undefined}
               disabled={item.disabled}
+              title={item.disabled && item.disabledReason ? `${item.label} — ${item.disabledReason}` : undefined}
               tabIndex={item.disabled ? -1 : item.action === 'connect' || item.action === 'add' ? 0 : -1}
               onClick={() => {
                 if (item.disabled) return;
