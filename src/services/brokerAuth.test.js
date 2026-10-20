@@ -339,7 +339,7 @@ test('resolveDefaultBrokerSelectionId can match runtime service host when manage
   );
 });
 
-test('fetchBrokerList normalizes known MyProp typo service domain', async () => {
+test('fetchBrokerList passes backend URLs through without hardcoded remapping', async () => {
   globalThis.fetch = async (url, options = {}) => {
     fetchCalls.push({ url: String(url), options });
     return {
@@ -360,7 +360,10 @@ test('fetchBrokerList normalizes known MyProp typo service domain', async () => 
   };
 
   const brokers = await fetchBrokerList();
-  assert.equal(brokers[0].backend_url, 'https://services.myprop.trade');
+  // White-label rule: no hardcoded host mappings. A discovery-advertised
+  // hostname passes through exactly as sent; correcting it is the broker's
+  // discovery data or runtime-config job, never a source literal.
+  assert.equal(brokers[0].backend_url, 'https://services.myprop.trad.app');
 });
 
 test('resolveDefaultBrokerSelectionId falls back to stored broker and then response order', () => {

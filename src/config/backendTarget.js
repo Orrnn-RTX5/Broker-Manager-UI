@@ -293,7 +293,8 @@ const sanitizeWebBackendCandidate = (candidate = '') => {
   const normalized = normalizeHttpUrl(candidate, 'https', true);
   const host = hostnameFromUrl(normalized);
   if (!host) return '';
-  if (host.toLowerCase() === 'services.myprop.trad.app') return 'https://services.myprop.trade';
+  // No hardcoded host mappings: any host translation must come from
+  // runtime-config, never a literal (white-label rule).
   // Loopback is accepted so local/dev/test stacks (discovery records without
   // backend URLs + loopback API_HOST) can sign in; unspecified addresses and
   // every other IP stay rejected exactly as before.

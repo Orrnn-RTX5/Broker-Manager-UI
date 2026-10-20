@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { resolveBrokerBackendUrl, resolveBrokerWsUrl } from './backendTarget.js';
 
 // Deploy-blocker regression (ds-22 M1 on :5223): with a discovery record that
@@ -43,4 +45,12 @@ test('loopback WS_HOST resolves for the live stack', () => {
   assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://0.0.0.0:8091'), '');
   assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://[::]:8091'), '');
   assert.equal(resolveBrokerWsUrl({ broker_id: 'qa-broker' }, 'ws://192.168.1.38:8091'), '');
+});
+
+test('no literal host mapping exists in the backend sanitizer', () => {
+  const source = readFileSync(fileURLToPath(new URL('./backendTarget.js', import.meta.url)), 'utf8');
+  assert.ok(!source.includes('myprop'), 'no hardcoded tenant host may be remapped in source');
+  assert.ok(!/return\s+'https?:\/\/[a-z0-9]/i.test(
+    source.slice(source.indexOf('const sanitizeWebBackendCandidate'), source.indexOf('const buildDirectBackendUrl')),
+  ), 'the sanitizer must not return a hardcoded URL for any host');
 });
