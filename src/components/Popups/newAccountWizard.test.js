@@ -4,6 +4,7 @@ import {
   ACCOUNT_MODES,
   ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
+  brokerCountryListOf,
   brokerCountryOf,
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
@@ -693,4 +694,95 @@ test('HOLD-5/H8 country: free text passes through, suggestions merge, seeded val
   assert.equal(resolveDefaultCountry({ country: 'Germany' }, false), 'Germany');
   assert.equal(buildNewAccountPayload(baseForm({ Country: '' })).Country, '');
   assert.equal(buildSubmittableAccountPayload(baseForm({ Country: '' })).Country, '');
+});
+
+// ds-18 broker country LIST (ported concept only from ds-16 countryOptions:
+// merge the broker-list keys into the suggestion set; strict strings-only
+// per branch convention — never String()-coerced. REAL helpers only,
+// generic fixtures, no tenant/broker/account identifiers).
+
+test('ds-18 country list: string + object entries merge into suggestions, sorted unique', () => {
+  assert.deepEqual(
+    countrySuggestions({
+      presets: ['India'],
+      brokerInfo: {
+        country: 'France',
+        countries: ['Germany', '  Spain  ', { name: 'Italy' }, { label: 'Portugal' }, { code: 'NL' }, { value: 'Belgium' }],
+      },
+      current: '',
+    }),
+    ['Belgium', 'France', 'Germany', 'India', 'Italy', 'NL', 'Portugal', 'Spain'],
+  );
+  // Alternate list keys (countryOptions / allowedCountries) are read too.
+  assert.deepEqual(
+    countrySuggestions({ presets: [], brokerInfo: { countryOptions: ['Germany'] }, current: '' }),
+    ['Germany'],
+  );
+  assert.deepEqual(
+    countrySuggestions({ presets: [], brokerInfo: { allowedCountries: [{ name: 'Germany' }] }, current: '' }),
+    ['Germany'],
+  );
+  // brokerCountryListOf exposes the raw merged list for direct checks.
+  assert.deepEqual(
+    brokerCountryListOf({ countries: ['Germany', { label: 'France' }] }),
+    ['Germany', 'France'],
+  );
+});
+
+test('ds-18 country list: blanks and duplicates are skipped', () => {
+  assert.deepEqual(
+    countrySuggestions({
+      presets: ['India'],
+      brokerInfo: {
+        country: 'India',
+        countries: ['', '   ', 'India', '  India  ', 'Germany', { name: '' }, { label: '  ' }, { name: 'Germany' }],
+      },
+      current: '  Germany  ',
+    }),
+    ['Germany', 'India'],
+  );
+  assert.deepEqual(brokerCountryListOf({ countries: ['', '   ', { name: '' }, { label: '  ' }] }), []);
+});
+
+test('ds-18 country list: non-string entries are ignored, never coerced', () => {
+  assert.deepEqual(
+    countrySuggestions({
+      presets: ['India'],
+      brokerInfo: { countries: [123, true, false, null, undefined, ['Germany'], { name: 123 }, { label: true }, {}] },
+      current: '',
+    }),
+    ['India'],
+  );
+  assert.deepEqual(brokerCountryListOf({ countries: [123, true, null, ['Germany'], {}] }), []);
+  // A non-string in an early object key falls through to the next string key.
+  assert.deepEqual(brokerCountryListOf({ countries: [{ name: 123, label: 'France' }] }), ['France']);
+  assert.deepEqual(brokerCountryListOf({ countries: [{ name: '', label: 'France' }] }), ['France']);
+});
+
+test('ds-18 country list: absent list changes nothing (identical to today)', () => {
+  // No list keys: today's behavior, byte-for-byte.
+  assert.deepEqual(
+    countrySuggestions({ presets: ['India', 'Germany'], brokerInfo: { country: 'France' }, current: '' }),
+    ['France', 'Germany', 'India'],
+  );
+  assert.deepEqual(countrySuggestions({ presets: [], brokerInfo: null, current: '' }), []);
+  assert.deepEqual(
+    countrySuggestions({ presets: ['India'], brokerInfo: { country: 123 }, current: '' }),
+    ['India'],
+  );
+  assert.deepEqual(brokerCountryListOf(null), []);
+  assert.deepEqual(brokerCountryListOf(undefined), []);
+  assert.deepEqual(brokerCountryListOf({}), []);
+  assert.deepEqual(brokerCountryListOf('Germany'), []);
+  // A non-array under a list key yields [] (fail-closed, never invented).
+  assert.deepEqual(brokerCountryListOf({ countries: 'Germany' }), []);
+  assert.deepEqual(
+    countrySuggestions({ presets: ['India'], brokerInfo: { countries: 'Germany' }, current: '' }),
+    ['India'],
+  );
+  // Default-country resolution is untouched: broker single wins else ''.
+  assert.equal(resolveDefaultCountry({ country: 'Germany', countries: ['France'] }, false), 'Germany');
+  assert.equal(resolveDefaultCountry({ countries: ['France'] }, false), '');
+  // Free text still passes through exactly, list or no list.
+  assert.equal(buildNewAccountPayload(baseForm({ Country: 'New Atlantis' })).Country, 'New Atlantis');
 });

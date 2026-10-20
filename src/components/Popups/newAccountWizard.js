@@ -181,11 +181,55 @@ export const inheritGroupSettings = ({ groups, groupName, leverageTouched, curre
 };
 
 /**
+ * Broker-configured country LIST as trimmed names, or [] when the broker
+ * config carries none. Reads only the generic broker-list keys (countries,
+ * countryOptions, allowedCountries — first non-nullish key wins, mirroring
+ * the ds-16 country-list concept); a non-array value under the winning key
+ * yields [] (fail-closed: never invent entries from a scalar).
+ *
+ * Strict strings-only per branch convention: string entries pass through
+ * trimmed; {name,label,code,value} objects contribute the first non-blank
+ * string among those keys (in that order); numbers/booleans/null/arrays and
+ * objects without a usable string yield nothing — never String()-coerced, so
+ * a `123` or `true` list entry can never become a suggestion.
+ */
+export const brokerCountryListOf = (brokerInfo) => {
+  if (!brokerInfo || typeof brokerInfo !== 'object') return [];
+  const raw = brokerInfo.countries ?? brokerInfo.countryOptions ?? brokerInfo.allowedCountries;
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      const name = entry.trim();
+      if (name) out.push(name);
+      continue;
+    }
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      for (const key of ['name', 'label', 'code', 'value']) {
+        const value = entry[key];
+        if (typeof value === 'string' && value.trim()) {
+          out.push(value.trim());
+          break;
+        }
+      }
+    }
+  }
+  return out;
+};
+
+/**
  * Sorted, de-duplicated country suggestions for the wizard's free-text
- * Country input: generic presets, plus the broker-configured country when the
- * broker config carries one, plus the current field value so a seeded value
- * stays visible. Suggestions only — any free text (or empty) may be sent, per
- * the backend account-create contract where Country is optional free text.
+ * Country input: generic presets, plus broker-list entries (countries /
+ * countryOptions / allowedCountries, string or {name,label,code,value}
+ * object forms), plus the broker-configured single country when the broker
+ * config carries one, plus the current field value so a seeded value stays
+ * visible. Suggestions only — any free text (or empty) may be sent, per the
+ * backend account-create contract where Country is optional free text.
+ *
+ * Design note: the list merge lives here in countrySuggestions (not in
+ * brokerCountryOf) because brokerCountryOf resolves the SINGLE default
+ * country (broker single wins else '' — unchanged), while this helper owns
+ * the multi-value suggestion set the modal datalist renders.
  */
 export const countrySuggestions = ({ presets = [], brokerInfo = null, current = '' } = {}) => {
   const seen = new Set();
@@ -198,6 +242,7 @@ export const countrySuggestions = ({ presets = [], brokerInfo = null, current = 
     out.push(name);
   };
   for (const preset of presets) push(preset);
+  for (const entry of brokerCountryListOf(brokerInfo)) push(entry);
   push(brokerCountryOf(brokerInfo));
   push(current);
   return out.sort();
