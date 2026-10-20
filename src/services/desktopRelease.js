@@ -134,13 +134,26 @@ export const getReleaseApiUrl = (brokerInfo = null) => {
 
 export const isReleaseChannelConfigured = (brokerInfo = null) => Boolean(getReleaseApiUrl(brokerInfo));
 
-const INSTALLER_ASSET_PATTERN = /^RTX-5-Broker-Manager-Setup-.+\.exe$/i;
+const DEFAULT_INSTALLER_ASSET_PATTERN = /^Broker-Manager-Setup-.+\.exe$/i;
+
+export const getInstallerAssetPattern = () => {
+  const raw = String(getRuntimeConfigValue(
+    ['DESKTOP_INSTALLER_PATTERN', 'VITE_DESKTOP_INSTALLER_PATTERN'],
+    ''
+  ) || '').trim();
+  if (!raw) return DEFAULT_INSTALLER_ASSET_PATTERN;
+  try {
+    return new RegExp(raw, 'i');
+  } catch {
+    return DEFAULT_INSTALLER_ASSET_PATTERN;
+  }
+};
 
 export const selectDesktopInstallerAsset = (release = {}) => {
   const assets = Array.isArray(release.assets) ? release.assets : [];
   const installer = assets.find((asset) => (
     asset?.browser_download_url &&
-    INSTALLER_ASSET_PATTERN.test(String(asset.name || '')) &&
+    getInstallerAssetPattern().test(String(asset.name || '')) &&
     !String(asset.name || '').toLowerCase().endsWith('.blockmap')
   ));
 

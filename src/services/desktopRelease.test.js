@@ -16,13 +16,13 @@ test('selectDesktopInstallerAsset picks the installer from the latest release as
     tag_name: 'v1.0.7',
     assets: [
       { name: 'latest.yml', browser_download_url: 'https://example.test/latest.yml' },
-      { name: 'RTX-5-Broker-Manager-Setup-1.0.7.exe.blockmap', browser_download_url: 'https://example.test/app.blockmap' },
-      { name: 'RTX-5-Broker-Manager-Setup-1.0.7.exe', browser_download_url: 'https://example.test/app.exe' },
+      { name: 'Broker-Manager-Setup-1.0.7.exe.blockmap', browser_download_url: 'https://example.test/app.blockmap' },
+      { name: 'Broker-Manager-Setup-1.0.7.exe', browser_download_url: 'https://example.test/app.exe' },
     ],
   });
 
   assert.deepEqual(installer, {
-    name: 'RTX-5-Broker-Manager-Setup-1.0.7.exe',
+    name: 'Broker-Manager-Setup-1.0.7.exe',
     url: 'https://example.test/app.exe',
     version: '1.0.7',
     publishedAt: '',
@@ -135,7 +135,7 @@ test('fetchLatestDesktopInstaller queries the configured channel', async () => {
         json: async () => ({
           tag_name: 'v2.0.0',
           assets: [
-            { name: 'RTX-5-Broker-Manager-Setup-2.0.0.exe', browser_download_url: 'https://releases.example.test/app.exe' },
+            { name: 'Broker-Manager-Setup-2.0.0.exe', browser_download_url: 'https://releases.example.test/app.exe' },
           ],
         }),
       };
@@ -158,7 +158,7 @@ test('fetchLatestDesktopInstaller honors an explicit channel override', async ()
         json: async () => ({
           tag_name: 'v2.0.1',
           assets: [
-            { name: 'RTX-5-Broker-Manager-Setup-2.0.1.exe', browser_download_url: 'https://releases.example.test/app.exe' },
+            { name: 'Broker-Manager-Setup-2.0.1.exe', browser_download_url: 'https://releases.example.test/app.exe' },
           ],
         }),
       };

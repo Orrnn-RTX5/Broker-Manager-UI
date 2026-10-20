@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: ghcr.io/orrnn-rtx5/broker-manager-ui
+  IMAGE_NAME: ${{ vars.REGISTRY_IMAGE }}
 
 concurrency:
   group: ui-image-${{ github.ref }}

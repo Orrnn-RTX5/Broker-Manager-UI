@@ -19,7 +19,7 @@ const COPY = {
   auth: {
     idle: 'Download desktop app',
     loading: 'Preparing download',
-    title: 'Download latest RTX-5 Broker Manager desktop app',
+    title: 'Download latest Broker Manager desktop app',
     error: 'Could not start the download. Please try again.',
   },
 };

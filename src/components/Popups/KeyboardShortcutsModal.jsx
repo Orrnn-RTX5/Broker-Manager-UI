@@ -90,7 +90,7 @@ const KeyboardShortcutsModal = ({ onClose }) => {
           <div className="keyboard-shortcuts-heading-icon"><Keyboard size={17} /></div>
           <div>
             <h2 id="keyboard-shortcuts-title">Shortcut Toolbox</h2>
-            <p>Keyboard shortcuts available across RTX-5 Manager.</p>
+            <p>Keyboard shortcuts available across Broker Manager.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close shortcut toolbox">
             <X size={16} />
