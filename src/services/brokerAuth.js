@@ -684,6 +684,20 @@ export const fetchBrokerConfig = async (brokerInfo = getBrokerInfo()) => {
       ...(configLogoUrl ? { logo_url: configLogoUrl } : {}),
       ...(data.support_email ? { support_email: String(data.support_email).trim() } : {}),
       ...(data.theme_color ? { theme_color: String(data.theme_color).trim() } : {}),
+      // Release-channel keys (the same 6 BROKER_RELEASE_API_URL_KEYS the
+      // desktopRelease module reads). Discovery-list records already preserve
+      // them via normalizeBrokerInfo passthrough; the /api/v2/broker/config
+      // merge must preserve them too or publishing via config is dropped.
+      ...(data.desktop_release_api_url ? { desktop_release_api_url: String(data.desktop_release_api_url).trim() } : {}),
+      ...(data.desktopReleaseApiUrl ? { desktopReleaseApiUrl: String(data.desktopReleaseApiUrl).trim() } : {}),
+      ...(data.release_api_url ? { release_api_url: String(data.release_api_url).trim() } : {}),
+      ...(data.releaseApiUrl ? { releaseApiUrl: String(data.releaseApiUrl).trim() } : {}),
+      ...(data.DESKTOP_RELEASE_API_URL ? { DESKTOP_RELEASE_API_URL: String(data.DESKTOP_RELEASE_API_URL).trim() } : {}),
+      ...(data.VITE_DESKTOP_RELEASE_API_URL ? { VITE_DESKTOP_RELEASE_API_URL: String(data.VITE_DESKTOP_RELEASE_API_URL).trim() } : {}),
+      // Broker default country (newAccountWizard reads country/Country); same
+      // passthrough note as above.
+      ...(data.country ? { country: String(data.country).trim() } : {}),
+      ...(data.Country ? { Country: String(data.Country).trim() } : {}),
     });
 
     const activeStored = getBrokerInfo();

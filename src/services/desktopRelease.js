@@ -27,6 +27,22 @@ const asChannelUrl = (value = '') => {
   return value.trim();
 };
 
+// Allowlist for release-channel URLs (stored-XSS hardening, tenant-agnostic).
+// Only http(s) absolute URLs and relative (scheme-less) URLs are accepted.
+// Any other scheme (javascript:, data:, vbscript:, file:, blob:, ftp:, and
+// the rest) is treated as unconfigured (null) so a stored channel value can
+// never become a clickable script URL. Scheme match is case-insensitive and
+// the value is trimmed first, so padded or cased variants are rejected too.
+const isAllowedChannelUrl = (value = '') => {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const schemeMatch = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(trimmed);
+  if (!schemeMatch) return true;
+  const scheme = schemeMatch[0].slice(0, -1).toLowerCase();
+  return scheme === 'http' || scheme === 'https';
+};
+
 const readChannelKey = (source = {}, key) => {
   if (!source || typeof source !== 'object') return '';
   if (Object.prototype.hasOwnProperty.call(source, key)) {
@@ -44,15 +60,25 @@ const readChannelKey = (source = {}, key) => {
 // Pure helper: resolve the configured release channel from a plain config
 // object (runtime config snapshot and/or broker info). Returns the channel
 // URL, or null when no channel is configured. Never falls back to vendor
-// infrastructure.
+// infrastructure. Disallowed URL schemes (javascript:, data:, and other
+// non-http(s) schemes) are treated as unconfigured and skipped.
 export const resolveReleaseChannel = (config = {}) => {
   if (!config || typeof config !== 'object') return null;
   for (const key of RELEASE_CHANNEL_KEYS) {
     const value = readChannelKey(config, key);
-    if (value) return value;
+    if (value && isAllowedChannelUrl(value)) return value;
   }
   return null;
 };
+
+// Human-notes choice (documented): the channel is a JSON API endpoint, not a
+// human page, and there is no reliable generic mapping from an arbitrary
+// tenant-configured JSON channel to an HTML notes page without hardcoding
+// vendor hosts (forbidden by the white-label rule). Callers therefore label
+// the raw channel honestly (for example "Query update channel") instead of
+// claiming "View release notes". No helper derives an HTML URL; when a
+// platform later publishes a dedicated human notes URL, it should be added
+// as a separate configured key rather than guessed from the JSON endpoint.
 
 // Impure wrapper: broker-provided channel wins when present, otherwise the
 // runtime (deployment) configuration. Returns url-or-null.
@@ -99,7 +125,7 @@ export const fetchLatestDesktopInstaller = async ({
   }
 
   const channelUrl = asChannelUrl(releaseApiUrl) || getReleaseApiUrl(brokerInfo);
-  if (!channelUrl) {
+  if (!channelUrl || !isAllowedChannelUrl(channelUrl)) {
     throw new Error(RELEASE_CHANNEL_UNAVAILABLE_MESSAGE);
   }
 

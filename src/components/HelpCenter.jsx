@@ -9,7 +9,7 @@ import './HelpCenter.css';
 const topics = [
   ['Market Watch', 'Click a symbol for its details. Double-click to open its tick chart. Cached prices appear immediately; live prices depend on your broker feed.'],
   ['Accounts', 'Select Real Accounts or Demo Accounts on the dashboard to filter the right sidebar. Double-click an account to review its details.'],
-  ['Workspace', 'Drag panel dividers to resize your workspace. Close tabs with × and use + for quick navigation. Reset layout restores the default panel arrangement.'],
+  ['Workspace', 'Drag panel dividers to resize your workspace. Close tabs with Ã— and use + for quick navigation. Reset layout restores the default panel arrangement.'],
   ['Saving changes', 'Edit supported account fields and select Update. Wait for the result message before closing. Informational notes are not update confirmations.'],
   ['Connection troubleshooting', 'Check the connection indicator and broker selection. If prices are cached, wait for the feed to reconnect. If the issue continues, record the error message for your broker administrator.'],
 ];
@@ -26,14 +26,34 @@ export default function HelpCenter({ initialSection = 'Guide', onClose }) {
     return rawName && !/^broker$/i.test(rawName) ? rawName : '';
   })();
   const helpProductTitle = helpBrokerName ? `${helpBrokerName} Manager` : 'Manager';
+  // Human-notes choice (documented): the channel URL is a JSON API endpoint,
+  // not a human release-notes page, and there is no reliable generic mapping
+  // from an arbitrary tenant-configured JSON channel to an HTML notes page
+  // without hardcoding vendor hosts (forbidden by the white-label rule). The
+  // link below therefore labels the raw channel honestly as
+  // "Query update channel" instead of claiming human-readable notes. When a
+  // platform later publishes a dedicated human notes URL, it should be added
+  // as a separate configured key rather than guessed from the JSON endpoint.
   const helpReleaseChannelUrl = getReleaseApiUrl(getBrokerInfo());
   const [message, setMessage] = useState(`${helpProductTitle} ${packageInfo.version}\n\nIssue summary:\n\nSteps to reproduce:\n1. \n\nExpected result:\n\nActual result / error message:\n`);
   useEffect(() => { dialogRef.current?.showModal(); }, []);
   const checkUpdates = async () => {
-    setBusy(true); setFailed(false); setStatus('Checking for updates…');
+    setBusy(true); setFailed(false); setStatus('Checking for updatesâ€¦');
     try {
       if (typeof window.rtx5Updater?.checkForUpdates === 'function') {
-        const result = await window.rtx5Updater.checkForUpdates();
+        // Bridge calls take no AbortSignal, so race them against a 15s
+        // timeout. finally below always resets busy.
+        const updaterTimeout = AbortSignal.timeout(15000);
+        const result = await Promise.race([
+          window.rtx5Updater.checkForUpdates(),
+          new Promise((_, reject) => {
+            if (updaterTimeout.aborted) {
+              reject(new Error('Update check timed out. Please try again.'));
+            } else {
+              updaterTimeout.addEventListener('abort', () => reject(new Error('Update check timed out. Please try again.')), { once: true });
+            }
+          }),
+        ]);
         setFailed(result?.status === 'error');
         setStatus(result?.message || 'Update check completed.');
       } else {
@@ -48,15 +68,15 @@ export default function HelpCenter({ initialSection = 'Guide', onClose }) {
     catch { setFailed(true); setStatus('Copy unavailable. Select the text below and copy it manually.'); }
   };
   return <dialog ref={dialogRef} className="manager-help-center" aria-labelledby="manager-help-title" onCancel={onClose} onClose={onClose}>
-    <header><div><h2 id="manager-help-title">Help Center</h2><p>Guidance, updates and support for {helpProductTitle}</p></div><button type="button" onClick={onClose} aria-label="Close Help Center">×</button></header>
+    <header><div><h2 id="manager-help-title">Help Center</h2><p>Guidance, updates and support for {helpProductTitle}</p></div><button type="button" onClick={onClose} aria-label="Close Help Center">Ã—</button></header>
     <nav aria-label="Help sections">{['Guide', 'Updates', 'Support', 'About'].map(name => <button type="button" key={name} aria-pressed={section === name} onClick={() => { setSection(name); setStatus(''); }}>{name}</button>)}</nav>
     <div className="manager-help-content">
-      {section === 'Guide' && <><label className="manager-help-search">Find a help topic<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts, prices, workspace…" /></label>{topics.filter(t => t.join(' ').toLowerCase().includes(search.toLowerCase())).map(([title, text]) => <section key={title}><h3>{title}</h3><p>{text}</p></section>)}{!topics.some(t => t.join(' ').toLowerCase().includes(search.toLowerCase())) && <p>No matching topics. Try another search or open Support.</p>}</>}
-      {section === 'Updates' && <><section><h3>Releases & updates</h3><p>Build version: {packageInfo.version}</p><p>Read published release notes or check for the latest desktop version.</p><div className="manager-help-actions"><button type="button" disabled={busy} onClick={checkUpdates}>{busy ? 'Checking…' : 'Check for updates'}</button>{helpReleaseChannelUrl ? <a href={helpReleaseChannelUrl} target="_blank" rel="noopener noreferrer">View release notes ?</a> : <span>Release notes are available from your platform operator.</span>}</div></section><section><h3>Web app updates</h3><p>The web app is updated by your platform operator. Finish any pending work before refreshing to load a deployed update.</p></section></>}
+      {section === 'Guide' && <><label className="manager-help-search">Find a help topic<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts, prices, workspaceâ€¦" /></label>{topics.filter(t => t.join(' ').toLowerCase().includes(search.toLowerCase())).map(([title, text]) => <section key={title}><h3>{title}</h3><p>{text}</p></section>)}{!topics.some(t => t.join(' ').toLowerCase().includes(search.toLowerCase())) && <p>No matching topics. Try another search or open Support.</p>}</>}
+      {section === 'Updates' && <><section><h3>Releases & updates</h3><p>Build version: {packageInfo.version}</p><p>Read published release notes or check for the latest desktop version.</p><div className="manager-help-actions"><button type="button" disabled={busy} onClick={checkUpdates}>{busy ? 'Checkingâ€¦' : 'Check for updates'}</button>{helpReleaseChannelUrl ? <a href={helpReleaseChannelUrl} target="_blank" rel="noopener noreferrer">Query update channel</a> : <span>Release notes are available from your platform operator.</span>}</div></section><section><h3>Web app updates</h3><p>The web app is updated by your platform operator. Finish any pending work before refreshing to load a deployed update.</p></section></>}
       {section === 'Support' && <><section><h3>Prepare a support message</h3><p>Describe what happened and copy the message to share with your broker administrator. Do not include passwords, access tokens or client personal data.</p><label>Message<textarea rows={9} value={message} onChange={e => setMessage(e.target.value)} /></label><div className="manager-help-actions"><button type="button" onClick={copyMessage}>Copy support message</button></div></section><p>Messages are not sent from this window.</p></>}
       {section === 'About' && <section><h3>{helpProductTitle}</h3><p>Version {packageInfo.version}</p><p>Workspace for broker accounts, market data and trading operations.</p><p>Account access and available actions depend on the permissions assigned by your broker administrator.</p></section>}
       {status && <p className={`manager-help-status${failed ? ' is-error' : ''}`} role={failed ? 'alert' : 'status'}>{status}</p>}
     </div>
-    <footer><span>{helpProductTitle} · {packageInfo.version}</span><button type="button" onClick={onClose}>Close</button></footer>
+    <footer><span>{helpProductTitle} Â· {packageInfo.version}</span><button type="button" onClick={onClose}>Close</button></footer>
   </dialog>;
 }

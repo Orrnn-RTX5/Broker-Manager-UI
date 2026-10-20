@@ -2,7 +2,12 @@ import { showResult } from '../store/resultDialogStore.js';
 import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { isDesktopBackendTarget } from '../config/backendTarget.js';
-import { startLatestDesktopDownload } from '../services/desktopRelease.js';
+import { getBrokerInfo } from '../services/brokerAuth.js';
+import {
+  RELEASE_CHANNEL_UNAVAILABLE_MESSAGE,
+  isReleaseChannelConfigured,
+  startLatestDesktopDownload,
+} from '../services/desktopRelease.js';
 
 const COPY = {
   menu: {
@@ -26,12 +31,33 @@ const DesktopAppDownloadButton = ({ variant = 'menu' }) => {
 
   if (isDesktopBackendTarget()) return null;
 
+  // When no update channel is configured, disable with an honest tooltip
+  // instead of letting the user sit on an infinite "Preparing" spinner.
+  // Tenant-agnostic: the message comes from the release module, no new copy.
+  if (!isReleaseChannelConfigured(getBrokerInfo())) {
+    return (
+      <div className={`desktop-app-download desktop-app-download-${variant}`}>
+        <button
+          type="button"
+          className={`desktop-app-download-button desktop-app-download-button-${variant}`}
+          disabled
+          title={RELEASE_CHANNEL_UNAVAILABLE_MESSAGE}
+          aria-label={copy.title}
+          aria-disabled="true"
+        >
+          <Download size={variant === 'auth' ? 16 : 13} aria-hidden="true" />
+          <span>{copy.idle}</span>
+        </button>
+      </div>
+    );
+  }
+
   const handleDownload = async () => {
     setLoading(true);
     setError('');
 
     try {
-      await startLatestDesktopDownload();
+      await startLatestDesktopDownload({ signal: AbortSignal.timeout(15000), brokerInfo: getBrokerInfo() });
     } catch (err) {
       const message = err?.message || copy.error;
       setError(message);
