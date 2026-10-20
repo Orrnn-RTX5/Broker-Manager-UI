@@ -98,7 +98,7 @@ export function isTransferType(type) {
 export function resolveTransferDestination(value, fromLogin) {
   const raw = typeof value === 'string' ? value.trim() : value;
   if (raw === '' || raw === null || raw === undefined) {
-    throw new TypeError('Transfer destination login is required.');
+    throw new TypeError('Enter a destination login.');
   }
   if (typeof raw !== 'string' && typeof raw !== 'number') {
     throw new TypeError(`Invalid transfer destination login: ${String(value)} must be a positive integer.`);

@@ -270,8 +270,8 @@ describe('accountFinanceOps transfer destination plumbing', () => {
       assert.throws(() => resolveTransferDestination(blank, 200001), TypeError);
       assert.throws(() => resolveTransferDestination(blank, '200001'), TypeError);
     }
-    assert.throws(() => resolveTransferDestination('', 200001), /required/i);
-    assert.throws(() => resolveTransferDestination('   ', 200001), /required/i);
+    assert.throws(() => resolveTransferDestination('', 200001), /Enter a destination login\./);
+    assert.throws(() => resolveTransferDestination('   ', 200001), /Enter a destination login\./);
   });
 
   it('throws a clear TypeError for zero destinations', () => {
