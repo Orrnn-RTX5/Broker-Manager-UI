@@ -19,6 +19,7 @@ import { placeManagerOrder } from '../../services/managerTradeApi';
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 import DepositDialog from './DepositDialog';
 import { COMMENT_PRESETS, normalizeCommentForDefault, detectCommentLanguage } from '../../utils/commentTranslation';
+import { resolveTradeSymbol, buildTradeSymbolList } from '../../utils/accountTradeSymbols';
 
 const readTradeQuote = (symbol) => {
   const quote = useSymbolStore.getState().symbols[symbol];
@@ -68,6 +69,9 @@ const PricePipsDisplay = ({ price, digits = 5, colorClass = 'text-white' }) => {
 const AccountTradeTab = ({
   loginId,
   positions = [],
+  // Tenant symbol catalog (optional). Default empty preserves today's
+  // behavior: symbols then come only from the row, positions and live feed.
+  symbols = [],
   selectedTicketRow,
   setSelectedTicketRow,
   adapter,
@@ -81,8 +85,14 @@ const AccountTradeTab = ({
   onTradePlaced,
   onUpdateState,
 }) => {
+  // Initial symbol: selected row, else first open-position symbol, else
+  // first tenant-catalog entry, else empty (fail-closed, never invented).
+  // With the default empty catalog this matches the previous inline chain
+  // (row symbol, else first position symbol, else ''), except whitespace-only
+  // values count as empty and later positions are scanned past an empty
+  // first entry -- both fail-safe, both invent nothing.
   const [modalSymbol, setModalSymbol] = useState(
-    selectedTicketRow?.symbol || positions[0]?.symbol || ''
+    resolveTradeSymbol({ selectedTicketRow, positions, catalog: symbols })
   );
   const [tradeSL, setTradeSL] = useState('0.00000');
   const [tradeTP, setTradeTP] = useState('0.00000');
@@ -213,15 +223,14 @@ const AccountTradeTab = ({
 
   // Available symbols list
   const availableSymbols = useMemo(() => {
-    const set = new Set();
-    if (modalSymbol) set.add(modalSymbol);
-    positions.forEach((p) => {
-      if (p.symbol) set.add(p.symbol);
-    });
+    const set = new Set(buildTradeSymbolList({ catalog: symbols, positions, activeSymbol: modalSymbol }));
     const storeSymbols = useSymbolStore.getState().symbols || {};
     Object.keys(storeSymbols).forEach((s) => set.add(s));
     return Array.from(set).sort();
-  }, [modalSymbol, positions]);
+  }, [modalSymbol, positions, symbols]);
+  // Fail-closed: with no symbol from any source (catalog, positions, active
+  // symbol, live feed) the order form is replaced by operator guidance below.
+  const hasAnySymbol = availableSymbols.length > 0;
 
   // Reuse the shared feed; opening or switching this tab never creates a socket.
   useEffect(() => {
@@ -628,6 +637,8 @@ const AccountTradeTab = ({
       {/* RIGHT: Professional MT5 Order / Position Modifier Panel                   */}
       {/* ========================================================================= */}
       <div className="account-trade-order flex-1 flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-lg p-2.5 text-[12px] overflow-hidden shadow-md h-full">
+        {hasAnySymbol ? (
+        <>
         {/* Header Bar */}
         <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border)] mb-1.5 shrink-0">
           {selectedTicketRow ? (
@@ -1066,6 +1077,18 @@ const AccountTradeTab = ({
             </div>
           )}
         </div>
+        </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center gap-1.5 p-4">
+            <span className="text-[11px] font-normal text-gray-200">
+              No symbol is available for this account.
+            </span>
+            <span className="text-[11px] font-normal text-gray-400">
+              Symbols come from the tenant catalog, the open positions, or the live price feed.
+              Ask your administrator to configure symbols for this tenant before placing orders.
+            </span>
+          </div>
+        )}
       </div>
       {tradeConfirmation && (
         <DepositDialog
