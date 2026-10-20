@@ -16,6 +16,44 @@ const expireAndThrow = (reason) => {
   throw new Error(SESSION_ERROR_MESSAGE);
 };
 
+/**
+ * Broker backends answer HTTP 200 with an application-level failure flag when
+ * a trade action is rejected ({ success: false }, { ok: false }, or an
+ * `error` member). HTTP completion alone must never read as success, so these
+ * payloads are classified as errors at this boundary. Only explicit failure
+ * signals count — lists, envelopes and other payloads without them pass
+ * through untouched. Mirrors the structural checks in normalizeResult so the
+ * transport boundary and the result dialog agree on the outcome.
+ */
+export const isErrorPayload = (data) => {
+  if (data === false) return true;
+  if (!data || typeof data !== 'object') return false;
+  return data.success === false || data.ok === false || Boolean(data.error);
+};
+
+export const isSuccessPayload = (data) => !isErrorPayload(data);
+
+const getErrorPayloadMessage = (data, fallback) => (
+  data?.error?.message
+  ?? (typeof data?.error === 'string' ? data.error : undefined)
+  ?? (typeof data?.message === 'string' ? data.message : undefined)
+  ?? (typeof data?.detail === 'string' ? data.detail : undefined)
+  ?? fallback
+);
+
+/**
+ * Throw when a payload carries an application-level failure, using the same
+ * error shape as ordinary HTTP failures (message, status, statusText, code)
+ * so existing catch paths and error contracts are preserved.
+ */
+export const throwIfErrorPayload = (data, { status, statusText } = {}) => {
+  if (!isErrorPayload(data)) return data;
+  const code = data?.error?.code ?? data?.code;
+  const message = getErrorPayloadMessage(data, `Request failed${status ? ` (HTTP ${status})` : ''}`);
+  console.error(`[API RESPONSE ERROR] ${status ?? 'payload'}`, message, redactSensitive(data));
+  throw Object.assign(new Error(message), { status, statusText, code });
+};
+
 const browserOrigin = () => {
   if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
   return 'http://localhost';
@@ -214,6 +252,11 @@ const apiClient = {
       console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
       throw Object.assign(new Error(errorMsg), { status: response.status, statusText: response.statusText, code: data?.error?.code || data?.code });
     }
+
+    // A completed HTTP request can still report a rejected action
+    // ({ success: false }, { ok: false } or an `error` member). Fail here so
+    // callers cannot mistake it for success.
+    throwIfErrorPayload(data, { status: response.status, statusText: response.statusText });
 
     if (API_DEBUG_ENABLED) {
       console.debug(`[API RESPONSE SUCCESS] ${response.status}`, {

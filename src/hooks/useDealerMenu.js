@@ -33,7 +33,7 @@ export const useDealerMenu = (onRefresh) => {
     setLoading(true);
     try {
       const result = await fn();
-      console.log('Action successful:', result);
+      showResult(result);
       onRefresh?.();
       setDialog(null);
     } catch (err) {
