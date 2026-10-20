@@ -45,6 +45,9 @@ export const normalizeAccountMode = (value) => {
   return mode === 'hedging' || mode === 'netting' ? mode : '';
 };
 
+/** Trimmed country name, or '' when the value is not a usable name. */
+export const normalizeCountryName = (value) => String(value ?? '').trim();
+
 export const isAccountMode = (value) => normalizeAccountMode(value) !== '';
 
 /** Trimmed group path, or '' when nothing explicit was chosen. */
@@ -83,6 +86,29 @@ export const groupCurrencyOf = (groups, groupName) => {
   if (!record) return null;
   const code = normalizeCurrencyCode(readFirst(record, ['currency', 'Currency', 'deposit_currency', 'depositCurrency']));
   return code || null;
+};
+
+/**
+ * Broker-configured default country as a trimmed name, or null when the
+ * broker config carries none. Reads only the generic broker-record country
+ * field (either case); no tenant, broker, or country literals live here.
+ */
+export const brokerCountryOf = (brokerInfo) => {
+  if (!brokerInfo || typeof brokerInfo !== 'object') return null;
+  const name = normalizeCountryName(readFirst(brokerInfo, ['country', 'Country']));
+  return name || null;
+};
+
+/**
+ * Default Country for the wizard. The broker config wins when it carries a
+ * country; otherwise '' (fail-closed: no invented default is ever emitted).
+ * A touched field keeps the operator's value, so re-resolution never
+ * overwrites an explicit pick. Mirrors the backend account-create contract,
+ * where Country is optional free text stored exactly as sent.
+ */
+export const resolveDefaultCountry = (brokerInfo, countryTouched) => {
+  if (countryTouched) return '';
+  return brokerCountryOf(brokerInfo) ?? '';
 };
 
 /**

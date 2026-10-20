@@ -7,7 +7,9 @@ import {
   ACCOUNT_MODE_DEFAULT,
   buildSubmittableAccountPayload,
   inheritGroupSettings,
+  resolveDefaultCountry,
 } from './newAccountWizard';
+import { getBrokerInfo } from '../../services/brokerAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 
@@ -183,13 +185,17 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // placeholder), Currency starts '' (no USD default). Leverage and currency
   // arrive only via explicit group inheritance (syncGroupDefaults) or an
   // explicit operator pick; submit fails closed on empty group/leverage/
-  // currency via buildSubmittableAccountPayload. Country 'India' and the
-  // CURRENCIES/LEVERAGES option lists are intentionally out of scope here.
+  // currency via buildSubmittableAccountPayload. Country starts '' unless the
+  // broker config carries one (resolveDefaultCountry over getBrokerInfo);
+  // the backend stores Country exactly as sent (optional free text), so an
+  // empty Country passes through untouched and no value is ever invented.
+  // CURRENCIES/LEVERAGES/COUNTRIES stay generic option lists: no entry is
+  // ever auto-selected (empty initial + placeholder, like currency/leverage).
   const [form, setForm] = useState({
     Group: '',
     Leverage: '',
     FirstName: '', LastName: '', Email: '', Phone: '',
-    Country: 'India', Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
+    Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
     master_pass: '', investor_pass: '',
   });
 
@@ -215,6 +221,7 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // omitted fields.
   const leverageTouched = useRef(false);
   const currencyTouched = useRef(false);
+  const countryTouched = useRef(false);
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -271,16 +278,18 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
     setResult(null);
     leverageTouched.current = false;
     currencyTouched.current = false;
+    countryTouched.current = false;
     // Reset path never prefills the first row: Group stays empty with the
     // "Select group…" placeholder so a reopened wizard fails closed until
     // the operator explicitly picks a group (inheritance then applies via
     // syncGroupDefaults). Search text is cleared so it can never leak into
-    // the next Group value.
+    // the next Group value. Country re-resolves from the broker config (empty
+    // when the config carries none) so no default is ever invented here.
     setGroupSearch('');
     setForm({
       Group: '',
       Leverage: '',
-      FirstName: '', LastName: '', Email: '', Phone: '', Country: 'India', Currency: '',
+      FirstName: '', LastName: '', Email: '', Phone: '', Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: '',
       AccountMode: ACCOUNT_MODE_DEFAULT,
       master_pass: '', investor_pass: '',
     });
@@ -379,8 +388,9 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </select>
                   </Field>
                   <Field id="new-account-country" label="Country" required>
-                    <select id="new-account-country" className="ui-select" value={form.Country} onChange={(event) => set('Country', event.target.value)}>
-                      {COUNTRIES.map((country) => <option key={country} value={country}>{country}</option>)}
+                    <select id="new-account-country" className="ui-select" value={form.Country} onChange={(event) => { countryTouched.current = true; set('Country', event.target.value); }}>
+                      <option value="" disabled>Select country…</option>
+                      {[...new Set([...COUNTRIES, form.Country].filter(Boolean))].sort().map((country) => <option key={country} value={country}>{country}</option>)}
                     </select>
                   </Field>
                 </div>

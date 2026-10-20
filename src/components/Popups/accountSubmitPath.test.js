@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACCOUNT_MODE_DEFAULT,
+  brokerCountryOf,
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
   normalizeAccountMode,
+  normalizeCountryName,
   normalizeCurrencyCode,
   inheritGroupSettings,
+  resolveDefaultCountry,
   resolveInitialGroup,
 } from './newAccountWizard.js';
 
@@ -31,12 +34,16 @@ import {
 
 // EXACT initial keys of NewAccountModal.jsx's useState initializer (sweep
 // W5/W4: Leverage and Currency both start '' so no hardcoded default can
-// reach the wire; values arrive only via group inheritance or explicit pick).
+// reach the wire; values arrive only via group inheritance or explicit pick.
+// Sweep country: Country starts '' via the REAL resolveDefaultCountry with no
+// broker config (fail-closed, no invented default); the broker-configured
+// country wins only when the config carries one, exactly as the modal seeds
+// it from getBrokerInfo()).
 const buildInitialForm = (overrides = {}) => ({
   Group: '',
   Leverage: '',
   FirstName: '', LastName: '', Email: '', Phone: '',
-  Country: 'India', Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
+  Country: resolveDefaultCountry(null, false), Currency: '', AccountMode: ACCOUNT_MODE_DEFAULT,
   master_pass: '', investor_pass: '',
   ...overrides,
 });
@@ -291,4 +298,183 @@ test('sweep W5/W4: reset leaves no currency default and fails closed', () => {
     {},
   );
   assert.throws(() => buildNewAccountPayload(reset), /Please select an account group\./);
+});
+
+// Sweep country (white-label hardcode removal; real helpers only): the
+// initial/reset form emits no country default, the broker-configured country
+// wins through the exact modal path (seeded via the REAL
+// resolveDefaultCountry, like the modal seeds it from getBrokerInfo()), an
+// explicit operator edit always wins, and empty Country passes through
+// exactly per the backend account-create contract (Country is optional free
+// text, stored as sent — never a submit failure).
+
+test('sweep country: initial form emits no country default', () => {
+  const initial = buildInitialForm();
+  assert.equal(initial.Country, '');
+  assert.equal(resolveDefaultCountry(null, false), '');
+  assert.equal(resolveDefaultCountry({}, false), '');
+  assert.equal(normalizeCountryName(initial.Country), '');
+  assert.throws(() => buildNewAccountPayload(initial), /Please select an account group\./);
+  assert.throws(() => buildSubmittableAccountPayload(initial), /Please select an account group\./);
+});
+
+test('sweep country: empty country passes through exactly to the payload', () => {
+  const picked = 'Fixture\\Beta';
+  const payload = buildNewAccountPayload({
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  });
+  assert.equal(payload.Country, '');
+  assert.equal(payload.Group, picked);
+  assert.equal(payload.Currency, 'GBP');
+});
+
+test('sweep country: broker-config country wins through the exact modal path', () => {
+  const picked = 'Fixture\\Beta';
+  const initial = { ...buildInitialForm(), Country: resolveDefaultCountry({ country: 'Germany' }, false) };
+  assert.equal(initial.Country, 'Germany');
+  const payload = buildNewAccountPayload({
+    ...initial,
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  });
+  assert.equal(payload.Group, picked);
+  assert.equal(payload.Country, 'Germany');
+});
+
+test('sweep country: touched country is never overwritten by re-resolution', () => {
+  assert.equal(resolveDefaultCountry({ country: 'Germany' }, true), '');
+  const payload = buildNewAccountPayload({
+    ...buildInitialForm(),
+    Group: 'Fixture\\Beta',
+    Leverage: 50,
+    Currency: 'GBP',
+    Country: 'France',
+    ...operatorDetails(),
+  });
+  assert.equal(payload.Country, 'France');
+});
+
+test('sweep country: reset leaves no country default', () => {
+  const reset = buildInitialForm();
+  assert.equal(reset.Country, '');
+  assert.equal(normalizeCountryName(reset.Country), '');
+  assert.deepEqual(
+    inheritGroupSettings({
+      groups: groups(),
+      groupName: reset.Group,
+      leverageTouched: false,
+      currencyTouched: false,
+    }),
+    {},
+  );
+  assert.throws(() => buildNewAccountPayload(reset), /Please select an account group\./);
+});
+
+// Sweep hardening (white-label: no invented country default; real helpers
+// only, through the exact modal path): broker records carrying both country
+// keys, non-object broker info, touched-wins with a broker country present,
+// whitespace-only Country pass-through, and option lists that never
+// auto-select an entry.
+
+test('sweep hardening: broker record with both country keys wins through the exact modal path', () => {
+  assert.equal(brokerCountryOf({ country: 'Germany', Country: 'France' }), 'Germany');
+  assert.equal(brokerCountryOf({ country: '   ', Country: 'France' }), 'France');
+  assert.equal(resolveDefaultCountry({ country: 'Germany', Country: 'France' }, false), 'Germany');
+  const picked = 'Fixture\\Beta';
+  const initial = { ...buildInitialForm(), Country: resolveDefaultCountry({ country: 'Germany', Country: 'France' }, false) };
+  assert.equal(initial.Country, 'Germany');
+  const payload = buildNewAccountPayload({
+    ...initial,
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  });
+  assert.equal(payload.Group, picked);
+  assert.equal(payload.Country, 'Germany');
+});
+
+test('sweep hardening: non-object broker info seeds an empty Country through the modal path', () => {
+  assert.equal(brokerCountryOf('Germany'), null);
+  assert.equal(brokerCountryOf(42), null);
+  assert.equal(resolveDefaultCountry('Germany', false), '');
+  assert.equal(resolveDefaultCountry(42, false), '');
+  assert.equal(resolveDefaultCountry([], false), '');
+  const picked = 'Fixture\\Beta';
+  const payload = buildNewAccountPayload({
+    ...buildInitialForm(),
+    Country: resolveDefaultCountry('Germany', false),
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  });
+  assert.equal(payload.Country, '');
+  assert.equal(payload.Group, picked);
+});
+
+test('sweep hardening: touched country keeps the operator value even with broker country present', () => {
+  assert.equal(resolveDefaultCountry({ country: 'Germany', Country: 'France' }, true), '');
+  assert.equal(resolveDefaultCountry({ Country: 'Germany' }, true), '');
+  const form = {
+    ...buildInitialForm(),
+    Country: 'France',
+    Group: 'Fixture\\Beta',
+    Leverage: 50,
+    Currency: 'GBP',
+    ...operatorDetails(),
+  };
+  assert.equal(buildNewAccountPayload(form).Country, 'France');
+  assert.equal(buildSubmittableAccountPayload(form).Country, 'France');
+});
+
+test('sweep hardening: whitespace-only Country passes through as empty on the submit path', () => {
+  const picked = 'Fixture\\Beta';
+  for (const whitespace of ['   ', ' \t\n ', undefined, null]) {
+    const form = {
+      ...buildInitialForm(),
+      Group: picked,
+      ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+      ...operatorDetails(),
+      Country: whitespace,
+    };
+    assert.equal(buildNewAccountPayload(form).Country, '');
+    assert.equal(buildSubmittableAccountPayload(form).Country, '');
+  }
+  const padded = buildNewAccountPayload({
+    ...buildInitialForm(),
+    Group: picked,
+    Leverage: 50,
+    Currency: 'GBP',
+    ...operatorDetails(),
+    Country: '  France  ',
+  });
+  assert.equal(padded.Country, 'France');
+});
+
+test('sweep hardening: option lists never auto-select on the submit path', () => {
+  const initial = buildInitialForm();
+  assert.equal(initial.Leverage, '');
+  assert.equal(initial.Currency, '');
+  assert.equal(initial.Country, '');
+  assert.equal(normalizeCurrencyCode(initial.Currency), '');
+  const reversed = [...groups()].reverse();
+  assert.equal(
+    resolveInitialGroup({ groups: reversed, currentGroup: '', groupTouched: false, search: '' }),
+    null,
+  );
+  assert.equal(
+    resolveInitialGroup({ groups: [groups()[0]], currentGroup: '', groupTouched: false, search: '' }),
+    null,
+  );
+  assert.deepEqual(
+    inheritGroupSettings({ groups: reversed, groupName: '', leverageTouched: false, currencyTouched: false }),
+    {},
+  );
+  // Valid option values with no group still fail closed on both builders.
+  const optionValues = { ...initial, Group: '', Leverage: 200, Currency: 'EUR' };
+  assert.throws(() => buildNewAccountPayload(optionValues), /Please select an account group\./);
+  assert.throws(() => buildSubmittableAccountPayload(optionValues), /Please select an account group\./);
 });

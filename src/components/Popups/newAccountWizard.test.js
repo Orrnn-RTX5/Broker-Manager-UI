@@ -4,6 +4,7 @@ import {
   ACCOUNT_MODES,
   ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
+  brokerCountryOf,
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
   groupCurrencyOf,
@@ -12,8 +13,10 @@ import {
   isAccountMode,
   isCreatableAccountMode,
   normalizeAccountMode,
+  normalizeCountryName,
   normalizeCurrencyCode,
   normalizeGroupName,
+  resolveDefaultCountry,
   resolveInitialGroup,
 } from './newAccountWizard.js';
 
@@ -309,12 +312,58 @@ test('submit path admits hedging and refuses netting before any payload is built
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: '' })), /not supported yet/);
 });
 
+// Sweep white-label hardcode (no country default is ever invented; real
+// helpers only): the resolver emits '' when the broker config carries no
+// country, the broker-configured country wins when present, an explicit
+// operator edit always wins over re-resolution, and empty Country passes
+// through the payload exactly per the backend account-create contract
+// (Country is optional free text, stored as sent).
+
+test('sweep country: no country default is ever emitted without broker config', () => {
+  assert.equal(resolveDefaultCountry(null, false), '');
+  assert.equal(resolveDefaultCountry(undefined, false), '');
+  assert.equal(resolveDefaultCountry({}, false), '');
+  assert.equal(resolveDefaultCountry({ broker_name: 'Fixture Broker' }, false), '');
+  assert.equal(brokerCountryOf(null), null);
+  assert.equal(brokerCountryOf({}), null);
+  assert.equal(brokerCountryOf({ country: '   ' }), null);
+  assert.equal(normalizeCountryName(''), '');
+  assert.equal(normalizeCountryName(null), '');
+});
+
+test('sweep country: broker-config country wins when present (same path the modal uses)', () => {
+  assert.equal(resolveDefaultCountry({ country: 'Germany' }, false), 'Germany');
+  assert.equal(resolveDefaultCountry({ Country: '  Germany  ' }, false), 'Germany');
+  assert.equal(brokerCountryOf({ country: 'Germany' }), 'Germany');
+  const payload = buildNewAccountPayload(baseForm({ Country: resolveDefaultCountry({ country: 'Germany' }, false) }));
+  assert.equal(payload.Country, 'Germany');
+  assert.equal(
+    buildSubmittableAccountPayload(baseForm({ Country: resolveDefaultCountry({ country: 'Germany' }, false) })).Country,
+    'Germany',
+  );
+});
+
+test('sweep country: an explicit operator edit always wins over re-resolution', () => {
+  assert.equal(resolveDefaultCountry({ country: 'Germany' }, true), '');
+  assert.equal(resolveDefaultCountry({ Country: 'Germany' }, true), '');
+  const payload = buildNewAccountPayload(baseForm({ Country: 'France' }));
+  assert.equal(payload.Country, 'France');
+});
+
+test('sweep country: empty country passes through exactly per the backend contract', () => {
+  for (const empty of ['', '   ', undefined, null]) {
+    const payload = buildNewAccountPayload(baseForm({ Country: empty }));
+    assert.equal(payload.Country, '');
+    assert.equal(buildSubmittableAccountPayload(baseForm({ Country: empty })).Country, '');
+  }
+});
+
 // Sweep W5/W4 (no hardcoded tenant defaults reach the wire; real helpers
 // only): USD is never emitted as a default, group currency (including a
 // non-USD fixture) wins after an explicit pick, a stale Leverage 100 with no
 // group still fails closed on group-required, and reset leaves no currency
-// default. Country 'India' and the CURRENCIES/LEVERAGES option lists are out
-// of scope and untouched.
+// default. The CURRENCIES/LEVERAGES option lists stay generic option sets
+// with no entry auto-selected.
 
 test('sweep W5/W4: no USD default is ever emitted; empty currency fails closed', () => {
   assert.equal(normalizeCurrencyCode(''), '');
@@ -391,4 +440,75 @@ test('sweep W5/W4: reset leaves no currency default and fails closed', () => {
     {},
   );
   assert.throws(() => buildNewAccountPayload(resetForm), /Please select an account group\./);
+});
+
+// Sweep hardening (white-label: no invented country default; real helpers
+// only): broker records carrying both country keys, non-object broker info,
+// touched-wins with a broker country present, whitespace-only Country
+// pass-through, and option lists that never auto-select an entry.
+
+test('sweep hardening: broker record with both country keys resolves first-wins with empty-first fallback', () => {
+  assert.equal(brokerCountryOf({ country: 'Germany', Country: 'France' }), 'Germany');
+  assert.equal(brokerCountryOf({ country: '', Country: 'France' }), 'France');
+  assert.equal(brokerCountryOf({ country: '   ', Country: 'France' }), 'France');
+  assert.equal(resolveDefaultCountry({ country: 'Germany', Country: 'France' }, false), 'Germany');
+  assert.equal(resolveDefaultCountry({ country: '   ', Country: 'France' }, false), 'France');
+  const payload = buildNewAccountPayload(baseForm({
+    Country: resolveDefaultCountry({ country: 'Germany', Country: 'France' }, false),
+  }));
+  assert.equal(payload.Country, 'Germany');
+});
+
+test('sweep hardening: non-object broker info never yields a country default', () => {
+  assert.equal(brokerCountryOf('Germany'), null);
+  assert.equal(brokerCountryOf(42), null);
+  assert.equal(brokerCountryOf(true), null);
+  assert.equal(brokerCountryOf([]), null);
+  assert.equal(resolveDefaultCountry('Germany', false), '');
+  assert.equal(resolveDefaultCountry(42, false), '');
+  assert.equal(resolveDefaultCountry([], false), '');
+  assert.equal(resolveDefaultCountry('Germany', true), '');
+});
+
+test('sweep hardening: touched country is never overwritten even when broker config carries one', () => {
+  assert.equal(resolveDefaultCountry({ country: 'Germany', Country: 'France' }, true), '');
+  assert.equal(resolveDefaultCountry({ Country: 'Germany' }, true), '');
+  assert.equal(resolveDefaultCountry(undefined, true), '');
+  const payload = buildNewAccountPayload(baseForm({ Country: 'France' }));
+  assert.equal(payload.Country, 'France');
+  assert.equal(buildSubmittableAccountPayload(baseForm({ Country: 'France' })).Country, 'France');
+});
+
+test('sweep hardening: whitespace-only Country passes through as empty without failing submit', () => {
+  for (const whitespace of ['   ', ' \t\n ']) {
+    assert.equal(normalizeCountryName(whitespace), '');
+    assert.equal(buildNewAccountPayload(baseForm({ Country: whitespace })).Country, '');
+    assert.equal(buildSubmittableAccountPayload(baseForm({ Country: whitespace })).Country, '');
+  }
+  assert.equal(buildNewAccountPayload(baseForm({ Country: '  France  ' })).Country, 'France');
+});
+
+test('sweep hardening: option lists never auto-select without an explicit pick', () => {
+  const reversed = [...groups()].reverse();
+  assert.equal(
+    resolveInitialGroup({ groups: reversed, currentGroup: '', groupTouched: false, search: '' }),
+    null,
+  );
+  assert.equal(
+    resolveInitialGroup({ groups: [groups()[0]], currentGroup: '', groupTouched: false, search: '' }),
+    null,
+  );
+  assert.deepEqual(
+    inheritGroupSettings({ groups: reversed, groupName: '', leverageTouched: false, currencyTouched: false }),
+    {},
+  );
+  assert.equal(groupCurrencyOf(groups(), ''), null);
+  assert.equal(groupCurrencyOf(groups(), '   '), null);
+  assert.equal(groupLeverageOf(groups(), ''), null);
+  // Valid option values with no group still fail closed: option entries alone
+  // never stand in for an explicit group pick.
+  assert.throws(
+    () => buildNewAccountPayload(baseForm({ Group: '', Leverage: 200, Currency: 'EUR' })),
+    /Please select an account group\./,
+  );
 });
