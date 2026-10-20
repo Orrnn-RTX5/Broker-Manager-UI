@@ -631,9 +631,21 @@ export const resolveBrokerWsUrl = (brokerInfo = {}, fallbackUrl = '', path = DEF
   return buildWsEndpoint(toWsUrl(clean, defaultProtocol), path);
 };
 
+const isPageOrigin = (url = '') => {
+  if (typeof window === 'undefined' || !window.location?.origin) return false;
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+};
+
 export const isDirectBrokerBackendUrl = (backendUrl = '', brokerInfo = {}) => {
   const host = hostnameFromUrl(backendUrl);
   if (!host) return false;
+  // The UI's own origin is its same-origin proxy (ui-prod-server / Vite), which
+  // exposes Manager routes under /manager/*; it is never a bare broker backend.
+  if (isPageOrigin(backendUrl)) return false;
   if (isIpAddress(host) || isLocalHost(host)) return true;
   if (!isDesktopBackendTarget()) return false;
 

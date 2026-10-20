@@ -451,3 +451,32 @@ test('feed websocket URL never carries manager session credentials', () => {
   assert.equal(out.includes('manager-access-token'), false);
   assert.equal(out.includes('manager-local-token'), false);
 });
+
+test('page-origin backend (same-origin prod proxy) keeps the /manager prefix', () => {
+  const prev = globalThis.window;
+  globalThis.window = { location: { origin: 'http://localhost:4000', hostname: 'localhost' } };
+  try {
+    assert.equal(shouldUseManagerProxyPrefix('http://localhost:4000'), true);
+    assert.equal(shouldUseManagerProxyPrefix('http://127.0.0.1:8091'), false); // real direct backend unchanged
+  } finally {
+    if (prev === undefined) delete globalThis.window; else globalThis.window = prev;
+  }
+});
+
+test('page-origin check covers loopback forms and public same-origin hosts', () => {
+  const prev = globalThis.window;
+  try {
+    globalThis.window = { location: { origin: 'http://127.0.0.1:4000', hostname: '127.0.0.1' } };
+    assert.equal(shouldUseManagerProxyPrefix('http://127.0.0.1:4000'), true);
+    globalThis.window = { location: { origin: 'http://[::1]:4000', hostname: '[::1]' } };
+    assert.equal(shouldUseManagerProxyPrefix('http://[::1]:4000'), true);
+    globalThis.window = { location: { origin: 'https://manager.example', hostname: 'manager.example' } };
+    assert.equal(shouldUseManagerProxyPrefix('https://manager.example'), true);
+    assert.equal(shouldUseManagerProxyPrefix('https://manager.example:8091'), true);
+    globalThis.window = { location: { origin: 'http://localhost:4000', hostname: 'localhost' } };
+    assert.equal(shouldUseManagerProxyPrefix('http://127.0.0.1:8091'), false);
+    assert.equal(shouldUseManagerProxyPrefix('http://192.168.1.38:8091'), false);
+  } finally {
+    if (prev === undefined) delete globalThis.window; else globalThis.window = prev;
+  }
+});
