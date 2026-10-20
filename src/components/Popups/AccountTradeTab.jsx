@@ -82,7 +82,7 @@ const AccountTradeTab = ({
   onUpdateState,
 }) => {
   const [modalSymbol, setModalSymbol] = useState(
-    selectedTicketRow?.symbol || positions[0]?.symbol || 'EURUSD'
+    selectedTicketRow?.symbol || positions[0]?.symbol || ''
   );
   const [tradeSL, setTradeSL] = useState('0.00000');
   const [tradeTP, setTradeTP] = useState('0.00000');
@@ -105,7 +105,10 @@ const AccountTradeTab = ({
     Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0)
   );
   const volumeChanged = Boolean(selectedTicketRow) && Number(tradeVolume) !== Number(selectedTicketRow.volume ?? selectedTicketRow.lots ?? 0);
-  const canUpdateTrade = Boolean(selectedTicketRow) && (stopsChanged || volumeChanged) && canManipulateTrades && !isUpdatingTrade && !isPlacingTrade;
+  // Fail-closed: empty symbol stays empty (no invented fallback) and gates
+  // modify/close actions. Generic for all symbols; no symbol source invented here.
+  const hasTradeSymbol = Boolean(String(modalSymbol || '').trim());
+  const canUpdateTrade = Boolean(selectedTicketRow) && hasTradeSymbol && (stopsChanged || volumeChanged) && canManipulateTrades && !isUpdatingTrade && !isPlacingTrade;
   useEffect(() => {
     onUpdateState?.({ canUpdate: canUpdateTrade, busy: isUpdatingTrade || isPlacingTrade });
   }, [canUpdateTrade, isUpdatingTrade, isPlacingTrade, onUpdateState]);
@@ -171,10 +174,6 @@ const AccountTradeTab = ({
     });
     const storeSymbols = useSymbolStore.getState().symbols || {};
     Object.keys(storeSymbols).forEach((s) => set.add(s));
-    [
-      'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'USDCAD',
-      'AUDUSD', 'NZDUSD', 'XAUUSD', 'BTCUSD', 'ETHUSD',
-    ].forEach((s) => set.add(s));
     return Array.from(set).sort();
   }, [modalSymbol, positions]);
 
@@ -230,6 +229,10 @@ const AccountTradeTab = ({
   // Save only edited fields; preserve successful writes if a later request fails.
   const handleUpdateTrade = async () => {
     if (!selectedTicketRow || !canUpdateTrade || !requireTradeMutationPermission()) return;
+    if (!String(modalSymbol || '').trim()) {
+      showError('Update trade', new Error('Select a symbol before modifying an order.'));
+      return;
+    }
     const sl = Number(tradeSL), tp = Number(tradeTP), lots = Number(tradeVolume);
     if (!tradeSL.trim() || !tradeTP.trim() || !Number.isFinite(sl) || !Number.isFinite(tp) || sl < 0 || tp < 0) {
       showError('Update trade', new Error('Stop loss and take profit must be zero or positive prices.'));
@@ -963,8 +966,9 @@ const AccountTradeTab = ({
                   onClick={() =>
                     requestTradeClose({ position: selectedTicketRow.position || selectedTicketRow.ticket })
                   }
-                  className="h-8 px-3 rounded border border-red-500/50 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-[12px] flex items-center gap-1 transition-colors"
-                  title="Close Position"
+                  disabled={!hasTradeSymbol}
+                  className="h-8 px-3 rounded border border-red-500/50 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-[12px] flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!hasTradeSymbol ? 'Select a symbol before closing' : 'Close Position'}
                 >
                   <Trash2 size={13} /> Close
                 </button>

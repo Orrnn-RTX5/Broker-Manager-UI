@@ -278,3 +278,74 @@ test('real overlay still propagates an actual TP change so edits resync', () => 
 // position selected, edit the SL field, and let live ticks arrive for >250ms.
 // The typed SL value must persist and the Modify button must enable. Before
 // this fix the field reset to the saved value on the next tick.
+
+// ds-16 E-FLAG: the Trade tab invented an 'EURUSD' fallback (modalSymbol
+// initializer `|| 'EURUSD'` plus a hardcoded preset symbol list), so an empty
+// symbol could never stay empty and modify/close stayed enabled against a
+// symbol the account never asked for. The fallback is removed: empty stays
+// empty and gates modify/close fail-closed. Everything below asserts the REAL
+// AccountTradeTab.jsx source text (never mirrored logic), generically for all
+// symbols with no new endpoints.
+
+test('no invented symbol fallback: empty symbol stays empty', () => {
+  assert.ok(!tabSource.includes("'EURUSD'"), 'component must not invent an EURUSD fallback anywhere in the flow');
+  assert.ok(!tabSource.includes('"EURUSD"'), 'component must not invent an EURUSD fallback (double-quoted) anywhere in the flow');
+  const initAt = tabSource.indexOf('selectedTicketRow?.symbol || positions[0]?.symbol');
+  assert.ok(initAt !== -1, 'modalSymbol must still derive from the selected row or open positions');
+  const initSnippet = tabSource.slice(initAt, initAt + 120);
+  assert.ok(!initSnippet.includes('EURUSD'), 'modalSymbol initializer must not fall back to an invented symbol');
+  assert.ok(initSnippet.includes("|| ''"), 'empty symbol must stay empty (explicit empty-string fallback)');
+});
+
+test('empty symbol disables the modify action through the real enablement path', () => {
+  const gateAt = tabSource.indexOf('const hasTradeSymbol');
+  assert.ok(gateAt !== -1, 'a truthy-symbol gate must exist');
+  const gateLine = tabSource.slice(gateAt, tabSource.indexOf('\n', gateAt));
+  assert.ok(gateLine.includes('modalSymbol'), 'the symbol gate must derive from the real modalSymbol state');
+  const updateAt = tabSource.indexOf('const canUpdateTrade');
+  assert.ok(updateAt !== -1, 'the real modify enablement path must exist');
+  const updateLine = tabSource.slice(updateAt, tabSource.indexOf('\n', updateAt));
+  assert.ok(updateLine.includes('hasTradeSymbol'), 'modify enablement must gate on truthy symbol (fail-closed)');
+  assert.ok(!updateLine.includes('!hasTradeSymbol'), 'the symbol gate must enable on a real symbol, not invert it');
+  assert.ok(updateLine.includes('selectedTicketRow'), 'modify enablement must still require a selected row');
+  // Evaluate the REAL gate initializer extracted above (never a
+  // reimplementation) across empty vs real symbols.
+  const initExpr = gateLine.slice(gateLine.indexOf('=') + 1).replace(/;[\s\S]*$/, '').trim();
+  const evalGate = (symbol) => new Function('modalSymbol', 'return (' + initExpr + ');')(symbol);
+  assert.equal(evalGate(''), false, 'empty symbol must fail the gate');
+  assert.equal(evalGate('   '), false, 'whitespace-only symbol must fail the gate');
+  assert.equal(evalGate(null), false, 'null symbol must fail the gate');
+  assert.equal(evalGate(undefined), false, 'undefined symbol must fail the gate');
+  assert.equal(evalGate('TESTSYM'), true, 'a real symbol must pass the gate');
+  assert.ok(
+    tabSource.includes('disabled={!canUpdateTrade}'),
+    'Modify button must stay bound to the symbol-gated enablement flag'
+  );
+});
+
+test('empty symbol disables the close action through the real close path', () => {
+  const closeAt = tabSource.indexOf('requestTradeClose({');
+  assert.ok(closeAt !== -1, 'the real close call site must exist');
+  const closeWindow = tabSource.slice(Math.max(0, closeAt - 600), closeAt + 200);
+  assert.ok(closeWindow.includes('disabled={!hasTradeSymbol}'), 'Close button must disable on empty symbol (fail-closed)');
+  const handlerAt = tabSource.indexOf('const handleUpdateTrade');
+  assert.ok(handlerAt !== -1, 'the real modify handler must exist');
+  const handlerWindow = tabSource.slice(handlerAt, handlerAt + 600);
+  assert.ok(
+    handlerWindow.includes("String(modalSymbol || '').trim()"),
+    'modify handler must fail closed on empty symbol'
+  );
+});
+
+test('symbol list invents no symbols: built only from live sources', () => {
+  const listStart = tabSource.indexOf('// Available symbols list');
+  assert.ok(listStart !== -1, 'available-symbols section must exist');
+  const listEnd = tabSource.indexOf('}, [modalSymbol', listStart);
+  assert.ok(listEnd > listStart, 'available-symbols memo must declare its dep close');
+  const listBlock = tabSource.slice(listStart, listEnd);
+  assert.ok(!listBlock.includes('EURUSD'), 'symbol list must not invent EURUSD');
+  assert.ok(!/'[A-Z]{6}'/.test(listBlock), 'symbol list must not embed hardcoded 6-letter symbol literals');
+  assert.ok(listBlock.includes('modalSymbol'), 'symbol list must include the current symbol');
+  assert.ok(listBlock.includes('positions'), 'symbol list must include open-position symbols');
+  assert.ok(listBlock.includes('storeSymbols'), 'symbol list must include live-feed symbols');
+});

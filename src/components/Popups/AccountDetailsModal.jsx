@@ -727,8 +727,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             setSelectedTicketRow({
               position: focusedTicket,
               ticket: focusedTicket,
-              symbol: 'EURUSD',
-              type: 'buy',
+              symbol: '',
+              type: '',
               priceSl: 0,
               priceTp: 0,
             });
@@ -748,8 +748,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           setSelectedTicketRow({
             position: focusedTicket,
             ticket: focusedTicket,
-            symbol: 'EURUSD',
-            type: 'buy',
+            symbol: '',
+            type: '',
             priceSl: 0,
             priceTp: 0,
           });
