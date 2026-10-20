@@ -26,4 +26,13 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  // Node-based test files run under `node --test`, not in a browser:
+  // allow the Node globals (process, Buffer, setImmediate, ...) there.
+  // Scoped to test files only — never silences app-code rules globally.
+  {
+    files: ['**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

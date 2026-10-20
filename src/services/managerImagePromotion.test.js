@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const workflow = fs.readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
-const scriptBlock = workflow.match(/name: Verify source revision and successful publish run[\s\S]*?script: \|\r?\n([\s\S]*?)(?=\r?\n      - name:)/)?.[1];
+const scriptBlock = workflow.match(/name: Verify source revision and successful publish run[\s\S]*?script: \|\r?\n([\s\S]*?)(?=\r?\n {6}- name:)/)?.[1];
 assert.ok(scriptBlock, 'publish provenance verifier must exist');
 const script = scriptBlock.split(/\r?\n/).map(line => line.replace(/^ {12}/, '')).join('\n');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
