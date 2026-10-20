@@ -32,6 +32,14 @@ export const useDealerMenu = (onRefresh) => {
   const exec = async (fn) => {
     setLoading(true);
     try {
+      // NOTE (stub-vs-transport split): the real transport throws first —
+      // apiClient.request() runs throwIfErrorPayload before resolving, so a
+      // { success: false } payload never reaches this success path in
+      // production (it lands in catch below, without refresh). showResult
+      // still classifies via normalizeResult (resultDialogStore) as defense
+      // in depth, which is why a unit stub resolving { success: false }
+      // straight into exec() renders as an error dialog yet still refreshes
+      // — stub order differs from transport order.
       const result = await fn();
       showResult(result);
       onRefresh?.();
