@@ -9,6 +9,13 @@ import { useDockingContext } from '../../components/docking/DockingContext';
 import { LANGUAGE_OPTIONS } from '../../config/languages.js';
 import { useI18nStore, useT } from '../../i18n/index.js';
 
+// SUI-M6: no depth-of-market panel or action exists in this workspace, so the
+// item renders disabled with an explicit reason instead of silently doing
+// nothing. Mirrors the TreeNode pattern (title `${label} — ${reason}` +
+// aria-disabled) while using MenuItem's own `disabled` prop like the other
+// menus.
+const NO_DEPTH_REASON = 'Not available in this workspace';
+
 // Panel IDs
 const PANEL_NAVIGATOR = 'navigator';
 const PANEL_MARKET_DATA = 'market_data';
@@ -79,7 +86,9 @@ const ViewMenu = ({ onClose, onViewAction }) => {
         iconColor="text-indigo-500"
       />
       <MenuDivider />
-      <MenuItem text={t('view.depthOfMarket')} hasSubmenu />
+      <div title={`${t('view.depthOfMarket')} — ${NO_DEPTH_REASON}`} aria-disabled="true">
+        <MenuItem text={t('view.depthOfMarket')} disabled />
+      </div>
       <MenuItem icon={ArrowUpDown} text={t('view.marketWatch')} shortcut="Ctrl+M" iconColor="text-red-500" onClick={runViewAction('market-watch', () => togglePanel(PANEL_MARKET_DATA))} />
       <MenuItem icon={Folders} text={t('view.navigator')} shortcut="Alt+N" iconColor="text-yellow-500" onClick={runViewAction('navigator', () => togglePanel(PANEL_NAVIGATOR))} />
       <MenuItem icon={BarChart2} text={t('view.marginCalls')} shortcut="Ctrl+L" iconColor="text-red-500" onClick={runViewAction('margin-calls')} />

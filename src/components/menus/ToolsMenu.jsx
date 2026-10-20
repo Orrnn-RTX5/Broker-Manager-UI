@@ -4,6 +4,13 @@ import { Database, Radio, Settings, SlidersHorizontal, Users } from 'lucide-reac
 import useSymbolStore from '../../store/symbolStore';
 import { useT } from '../../i18n/index.js';
 
+// SUI-M6: no global-settings surface exists in this workspace (no route,
+// dialog, or endpoint), so the item renders disabled with an explicit reason
+// instead of silently doing nothing. Mirrors the TreeNode pattern
+// (title `${label} — ${reason}` + aria-disabled) while using MenuItem's own
+// `disabled` prop like the other menus.
+const NO_GLOBAL_SETTINGS_REASON = 'Not available in this workspace';
+
 const ToolsMenu = () => {
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const isLiveFeedConnected = useSymbolStore((state) => state.isConnected);
@@ -44,7 +51,9 @@ const ToolsMenu = () => {
         )}
       </div>
       <MenuDivider />
-      <MenuItem icon={Settings} text={t('tools.globalSettings')} iconColor="text-gray-600" />
+      <div title={`${t('tools.globalSettings')} — ${NO_GLOBAL_SETTINGS_REASON}`} aria-disabled="true">
+        <MenuItem icon={Settings} text={t('tools.globalSettings')} iconColor="text-gray-600" disabled />
+      </div>
     </div>
   );
 };

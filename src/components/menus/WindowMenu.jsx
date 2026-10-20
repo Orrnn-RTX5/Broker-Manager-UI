@@ -25,6 +25,20 @@ import { useT } from '../../i18n/index.js';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions.js';
 
+// SUI-M6: the web workspace has no floating MDI windows, so the classic
+// desktop tile/cascade/arrange commands (and the open-window list) have no
+// backing action. They render disabled with an explicit reason instead of
+// silently doing nothing. Mirrors the TreeNode pattern
+// (title `${label} — ${reason}` + aria-disabled) while using MenuItem's own
+// `disabled` prop like the other menus.
+const NO_MDI_REASON = 'Not available in the web workspace';
+
+const UnavailableMenuItem = ({ icon, label, shortcut, iconColor }) => (
+  <div title={`${label} — ${NO_MDI_REASON}`} aria-disabled="true">
+    <MenuItem icon={icon} text={label} shortcut={shortcut} iconColor={iconColor} disabled />
+  </div>
+);
+
 const WindowMenu = ({ onClose, onViewAction }) => {
   const navigate = useNavigate();
   const t = useT();
@@ -38,12 +52,12 @@ const WindowMenu = ({ onClose, onViewAction }) => {
 
   return (
     <div className="manager-menu-dropdown absolute top-full left-0 bg-[#f2f2f2] dark:bg-[var(--surface)] border border-[#a0a0a0] dark:border-[var(--border)] shadow-[2px_2px_4px_rgba(0,0,0,0.2)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.6)] py-1 min-w-[260px] z-[60] max-h-[90vh] overflow-y-auto transition-colors">
-      <MenuItem icon={LayoutGrid} text={t('window.tileWindows')} shortcut="Alt+R" iconColor="text-blue-500" />
+      <UnavailableMenuItem icon={LayoutGrid} label={t('window.tileWindows')} shortcut="Alt+R" iconColor="text-blue-500" />
       <MenuDivider />
-      <MenuItem icon={Layers} text={t('window.cascade')} iconColor="text-blue-600" />
-      <MenuItem icon={SplitSquareHorizontal} text={t('window.tileHorizontally')} iconColor="text-blue-500" />
-      <MenuItem icon={SplitSquareVertical} text={t('window.tileVertically')} iconColor="text-blue-500" />
-      <MenuItem icon={Rows3} text={t('window.arrangeIcons')} iconColor="text-blue-600" />
+      <UnavailableMenuItem icon={Layers} label={t('window.cascade')} iconColor="text-blue-600" />
+      <UnavailableMenuItem icon={SplitSquareHorizontal} label={t('window.tileHorizontally')} iconColor="text-blue-500" />
+      <UnavailableMenuItem icon={SplitSquareVertical} label={t('window.tileVertically')} iconColor="text-blue-500" />
+      <UnavailableMenuItem icon={Rows3} label={t('window.arrangeIcons')} iconColor="text-blue-600" />
       <MenuItem 
         icon={RotateCcw} 
         text={t('window.resetToDefault')} 
@@ -53,7 +67,7 @@ const WindowMenu = ({ onClose, onViewAction }) => {
           if (onClose) onClose();
         }}
       />
-      <MenuItem text={t('window.layouts')} hasSubmenu />
+      <UnavailableMenuItem label={t('window.layouts')} />
       <MenuDivider />
       <MenuItem icon={BarChart} text={t('window.analytics')} iconColor="text-blue-400" onClick={() => handleMenuClick('/analytics/trading-accounts')} />
       <MenuItem icon={Users} text={t('window.onlineUsers')} iconColor="text-blue-600" onClick={() => handleMenuClick('/clients/online-users')} />
@@ -68,7 +82,7 @@ const WindowMenu = ({ onClose, onViewAction }) => {
       <MenuItem icon={Network} text={t('window.ibManagement')} iconColor="text-cyan-500" onClick={() => handleMenuClick('/ib')} />
       <MenuItem icon={Settings} text={t('window.symbolManagement')} iconColor="text-blue-500" onClick={() => handleMenuClick('/symbol-management')} />
       <MenuDivider />
-      <MenuItem icon={Check} text="1 Accounts" iconColor="text-black" />
+      <UnavailableMenuItem icon={Check} label="1 Accounts" iconColor="text-black" />
     </div>
   );
 };
