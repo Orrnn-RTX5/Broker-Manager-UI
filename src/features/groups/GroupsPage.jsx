@@ -237,10 +237,13 @@ const GroupsPage = () => {
     }
   };
 
-  const focusSearch = () => {
+  // Stable identity: only the stable searchInputRef is closed over, so the
+  // edit-menu ref bridge and the Find handler never go stale (and no
+  // exhaustive-deps warning is introduced by the stable click handler).
+  const focusSearch = useCallback(() => {
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
-  };
+  }, []);
 
   const handleKeyDown = (event) => {
     if (isEditableElement()) return;
@@ -292,7 +295,14 @@ const GroupsPage = () => {
     return () => publishEditMenuContext({ selectedCount: 0 });
   }, [selectedNode]);
 
-  handlersRef.current = { selectedNode, openProperties, duplicateGroup, copyNode, focusSearch };
+  // Publish the latest selection/handlers to the stable window listener
+  // below. A passive no-deps effect (not a render-phase write): menu clicks
+  // dispatch in a later task, after effects flush, so every dispatch observes
+  // the committed render's values — identical behaviour, safe under
+  // StrictMode double-render and concurrent aborted renders.
+  useEffect(() => {
+    handlersRef.current = { selectedNode, openProperties, duplicateGroup, copyNode, focusSearch };
+  });
   useEffect(() => {
     const handleEditMenuAction = (event) => {
       const { action } = event.detail || {};
@@ -336,6 +346,13 @@ const GroupsPage = () => {
     };
   }, [contextMenu]);
   const menuAction = (callback) => () => { setContextMenu(null); callback(); };
+  // Stable click handler for the Find menu item. focusSearch reads
+  // searchInputRef, so passing it (bare or wrapped) through menuAction during
+  // render trips react-hooks/refs. A useCallback with the same body runs only
+  // on click — identical behaviour (close menu, then focus), no render-phase
+  // ref involvement. Deps mirror the file's per-render closures; the ref
+  // object itself is stable so the callback never goes stale.
+  const handleFindClick = useCallback(() => { setContextMenu(null); focusSearch(); }, [focusSearch]);
 
   const emptyMessage = search.trim()
     ? 'No groups match your search.'
@@ -585,7 +602,7 @@ const GroupsPage = () => {
           <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => copyNode(contextMenu.node))}>
             <Copy size={14} /><span className="flex-1">Copy</span><span className="kbd">Ctrl+C</span>
           </div>
-          <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(focusSearch)}>
+          <div className="ui-ctxmenu-item" role="menuitem" onClick={handleFindClick}>
             <Search size={14} /><span className="flex-1">Find</span><span className="kbd">Ctrl+F</span>
           </div>
           <div className="ui-ctxmenu-sep" />
