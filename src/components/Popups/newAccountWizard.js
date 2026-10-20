@@ -277,16 +277,15 @@ export const currencyOptions = (groups = []) => {
 };
 
 /**
- * Default Currency for the wizard. With no group selected (open/reset) there
- * is no default ('': fail-closed, the placeholder stays). After an explicit
- * group pick the selected group's deposit currency is the default; a touched
- * field keeps the operator's value so re-resolution never overwrites an
- * explicit pick. A group without currency data leaves '' (never invented).
+ * Initial Currency for the wizard. Binding product decision (UI-3b): NEVER
+ * preselected — always '' in every case (no group, any group, touched or
+ * not). The placeholder stays until the operator picks explicitly or group
+ * inheritance (inheritGroupSettings) sets a value after an explicit group
+ * pick. The argument is accepted (and ignored) so callers keep a single
+ * explicit seam; nothing is ever derived from it.
  */
-export const resolveDefaultCurrency = ({ groups = [], groupName = '', currencyTouched = false } = {}) => {
-  if (currencyTouched) return '';
-  return groupCurrencyOf(groups, groupName) ?? '';
-};
+// eslint-disable-next-line no-unused-vars
+export const resolveDefaultCurrency = ({ groups = [], groupName = '', currencyTouched = false } = {}) => '';
 
 /**
  * Broker-configured country LIST as trimmed names, or [] when the broker
