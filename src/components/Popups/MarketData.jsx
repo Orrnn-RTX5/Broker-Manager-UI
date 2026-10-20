@@ -3,10 +3,7 @@ import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowDownRight, ArrowUpRight, Search, X } from 'lucide-react';
 import useSymbolStore, {
-  ensureSymbolTickSeries,
   getSymbolTickBuffer,
-  mergeRemoteSymbolTickHistory,
-  subscribeSymbolTicks,
 } from '../../store/symbolStore';
 import { buildBrokerApiUrl } from '../../config/endpoints';
 import authService from '../../services/authService';
@@ -19,18 +16,11 @@ import {
 } from './tickChartGeometry';
 
 const MAX_TICKS = MARKET_WATCH_TICK_CHART_LIMIT;
-const REMOTE_TICK_FETCH_LIMIT = 180;
 const SYMBOL_CLICK_DELAY_MS = 300;
 const COMPACT_QUOTE_ROW_HEIGHT = 27;
 const COMPACT_QUOTE_OVERSCAN = 10;
 const COMPACT_QUOTE_FALLBACK_VIEWPORT_HEIGHT = 540;
 const FALLBACK_CHART_SIZE = { width: 320, height: 240, fontSize: 11 };
-
-const remoteTickCache = new Map();
-const inFlightTickRequests = new Map();
-const unsupportedTickSymbols = new Set();
-
-const isLikelyUnsupportedTickSymbol = (symbol) => /\.[A-Z0-9]{1,5}$|-PERP$/i.test(String(symbol || '').trim());
 
 const toNumber = (value) => {
   const number = Number(value);
@@ -93,49 +83,6 @@ const parseRemoteTickHistory = (payload, symbol) => {
   return points.sort((a, b) => a.timestamp - b.timestamp);
 };
 
-const fetchRemoteTickSeries = (symbol) => {
-  const key = String(symbol || '').trim().toUpperCase();
-  if (!key || unsupportedTickSymbols.has(key) || isLikelyUnsupportedTickSymbol(key)) {
-    return Promise.resolve([]);
-  }
-  if (remoteTickCache.has(key)) {
-    return Promise.resolve(remoteTickCache.get(key));
-  }
-  if (inFlightTickRequests.has(key)) {
-    return inFlightTickRequests.get(key);
-  }
-  const url = buildBrokerApiUrl(`/api/v2/ticks/${encodeURIComponent(key)}?limit=${REMOTE_TICK_FETCH_LIMIT}`);
-  const token = authService.getToken?.() || null;
-  const request = fetch(url, {
-    method: 'GET',
-    headers: {
-      accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
-    .then((res) => {
-      if (res.status === 403 || res.status === 404) {
-        unsupportedTickSymbols.add(key);
-        return null;
-      }
-      return res.ok ? res.json() : null;
-    })
-    .then((payload) => {
-      const points = payload ? parseRemoteTickHistory(payload, key) : [];
-      if (points.length > 0) {
-        remoteTickCache.set(key, points);
-        mergeRemoteSymbolTickHistory(key, points);
-      }
-      return points;
-    })
-    .catch(() => [])
-    .finally(() => {
-      inFlightTickRequests.delete(key);
-    });
-  inFlightTickRequests.set(key, request);
-  return request;
-};
-
 const MarketQuoteRow = memo(function MarketQuoteRow({
   compact,
   isConnected,
@@ -190,6 +137,10 @@ const MarketData = ({ compact = false }) => {
   const [activeTab, setActiveTab] = useState('Symbols');
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [tickHistory, setTickHistory] = useState([]);
+  // Remote (broker-history) points per symbol, merged under the live points
+  // in renderTicks. Missing this state crashed the Ticks tab (ReferenceError)
+  // whenever a broker returned history, and on every Ticks render.
+  const [remoteHistoryMap, setRemoteHistoryMap] = useState({});
   const [chartElement, setChartElement] = useState(null);
   const [chartSize, setChartSize] = useState(FALLBACK_CHART_SIZE);
   const titleId = useId();
@@ -202,21 +153,6 @@ const MarketData = ({ compact = false }) => {
   const searchInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [symbolsViewport, setSymbolsViewport] = useState({ height: 0, scrollTop: 0 });
-
-  const handleChartCanvasRef = useCallback((node) => {
-    setChartElement(node);
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    const width = Math.floor(rect.width);
-    const height = Math.floor(rect.height);
-    if (width > 0 && height > 0) {
-      setChartSize((current) => (
-        current.width === width && current.height === height
-          ? current
-          : { width, height, fontSize: 11 }
-      ));
-    }
-  }, []);
 
   const {
     feedError,
