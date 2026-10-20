@@ -27,25 +27,38 @@ export const GROUP_ACCOUNT_COLUMNS = [
 
 export const readLeverageRatio = (settings) => {
   const raw = settings?.leverage ?? settings?.Leverage ?? settings?.defaultLeverage ?? settings?.default_leverage;
-  if (raw === undefined || raw === null || raw === '') return null;
-  const text = String(raw).trim();
-  const ratio = text.match(/1\s*:\s*(\d+(?:\.\d+)?)/i);
-  const value = Number(ratio ? ratio[1] : text);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  }
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (text === '') return null;
+    const ratio = text.match(/^1\s*:\s*(\d+(?:\.\d+)?)$/i);
+    if (ratio) {
+      const value = Number(ratio[1]);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+    if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+    const value = Number(text);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  return null;
 };
 
 const groupLeverage = (settings) => readLeverageRatio(settings);
 
 export const toGroupAccountRow = (account, groupSettings) => {
-  const leverage = readLeverageRatio(account) ?? groupLeverage(groupSettings);
+  const safe = account ?? {};
+  const leverage = readLeverageRatio(safe) ?? groupLeverage(groupSettings);
   return {
     account,
-    login: account.login,
-    name: account.Name || '',
-    email: pick(account, ['email', 'Email', 'username', 'Username']),
+    login: safe.login ?? '',
+    name: safe.Name || '',
+    email: pick(safe, ['email', 'Email', 'username', 'Username']),
     leverage: leverage === null ? '' : `1 : ${leverage}`,
-    balance: money(pick(account, ['balance', 'Balance'])),
-    equity: money(pick(account, ['equity', 'Equity'])),
+    balance: money(pick(safe, ['balance', 'Balance'])),
+    equity: money(pick(safe, ['equity', 'Equity'])),
   };
 };
 
