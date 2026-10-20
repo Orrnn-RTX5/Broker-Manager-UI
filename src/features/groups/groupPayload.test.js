@@ -365,54 +365,47 @@ test('a group edit copies leverage, margin, and a renamed group onto each accoun
   });
 });
 
-test('untouched display-default leverage is omitted on create so backend derivation governs', () => {
-  const payload = buildNewGroupPayload(
-    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 },
+test('top-level create sends its leverage even when untouched (broker-default pre-fill), as an integer', () => {
+  const prefilled = buildNewGroupPayload(
+    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 250 },
     { leverageTouched: false },
   );
+  assert.equal(prefilled.leverage, 250, 'a top-level group never relies on a silent backend leverage default');
+  assert.ok(!('leverageTouched' in prefilled), 'the touched flag itself is never a payload key');
 
-  assert.ok(!('leverage' in payload), 'untouched leverage 100 must be omitted for backend derivation');
-  assert.ok(!('leverageTouched' in payload), 'the touched flag itself is never a payload key');
-  assert.ok(
-    Object.keys(payload).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
-    'payload keys must stay within GROUP_ALLOWED_FIELDS',
-  );
-});
-
-test('explicit leverage values (including a re-typed 100) are always sent on create', () => {
-  const explicit100 = buildNewGroupPayload(
-    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 },
-    { leverageTouched: true },
-  );
-  const explicit200 = buildNewGroupPayload(
-    { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 200 },
-    { leverageTouched: true },
-  );
-  // Callers that predate the touched flag keep the previous behavior: the
-  // value is preserved.
-  const defaultTouched = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 100 });
-
-  assert.equal(explicit100.leverage, 100);
-  assert.equal(explicit200.leverage, 200);
-  assert.equal(defaultTouched.leverage, 100);
-  for (const payload of [explicit100, explicit200, defaultTouched]) {
+  const typed = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: '300' }, { leverageTouched: true });
+  assert.equal(typed.leverage, 300);
+  // Callers that predate the touched flag keep sending the value.
+  assert.equal(buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage: 200 }).leverage, 200);
+  for (const payload of [prefilled, typed]) {
     assert.ok(
       Object.keys(payload).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
       'payload keys must stay within GROUP_ALLOWED_FIELDS',
     );
   }
+});
+
+test('create never sends a blank, 0, fractional or out-of-range leverage', () => {
+  for (const leverage of ['', 0, '0', 1.5, 10001, 'abc', null]) {
+    for (const leverageTouched of [false, true]) {
+      const payload = buildNewGroupPayload({ ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard', leverage }, { leverageTouched });
+      assert.ok(!('leverage' in payload), `leverage ${JSON.stringify(leverage)} must never be sent`);
+    }
+  }
+});
+
+test('create with a parent group: untouched leverage is omitted so the parent governs; explicit is sent', () => {
+  const base = { ...GROUP_DEFAULT_PAYLOAD, name: 'Nexa/standard/child', parentGroup: 'Nexa/standard', leverage: 250 };
+  assert.ok(!('leverage' in buildNewGroupPayload(base, { leverageTouched: false })));
+  assert.equal(buildNewGroupPayload(base, { leverageTouched: true }).leverage, 250);
 
   // The isNew save path forwards the touched flag to the create builder.
-  assert.ok(!('leverage' in buildGroupSavePayload(
-    existingGroup(),
-    { ...existingGroup(), leverage: 100 },
-    { isNew: true, leverageTouched: false },
-  )));
+  assert.ok(!('leverage' in buildGroupSavePayload(existingGroup(), base, { isNew: true, leverageTouched: false })));
   assert.equal(buildGroupSavePayload(
     existingGroup(),
-    { ...existingGroup(), leverage: 100 },
-    { isNew: true, leverageTouched: true },
-  ).leverage, 100);
+    { ...existingGroup(), leverage: 250 },
+    { isNew: true, leverageTouched: false },
+  ).leverage, 250);
 });
 
 test('edit path still sends the full picked payload including leverage', () => {

@@ -67,10 +67,10 @@ const runCreateSubmit = (formData, { leverageTouched = false } = {}) => {
 test('fresh form starts with a blank leverage but keeps every other financial default', () => {
   const form = buildNewGroupFormData({});
 
-  // The ONE behavior change: honest blank instead of the old 100 display
-  // default that the wire would omit when untouched.
+  // Honest blank: the modal pre-fills the broker's group default (or the
+  // operator enters one); there is no client-side leverage literal default.
   assert.equal(form.leverage, '');
-  assert.notEqual(NEW_GROUP_FINANCIAL_DEFAULTS.leverage, '', 'guard: the preset default is still a real ratio');
+  assert.ok(!('leverage' in NEW_GROUP_FINANCIAL_DEFAULTS), 'no leverage literal default for new groups');
 
   // All other financial defaults are preserved exactly.
   assert.equal(form.marginCallLevel, NEW_GROUP_FINANCIAL_DEFAULTS.marginCallLevel);
@@ -142,24 +142,36 @@ test('source book choices normalize to canonical bookType, never display labels'
   assert.equal(form.bookType, bookTypeForRoutingMode('a_book'));
 });
 
-test('fresh untouched form omits leverage; an explicit pick is always sent', () => {
+test('fresh top-level form: blank leverage never reaches the wire; a pre-filled or picked value is sent as an integer', () => {
   const fresh = buildNewGroupFormData({ presetName: 'Fixture/New' });
   assert.equal(fresh.leverage, '');
 
-  const untouched = runCreateSubmit({ ...fresh, name: 'Fixture/New' });
-  assert.ok(!('leverage' in untouched), 'untouched blank leverage must be omitted for backend derivation');
-  assert.ok(!('leverageTouched' in untouched), 'the touched flag itself is never a payload key');
+  // Blank is never sent (and never as 0); the modal's gate blocks the submit
+  // before this builder runs for a top-level create.
+  const blank = runCreateSubmit({ ...fresh, name: 'Fixture/New' });
+  assert.ok(!('leverage' in blank), 'a blank leverage must never be sent');
+  assert.ok(!('leverageTouched' in blank), 'the touched flag itself is never a payload key');
   assert.ok(
-    Object.keys(untouched).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
+    Object.keys(blank).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
     'payload keys must stay within GROUP_ALLOWED_FIELDS',
   );
 
-  // An explicit operator pick -- including a re-typed display default --
-  // counts as touched downstream and is always sent.
-  for (const value of [100, 200]) {
+  // A broker-default pre-fill is untouched but still sent for a top-level group.
+  const prefilled = runCreateSubmit({ ...fresh, name: 'Fixture/New', leverage: 250 });
+  assert.equal(prefilled.leverage, 250);
+
+  // An explicit operator pick is always sent, as an integer.
+  for (const [value, expected] of [[200, 200], ['300', 300]]) {
     const payload = runCreateSubmit({ ...fresh, name: 'Fixture/New', leverage: value }, { leverageTouched: true });
-    assert.equal(payload.leverage, value);
+    assert.equal(payload.leverage, expected);
   }
+});
+
+test('duplicate without a readable source leverage starts blank, never 0', () => {
+  const form = buildNewGroupFormData({ duplicateData: { name: 'Fixture/Source' } });
+  assert.equal(form.leverage, '');
+  const payload = runCreateSubmit({ ...form }, { leverageTouched: true });
+  assert.ok(!('leverage' in payload), 'leverage 0 must never be sent');
 });
 
 test('duplicate/edit sources count as touched downstream, so their leverage is sent', () => {

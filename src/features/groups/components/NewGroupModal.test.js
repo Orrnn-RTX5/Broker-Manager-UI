@@ -24,6 +24,11 @@ import {
   GROUP_POLICY_FIELDS,
   mapGroupPolicyError,
 } from '../groupPolicyErrors.js';
+import { LEVERAGE_PRESETS } from '../groupFinancialPresets.js';
+
+// The REAL leverage gate module; guarded so a missing module reports each
+// test by name instead of failing the whole file.
+const leverageGate = await import('../groupLeverage.js').catch(() => ({}));
 
 // First covered policy field is the execution-mode field: the MISSING flow
 // under test leaves it blank so backend derivation 400s and the mapper names
@@ -46,16 +51,22 @@ for (const key of ['HTMLElement', 'HTMLDialogElement', 'HTMLInputElement', 'HTML
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 // ---- Recorded network edge -------------------------------------------------
-const host = { serverText: '' };
+// Every manager request is recorded. GET answers the broker group-defaults
+// read (host.defaultsResponse); POST answers GroupCreate with a 400 carrying
+// host.serverText, or a 200 when serverText is empty.
+const host = { serverText: '', calls: [], defaultsResponse: null };
 globalThis.__newGroupModalHost = host;
 
 const STUBS = {
   transport: `
     const host = globalThis.__newGroupModalHost;
-    export const fetchManagerApi = async () => ({
-      ok: false, status: 400,
-      text: async () => JSON.stringify({ error: host.serverText }),
-    });
+    export const fetchManagerApi = async (url, options = {}) => {
+      const method = String(options.method ?? 'GET').toUpperCase();
+      host.calls.push({ url, method, body: options.body === undefined ? undefined : JSON.parse(options.body) });
+      if (method === 'GET') return host.defaultsResponse();
+      if (!host.serverText) return { ok: true, status: 200, text: async () => JSON.stringify({ created: true }) };
+      return { ok: false, status: 400, text: async () => JSON.stringify({ error: host.serverText }) };
+    };
     export const updateManagerAccount = async () => { throw new Error('NewGroupModal test: account write must not run on create'); };
     export const fetchAllSidebarAccounts = async () => ({ rows: [] });
   `,
@@ -125,7 +136,7 @@ const settle = async (rounds = 8) => {
   }
 };
 
-const renderModal = async () => {
+const renderModal = async (props = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -134,7 +145,7 @@ const renderModal = async () => {
     root.render(createElement(
       QueryClientProvider,
       { client: queryClient },
-      createElement(NewGroupModal, { onClose: () => { calls.close += 1; }, onSuccess: () => {} }),
+      createElement(NewGroupModal, { ...props, onClose: () => { calls.close += 1; }, onSuccess: () => {} }),
     ));
   });
   await settle();
@@ -150,8 +161,30 @@ const unmountModal = async () => {
   mounted = null;
 };
 
+// ---- Broker group-defaults fixtures ----------------------------------------
+// Contract: 200 {"broker_id", "group_default_leverage": int 1..10000 | null};
+// errors are {"message","code","stackTrace"}. Values derive from the REAL
+// preset list (one preset, one non-preset) -- no tenant values.
+const PRESET_DEFAULT = LEVERAGE_PRESETS[Math.floor(LEVERAGE_PRESETS.length / 2)];
+const CUSTOM_DEFAULT = (() => {
+  let value = PRESET_DEFAULT.value + 1;
+  while (LEVERAGE_PRESETS.some((preset) => preset.value === value)) value += 1;
+  return value;
+})();
+const jsonResponse = (status, body) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+  text: async () => JSON.stringify(body),
+});
+const defaultsOf = (value) => () => jsonResponse(200, { broker_id: 'fixture-broker', group_default_leverage: value });
+const defaultsError = (status, code) => () => jsonResponse(status, { message: `${code}: fixture refusal`, code, stackTrace: null });
+const DEFAULTS_PATH = '/api/v1/manager/broker/group-defaults';
+
 beforeEach(() => {
   host.serverText = '';
+  host.calls = [];
+  host.defaultsResponse = defaultsOf(PRESET_DEFAULT.value);
   calls.close = 0;
 });
 
@@ -247,4 +280,172 @@ test('editing the executionMode field clears its inline error', async () => {
   });
   await settle();
   assert.equal(container.querySelectorAll('.group-create-field-error').length, 0, 'picking a value clears the inline error');
+});
+
+// ---- Group-create leverage: broker default pre-fill and the 1..10000 gate ---
+const leverageWrap = (container) => {
+  const wrap = fieldWrap(container, 'Leverage');
+  assert.ok(wrap, 'the Leverage choice must render');
+  return wrap;
+};
+const leverageShown = (container) => leverageWrap(container).querySelector('button span')?.textContent;
+const leverageError = (container) => leverageWrap(container).querySelector('.group-create-field-error')?.textContent ?? null;
+const leveragePanel = (container) => leverageWrap(container).closest('.group-create-preset');
+const customLeverageInput = (container) => container.querySelector('input[aria-label="Leverage (custom)"]');
+const postCalls = () => host.calls.filter((call) => call.method === 'POST');
+const getCalls = () => host.calls.filter((call) => call.method === 'GET');
+
+const typeInto = async (input, value) => {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  });
+  await settle();
+};
+
+const chooseLeverageOption = async (container, label) => {
+  await act(async () => {
+    leverageWrap(container).querySelector('button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
+  const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent === label);
+  assert.ok(option, `the leverage menu must offer "${label}"`);
+  await act(async () => { option.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  await settle();
+};
+
+const assertBlocked = (container, why) => {
+  assert.equal(postCalls().length, 0, `${why}: no GroupCreate request may be sent`);
+  assert.ok(leverageGate.GROUP_LEVERAGE_RANGE_MESSAGE, 'range message constant exists');
+  assert.equal(leverageError(container), leverageGate.GROUP_LEVERAGE_RANGE_MESSAGE, `${why}: inline leverage error`);
+  assert.equal(calls.close, 0, `${why}: the modal stays open`);
+};
+
+test('a fresh create reads the broker group defaults exactly once, at the manager contract path', async () => {
+  await renderModal();
+  assert.deepEqual(getCalls().map((call) => call.url), [DEFAULTS_PATH]);
+  assert.equal(getCalls()[0].body, undefined, 'the GET carries no body (no broker_id)');
+});
+
+test('broker default pre-fills leverage (preset) and is sent as an integer', async () => {
+  const container = await renderModal();
+  assert.equal(leverageShown(container), PRESET_DEFAULT.label, 'the default shows as the selected value');
+  await fillInput(container, 'Group name', 'Fixture/Standard');
+  await submitModal(container);
+  assert.equal(postCalls().length, 1);
+  assert.equal(postCalls()[0].url, '/GroupCreate');
+  assert.equal(postCalls()[0].body.leverage, PRESET_DEFAULT.value);
+  assert.ok(Number.isInteger(postCalls()[0].body.leverage));
+  assert.equal(calls.close, 1);
+});
+
+test('broker default that is not a preset pre-fills the custom box and is sent', async () => {
+  host.defaultsResponse = defaultsOf(CUSTOM_DEFAULT);
+  const container = await renderModal();
+  assert.equal(customLeverageInput(container)?.value, String(CUSTOM_DEFAULT));
+  await fillInput(container, 'Group name', 'Fixture/Standard');
+  await submitModal(container);
+  assert.equal(postCalls().length, 1);
+  assert.equal(postCalls()[0].body.leverage, CUSTOM_DEFAULT);
+});
+
+test('null broker default leaves leverage empty with a hint and requires a value', async () => {
+  host.defaultsResponse = defaultsOf(null);
+  const container = await renderModal();
+  assert.equal(leverageShown(container), 'Select leverage…');
+  assert.ok(leverageGate.GROUP_LEVERAGE_NO_DEFAULT_HINT, 'hint constant exists');
+  assert.ok(leveragePanel(container).textContent.includes(leverageGate.GROUP_LEVERAGE_NO_DEFAULT_HINT), 'neutral hint renders');
+  await fillInput(container, 'Group name', 'Fixture/Standard');
+  await submitModal(container);
+  assertBlocked(container, 'null default');
+
+  await chooseLeverageOption(container, PRESET_DEFAULT.label);
+  assert.equal(leverageError(container), null, 'picking a value clears the inline error');
+  await submitModal(container);
+  assert.equal(postCalls().length, 1);
+  assert.equal(postCalls()[0].body.leverage, PRESET_DEFAULT.value);
+});
+
+for (const [label, response] of [
+  ['403 MT_RET_ERR_PERMISSIONS', defaultsError(403, 'MT_RET_ERR_PERMISSIONS')],
+  ['503 GROUP_DEFAULTS_UNAVAILABLE', defaultsError(503, 'GROUP_DEFAULTS_UNAVAILABLE')],
+  ['network failure', () => { throw new TypeError('Failed to fetch'); }],
+]) {
+  test(`group-defaults ${label} leaves leverage empty with a hint and blocks submit`, async () => {
+    host.defaultsResponse = response;
+    const container = await renderModal();
+    assert.equal(getCalls().length, 1, 'the defaults read was attempted');
+    assert.equal(leverageShown(container), 'Select leverage…');
+    assert.ok(leverageGate.GROUP_LEVERAGE_NO_DEFAULT_HINT, 'hint constant exists');
+    assert.ok(leveragePanel(container).textContent.includes(leverageGate.GROUP_LEVERAGE_NO_DEFAULT_HINT));
+    await fillInput(container, 'Group name', 'Fixture/Standard');
+    await submitModal(container);
+    assertBlocked(container, label);
+  });
+}
+
+test('custom leverage: cleared box never sends 0; 0, 10001 and 1.5 are blocked; 250 is sent as an integer', async () => {
+  const container = await renderModal();
+  await fillInput(container, 'Group name', 'Fixture/Standard');
+  await chooseLeverageOption(container, 'Custom...');
+  assert.ok(customLeverageInput(container), 'the custom leverage box opens');
+
+  for (const value of ['', '0', '10001', '1.5']) {
+    await typeInto(customLeverageInput(container), value);
+    await submitModal(container);
+    assertBlocked(container, `custom ${JSON.stringify(value)}`);
+  }
+
+  await typeInto(customLeverageInput(container), '250');
+  assert.equal(leverageError(container), null, 'typing clears the inline error');
+  await submitModal(container);
+  assert.equal(postCalls().length, 1);
+  assert.equal(postCalls()[0].body.leverage, 250);
+  assert.ok(Number.isInteger(postCalls()[0].body.leverage));
+});
+
+test('create with a parent group keeps inheriting: untouched leverage is omitted', async () => {
+  for (const response of [defaultsOf(null), defaultsOf(PRESET_DEFAULT.value)]) {
+    host.calls = [];
+    host.defaultsResponse = response;
+    calls.close = 0;
+    const container = await renderModal();
+    await fillInput(container, 'Group name', 'Fixture/Parent/Child');
+    await fillInput(container, 'Parent group (optional)', 'Fixture/Parent');
+    await submitModal(container);
+    assert.equal(postCalls().length, 1, 'subgroup create is not blocked');
+    assert.equal(postCalls()[0].body.parentGroup, 'Fixture/Parent');
+    assert.ok(!('leverage' in postCalls()[0].body), 'the parent leverage governs');
+    await unmountModal();
+  }
+});
+
+test('duplicate keeps sending the source leverage', async () => {
+  const source = { name: 'Fixture/Source', leverage: CUSTOM_DEFAULT, tradeAllowed: true };
+  const container = await renderModal({ duplicateData: source });
+  await submitModal(container);
+  assert.equal(postCalls().length, 1);
+  assert.equal(postCalls()[0].body.name, 'Fixture/Source Copy');
+  assert.equal(postCalls()[0].body.leverage, CUSTOM_DEFAULT);
+});
+
+test('server leverage refusals render inline on the Leverage field', async () => {
+  for (const serverText of [
+    `${GROUP_POLICY_DEFAULT_MISSING}: leverage is omitted and this broker has no default group leverage; send leverage explicitly`,
+    'GROUP_LEVERAGE_INVALID: leverage is outside 1..10000',
+  ]) {
+    host.calls = [];
+    host.serverText = serverText;
+    const container = await renderModal();
+    await fillInput(container, 'Group name', 'Fixture/Standard');
+    await submitModal(container);
+    assert.equal(postCalls().length, 1);
+    const inline = leverageError(container);
+    assert.ok(inline, `inline leverage error for ${serverText.split(':')[0]}`);
+    assert.equal(inline, mapGroupPolicyError(serverText));
+    assert.equal(container.querySelector('.group-create-body > .group-create-error'), null, 'no form-level duplicate');
+    assert.doesNotMatch(container.textContent, /GROUP_POLICY_DEFAULT_MISSING|GROUP_LEVERAGE_INVALID/);
+    await unmountModal();
+  }
 });

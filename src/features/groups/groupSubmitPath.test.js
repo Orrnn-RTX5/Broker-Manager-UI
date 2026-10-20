@@ -100,7 +100,10 @@ const BOOK_CHOICES = [
 test('create initializer composes the real defaults without mirrored literals', () => {
   const form = buildCreateFormData();
 
-  assert.equal(form.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  // No client-side leverage literal default: the form starts from the blank
+  // payload value and the modal pre-fills the broker's group default.
+  assert.ok(!('leverage' in NEW_GROUP_FINANCIAL_DEFAULTS), 'no leverage literal default for new groups');
+  assert.equal(form.leverage, GROUP_DEFAULT_PAYLOAD.leverage);
   assert.equal(form.marginCallLevel, NEW_GROUP_FINANCIAL_DEFAULTS.marginCallLevel);
   assert.equal(form.stopOutLevel, NEW_GROUP_FINANCIAL_DEFAULTS.stopOutLevel);
   assert.equal(form.spreadMarkup, NEW_GROUP_FINANCIAL_DEFAULTS.spreadMarkup);
@@ -141,10 +144,10 @@ test('fresh-create submit path: keys within allowed fields, blanks absent, symbo
   assert.ok('tradeAllowed' in payload);
   assert.equal(typeof payload.tradeAllowed, 'boolean');
   assert.equal(payload.tradeAllowed, true);
-  // Untouched display-default leverage is omitted so backend tenant/env/parent
-  // derivation governs; the form still shows the display default.
-  assert.equal(form.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
-  assert.ok(!('leverage' in payload), 'untouched leverage must be omitted for backend derivation');
+  // A blank leverage is never sent (never as 0); for a top-level create the
+  // modal's 1..10000 gate blocks the submit before this builder runs.
+  assert.equal(form.leverage, GROUP_DEFAULT_PAYLOAD.leverage);
+  assert.ok(!('leverage' in payload), 'a blank leverage must never be sent');
   // ds-20 guard: the submitted list must be a true Array (not Set/string), so
   // production array operations such as .includes keep working.
   assert.ok(Array.isArray(payload.symbolsAllowed));
@@ -231,39 +234,42 @@ test('string-typed form numbers pass through the create builder without crashing
     { leverageTouched: true },
   );
   assert.equal(validationError, null);
-  assert.equal(payload.leverage, '100');
+  // Leverage is always sent as an integer.
+  assert.equal(payload.leverage, 100);
   assert.equal(payload.marginCallLevel, '100');
 });
 
-test('untouched display-default leverage omitted; explicit 100 and 200 always sent', () => {
-  // Fresh create: the display default is shown but untouched, so the key is
-  // omitted and backend tenant/env/parent derivation governs.
-  const untouchedForm = buildCreateFormData({ name: 'Fixture/Standard' });
-  assert.equal(untouchedForm.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
-  const untouched = runCreateSubmitPath(untouchedForm);
-  assert.equal(untouched.validationError, null);
-  assert.ok(!('leverage' in untouched.payload), 'untouched leverage 100 must be omitted');
-  assert.ok(!('leverageTouched' in untouched.payload), 'the touched flag itself is never a payload key');
+test('top-level create sends a pre-filled or explicit leverage as an integer; a parent group inherits', () => {
+  // A broker-default pre-fill is untouched but sent for a top-level group.
+  const prefilled = runCreateSubmitPath(buildCreateFormData({ name: 'Fixture/Standard', leverage: 250 }));
+  assert.equal(prefilled.validationError, null);
+  assert.equal(prefilled.payload.leverage, 250);
+  assert.ok(!('leverageTouched' in prefilled.payload), 'the touched flag itself is never a payload key');
 
-  // An explicit operator pick -- including a re-typed display default -- wins.
-  for (const value of [NEW_GROUP_FINANCIAL_DEFAULTS.leverage, 200]) {
+  // An explicit operator pick always wins and is sent as an integer.
+  for (const [value, expected] of [[200, 200], ['300', 300]]) {
     const { validationError, payload } = runCreateSubmitPath(
       buildCreateFormData({ name: 'Fixture/Standard', leverage: value }),
       { leverageTouched: true },
     );
     assert.equal(validationError, null);
-    assert.equal(payload.leverage, value);
+    assert.equal(payload.leverage, expected);
     for (const key of Object.keys(payload)) {
       assert.ok(GROUP_ALLOWED_FIELDS.includes(key), `payload key outside GROUP_ALLOWED_FIELDS: ${key}`);
     }
   }
+
+  // With a parent group, an untouched leverage is omitted so the parent governs.
+  const child = runCreateSubmitPath(buildCreateFormData({ name: 'Fixture/Parent/Child', parentGroup: 'Fixture/Parent', leverage: 250 }));
+  assert.equal(child.validationError, null);
+  assert.ok(!('leverage' in child.payload), 'untouched leverage under a parent must be omitted');
 });
 
 test('edit path still sends the full picked payload including leverage', () => {
-  const form = { ...buildCreateFormData({ name: 'Fixture/Standard' }), leverage: NEW_GROUP_FINANCIAL_DEFAULTS.leverage };
+  const form = { ...buildCreateFormData({ name: 'Fixture/Standard' }), leverage: 250 };
   const picked = pickGroupPayloadFields(form, GROUP_ALLOWED_FIELDS);
 
-  assert.equal(picked.leverage, NEW_GROUP_FINANCIAL_DEFAULTS.leverage);
+  assert.equal(picked.leverage, 250);
   for (const key of Object.keys(picked)) {
     assert.ok(GROUP_ALLOWED_FIELDS.includes(key), `payload key outside GROUP_ALLOWED_FIELDS: ${key}`);
   }

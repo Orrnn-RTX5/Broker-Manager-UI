@@ -76,3 +76,42 @@ test('unknown errors pass through untouched and mapped output never leaks raw co
     for (const code of RAW_CODES) assert.doesNotMatch(mapped, new RegExp(code));
   }
 });
+
+// Leverage refusals from POST /GroupCreate: a top-level create without
+// leverage (and no broker default) answers 400 MT_RET_ERR_PARAMS with
+// `GROUP_POLICY_DEFAULT_MISSING: leverage is omitted ...`, and an explicit
+// leverage outside 1..10000 answers `GROUP_LEVERAGE_INVALID ...`. Both map to
+// an inline error on the leverage field; the raw code never renders. The
+// namespace import keeps each test reporting by name if an export is missing.
+import * as policyErrors from './groupPolicyErrors.js';
+
+const LEVERAGE_MISSING = `${GROUP_POLICY_DEFAULT_MISSING}: leverage is omitted and this broker has no default group leverage; send leverage explicitly`;
+const LEVERAGE_INVALID = 'GROUP_LEVERAGE_INVALID: leverage 0 is outside 1..10000';
+
+test('GROUP_POLICY_DEFAULT_MISSING: leverage maps to the leverage field', () => {
+  assert.ok(policyErrors.GROUP_POLICY_FIELDS.includes('leverage'));
+  assert.equal(policyErrors.groupPolicyErrorField(LEVERAGE_MISSING), 'leverage');
+  assert.equal(policyErrors.groupPolicyErrorField(new Error(LEVERAGE_MISSING)), 'leverage');
+  assert.equal(policyErrors.groupPolicyErrorField({ message: LEVERAGE_MISSING, code: 'MT_RET_ERR_PARAMS', stackTrace: null }), 'leverage');
+  const mapped = mapGroupPolicyError(LEVERAGE_MISSING);
+  assert.match(mapped, /leverage/i);
+  assert.match(mapped, /this broker has no default\./);
+  for (const code of RAW_CODES) assert.doesNotMatch(mapped, new RegExp(code));
+});
+
+test('GROUP_LEVERAGE_INVALID maps to the leverage field with the range message', () => {
+  assert.equal(policyErrors.GROUP_LEVERAGE_INVALID, 'GROUP_LEVERAGE_INVALID');
+  assert.equal(policyErrors.groupPolicyErrorField(LEVERAGE_INVALID), 'leverage');
+  assert.equal(policyErrors.groupPolicyErrorField(new Error(LEVERAGE_INVALID)), 'leverage');
+  assert.equal(policyErrors.groupPolicyErrorField({ message: 'out of range', code: 'GROUP_LEVERAGE_INVALID' }), 'leverage');
+  const mapped = mapGroupPolicyError(LEVERAGE_INVALID);
+  assert.match(mapped, /1 to 10000/);
+  assert.doesNotMatch(mapped, /GROUP_LEVERAGE_INVALID/);
+});
+
+test('groupPolicyErrorField keeps existing fields and ignores unknown errors', () => {
+  assert.equal(policyErrors.groupPolicyErrorField(missingServerMessage('executionMode')), 'executionMode');
+  assert.equal(policyErrors.groupPolicyErrorField(`${GROUP_POLICY_DEFAULT_MISSING}: something is omitted`), null);
+  assert.equal(policyErrors.groupPolicyErrorField('Failed to create group'), null);
+  assert.equal(policyErrors.groupPolicyErrorField(new Error('leverage could not be saved')), null);
+});

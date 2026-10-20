@@ -24,8 +24,10 @@ test('margin levels are percentages and spread markup starts at no markup', () =
 });
 
 test('new-group defaults are presets, and stop out does not exceed margin call', () => {
-  const { leverage, marginCallLevel, stopOutLevel, spreadMarkup } = NEW_GROUP_FINANCIAL_DEFAULTS;
-  assert.ok(isPresetValue(LEVERAGE_PRESETS, leverage));
+  const { marginCallLevel, stopOutLevel, spreadMarkup } = NEW_GROUP_FINANCIAL_DEFAULTS;
+  // Leverage has no client-side default: a fresh create pre-fills it from the
+  // broker's group defaults or requires the operator to enter one.
+  assert.ok(!('leverage' in NEW_GROUP_FINANCIAL_DEFAULTS), 'no leverage literal default for new groups');
   assert.ok(isPresetValue(MARGIN_CALL_PRESETS, marginCallLevel));
   assert.ok(isPresetValue(STOP_OUT_PRESETS, stopOutLevel));
   assert.ok(isPresetValue(SPREAD_MARKUP_PRESETS, spreadMarkup));
