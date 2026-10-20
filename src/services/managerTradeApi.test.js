@@ -1,6 +1,7 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { closeManagerPosition, getManagerOrderStatus, placeManagerOrder } from './managerTradeApi.js';
+import { accountRestrictList, getDealerQueue } from './tradeApi.js';
 
 const createStorage = () => {
   const values = new Map();
@@ -142,4 +143,150 @@ test('disabled browser storage still prevents resubmission while status is unava
   });
   await assert.rejects(() => placeManagerOrder(payload), (error) => error.client_order_id === firstId);
   assert.equal(calls.filter(({ options }) => options.method === 'POST').length, 1);
+});
+
+test('retcode MT_RET_ERR_* payloads reject even with success:true and preserve code', async () => {
+  for (const payload of [
+    { success: true, retcode: 'MT_RET_ERR_PARAMS', message: 'client_order_id is required exactly once for an engine command' },
+    { success: true, retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { success: true, code: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+  ]) {
+    globalThis.fetch = async () => new Response(JSON.stringify(payload), { status: 200 });
+    await assert.rejects(
+      () => placeManagerOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1 }),
+      (error) => {
+        assert.equal(error.message, payload.message);
+        assert.equal(error.code, payload.retcode ?? payload.code);
+        return true;
+      },
+      `must reject ${JSON.stringify(payload)}`,
+    );
+  }
+});
+
+test('closeManagerPosition rejects retcode failures and preserves the backend code', async () => {
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ success: true, retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' }),
+    { status: 200 },
+  );
+  await assert.rejects(
+    () => closeManagerPosition(19916),
+    (error) => {
+      assert.equal(error.message, 'Request rejected');
+      assert.equal(error.code, 'MT_RET_ERR_TRADE');
+      assert.equal(error.status, 200);
+      return true;
+    },
+  );
+});
+
+test('manager trade errors render nested error objects without [object Object]', async () => {
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: { message: 'Invalid price', code: 'MT_RET_ERR_PARAMS' } }),
+    { status: 200 },
+  );
+  await assert.rejects(
+    () => closeManagerPosition(19916),
+    (error) => {
+      assert.equal(error.message, 'Invalid price');
+      assert.equal(error.code, 'MT_RET_ERR_PARAMS');
+      return true;
+    },
+  );
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: { message: 'Invalid price', code: 'MT_RET_ERR_PARAMS' } }),
+    { status: 500, statusText: 'Server Error' },
+  );
+  await assert.rejects(
+    () => closeManagerPosition(19916),
+    (error) => {
+      assert.equal(error.message, 'Invalid price');
+      assert.equal(error.code, 'MT_RET_ERR_PARAMS');
+      assert.equal(error.status, 500);
+      return true;
+    },
+  );
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: { code: 'MT_RET_ERR_TRADE' } }),
+    { status: 200 },
+  );
+  await assert.rejects(
+    () => closeManagerPosition(19916),
+    (error) => {
+      assert.equal(error.message, 'Failed to close position');
+      assert.equal(error.code, 'MT_RET_ERR_TRADE');
+      assert.notEqual(error.message, '[object Object]');
+      return true;
+    },
+  );
+});
+
+test('read path throws on application-level failures instead of returning a misleading empty list', async () => {
+  for (const payload of [
+    { success: false, message: 'Rejected by dealer' },
+    { ok: false, message: 'Order reject failed' },
+    { success: true, retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { success: true, code: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { error: 'Market is closed.' },
+    { error: { message: 'Invalid price', code: 'MT_RET_ERR_PARAMS' } },
+  ]) {
+    globalThis.fetch = async () => new Response(JSON.stringify(payload), { status: 200 });
+    await assert.rejects(
+      () => getDealerQueue(),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.notDeepEqual(error, []);
+        return true;
+      },
+      `getDealerQueue must throw for ${JSON.stringify(payload)}`,
+    );
+    globalThis.fetch = async () => new Response(JSON.stringify(payload), { status: 200 });
+    await assert.rejects(
+      () => accountRestrictList(),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.notDeepEqual(error, []);
+        return true;
+      },
+      `accountRestrictList must throw for ${JSON.stringify(payload)}`,
+    );
+  }
+});
+
+test('read path preserves retcode and nested error message+code instead of silent []', async () => {
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ success: true, retcode: 'MT_RET_ERR_PARAMS', message: 'client_order_id is required exactly once' }),
+    { status: 200 },
+  );
+  await assert.rejects(
+    () => getDealerQueue(),
+    (error) => {
+      assert.equal(error.message, 'client_order_id is required exactly once');
+      assert.equal(error.code, 'MT_RET_ERR_PARAMS');
+      return true;
+    },
+  );
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: { message: 'Invalid price', code: 'MT_RET_ERR_PARAMS' } }),
+    { status: 200 },
+  );
+  await assert.rejects(
+    () => getDealerQueue(),
+    (error) => {
+      assert.equal(error.message, 'Invalid price');
+      assert.equal(error.code, 'MT_RET_ERR_PARAMS');
+      assert.notEqual(error.message, '[object Object]');
+      return true;
+    },
+  );
+});
+
+test('read path still returns records for genuine successes', async () => {
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ answer: [{ ticket: 101, login: 200001 }] }),
+    { status: 200 },
+  );
+  const queue = await getDealerQueue();
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0].orderTicket, 101);
 });

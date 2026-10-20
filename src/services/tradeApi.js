@@ -1,8 +1,8 @@
 // Trade API client routes through the /ext-api Vite proxy. apiClient attaches
 // Authorization headers; REST token query parameters are intentionally avoided.
 
-import apiClient from './apiClient';
-import { fetchManagerApi } from './managerFetch';
+import apiClient from './apiClient.js';
+import { fetchManagerApi } from './managerFetch.js';
 
 const TRADE_BASE = '/ext-api';
 
@@ -32,9 +32,18 @@ const readJson = async (response) => {
   }
 };
 
+const isMtRetErrorCode = (value) => typeof value === 'string' && /MT_RET_ERR_/i.test(value);
+
+const isManagerFailurePayload = (data) => {
+  if (data === false) return true;
+  if (!data || typeof data !== 'object') return false;
+  if (data.success === false || data.ok === false || Boolean(data.error)) return true;
+  return isMtRetErrorCode(data.retcode) || isMtRetErrorCode(data.code);
+};
+
 const getResponseMessage = (data, fallback) =>
   data?.error?.message ||
-  data?.error ||
+  (typeof data?.error === 'string' ? data.error : undefined) ||
   data?.message ||
   data?.detail ||
   fallback;
@@ -169,10 +178,13 @@ const fetchManagerJson = async (endpoint, options = {}) => {
   });
   const data = await readJson(response);
 
-  if (!response.ok || data?.code === 'MT_RET_ERR_NOTFOUND') {
+  // A completed read can still report a rejected action ({ success: false },
+  // { ok: false }, an `error` member, or an MT_RET_ERR_* retcode/code).
+  // Failing here keeps callers from rendering it as a misleading empty list.
+  if (!response.ok || isManagerFailurePayload(data)) {
     const error = new Error(getResponseMessage(data, `HTTP ${response.status}`));
     error.status = response.status;
-    error.code = data?.code;
+    error.code = data?.error?.code ?? data?.retcode ?? data?.code;
     throw error;
   }
 

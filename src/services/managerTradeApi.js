@@ -28,11 +28,27 @@ const pendingTrades = () => {
   return pendingTradesByWindow.get(owner);
 };
 
+const isMtRetErrorCode = (value) => typeof value === 'string' && /MT_RET_ERR_/i.test(value);
+
+const getTradeErrorMessage = (result, fallback) => {
+  if (typeof result?.message === 'string' && result.message !== '') return result.message;
+  if (typeof result?.error?.message === 'string' && result.error.message !== '') return result.error.message;
+  if (typeof result?.error === 'string' && result.error !== '') return result.error;
+  return fallback;
+};
+
 const throwTradeError = (result, response, fallback) => {
-  if (response.ok && result?.success !== false && result?.ok !== false && !result?.error) return;
+  if (
+    response.ok
+    && result?.success !== false
+    && result?.ok !== false
+    && !result?.error
+    && !isMtRetErrorCode(result?.retcode)
+    && !isMtRetErrorCode(result?.code)
+  ) return;
   throw Object.assign(
-    new Error(result?.message || result?.error?.message || result?.error || fallback),
-    { status: response.status, code: result?.code || result?.error?.code }
+    new Error(getTradeErrorMessage(result, fallback)),
+    { status: response.status, code: result?.code || result?.retcode || result?.error?.code }
   );
 };
 

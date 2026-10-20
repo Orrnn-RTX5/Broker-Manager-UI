@@ -349,3 +349,147 @@ test('handleResponse and request reject mixed success/error signals at 200', asy
     },
   );
 });
+
+test('retcode MT_RET_ERR_* payloads classify as errors with code preserved', () => {
+  // Mirrors the REAL backend shape asserted in resultMessage.test.js:
+  // { success: true, retcode: 'MT_RET_ERR_PARAMS', message: 'client_order_id …' }
+  // must read as an error at the transport boundary, never as success.
+  for (const payload of [
+    { success: true, retcode: 'MT_RET_ERR_PARAMS', message: 'client_order_id is required exactly once for an engine command' },
+    { success: true, retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { success: true, code: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { success: true, code: 'MT_RET_ERR_MARKET_CLOSED', message: 'Market is closed.' },
+    { retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+    { code: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+  ]) {
+    assert.equal(isErrorPayload(payload), true, `must flag ${JSON.stringify(payload)}`);
+    assert.equal(isSuccessPayload(payload), false, `must reject ${JSON.stringify(payload)}`);
+  }
+  for (const payload of [
+    { success: true, retcode: 'MT_RET_OK' },
+    { success: true, retcode: 'MT_RET_OK', message: 'Position closed' },
+    { retcode: 'MT_RET_OK', message: 'Position closed' },
+    { success: true },
+  ]) {
+    assert.equal(isErrorPayload(payload), false, `must not flag ${JSON.stringify(payload)}`);
+    assert.equal(isSuccessPayload(payload), true, `must accept ${JSON.stringify(payload)}`);
+  }
+});
+
+test('throwIfErrorPayload and handleResponse preserve retcode with the backend message', () => {
+  const payload = {
+    success: true,
+    retcode: 'MT_RET_ERR_PARAMS',
+    message: 'client_order_id is required exactly once for an engine command',
+  };
+  assert.throws(
+    () => throwIfErrorPayload(payload, { status: 200, statusText: 'OK' }),
+    (err) => {
+      assert.equal(err.message, 'client_order_id is required exactly once for an engine command');
+      assert.equal(err.code, 'MT_RET_ERR_PARAMS');
+      assert.equal(err.status, 200);
+      return true;
+    },
+  );
+  assert.throws(
+    () => throwIfErrorPayload(
+      { success: true, code: 'MT_RET_ERR_TRADE', message: 'Request rejected' },
+      { status: 200, statusText: 'OK' },
+    ),
+    (err) => {
+      assert.equal(err.message, 'Request rejected');
+      assert.equal(err.code, 'MT_RET_ERR_TRADE');
+      return true;
+    },
+  );
+});
+
+test('handleResponse rejects 200 retcode failures with code preserved', async () => {
+  await assert.rejects(
+    apiClient.handleResponse(jsonResponse({
+      success: true,
+      retcode: 'MT_RET_ERR_PARAMS',
+      message: 'client_order_id is required exactly once for an engine command',
+    })),
+    (err) => {
+      assert.equal(err.message, 'client_order_id is required exactly once for an engine command');
+      assert.equal(err.code, 'MT_RET_ERR_PARAMS');
+      assert.equal(err.status, 200);
+      return true;
+    },
+  );
+  await assert.rejects(
+    apiClient.handleResponse(jsonResponse({
+      success: true,
+      code: 'MT_RET_ERR_TRADE',
+      message: 'Request rejected',
+    })),
+    (err) => {
+      assert.equal(err.message, 'Request rejected');
+      assert.equal(err.code, 'MT_RET_ERR_TRADE');
+      return true;
+    },
+  );
+});
+
+test('handleResponse renders nested error objects on the HTTP error path', async () => {
+  await assert.rejects(
+    apiClient.handleResponse(
+      jsonResponse({ error: { message: 'Invalid price', code: 'MT_RET_ERR_PARAMS' } }, { status: 500, statusText: 'Server Error' }),
+    ),
+    (err) => {
+      assert.equal(err.message, 'Invalid price');
+      assert.equal(err.code, 'MT_RET_ERR_PARAMS');
+      assert.equal(err.status, 500);
+      assert.equal(err.statusText, 'Server Error');
+      return true;
+    },
+  );
+  await assert.rejects(
+    apiClient.handleResponse(
+      jsonResponse({ error: { code: 'MT_RET_ERR_TRADE' } }, { status: 500, statusText: 'Server Error' }),
+    ),
+    (err) => {
+      assert.equal(err.message, 'HTTP 500');
+      assert.equal(err.code, 'MT_RET_ERR_TRADE');
+      return true;
+    },
+  );
+  await assert.rejects(
+    apiClient.handleResponse(
+      jsonResponse({ retcode: 'MT_RET_ERR_TRADE', message: 'Request rejected' }, { status: 500, statusText: 'Server Error' }),
+    ),
+    (err) => {
+      assert.equal(err.message, 'Request rejected');
+      assert.equal(err.code, 'MT_RET_ERR_TRADE');
+      return true;
+    },
+  );
+});
+
+test('empty-string messages fall through instead of shadowing diagnostics', () => {
+  assert.throws(
+    () => throwIfErrorPayload({ success: false, message: '', detail: 'Dealer detail' }, { status: 200, statusText: 'OK' }),
+    (err) => {
+      assert.equal(err.message, 'Dealer detail');
+      return true;
+    },
+  );
+  assert.throws(
+    () => throwIfErrorPayload(
+      { success: false, error: { message: '' }, message: 'Top message' },
+      { status: 200, statusText: 'OK' },
+    ),
+    (err) => {
+      assert.equal(err.message, 'Top message');
+      return true;
+    },
+  );
+  assert.throws(
+    () => throwIfErrorPayload({ success: false, message: '' }, { status: 200, statusText: 'OK' }),
+    (err) => {
+      assert.equal(err.message, 'Request failed (HTTP 200)');
+      return true;
+    },
+  );
+});

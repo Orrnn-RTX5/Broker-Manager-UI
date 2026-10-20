@@ -18,26 +18,36 @@ const expireAndThrow = (reason) => {
 
 /**
  * Broker backends answer HTTP 200 with an application-level failure flag when
- * a trade action is rejected ({ success: false }, { ok: false }, or an
- * `error` member). HTTP completion alone must never read as success, so these
- * payloads are classified as errors at this boundary. Only explicit failure
- * signals count — lists, envelopes and other payloads without them pass
- * through untouched. Mirrors the structural checks in normalizeResult so the
- * transport boundary and the result dialog agree on the outcome.
+ * a trade action is rejected ({ success: false }, { ok: false }, an `error`
+ * member, or an MT5 retcode such as { success: true, retcode: 'MT_RET_ERR_*' }
+ * / { success: true, code: 'MT_RET_ERR_*' }). HTTP completion alone must never
+ * read as success, so these payloads are classified as errors at this
+ * boundary. Only explicit failure signals count — lists, envelopes and other
+ * payloads without them pass through untouched. This checks explicit flags
+ * only; wording-based (text / regex) classification lives in normalizeResult
+ * (utils/resultMessage.js), which the result dialog applies on top, so the
+ * transport boundary never claims agreement on outcomes it does not evaluate.
  */
+const isMtRetErrorCode = (value) => typeof value === 'string' && /MT_RET_ERR_/i.test(value);
+
 export const isErrorPayload = (data) => {
   if (data === false) return true;
   if (!data || typeof data !== 'object') return false;
-  return data.success === false || data.ok === false || Boolean(data.error);
+  if (data.success === false || data.ok === false || Boolean(data.error)) return true;
+  return isMtRetErrorCode(data.retcode) || isMtRetErrorCode(data.code);
 };
 
 export const isSuccessPayload = (data) => !isErrorPayload(data);
 
+const asNonEmptyMessageText = (value) => (
+  typeof value === 'string' && value !== '' ? value : undefined
+);
+
 const getErrorPayloadMessage = (data, fallback) => (
-  data?.error?.message
-  ?? (typeof data?.error === 'string' ? data.error : undefined)
-  ?? (typeof data?.message === 'string' ? data.message : undefined)
-  ?? (typeof data?.detail === 'string' ? data.detail : undefined)
+  asNonEmptyMessageText(data?.error?.message)
+  ?? (typeof data?.error === 'string' && data.error !== '' ? data.error : undefined)
+  ?? asNonEmptyMessageText(data?.message)
+  ?? asNonEmptyMessageText(data?.detail)
   ?? fallback
 );
 
@@ -48,7 +58,7 @@ const getErrorPayloadMessage = (data, fallback) => (
  */
 export const throwIfErrorPayload = (data, { status, statusText } = {}) => {
   if (!isErrorPayload(data)) return data;
-  const code = data?.error?.code ?? data?.code;
+  const code = data?.error?.code ?? data?.retcode ?? data?.code;
   const message = getErrorPayloadMessage(data, `Request failed${status ? ` (HTTP ${status})` : ''}`);
   console.error(`[API RESPONSE ERROR] ${status ?? 'payload'}`, message, redactSensitive(data));
   throw Object.assign(new Error(message), { status, statusText, code });
@@ -248,14 +258,15 @@ const apiClient = {
       if (isAuthExpiredResponse(response.status, data)) {
         expireAndThrow('token_rejected');
       }
-      const errorMsg = data.error || data.message || `HTTP ${response.status}`;
+      const errorMsg = getErrorPayloadMessage(data, `HTTP ${response.status}`);
       console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
-      throw Object.assign(new Error(errorMsg), { status: response.status, statusText: response.statusText, code: data?.error?.code || data?.code });
+      throw Object.assign(new Error(errorMsg), { status: response.status, statusText: response.statusText, code: data?.error?.code ?? data?.retcode ?? data?.code });
     }
 
     // A completed HTTP request can still report a rejected action
-    // ({ success: false }, { ok: false } or an `error` member). Fail here so
-    // callers cannot mistake it for success.
+    // ({ success: false }, { ok: false }, an `error` member, or an
+    // MT_RET_ERR_* retcode/code). Fail here so callers cannot mistake it
+    // for success.
     throwIfErrorPayload(data, { status: response.status, statusText: response.statusText });
 
     if (API_DEBUG_ENABLED) {
