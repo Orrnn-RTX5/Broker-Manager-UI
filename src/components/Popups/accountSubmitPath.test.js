@@ -5,6 +5,7 @@ import {
   brokerCountryOf,
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
+  countrySuggestions,
   normalizeAccountMode,
   normalizeCountryName,
   normalizeCurrencyCode,
@@ -74,7 +75,13 @@ test('explicit group pick inherits leverage+currency and builds the exact payloa
     currencyTouched: false,
   });
   assert.deepEqual(inherited, { Leverage: 50, Currency: 'GBP' });
-  form = { ...form, ...inherited, ...operatorDetails(), AccountMode: 'netting' };
+  // CORRECTED (HOLD-4 engine constraint): this path previously submitted
+  // AccountMode 'netting' and asserted it passed through the CANONICAL
+  // builder. The RAM engine cannot open netting accounts, so netting is
+  // refused by BOTH builders — the payload below uses the hedging default,
+  // and netting refusal is asserted right after with the engine-constraint
+  // comment.
+  form = { ...form, ...inherited, ...operatorDetails() };
 
   const payload = buildNewAccountPayload(form);
 
@@ -82,8 +89,15 @@ test('explicit group pick inherits leverage+currency and builds the exact payloa
   assert.equal(payload.Leverage, 50);
   assert.ok(Number.isInteger(payload.Leverage));
   assert.equal(payload.Currency, 'GBP');
-  assert.ok(['hedging', 'netting'].includes(payload.AccountMode));
-  assert.equal(payload.AccountMode, 'netting');
+  assert.equal(payload.AccountMode, 'hedging');
+  assert.throws(
+    () => buildNewAccountPayload({ ...form, AccountMode: 'netting' }),
+    /not supported yet/,
+  );
+  assert.throws(
+    () => buildSubmittableAccountPayload({ ...form, AccountMode: 'netting' }),
+    /not supported yet/,
+  );
   // Search-box state is never part of the submitted payload.
   assert.ok(!('groupSearch' in payload));
   assert.ok(!('search' in payload));
@@ -97,14 +111,14 @@ test('lowercase group currency is uppercased; mixed-case mode is normalized', ()
     ...form,
     ...inheritGroupSettings({ groups: groups(), groupName: form.Group, leverageTouched: false, currencyTouched: false }),
     ...operatorDetails(),
-    AccountMode: 'Netting',
+    AccountMode: 'Hedging',
   };
   const payload = buildNewAccountPayload(form);
   assert.equal(payload.Group, 'Fixture\\Alpha');
   assert.equal(payload.Currency, 'EUR');
   assert.equal(payload.Leverage, 200);
   assert.ok(Number.isInteger(payload.Leverage));
-  assert.equal(payload.AccountMode, 'netting');
+  assert.equal(payload.AccountMode, 'hedging');
 });
 
 test('default accounting mode is hedging and passes the submit path', () => {
@@ -502,4 +516,140 @@ test('ds-7 REVIEW-B item 2: empty country passes through the exact modal submit 
     assert.doesNotThrow(() => buildSubmittableAccountPayload(form));
     assert.equal(buildSubmittableAccountPayload(form).Country, '');
   }
+});
+
+// HOLD adversarial fixes through the exact modal submit path (REAL helpers
+// only, one regression block per hole): initial form + REAL
+// inheritGroupSettings on pick + operator details + REAL builders.
+
+// Modal path for the wizard's syncGroupDefaults spread: the operator inherits
+// 1:200/EUR from Alpha, then picks a group without currency — the stale EUR
+// must clear to '' while an explicit leverage pick survives.
+const groupsWithSparse = () => ([
+  { name: 'Fixture\\Alpha', leverage: 200, currency: 'eur' },
+  { name: 'Fixture\\Gamma', leverage: 100 },
+]);
+
+test('HOLD-1 modal path: repick clears stale untouched currency; explicit leverage pick survives', () => {
+  let form = {
+    ...buildInitialForm(),
+    Group: 'Fixture\\Alpha',
+    ...inheritGroupSettings({ groups: groupsWithSparse(), groupName: 'Fixture\\Alpha', leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  };
+  assert.equal(buildNewAccountPayload(form).Currency, 'EUR');
+  // Untouched repick: stale EUR clears, leverage follows the new group.
+  form = {
+    ...form,
+    Group: 'Fixture\\Gamma',
+    ...inheritGroupSettings({ groups: groupsWithSparse(), groupName: 'Fixture\\Gamma', leverageTouched: false, currencyTouched: false }),
+  };
+  assert.equal(form.Currency, '');
+  assert.throws(() => buildNewAccountPayload(form), /currency/i);
+  const explicit = buildNewAccountPayload({ ...form, Currency: 'EUR' });
+  assert.equal(explicit.Leverage, 100);
+  assert.equal(explicit.Currency, 'EUR');
+  // Explicit leverage pick (touched) survives the same repick untouched:
+  // the operator picks 1:500 after Alpha's inheritance (exactly what sets
+  // leverageTouched in the modal), then repicks Gamma.
+  const guarded = {
+    ...buildInitialForm(),
+    Group: 'Fixture\\Alpha',
+    ...inheritGroupSettings({ groups: groupsWithSparse(), groupName: 'Fixture\\Alpha', leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+    Leverage: 500,
+  };
+  const afterRepick = {
+    ...guarded,
+    Group: 'Fixture\\Gamma',
+    ...inheritGroupSettings({ groups: groupsWithSparse(), groupName: 'Fixture\\Gamma', leverageTouched: true, currencyTouched: false }),
+  };
+  assert.equal(afterRepick.Leverage, 500);
+  assert.equal(afterRepick.Currency, '');
+  assert.equal(buildNewAccountPayload({ ...afterRepick, Currency: 'EUR' }).Leverage, 500);
+});
+
+test('HOLD-2 modal path: empty master_pass fails closed; empty identities never gate submit', () => {
+  // Verified read-only against the manager AccountCreate handler
+  // (accounts.go): ONLY master_pass + Group are backend-required.
+  const picked = 'Fixture\\Beta';
+  for (const empty of ['', undefined, null]) {
+    const form = {
+      ...buildInitialForm(),
+      Group: picked,
+      ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+      ...operatorDetails(),
+      master_pass: empty,
+    };
+    assert.throws(() => buildNewAccountPayload(form), /master password/i);
+    assert.throws(() => buildSubmittableAccountPayload(form), /master password/i);
+  }
+  // Backend-optional identities pass through the exact modal path ungated.
+  const open = {
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    FirstName: '', LastName: '', Email: '', investor_pass: '',
+    master_pass: 'secret-a',
+  };
+  assert.equal(buildSubmittableAccountPayload(open).Email, '');
+  assert.equal(buildSubmittableAccountPayload(open).investor_pass, '');
+});
+
+test('HOLD-3 modal path: confused group/field types never reach the payload', () => {
+  // A group row carrying {leverage:true, currency:true} yields no inheritance
+  // (never 1/'TRUE'); the untouched form then fails closed on leverage.
+  const odd = [{ name: 'Fixture\\Odd', leverage: true, currency: true }];
+  const inherited = inheritGroupSettings({
+    groups: odd, groupName: 'Fixture\\Odd', leverageTouched: false, currencyTouched: false,
+  });
+  assert.deepEqual(inherited, { Leverage: '', Currency: '' });
+  const form = {
+    ...buildInitialForm(), Group: 'Fixture\\Odd', ...inherited, ...operatorDetails(),
+  };
+  assert.throws(() => buildNewAccountPayload(form), /leverage/i);
+  // A forced boolean leverage throws instead of becoming 1.
+  assert.throws(
+    () => buildSubmittableAccountPayload({ ...form, Leverage: true, Currency: 'EUR' }),
+    /leverage/i,
+  );
+  // A confused broker country seeds no default on the modal path.
+  assert.equal(resolveDefaultCountry({ country: true }, false), '');
+  assert.equal(resolveDefaultCountry({ country: 123 }, false), '');
+});
+
+test('HOLD-4 modal path: netting is refused on the exact submit path', () => {
+  // Engine constraint (global product decision): the RAM engine has no
+  // netting, so the canonical builder refuses it exactly like the wrapper.
+  const picked = 'Fixture\\Beta';
+  const form = {
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+    AccountMode: 'netting',
+  };
+  assert.throws(() => buildNewAccountPayload(form), /not supported yet/);
+  assert.throws(() => buildSubmittableAccountPayload(form), /not supported yet/);
+  assert.equal(buildSubmittableAccountPayload({ ...form, AccountMode: 'hedging' }).AccountMode, 'hedging');
+});
+
+test('HOLD-5/H8 modal path: free-text country and clearing a seeded country', () => {
+  const picked = 'Fixture\\Beta';
+  const base = {
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: groups(), groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+  };
+  // Free text outside every preset passes through exactly.
+  assert.equal(buildSubmittableAccountPayload({ ...base, Country: 'New Atlantis' }).Country, 'New Atlantis');
+  // Suggestions merge presets + broker value + current value for the datalist.
+  const seeded = { ...buildInitialForm(), Country: resolveDefaultCountry({ country: 'Germany' }, false) };
+  assert.equal(seeded.Country, 'Germany');
+  assert.ok(countrySuggestions({ presets: ['India'], brokerInfo: { country: 'Germany' }, current: '' }).includes('Germany'));
+  // H8: the seeded value clears back to empty (no disabled placeholder
+  // blocks it) and the cleared form still submits with Country ''.
+  const cleared = { ...base, Country: '' };
+  assert.equal(buildSubmittableAccountPayload(cleared).Country, '');
 });

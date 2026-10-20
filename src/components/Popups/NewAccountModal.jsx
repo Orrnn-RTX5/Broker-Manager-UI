@@ -6,6 +6,7 @@ import {
   ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
   buildSubmittableAccountPayload,
+  countrySuggestions,
   inheritGroupSettings,
   resolveDefaultCountry,
 } from './newAccountWizard';
@@ -15,6 +16,13 @@ import { PERMISSIONS } from '../../utils/permissions';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 const LEVERAGES = [1, 10, 25, 50, 100, 200, 300, 400, 500];
+// Country suggestion presets for the free-text Country input (datalist).
+// CURRENCIES/LEVERAGES deliberately stay <select> presets while Country is
+// free text: leverage/currency ranges are fully covered by these presets
+// plus group inheritance, and both are validated fail-closed in
+// buildNewAccountPayload — whereas Country is backend-optional free text
+// with an unbounded value space no preset list can cover. Exotic explicit
+// leverage/currency values outside the presets remain a known constraint.
 const COUNTRIES = ['India', 'United States', 'United Kingdom', 'Australia', 'Canada', 'Germany', 'France', 'Japan'];
 
 const Field = ({ id, label, required = false, hint, children }) => (
@@ -29,11 +37,11 @@ const Field = ({ id, label, required = false, hint, children }) => (
   </div>
 );
 
-const PasswordField = ({ id, label, value, onChange }) => {
+const PasswordField = ({ id, label, value, onChange, required = true }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   return (
-    <Field id={id} label={label} required>
+    <Field id={id} label={label} required={required} hint={required ? undefined : 'Optional'}>
       <div className="new-account-password-input">
         <input
           id={id}
@@ -42,7 +50,7 @@ const PasswordField = ({ id, label, value, onChange }) => {
           className="ui-input"
           value={value}
           onChange={onChange}
-          required
+          required={required}
           autoComplete="new-password"
         />
         <button
@@ -185,12 +193,17 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   // placeholder), Currency starts '' (no USD default). Leverage and currency
   // arrive only via explicit group inheritance (syncGroupDefaults) or an
   // explicit operator pick; submit fails closed on empty group/leverage/
-  // currency via buildSubmittableAccountPayload. Country starts '' unless the
+  // currency/master_pass via buildSubmittableAccountPayload. Backend contract
+  // mirror (verified read-only against the manager AccountCreate handler):
+  // ONLY master_pass + Group are backend-required, so only those gate
+  // submit — FirstName/LastName/Email/Phone/investor_pass/Country stay
+  // optional and pass through exactly as sent. Country starts '' unless the
   // broker config carries one (resolveDefaultCountry over getBrokerInfo);
   // the backend stores Country exactly as sent (optional free text), so an
   // empty Country passes through untouched and no value is ever invented.
-  // CURRENCIES/LEVERAGES/COUNTRIES stay generic option lists: no entry is
-  // ever auto-selected (empty initial + placeholder, like currency/leverage).
+  // CURRENCIES/LEVERAGES stay generic <select> presets with no entry
+  // auto-selected (empty initial + placeholder); COUNTRIES are suggestion
+  // presets for the free-text Country input (see the Country field below).
   const [form, setForm] = useState({
     Group: '',
     Leverage: '',
@@ -225,6 +238,11 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
   const syncGroupDefaults = (groupName) => {
+    // inheritGroupSettings always keys untouched Leverage/Currency (fresh
+    // group value, or '' when the new group has none), so this spread both
+    // applies fresh inheritance AND clears previously-inherited stale values
+    // on every group switch. Touched (explicit operator) picks are omitted
+    // from the result and therefore never cleared.
     const inherited = inheritGroupSettings({
       groups,
       groupName,
@@ -385,11 +403,31 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                       {ACCOUNT_MODE_CREATE_OPTIONS.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
                     </select>
                   </Field>
-                  <Field id="new-account-country" label="Country">
-                    <select id="new-account-country" className="ui-select" value={form.Country} onChange={(event) => set('Country', event.target.value)}>
-                      <option value="" disabled>Select country…</option>
-                      {[...new Set([...COUNTRIES, form.Country].filter(Boolean))].sort().map((country) => <option key={country} value={country}>{country}</option>)}
-                    </select>
+                  <Field id="new-account-country" label="Country" hint="Optional">
+                    {/*
+                      Backend Country is optional FREE TEXT, so this is a text
+                      input with datalist suggestions (generic COUNTRIES
+                      presets + the broker-configured country when present +
+                      the current value), never a restrictive <select>.
+                      H8: free text also means a broker-seeded country can
+                      always be cleared back to empty — the old disabled
+                      placeholder <option> made empty unselectable. Empty
+                      passes through untouched per the backend contract.
+                    */}
+                    <input
+                      id="new-account-country"
+                      className="ui-input"
+                      value={form.Country}
+                      onChange={(event) => set('Country', event.target.value)}
+                      placeholder="Type or select a country…"
+                      list="new-account-country-suggestions"
+                      autoComplete="country-name"
+                    />
+                    <datalist id="new-account-country-suggestions">
+                      {countrySuggestions({ presets: COUNTRIES, brokerInfo: getBrokerInfo(), current: form.Country }).map((country) => (
+                        <option key={country} value={country} />
+                      ))}
+                    </datalist>
                   </Field>
                 </div>
               </section>
@@ -403,14 +441,20 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </div>
                   </div>
                   <div className="new-account-contact-grid">
-                    <Field id="new-account-first-name" label="First name" required>
-                      <input id="new-account-first-name" className="ui-input" value={form.FirstName} onChange={(event) => set('FirstName', event.target.value)} required autoComplete="given-name" />
+                    {/*
+                      Backend contract mirror: FirstName/LastName/Email are
+                      OPTIONAL in the manager AccountCreate handler, so these
+                      inputs carry no `required` and never gate submit — the
+                      canonical builder passes them through exactly as sent.
+                    */}
+                    <Field id="new-account-first-name" label="First name" hint="Optional">
+                      <input id="new-account-first-name" className="ui-input" value={form.FirstName} onChange={(event) => set('FirstName', event.target.value)} autoComplete="given-name" />
                     </Field>
-                    <Field id="new-account-last-name" label="Last name" required>
-                      <input id="new-account-last-name" className="ui-input" value={form.LastName} onChange={(event) => set('LastName', event.target.value)} required autoComplete="family-name" />
+                    <Field id="new-account-last-name" label="Last name" hint="Optional">
+                      <input id="new-account-last-name" className="ui-input" value={form.LastName} onChange={(event) => set('LastName', event.target.value)} autoComplete="family-name" />
                     </Field>
-                    <Field id="new-account-email" label="Email" required>
-                      <input id="new-account-email" type="email" name="new_user_email" className="ui-input" value={form.Email} onChange={(event) => set('Email', event.target.value)} required autoComplete="off" />
+                    <Field id="new-account-email" label="Email" hint="Optional">
+                      <input id="new-account-email" type="email" name="new_user_email" className="ui-input" value={form.Email} onChange={(event) => set('Email', event.target.value)} autoComplete="off" />
                     </Field>
                     <Field id="new-account-phone" label="Phone" hint="Optional">
                       <input id="new-account-phone" type="tel" className="ui-input" value={form.Phone} onChange={(event) => set('Phone', event.target.value)} autoComplete="tel" />
@@ -426,8 +470,13 @@ const NewAccountModalContent = ({ onClose, onSuccess }) => {
                     </div>
                   </div>
                   <div className="new-account-password-grid">
+                    {/*
+                      Backend contract mirror: master_pass is REQUIRED
+                      (fail-closed in the builder) while investor_pass is
+                      OPTIONAL (policy-checked server-side only when present).
+                    */}
                     <PasswordField id="new-account-master-password" label="Master password" value={form.master_pass} onChange={(event) => set('master_pass', event.target.value)} />
-                    <PasswordField id="new-account-investor-password" label="Investor password" value={form.investor_pass} onChange={(event) => set('investor_pass', event.target.value)} />
+                    <PasswordField id="new-account-investor-password" label="Investor password" value={form.investor_pass} onChange={(event) => set('investor_pass', event.target.value)} required={false} />
                   </div>
                 </section>
               </div>
