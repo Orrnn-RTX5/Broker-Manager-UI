@@ -20,6 +20,21 @@ const BROKER_RELEASE_API_URL_KEYS = [
 
 const RELEASE_CHANNEL_KEYS = [...BROKER_RELEASE_API_URL_KEYS, ...RUNTIME_RELEASE_API_URL_KEYS];
 
+// Human release-notes page keys. Same precedence pattern as the channel
+// resolver: broker-style keys first, deployment runtime keys last. There is
+// intentionally no built-in default — a white-label build must never point at
+// vendor infrastructure on its own.
+const RUNTIME_RELEASES_PAGE_URL_KEYS = ['DESKTOP_RELEASES_URL', 'VITE_DESKTOP_RELEASES_URL'];
+
+// Broker-provided human notes-page fields (generic, tenant-agnostic).
+const BROKER_RELEASES_PAGE_URL_KEYS = [
+  'releasesUrl',
+  'desktopReleasesUrl',
+  'releaseNotesUrl',
+];
+
+const RELEASES_PAGE_KEYS = [...BROKER_RELEASES_PAGE_URL_KEYS, ...RUNTIME_RELEASES_PAGE_URL_KEYS];
+
 export const RELEASE_CHANNEL_UNAVAILABLE_MESSAGE = 'Desktop update check is not configured for this broker.';
 
 const asChannelUrl = (value = '') => {
@@ -71,14 +86,38 @@ export const resolveReleaseChannel = (config = {}) => {
   return null;
 };
 
-// Human-notes choice (documented): the channel is a JSON API endpoint, not a
-// human page, and there is no reliable generic mapping from an arbitrary
-// tenant-configured JSON channel to an HTML notes page without hardcoding
-// vendor hosts (forbidden by the white-label rule). Callers therefore label
-// the raw channel honestly (for example "Query update channel") instead of
-// claiming "View release notes". No helper derives an HTML URL; when a
-// platform later publishes a dedicated human notes URL, it should be added
-// as a separate configured key rather than guessed from the JSON endpoint.
+// Human-notes page (configured): the channel above is a JSON API endpoint,
+// not a human page, and there is no reliable generic mapping from an
+// arbitrary tenant-configured JSON channel to an HTML notes page without
+// hardcoding vendor hosts (forbidden by the white-label rule). Callers
+// therefore label the raw channel honestly (for example "Query update
+// channel") instead of claiming "View release notes". The human page is a
+// separate configured key resolved by resolveReleasesPageUrl below; only that
+// URL may ever be labeled as release notes.
+
+// Pure helper: resolve the configured human release-notes page URL from a
+// plain config object (direct fields, nested broker object, and/or deployment
+// runtime config). Direct config wins, then the nested broker object, then
+// runtime — within each source, broker-style keys precede runtime keys, the
+// same precedence pattern as resolveReleaseChannel. Returns the page URL, or
+// null when no notes page is configured. Never falls back to vendor
+// infrastructure. Disallowed URL schemes (javascript:, data:, and other
+// non-http(s) schemes) are treated as unconfigured and skipped.
+export const resolveReleasesPageUrl = (config = {}) => {
+  const direct = config && typeof config === 'object' ? config : {};
+  const nested = direct.broker && typeof direct.broker === 'object' ? direct.broker : {};
+  const runtimeSnapshot = {};
+  for (const key of RUNTIME_RELEASES_PAGE_URL_KEYS) {
+    runtimeSnapshot[key] = getRuntimeConfigValue([key]);
+  }
+  for (const source of [direct, nested, runtimeSnapshot]) {
+    for (const key of RELEASES_PAGE_KEYS) {
+      const value = readChannelKey(source, key);
+      if (value && isAllowedChannelUrl(value)) return value;
+    }
+  }
+  return null;
+};
 
 // Impure wrapper: broker-provided channel wins when present, otherwise the
 // runtime (deployment) configuration. Returns url-or-null.
