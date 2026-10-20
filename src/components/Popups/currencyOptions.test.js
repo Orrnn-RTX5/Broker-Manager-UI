@@ -6,9 +6,11 @@ import * as wizard from './newAccountWizard.js';
 // the Currency <select> offers the UNION of the groups' allowed/deposit
 // currencies (existing groups API rows as returned by useGroupList, read via
 // groupCurrencyOf) — distinct values, stable (first-seen) order. The literal
-// CURRENCIES list is used ONLY when that union is empty, and NOTHING is
-// preselected unless a default is set. The country list stays literal and
-// universal (untouched by this slice).
+// CURRENCIES list is used ONLY when that union is empty, and NOTHING is EVER
+// preselected: the initial Currency is '' in ALL cases (no broker default,
+// no group default — the placeholder stays until an explicit pick or group
+// inheritance). The country list stays literal and universal (untouched by
+// this slice).
 //
 // Generic fixtures only: synthetic group names and ISO-style codes. No
 // tenant, broker, host, or account identifiers.
@@ -81,11 +83,11 @@ test('ui-3b currency list: with an empty union expects the fallback literal list
   assert.deepEqual(wizard.currencyOptions([{ name: 'Fixture\\Alpha', currencies: 'EUR' }]), fallback);
 });
 
-// UI-3b (c): NOTHING is preselected unless a default is set. With no group
-// selected (wizard open/reset) the default resolver emits '' so the Currency
-// placeholder stays until an explicit pick or group inheritance; a touched
-// field keeps the operator value.
-test('ui-3b currency list: no preselect without a default', () => {
+// UI-3b (c): NOTHING is EVER preselected. The initial Currency is '' in ALL
+// cases — no group selected (wizard open/reset), a group selected (even one
+// carrying a deposit currency), empty or unknown groups, touched or not. The
+// placeholder stays until an explicit pick or group inheritance sets a value.
+test('ui-3b currency list: initial Currency is empty in all cases (never preselected)', () => {
   assert.equal(typeof wizard.resolveDefaultCurrency, 'function', 'resolveDefaultCurrency helper exists');
   const groups = () => ([
     { name: 'Fixture\\Alpha', currency: 'EUR' },
@@ -96,12 +98,11 @@ test('ui-3b currency list: no preselect without a default', () => {
   assert.equal(wizard.resolveDefaultCurrency({ groups: [], groupName: '' }), '');
   assert.equal(wizard.resolveDefaultCurrency(), '');
   assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'No\\SuchGroup' }), '');
-  // An explicit operator edit always wins over re-resolution.
   assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Alpha', currencyTouched: true }), '');
   assert.equal(wizard.resolveDefaultCurrency({ currencyTouched: true }), '');
-  // Unless-clause: a selected group carrying a deposit currency sets the
-  // default (uppercased); a group without one leaves '' (no invention).
-  assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Alpha' }), 'EUR');
-  assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Beta' }), 'GBP');
-  assert.equal(wizard.resolveDefaultCurrency({ groups: [{ name: 'Fixture\\Gamma' }], groupName: 'Fixture\\Gamma' }), '');
+  // Even a selected group WITH a deposit currency never preselects: the
+  // operator picks explicitly (or inherits on pick), the wizard never fills.
+  assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Alpha' }), '');
+  assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Beta' }), '');
+  assert.equal(wizard.resolveDefaultCurrency({ groups: groups(), groupName: 'Fixture\\Alpha', currencyTouched: false }), '');
 });
