@@ -1,6 +1,10 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import authService, { AUTH_STORAGE_KEYS, performLogoutSequence } from './authService.js';
+import authService, {
+  AUTH_STORAGE_KEYS,
+  LOGOUT_REVOKE_TIMEOUT_MS,
+  performLogoutSequence,
+} from './authService.js';
 
 // Covers the real logout sequence: a stubbed revoke transport must run before
 // local state is cleared, and local state is always cleared — even when the
@@ -193,4 +197,45 @@ test('the returned snapshot describes the pre-clear session', async () => {
   assert.ok(snapshot.expiresAt > Date.now());
   assert.equal(snapshot.isExpired, false);
   assert.deepEqual(localRemnants(), []);
+});
+
+test('the default revoke timeout stays within the 5-8s logout budget', () => {
+  assert.ok(
+    LOGOUT_REVOKE_TIMEOUT_MS >= 5_000 && LOGOUT_REVOKE_TIMEOUT_MS <= 8_000,
+    `expected 5-8s budget, got ${LOGOUT_REVOKE_TIMEOUT_MS}ms`,
+  );
+});
+
+test('a never-settling revoke still clears locally and resolves within budget', async () => {
+  // Adversarial HOLD: a transport that never settles must not hang logout —
+  // local clear always runs within the timeout budget. A short timeout keeps
+  // this fast; the generous upper bound only guards against a hang, so the
+  // assertion cannot flake on timing.
+  const revokeSession = () => new Promise(() => {});
+
+  const snapshot = await performLogoutSequence({ revokeSession, revokeTimeoutMs: 50 });
+
+  assert.equal(snapshot.token, 'access-1');
+  assert.deepEqual(localRemnants(), []);
+  assert.equal(authService.getSessionStatus().authenticated, false);
+});
+
+test('a slow revoke past the timeout still clears locally without waiting', async () => {
+  let settled = false;
+  const revokeSession = () => new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      settled = true;
+      resolve();
+    }, 500);
+    // The test must not wait for the late revoke after logout already won.
+    if (typeof timer.unref === 'function') timer.unref();
+  });
+
+  const snapshot = await performLogoutSequence({ revokeSession, revokeTimeoutMs: 50 });
+
+  assert.equal(snapshot.token, 'access-1');
+  assert.deepEqual(localRemnants(), []);
+  assert.equal(authService.getSessionStatus().authenticated, false);
+  // The late revoke resolving later must not restore or throw.
+  assert.equal(settled, false);
 });

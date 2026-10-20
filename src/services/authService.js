@@ -395,6 +395,13 @@ const removeStoredBrokerInfoCopies = () => {
   }
 };
 
+// A revoke transport that never settles must not hang logout forever (tokens
+// would stay live and the refresh scheduler would keep running). The remote
+// revoke is therefore raced against a bounded timeout; a timed-out revoke is
+// swallowed exactly like a rejected one (best-effort remote, fail-closed
+// local). Kept inside the 5-8s budget so local clear always runs in time.
+export const LOGOUT_REVOKE_TIMEOUT_MS = 6_000;
+
 /**
  * Logout sequence: best-effort remote revoke BEFORE local clear, then always
  * clear locally even when the revoke fails (fail-closed locally,
@@ -403,14 +410,30 @@ const removeStoredBrokerInfoCopies = () => {
  *
  * - revokeSession: async (snapshot) => void transport using the pre-clear
  *   snapshot tokens. Throwing/rejecting never blocks or undoes local logout.
+ *   A transport that never settles is cut off after `revokeTimeoutMs`
+ *   (default LOGOUT_REVOKE_TIMEOUT_MS) and treated the same as a rejection.
+ * - revokeTimeoutMs: bound in ms for the remote revoke; local clear always
+ *   runs within this budget. Tenant-agnostic; no new endpoints.
  */
-export const performLogoutSequence = async ({ revokeSession = null } = {}) => {
+export const performLogoutSequence = async ({ revokeSession = null, revokeTimeoutMs = LOGOUT_REVOKE_TIMEOUT_MS } = {}) => {
   const snapshot = getAuthSnapshot();
   if (typeof revokeSession === 'function') {
+    const timeoutMs = Number.isFinite(revokeTimeoutMs) && revokeTimeoutMs > 0
+      ? revokeTimeoutMs
+      : LOGOUT_REVOKE_TIMEOUT_MS;
+    let timeoutId = null;
     try {
-      await revokeSession(snapshot);
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('revoke timed out')), timeoutMs);
+      });
+      await Promise.race([
+        Promise.resolve().then(() => revokeSession(snapshot)),
+        timeoutPromise,
+      ]);
     } catch {
       // Best-effort remote revoke; the local logout below still runs.
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
     }
   }
   clearSession();
