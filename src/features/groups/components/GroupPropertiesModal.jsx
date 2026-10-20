@@ -9,6 +9,7 @@ import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
+import { groupPolicyErrorField, mapGroupPolicyError } from '../groupPolicyErrors.js';
 import { ROUTING_LABELS } from '../groupTree.js';
 import {
   GROUP_SYMBOL_FILTERS,
@@ -154,7 +155,13 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
       onSaved?.(saved);
       onClose();
     } catch (err) {
-      setError(err.message);
+      // A server leverage refusal on create renders inline on the field.
+      if (group.isNew && groupPolicyErrorField(err) === 'leverage') {
+        setLeverageError(mapGroupPolicyError(err));
+        setTab('Margin');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setSaving(false);
     }
