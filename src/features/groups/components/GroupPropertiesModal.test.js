@@ -24,7 +24,7 @@ for (const key of ['HTMLElement', 'HTMLDialogElement', 'HTMLInputElement', 'HTML
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 // ---- Recorded network edge -------------------------------------------------
-const host = { calls: [], defaultsResponse: null };
+const host = { calls: [], defaultsResponse: null, serverText: '' };
 globalThis.__groupPropertiesHost = host;
 
 const STUBS = {
@@ -34,6 +34,9 @@ const STUBS = {
       const method = String(options.method ?? 'GET').toUpperCase();
       host.calls.push({ url, method, body: options.body === undefined ? undefined : JSON.parse(options.body) });
       if (method === 'GET') return host.defaultsResponse();
+      if (host.serverText) {
+        return { ok: false, status: 400, text: async () => JSON.stringify({ message: host.serverText, code: 'MT_RET_ERR_PARAMS', stackTrace: null }) };
+      }
       return { ok: true, status: 200, text: async () => JSON.stringify({ created: true }) };
     };
     export const updateManagerAccount = async () => { throw new Error('GroupPropertiesModal test: account write must not run on create'); };
@@ -123,6 +126,7 @@ const unmountModal = async () => {
 beforeEach(() => {
   host.calls = [];
   host.defaultsResponse = defaultsOf(250);
+  host.serverText = '';
   calls.close = 0;
 });
 afterEach(() => unmountModal());
@@ -215,4 +219,24 @@ test('folder properties create: cleared, 0, 10001 and 1.5 are blocked and 0 is n
 test('an existing group does not read broker defaults', async () => {
   await renderModal({ name: 'Fixture/Existing', leverage: 200 });
   assert.equal(getCalls().length, 0);
+});
+
+test('folder properties create: server leverage refusals render inline on the leverage field', async () => {
+  const { mapGroupPolicyError } = await import('../groupPolicyErrors.js');
+  for (const serverText of [
+    'GROUP_POLICY_DEFAULT_MISSING: leverage is omitted and this broker has no default group leverage; send leverage explicitly',
+    'GROUP_LEVERAGE_INVALID: leverage is outside 1..10000',
+  ]) {
+    host.calls = [];
+    host.serverText = serverText;
+    const container = await renderModal(NEW_GROUP);
+    await pressOk(container);
+    assert.equal(postCalls().length, 1);
+    const expected = mapGroupPolicyError(serverText);
+    const inline = [...container.querySelectorAll('[role="alert"]')].find((el) => el.textContent === expected);
+    assert.ok(inline, `inline leverage error for ${serverText.split(':')[0]}`);
+    assert.ok(leverageInput(container), 'the Margin tab with the leverage field is shown');
+    assert.doesNotMatch(container.textContent, /GROUP_POLICY_DEFAULT_MISSING|GROUP_LEVERAGE_INVALID/);
+    await unmountModal();
+  }
 });
