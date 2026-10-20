@@ -204,7 +204,7 @@ export default {
   "Done Time": "पूर्ण होने का समय",
   "Download desktop app": "डेस्कटॉप ऐप डाउनलोड करें",
   "Download latest desktop app": "नवीनतम डेस्कटॉप ऐप डाउनलोड करें",
-  "Download latest RTX-5 Broker Manager desktop app": "नवीनतम RTX-5 ब्रोकर मैनेजर डेस्कटॉप ऐप डाउनलोड करें",
+  "Download latest Broker Manager desktop app": "नवीनतम ब्रोकर मैनेजर डेस्कटॉप ऐप डाउनलोड करें",
   "Duplicate Group": "समूह की प्रतिलिपि बनाएँ",
   "Edit": "संपादित करें",
   "Edit Selected": "चयनित संपादित करें",

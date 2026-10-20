@@ -59,7 +59,7 @@ export default {
   'Guidance, updates and support for RTX5 Manager': 'RTX5 Manager के लिए मार्गदर्शन, अपडेट और सहायता',
   'Identity, contact information and account preferences.': 'पहचान, संपर्क जानकारी और खाते की प्राथमिकताएँ।',
   'Interactive world-map overlay.': 'इंटरैक्टिव विश्व मानचित्र दृश्य।',
-  'Keyboard shortcuts available across RTX-5 Manager.': 'RTX-5 Manager में उपलब्ध कीबोर्ड शॉर्टकट।',
+  'Keyboard shortcuts available across Broker Manager.': 'Broker Manager में उपलब्ध कीबोर्ड शॉर्टकट।',
   'Liquidation threshold enforced by the server.': 'सर्वर द्वारा लागू अनिवार्य समापन सीमा।',
   'Liquidity Providers integrated into Ultency': 'Ultency से जुड़े तरलता प्रदाता',
   'Live brokerage operations, exposure, account activity and infrastructure health.': 'लाइव ब्रोकर संचालन, जोखिम, खाता गतिविधि और बुनियादी ढाँचे की स्थिति।',

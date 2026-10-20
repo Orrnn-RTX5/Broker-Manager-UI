@@ -58,7 +58,7 @@ export default {
   'Guidance, updates and support for RTX5 Manager': 'RTX5 Managerのガイド、更新情報、サポート',
   'Identity, contact information and account preferences.': '本人情報、連絡先、口座の設定です。',
   'Interactive world-map overlay.': '操作可能な世界地図です。',
-  'Keyboard shortcuts available across RTX-5 Manager.': 'RTX-5 Managerで使用できるキーボードショートカットです。',
+  'Keyboard shortcuts available across Broker Manager.': 'Broker Managerで使用できるキーボードショートカットです。',
   'Liquidation threshold enforced by the server.': 'サーバーが適用する強制決済の閾値です。',
   'Liquidity Providers integrated into Ultency': 'Ultencyに接続された流動性プロバイダー',
   'Live brokerage operations, exposure, account activity and infrastructure health.': 'ブローカー業務、リスク、口座活動、インフラの稼働状況をリアルタイムで表示します。',

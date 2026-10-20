@@ -20,8 +20,12 @@ if (!owner || !repo) {
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+const productName = (process.env.APP_PRODUCT_NAME || '').trim() || pkg.build?.productName || 'Broker Manager';
+const appId = (process.env.APP_ID || '').trim() || pkg.build?.appId || 'com.broker.manager';
 const build = {
   ...(pkg.build || {}),
+  productName,
+  appId,
   publish: [{ provider: 'github', owner, repo, private: false, releaseType: 'release' }],
 };
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rtx5-publish-'));

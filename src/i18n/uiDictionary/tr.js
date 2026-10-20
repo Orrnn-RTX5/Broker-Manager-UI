@@ -203,7 +203,7 @@ export default {
   "Done Time": "Bitiş Zamanı",
   "Download desktop app": "Masaüstü uygulamasını indirin",
   "Download latest desktop app": "En son masaüstü uygulamasını indirin",
-  "Download latest RTX-5 Broker Manager desktop app": "En son RTX-5 Broker Manager masaüstü uygulamasını indirin",
+  "Download latest Broker Manager desktop app": "En son Broker Manager masaüstü uygulamasını indirin",
   "Duplicate Group": "Grubu Çoğalt",
   "Edit": "Düzenle",
   "Edit Selected": "Seçileni Düzenle",

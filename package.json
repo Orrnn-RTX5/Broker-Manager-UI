@@ -2,8 +2,8 @@
   "name": "rtx5-broker-manager-ui",
   "private": true,
   "version": "1.0.3",
-  "description": "RTX-5 broker manager web and desktop UI",
-  "author": "RTX-5",
+  "description": "Broker manager web and desktop UI",
+  "author": "Broker Manager",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
@@ -30,9 +30,9 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.rtx5.brokermanager",
-    "productName": "RTX-5 Broker Manager",
-    "artifactName": "RTX-5-Broker-Manager-Setup-${version}.${ext}",
+    "appId": "com.broker.manager",
+    "productName": "Broker Manager",
+    "artifactName": "Broker-Manager-Setup-${version}.${ext}",
     "asar": true,
     "compression": "maximum",
     "directories": {
@@ -64,7 +64,7 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "RTX-5 Broker Manager"
+      "shortcutName": "Broker Manager"
     }
   },
   "dependencies": {

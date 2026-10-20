@@ -203,7 +203,7 @@ export default {
   "Done Time": "Время исполнения",
   "Download desktop app": "Скачать приложение",
   "Download latest desktop app": "Скачать десктопное приложение",
-  "Download latest RTX-5 Broker Manager desktop app": "Скачать последнюю версию RTX-5 Broker Manager",
+  "Download latest Broker Manager desktop app": "Скачать последнюю версию Broker Manager",
   "Duplicate Group": "Дублировать группу",
   "Edit": "Редактировать",
   "Edit Selected": "Редактировать выбранное",

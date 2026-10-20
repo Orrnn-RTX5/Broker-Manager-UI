@@ -52,7 +52,7 @@ export default {
   'Guidance, updates and support for RTX5 Manager': 'Guías, actualizaciones y soporte para RTX5 Manager',
   'Identity, contact information and account preferences.': 'Identidad, información de contacto y preferencias de la cuenta.',
   'Interactive world-map overlay.': 'Mapa del mundo interactivo.',
-  'Keyboard shortcuts available across RTX-5 Manager.': 'Atajos de teclado disponibles en RTX-5 Manager.',
+  'Keyboard shortcuts available across Broker Manager.': 'Atajos de teclado disponibles en Broker Manager.',
   'Liquidation threshold enforced by the server.': 'Umbral de liquidación aplicado por el servidor.',
   'Liquidity Providers integrated into Ultency': 'Proveedores de liquidez integrados en Ultency',
   'Live brokerage operations, exposure, account activity and infrastructure health.': 'Operaciones del bróker, exposición, actividad de las cuentas y estado de la infraestructura en tiempo real.',

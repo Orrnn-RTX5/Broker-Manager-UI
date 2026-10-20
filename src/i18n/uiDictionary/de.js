@@ -204,7 +204,7 @@ export default {
   "Done Time": "Abschlusszeit",
   "Download desktop app": "Desktop-App herunterladen",
   "Download latest desktop app": "Neueste Desktop-App herunterladen",
-  "Download latest RTX-5 Broker Manager desktop app": "Neueste RTX-5 Broker Manager Desktop-App herunterladen",
+  "Download latest Broker Manager desktop app": "Neueste Broker Manager Desktop-App herunterladen",
   "Duplicate Group": "Gruppe duplizieren",
   "Edit": "Bearbeiten",
   "Edit Selected": "Auswahl bearbeiten",

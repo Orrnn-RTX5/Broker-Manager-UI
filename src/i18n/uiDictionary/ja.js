@@ -203,7 +203,7 @@ export default {
   "Done Time": "完了日時",
   "Download desktop app": "デスクトップアプリをダウンロード",
   "Download latest desktop app": "最新デスクトップアプリをダウンロード",
-  "Download latest RTX-5 Broker Manager desktop app": "最新のRTX-5 Broker Managerデスクトップアプリをダウンロード",
+  "Download latest Broker Manager desktop app": "最新のBroker Managerデスクトップアプリをダウンロード",
   "Duplicate Group": "グループを複製",
   "Edit": "編集",
   "Edit Selected": "選択項目を編集",
