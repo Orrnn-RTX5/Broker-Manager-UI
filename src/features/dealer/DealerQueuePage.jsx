@@ -1,5 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { useEffect, useState } from 'react';
+import { isErrorPayload } from '../../services/apiClient.js';
+import { normalizeResult } from '../../utils/resultMessage.js';
 import { useI18nStore } from '../../i18n/index.js';
 import { Search, AlertTriangle, User, CheckCircle2, XCircle } from 'lucide-react';
 import { getDealerQueue, orderApprove, orderReject } from '../../services/tradeApi';
@@ -9,6 +11,32 @@ import { PERMISSIONS } from '../../utils/permissions';
 import GridLoadingState from '../../components/GridLoadingState';
 
 const DEALER_QUEUE_REFRESH_MS = 4000;
+
+/**
+ * Routing decision for dealer approve/reject results. Uses the SAME
+ * classifiers as the production path: the real isErrorPayload predicate
+ * from the transport boundary (the exact check throwIfErrorPayload applies
+ * inside apiClient.handleResponse before a payload can resolve) plus
+ * normalizeResult — the classifier showResult itself uses — for
+ * retcode-driven rejections (e.g. MT_RET_ERR_*) that pass the transport
+ * flags. No hand-rolled flag checks: stub-resolved { success: false } /
+ * { ok: false } payloads classify exactly like transport-thrown failures.
+ * Pure: ok:true closes the prompt and refetches; ok:false keeps the prompt
+ * open (exec parity) so the operator can correct and retry.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- pure routing decision, unit-tested; co-located here by track file ownership
+export const resolveDealerActionOutcome = (result) => {
+  const outcome = normalizeResult(result);
+  if (isErrorPayload(result) || outcome.type === 'error') {
+    return { ok: false, message: outcome.message, code: outcome.code };
+  }
+  return { ok: true };
+};
+
+// Dialog lifecycle decision: close the approve/reject prompt only when the
+// result classifies as success; keep it open on error like useDealerMenu exec.
+// eslint-disable-next-line react-refresh/only-export-components -- pure lifecycle decision, unit-tested; co-located here by track file ownership
+export const shouldCloseDealerDialog = (result) => resolveDealerActionOutcome(result).ok;
 
 const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const fmtTime = (unix, language) => {
@@ -88,13 +116,15 @@ const DealerQueuePage = () => {
         setActionLoading(true);
         try {
           const result = await orderApprove({ ticket: row.orderTicket, comment: v.comment || undefined });
+          const outcome = resolveDealerActionOutcome(result);
+          if (!outcome.ok) throw new Error(outcome.message);
           showResult(result);
           refetch();
+          setActionDialog(null);
         } catch (err) {
           showResult.error(`Error: ${err.message}`);
         } finally {
           setActionLoading(false);
-          setActionDialog(null);
         }
       },
     });
@@ -109,13 +139,15 @@ const DealerQueuePage = () => {
         setActionLoading(true);
         try {
           const result = await orderReject({ ticket: row.orderTicket, comment: v.comment || undefined });
+          const outcome = resolveDealerActionOutcome(result);
+          if (!outcome.ok) throw new Error(outcome.message);
           showResult(result);
           refetch();
+          setActionDialog(null);
         } catch (err) {
           showResult.error(`Error: ${err.message}`);
         } finally {
           setActionLoading(false);
-          setActionDialog(null);
         }
       },
     });

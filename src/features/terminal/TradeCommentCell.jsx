@@ -1,7 +1,27 @@
 import { useRef, useState } from 'react';
 import { Check, LoaderCircle, Pencil, X } from 'lucide-react';
 import { positionCommentChange } from '../../services/tradeApi';
+import { isErrorPayload } from '../../services/apiClient.js';
+import { normalizeResult } from '../../utils/resultMessage.js';
 import './tradeCommentCell.css';
+
+/**
+ * Routing decision for comment saves through the SAME classifiers as the
+ * production path: the real isErrorPayload predicate from the transport
+ * boundary (covers success:false, ok:false and error members exactly as
+ * apiClient.handleResponse does) plus normalizeResult — the classifier
+ * showResult itself uses — for retcode-driven rejections (e.g. MT_RET_ERR_*)
+ * that pass the transport flags. Replaces the hand-rolled
+ * success===false/error check, which missed ok===false and retcode. Pure.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- pure routing decision, unit-tested; co-located here by track file ownership
+export const resolveCommentSaveOutcome = (result) => {
+  const outcome = normalizeResult(result);
+  if (isErrorPayload(result) || outcome.type === 'error') {
+    return { ok: false, message: outcome.message, code: outcome.code };
+  }
+  return { ok: true };
+};
 
 export default function TradeCommentCell({ row, disabled, onSaved }) {
   const [editing, setEditing] = useState(false);
@@ -25,8 +45,9 @@ export default function TradeCommentCell({ row, disabled, onSaved }) {
     setError('');
     try {
       const result = await positionCommentChange({ ticket: row.position, comment: draft });
-      if (result?.success === false || result?.error) {
-        throw new Error(result?.error?.message || result?.message || String(result.error || 'Could not save comment.'));
+      const outcome = resolveCommentSaveOutcome(result);
+      if (!outcome.ok) {
+        throw new Error(outcome.message);
       }
       onSaved(draft);
       finish();
