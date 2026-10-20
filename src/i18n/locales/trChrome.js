@@ -1,11 +1,11 @@
 export default {
   'tabs.tradingAnalytics': 'İşlem analizi', 'tabs.tradingAccounts': 'İşlem hesapları', 'tabs.dealerQueue': 'İşlem yetkilisi kuyruğu',
   'status.login': 'Hesap numarası', 'edit.excelCompatible': 'Excel uyumlu',
-  'tools.connectedLive': 'RTX5-Live bağlantısı kuruldu', 'tools.feedReconnecting': 'Akış yeniden bağlanıyor',
+  'tools.connectedLive': 'Live bağlantısı kuruldu', 'tools.feedReconnecting': 'Akış yeniden bağlanıyor',
   'tools.feedReconnectingTitle': 'Piyasa akışı yeniden bağlanıyor', 'tools.subscribedSymbols': 'Abone olunan enstrümanlar',
   'tools.dbHealthy': 'Veritabanı bağlantısı sağlıklı', 'tools.apiHealthy': 'Manager API sağlıklı', 'tools.globalSettings': 'Genel ayarlar',
   'window.dealer': 'İşlem yetkilisi', 'window.groups': 'Gruplar', 'help.topics': 'Yardım konuları', 'help.releaseNotes': 'Sürüm notları',
-  'help.checkUpdates': 'Güncellemeleri denetle', 'help.contact': 'İletişim ve destek', 'help.about': 'RTX5 Manager hakkında',
+  'help.checkUpdates': 'Güncellemeleri denetle', 'help.contact': 'İletişim ve destek', 'help.about': 'Manager hakkında',
   'tabs.liquidity': 'Likidite', 'tabs.riskMonitor': 'Risk izleme', 'tabs.quickNavigation': 'Hızlı gezinme',
   'tabs.openQuickNavigation': 'Hızlı gezinmeyi aç', 'tabs.openWorkspaces': 'Çalışma alanlarını aç',
   'tabs.allOpen': 'Tüm çalışma alanları zaten açık.', 'bar.notifications': 'Bildirimler', 'bar.unread': '{count} okunmamış',

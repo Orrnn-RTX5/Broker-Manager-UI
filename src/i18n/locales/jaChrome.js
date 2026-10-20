@@ -1,6 +1,6 @@
 export default {
   'edit.excelCompatible': 'Excel互換',
-  'tools.connectedLive': 'RTX5-Liveに接続済み',
+  'tools.connectedLive': 'Liveに接続済み',
   'tools.feedReconnecting': 'フィードに再接続中',
   'tools.feedReconnectingTitle': '市場データフィードに再接続中',
   'tools.subscribedSymbols': '購読中の銘柄',
@@ -13,7 +13,7 @@ export default {
   'help.releaseNotes': 'リリースノート',
   'help.checkUpdates': '更新を確認',
   'help.contact': 'お問い合わせ・サポート',
-  'help.about': 'RTX5 Managerについて',
+  'help.about': 'Managerについて',
   'tabs.liquidity': '流動性',
   'tabs.riskMonitor': 'リスク監視',
   'tabs.quickNavigation': 'クイックナビゲーション',

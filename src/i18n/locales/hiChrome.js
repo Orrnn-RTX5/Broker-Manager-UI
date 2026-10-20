@@ -1,6 +1,6 @@
 export default {
   'edit.excelCompatible': 'Excel-संगत',
-  'tools.connectedLive': 'RTX5-Live से कनेक्ट है',
+  'tools.connectedLive': 'Live से कनेक्ट है',
   'tools.feedReconnecting': 'फ़ीड फिर कनेक्ट हो रहा है',
   'tools.feedReconnectingTitle': 'बाज़ार फ़ीड फिर कनेक्ट हो रहा है',
   'tools.subscribedSymbols': 'सब्सक्राइब किए गए सिंबल',
@@ -13,7 +13,7 @@ export default {
   'help.releaseNotes': 'संस्करण विवरण',
   'help.checkUpdates': 'अपडेट जाँचें',
   'help.contact': 'संपर्क और सहायता',
-  'help.about': 'RTX5 Manager के बारे में',
+  'help.about': 'Manager के बारे में',
   'tabs.liquidity': 'तरलता',
   'tabs.riskMonitor': 'जोखिम निगरानी',
   'tabs.quickNavigation': 'त्वरित नेविगेशन',

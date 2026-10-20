@@ -424,7 +424,7 @@ const ManagerLoginShell = ({ children }) => (
 );
 
 const ManagerLoginHeader = ({ broker }) => {
-  const defaultLogo = `${import.meta.env.BASE_URL}rtx5-logo.png`;
+  const defaultLogo = `${import.meta.env.BASE_URL}brand-logo.png`;
   const candidates = buildBrokerLogoCandidates(broker, { appFallbackUrl: defaultLogo });
   const candidateKey = candidates.join('|');
   const [attempt, setAttempt] = useState({ key: candidateKey, index: 0 });
