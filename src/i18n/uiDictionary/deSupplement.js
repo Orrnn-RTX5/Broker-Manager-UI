@@ -308,7 +308,7 @@ export default {
 'Interactive world-map overlay.': 'Interaktive Weltkartenansicht.',
 'Internal Symbol': 'Internes Symbol',
 'Investor password': 'Anlegerpasswort',
-'Keyboard shortcuts available across RTX-5 Manager.': 'Verfügbare Tastenkürzel in RTX-5 Manager.',
+'Keyboard shortcuts available across Broker Manager.': 'Verfügbare Tastenkürzel in Broker Manager.',
 'KYC Document': 'Identitätsnachweis',
 'Languages Distribution': 'Sprachverteilung',
 'Last 24 Hours': 'Letzte 24 Stunden',
