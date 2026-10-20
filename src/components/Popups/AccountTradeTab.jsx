@@ -130,7 +130,11 @@ const AccountTradeTab = ({
   const pipMultiplier = getPipMultiplier(digits);
   const pipSize = 1 / pipMultiplier;
 
-  // Sync state when selected position row changes
+  // Sync state when selected position row changes.
+  // Deps are stable primitives, never the row object: useLivePositions
+  // (overlayRows) rebuilds the row identity on every live tick, which used to
+  // wipe in-progress SL/TP edits within ~250ms so Modify never enabled. Only
+  // an actual change of ticket/values resets the edit fields.
   useEffect(() => {
     if (selectedTicketRow) {
       if (selectedTicketRow.symbol) {
@@ -153,7 +157,10 @@ const AccountTradeTab = ({
         setTradeComment(String(selectedTicketRow.comment));
       }
     }
-  }, [selectedTicketRow, digits]);
+  // Intentionally narrowed: exhaustive-deps cannot see that the row object
+  // identity churns on every live tick, so the object itself must stay out.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTicketRow?.position ?? selectedTicketRow?.ticket, selectedTicketRow?.priceSl, selectedTicketRow?.priceTp, selectedTicketRow?.volume ?? selectedTicketRow?.lots, digits]);
 
   // Available symbols list
   const availableSymbols = useMemo(() => {
