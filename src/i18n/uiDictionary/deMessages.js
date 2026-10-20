@@ -277,7 +277,7 @@ export default {
   'Enter the account login ID above to view its position history.': 'Geben Sie oben die Konto-Anmelde-ID ein, um den Positionsverlauf anzuzeigen.',
   'Failed to fetch history': 'Verlauf konnte nicht abgerufen werden',
   'Right-click for actions · Double-click a row to edit': 'Rechtsklick für Aktionen · Doppelklick auf eine Zeile zum Bearbeiten',
-  'Connect top-tier liquidity in a few clicks. The system is fully integrated with RTX5, no external gateways are needed. Try it now with a 90-day free access period.': 'Verbinden Sie führende Liquiditätsanbieter mit wenigen Klicks. Das System ist vollständig in RTX5 integriert und benötigt keine externen Gateways. Jetzt 90 Tage kostenlos testen.',
+  'Connect top-tier liquidity in a few clicks. The system is fully integrated with Broker Manager, no external gateways are needed. Try it now with a 90-day free access period.': 'Verbinden Sie führende Liquiditätsanbieter mit wenigen Klicks. Das System ist vollständig in Broker Manager integriert und benötigt keine externen Gateways. Jetzt 90 Tage kostenlos testen.',
   'This aggregate is supplied by the isolated UI adapter until its API is connected.': 'Dieser Gesamtwert stammt bis zur Anbindung der API aus dem separaten Oberflächenadapter.',
   'Some live aggregates are unavailable; cached values and clearly marked UI adapters remain visible.': 'Einige Echtzeitgesamtwerte sind nicht verfügbar; zwischengespeicherte Werte und gekennzeichnete Oberflächenadapter bleiben sichtbar.',
   'Request failed': 'Anfrage fehlgeschlagen',
