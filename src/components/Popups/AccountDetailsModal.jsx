@@ -40,6 +40,7 @@ import {
   getManagerTransactionPendingLabel,
   getManagerTransactionPendingNoun,
   resolveManagerTransactionType,
+  resolveTransferDestination,
 } from './accountFinanceOps.js';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
@@ -286,6 +287,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const [depositAmount, setDepositAmount] = useState('');
   const [depositComment, setDepositComment] = useState('');
+  const [depositDestination, setDepositDestination] = useState('');
   const [transactionType, setTransactionType] = useState(DEFAULT_MANAGER_TRANSACTION_TYPE);
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
@@ -890,7 +892,8 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     const reportFailure = (message) => {
       setDepositAmount('');
       setDepositComment('');
-      setDepositError(`${message} The amount and comment have been reset.`);
+      setDepositDestination('');
+      setDepositError(`${message} The amount, destination and comment have been reset.`);
     };
     setDepositError(null);
     setDepositSuccess(null);
@@ -936,10 +939,23 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       return;
     }
 
+    // Transfers require a destination account login, resolved through the
+    // tested helper (SecureTransfer contract: from_login AND to_login as
+    // positive different integers). All other types send no to_login.
+    let parsedDestination = null;
+    if (transactionTypeKey === 'transfer') {
+      try {
+        parsedDestination = resolveTransferDestination(depositDestination, parsedLogin);
+      } catch (err) {
+        reportFailure(err?.message || 'Destination login must be a positive integer account login.');
+        return;
+      }
+    }
+
     if (depositConfirmationRef.current || isDepositing) return;
     const confirmed = await new Promise((resolve) => {
       depositConfirmationRef.current = resolve;
-      setDepositConfirmation(buildManagerTransactionConfirmation(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin));
+      setDepositConfirmation(buildManagerTransactionConfirmation(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin, parsedDestination));
     });
     if (!confirmed) return;
 
@@ -948,8 +964,13 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     setDepositSuccess(null);
 
     try {
+      // TransferRequest carries from_login/to_login (no `login` key); all
+      // other types carry `login`. The backend 400s a transfer without both
+      // positive different integers, so the keys must match the endpoint.
       const result = await submitManagerTransaction(transactionTypeKey, {
-        login: parsedLogin,
+        ...(transactionTypeKey === 'transfer'
+          ? { from_login: parsedLogin, to_login: parsedDestination }
+          : { login: parsedLogin }),
         amount: amountVal,
         comment: depositComment.trim(),
       });
@@ -961,10 +982,11 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       const responseMessage = result && typeof result === 'object'
         ? (result.message || result.detail || result.status_message)
         : '';
-      const successMessage = buildManagerTransactionSuccessMessage(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin);
+      const successMessage = buildManagerTransactionSuccessMessage(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin, parsedDestination);
       setDepositSuccess(typeof responseMessage === 'string' && responseMessage ? `${successMessage} ${responseMessage}` : successMessage);
       setDepositAmount('');
       setDepositComment('');
+      setDepositDestination('');
       // Refresh failures must never turn a completed transaction into a failed transaction.
       void Promise.resolve().then(() => onAccountUpdated?.(loginId)).catch(() => {});
 
@@ -1652,6 +1674,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                         disabled={isDepositing || !canManageFinances}
                         onChange={(e) => {
                           setTransactionType(resolveManagerTransactionType(e.target.value));
+                          setDepositDestination('');
                           setDepositError(null);
                           setDepositSuccess(null);
                         }}
@@ -1680,6 +1703,26 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
                         className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
                       />
                     </div>
+
+                    {transactionType === 'transfer' && (
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="transaction-to-login" className="text-[11px] font-normal">To login *</label>
+                        <input
+                          type="text"
+                          id="transaction-to-login"
+                          value={depositDestination}
+                          disabled={isDepositing || !canManageFinances}
+                          onChange={(e) => {
+                            setDepositDestination(e.target.value);
+                            setDepositError(null);
+                            setDepositSuccess(null);
+                          }}
+                          placeholder="Destination account login"
+                          inputMode="numeric"
+                          className="w-full h-9    border   rounded-md px-3 text-[11px]   focus:outline-none   transition-all "
+                        />
+                      </div>
+                    )}
 
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="transaction-comment" className="text-[12px] font-medium  ">Comment</label>

@@ -70,6 +70,69 @@ export function isSupportedManagerTransactionType(type) {
 }
 
 /**
+ * Check whether a value is the transfer type without throwing.
+ *
+ * @param {string} type Candidate transaction type.
+ * @returns {boolean} True only for the transfer type, false otherwise.
+ */
+export function isTransferType(type) {
+  try {
+    return resolveManagerTransactionType(type) === 'transfer';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve a transfer destination login.
+ *
+ * Pure helper for the SecureTransfer contract, which requires from_login AND
+ * to_login as positive DIFFERENT integers. Fails closed: blank, non-numeric,
+ * zero, negative, non-integer, and equal-to-source values all throw instead
+ * of producing a submittable login.
+ *
+ * @param {string|number} value Candidate destination login.
+ * @param {string|number} fromLogin Source account login to differ from.
+ * @returns {number} The destination login as a positive safe integer.
+ */
+export function resolveTransferDestination(value, fromLogin) {
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (raw === '' || raw === null || raw === undefined) {
+    throw new TypeError('Transfer destination login is required.');
+  }
+  if (typeof raw !== 'string' && typeof raw !== 'number') {
+    throw new TypeError(`Invalid transfer destination login: ${String(value)} must be a positive integer.`);
+  }
+  if (typeof raw === 'string' && !/^\d+$/.test(raw)) {
+    if (raw === '') {
+      throw new TypeError('Transfer destination login is required.');
+    }
+    throw new TypeError(`Invalid transfer destination login: ${String(value)} must be a positive integer.`);
+  }
+  const num = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(num) || !Number.isSafeInteger(num)) {
+    throw new TypeError(`Transfer destination login must be a positive integer, got ${String(value)}.`);
+  }
+  if (num === 0) {
+    throw new TypeError('Transfer destination login must be a positive integer, got 0.');
+  }
+  if (num < 0) {
+    throw new TypeError(`Transfer destination login must be a positive integer, got ${num}.`);
+  }
+  const fromRaw = typeof fromLogin === 'string' ? fromLogin.trim() : fromLogin;
+  let from = Number.NaN;
+  if (typeof fromRaw === 'string' && fromRaw !== '' && /^-?\d+$/.test(fromRaw)) {
+    from = Number(fromRaw);
+  } else if (typeof fromRaw === 'number') {
+    from = fromRaw;
+  }
+  if (Number.isSafeInteger(from) && from > 0 && num === from) {
+    throw new TypeError(`Transfer destination login must be different from the source account #${from}.`);
+  }
+  return num;
+}
+
+/**
  * Selector options for the Balance tab TYPE control.
  *
  * @returns {Array<{ value: string, label: string }>} One generic option per supported type.
@@ -118,13 +181,18 @@ export function getManagerTransactionPendingNoun(type) {
  * @param {string} type Transaction type.
  * @param {string} amountText Pre-formatted "amount currency" text.
  * @param {string|number} login Target account login.
+ * @param {string|number} [destination] Transfer destination login; named in
+ *   the copy for transfer only, ignored for other types.
  * @returns {string} The confirmation prompt.
  */
-export function buildManagerTransactionConfirmation(type, amountText, login) {
+export function buildManagerTransactionConfirmation(type, amountText, login, destination) {
   const key = resolveManagerTransactionType(type);
   const action = TRANSACTION_ACTION_LABELS[key];
   const direction = key === 'deposit' ? 'into' : key === 'withdraw' || key === 'transfer' ? 'from' : 'to';
-  return `${action} ${amountText} ${direction} account #${login}?`;
+  const target = key === 'transfer' && destination !== null && destination !== undefined && String(destination).trim() !== ''
+    ? `${login} to account #${String(destination).trim()}`
+    : login;
+  return `${action} ${amountText} ${direction} account #${target}?`;
 }
 
 /**
@@ -134,13 +202,18 @@ export function buildManagerTransactionConfirmation(type, amountText, login) {
  * @param {string} type Transaction type.
  * @param {string} amountText Pre-formatted "amount currency" text.
  * @param {string|number} login Target account login.
+ * @param {string|number} [destination] Transfer destination login; named in
+ *   the copy for transfer only, ignored for other types.
  * @returns {string} The success message.
  */
-export function buildManagerTransactionSuccessMessage(type, amountText, login) {
+export function buildManagerTransactionSuccessMessage(type, amountText, login, destination) {
   const key = resolveManagerTransactionType(type);
   if (key === 'deposit') return `Deposited ${amountText} into account #${login} successfully.`;
   if (key === 'withdraw') return `Withdrew ${amountText} from account #${login} successfully.`;
   if (key === 'credit') return `Credited ${amountText} to account #${login} successfully.`;
+  if (destination !== null && destination !== undefined && String(destination).trim() !== '') {
+    return `Transferred ${amountText} from account #${login} to account #${String(destination).trim()} successfully.`;
+  }
   return `Transferred ${amountText} from account #${login} successfully.`;
 }
 

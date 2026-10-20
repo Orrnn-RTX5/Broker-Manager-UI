@@ -11,7 +11,9 @@ import {
   getManagerTransactionPendingLabel,
   getManagerTransactionPendingNoun,
   isSupportedManagerTransactionType,
+  isTransferType,
   resolveManagerTransactionType,
+  resolveTransferDestination,
 } from './accountFinanceOps.js';
 
 describe('accountFinanceOps transaction type mapping', () => {
@@ -246,5 +248,109 @@ describe('accountFinanceOps transaction type mapping', () => {
     assert.notEqual(first[0], second[0]);
     first[0].value = 'rebate';
     assert.equal(getManagerTransactionOptions()[0].value, 'deposit');
+  });
+});
+
+describe('accountFinanceOps transfer destination plumbing', () => {
+  it('resolves a valid destination login against a different source', () => {
+    assert.equal(resolveTransferDestination('200002', 200001), 200002);
+    assert.equal(resolveTransferDestination(200002, 200001), 200002);
+    assert.equal(resolveTransferDestination('  200002  ', 200001), 200002);
+  });
+
+  it('accepts fromLogin as string or number variants', () => {
+    assert.equal(resolveTransferDestination(200002, '200001'), 200002);
+    assert.equal(resolveTransferDestination('200002', '200001'), 200002);
+    assert.equal(resolveTransferDestination('200002', '  200001  '), 200002);
+    assert.equal(resolveTransferDestination(200002, 200001), 200002);
+  });
+
+  it('throws a clear TypeError for blank destinations', () => {
+    for (const blank of ['', '   ', '\t\n ', null, undefined]) {
+      assert.throws(() => resolveTransferDestination(blank, 200001), TypeError);
+      assert.throws(() => resolveTransferDestination(blank, '200001'), TypeError);
+    }
+    assert.throws(() => resolveTransferDestination('', 200001), /required/i);
+    assert.throws(() => resolveTransferDestination('   ', 200001), /required/i);
+  });
+
+  it('throws a clear TypeError for zero destinations', () => {
+    assert.throws(() => resolveTransferDestination(0, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('0', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(' 0 ', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(0, 200001), /positive integer/i);
+  });
+
+  it('throws a clear TypeError for negative destinations', () => {
+    assert.throws(() => resolveTransferDestination(-5, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('-5', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('-5', 200001), /positive integer/i);
+  });
+
+  it('throws a clear TypeError for float text and non-integer numbers', () => {
+    assert.throws(() => resolveTransferDestination('12.5', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(12.5, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('200002.5', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('12.5', 200001), /positive integer/i);
+  });
+
+  it('throws a clear TypeError for non-numeric destinations', () => {
+    for (const bad of ['abc', '12abc', 'USD', '--5', '1,000']) {
+      assert.throws(() => resolveTransferDestination(bad, 200001), TypeError);
+      assert.throws(() => resolveTransferDestination(bad, 200001), /positive integer/i);
+    }
+    assert.throws(() => resolveTransferDestination(Number.NaN, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(Number.POSITIVE_INFINITY, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(true, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination({}, 200001), TypeError);
+  });
+
+  it('throws a clear TypeError when destination equals the source', () => {
+    assert.throws(() => resolveTransferDestination(200001, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination('200001', 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(200001, '200001'), TypeError);
+    assert.throws(() => resolveTransferDestination('200001', '200001'), TypeError);
+    assert.throws(() => resolveTransferDestination('  200001  ', '200001'), TypeError);
+    assert.throws(() => resolveTransferDestination(200001, 200001), /different/i);
+  });
+
+  it('predicates the transfer type without throwing', () => {
+    assert.equal(isTransferType('transfer'), true);
+    assert.equal(isTransferType(' Transfer '), true);
+    assert.equal(isTransferType('TRANSFER'), true);
+    assert.equal(isTransferType('deposit'), false);
+    assert.equal(isTransferType('withdraw'), false);
+    assert.equal(isTransferType('credit'), false);
+    assert.equal(isTransferType(''), false);
+    assert.equal(isTransferType(null), false);
+    assert.equal(isTransferType(undefined), false);
+    assert.equal(isTransferType('rebate'), false);
+  });
+
+  it('names the destination in transfer confirm and success copy', () => {
+    assert.equal(
+      buildManagerTransactionConfirmation('transfer', '100.00 USD', 200317, 200318),
+      'Transfer 100.00 USD from account #200317 to account #200318?',
+    );
+    assert.equal(
+      buildManagerTransactionSuccessMessage('transfer', '100.00 USD', 200317, 200318),
+      'Transferred 100.00 USD from account #200317 to account #200318 successfully.',
+    );
+    assert.equal(
+      buildManagerTransactionConfirmation('transfer', '100.00 USD', 200317, null),
+      'Transfer 100.00 USD from account #200317?',
+    );
+    assert.equal(
+      buildManagerTransactionSuccessMessage('transfer', '100.00 USD', 200317, ''),
+      'Transferred 100.00 USD from account #200317 successfully.',
+    );
+    assert.equal(
+      buildManagerTransactionConfirmation('deposit', '100.00 USD', 200317, 200318),
+      'Deposit 100.00 USD into account #200317?',
+    );
+    assert.equal(
+      buildManagerTransactionSuccessMessage('deposit', '100.00 USD', 200317, 200318),
+      'Deposited 100.00 USD into account #200317 successfully.',
+    );
   });
 });
