@@ -31,3 +31,35 @@ test('light workspace palette stays unchanged', () => {
   assert.equal(light['text-primary'], '#172033');
   assert.equal(light['accent-soft'], '#eaf2ff');
 });
+test('light-theme.css applies the RTX5 light color tokens across root and command shell', () => {
+  const rootLight = tokens('./light-theme.css', 'html:not(.dark)');
+  const shellLight = tokens('./light-theme.css', 'html:not(.dark) .rtx5-command-shell');
+
+  assert.equal(rootLight['rtx-light-panel'], '#ffffff');
+  assert.equal(rootLight['rtx-light-canvas'], '#f5f7fa');
+  assert.equal(rootLight['rtx-light-panel-subtle'], '#f8fafc');
+  assert.equal(rootLight['rtx-light-panel-header'], '#f2f4f7');
+  assert.equal(rootLight['rtx-light-text'], '#101828');
+  assert.equal(rootLight['rtx-light-text-alt'], '#0f172a');
+  assert.equal(rootLight['rtx-light-text-secondary'], '#344054');
+  assert.equal(rootLight['text-secondary'], '#475467');
+  assert.equal(rootLight['rtx-light-text-muted'], '#667085');
+  assert.equal(rootLight['rtx-light-border'], '#e4e7ec');
+  assert.equal(rootLight['rtx-light-border-strong'], '#d0d5dd');
+  assert.equal(rootLight['color-primary'], '#7f56d9');
+  assert.equal(rootLight['rtx-light-accent'], '#6941c6');
+  assert.equal(rootLight['color-profit'], '#1d4ed8');
+  assert.equal(rootLight['color-quote-up'], '#1d4ed8');
+  assert.equal(rootLight['color-loss'], '#f04438');
+  assert.equal(rootLight['rtx-light-quote-down'], '#dc2626');
+
+  assert.equal(shellLight['bg-app'], 'var(--rtx-light-canvas)');
+  assert.equal(shellLight['bg-panel'], 'var(--rtx-light-panel)');
+  assert.equal(shellLight['bg-elevated'], 'var(--rtx-light-panel-subtle)');
+  assert.equal(shellLight['bg-hover'], 'var(--rtx-light-panel-header)');
+  assert.equal(shellLight['accent'], 'var(--color-primary)');
+  assert.equal(shellLight['accent-hover'], 'var(--rtx-light-accent)');
+  assert.equal(shellLight['success'], 'var(--color-profit)');
+  assert.equal(shellLight['danger'], 'var(--color-loss)');
+});
+

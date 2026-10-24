@@ -175,6 +175,9 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
               </tr>
             ) : rows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
+              const sideRaw = String(row.side || '').trim().toLowerCase();
+              const isBuy = sideRaw.startsWith('buy');
+              const isSell = sideRaw.startsWith('sell');
               return (
                 <tr
                   key={rowKey}
@@ -192,7 +195,14 @@ const OrdersDataGrid = ({ search = '', typeFilter = 'All Types', symbolFilter = 
                   <td style={{ color: 'var(--text)' }}>{row.name}</td>
                   <td style={{ color: 'var(--text)' }}>{row.group}</td>
                   <td style={{ color: 'var(--text)' }}>{row.symbol}</td>
-                  <td style={{ color: 'var(--text)' }}>{row.side}</td>
+                  <td>
+                    <span
+                      className={`orders-side-badge ${isBuy ? 'is-buy' : isSell ? 'is-sell' : 'is-neutral'}`}
+                      style={{ color: isBuy ? '#38bdf8' : isSell ? '#f87171' : 'var(--text)' }}
+                    >
+                      {row.side}
+                    </span>
+                  </td>
                   <td className="tabular" style={{ color: 'var(--text)' }}>{row.volume}</td>
                   <td className="tabular font-mono" style={{ color: 'var(--text)' }}>{fmt(row.priceOpen, 5)}</td>
                   <td className="tabular font-mono" style={{ color: 'var(--text)' }}>{fmt(row.priceSl, 5)}</td>

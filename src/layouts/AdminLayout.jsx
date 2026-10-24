@@ -4,11 +4,15 @@ import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
 import MarginCallsSidebar from '../components/MarginCallsSidebar';
 import MarketData from '../components/Popups/MarketData';
+import MultiScreenWorkspace from '../components/MultiScreenWorkspace';
 import StatusBar from '../components/shell/StatusBar';
 import OwnerConsole from '../features/owner/OwnerConsole';
 import TerminalDock from '../features/terminal/TerminalDock';
 import useThemeStore from '../store/themeStore';
 import useSymbolStore from '../store/symbolStore';
+import { useMultiScreenStore } from '../store/multiScreenStore';
+import { showResult } from '../store/resultDialogStore.js';
+import { describeGroupSave } from '../features/groups/groupAccountRows.js';
 
 import { DockingProvider } from '../components/docking/index.js';
 import DockLayout from '../components/docking/DockLayout';
@@ -80,10 +84,25 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   const navigate = useWorkspaceNavigation();
   const { canAct } = usePermissions();
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
+  const activeMultiView = useMultiScreenStore((state) => state.activeView);
+  const accountScreenCount = useMultiScreenStore((state) => state.accountScreens.length);
+  const groupScreenCount = useMultiScreenStore((state) => state.groupScreens.length);
+  const effectiveMultiMode =
+    activeMultiView === 'group' && groupScreenCount > 0
+      ? 'group'
+      : activeMultiView === 'account' && accountScreenCount > 0
+        ? 'account'
+        : accountScreenCount > 0
+          ? 'account'
+          : groupScreenCount > 0
+            ? 'group'
+            : null;
+  const hasMultiScreens = Boolean(effectiveMultiMode);
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const resetLayout = useCallback(() => {
     resetDockLayout();
+    useMultiScreenStore.getState().resetMultiScreens();
     setIsToolBarVisible(true);
     // Restore tab selections and scroll positions along with the panel geometry.
     setWorkspaceRevision((revision) => revision + 1);
@@ -326,9 +345,25 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       {/* ── Main dockable workspace ── */}
       <div className="cc-shell-workspace flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
         <DockLayout key={workspaceRevision} panelContents={panelContents}>
-          <div className="cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative" style={{ background: 'var(--bg)' }} data-export-current-view>
-            <div className="cc-route-viewport">
-              {children}
+          <div
+            className={`cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative${hasMultiScreens ? ' has-multi-screens' : ''}`}
+            style={{ background: 'var(--bg)' }}
+            data-export-current-view
+          >
+            <div className="cc-center-split">
+              <div className="cc-route-viewport">
+                {children}
+              </div>
+              {hasMultiScreens ? (
+                <MultiScreenWorkspace
+                  mode={effectiveMultiMode}
+                  onGroupSuccess={(saved) => {
+                    const notice = describeGroupSave(saved, { created: true });
+                    showResult.success(notice.message, { title: notice.title });
+                    queryClient.invalidateQueries({ queryKey: ['groups'] });
+                  }}
+                />
+              ) : null}
             </div>
           </div>
         </DockLayout>

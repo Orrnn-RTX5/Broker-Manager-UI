@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import {
-  Activity, BarChart2, ChevronDown, ChevronRight, CircleDollarSign, ClipboardCheck,
+  Activity, BarChart2, Bug, ChevronDown, ChevronRight, CircleDollarSign, ClipboardCheck,
   FileClock, Folder, Gavel, GitBranch, Handshake, Landmark, LayoutDashboard,
   Award, BookOpen, Code, FileText, Globe, GraduationCap, Headphones, Mail,
   Lock, LogIn, Megaphone, MessageSquare, Network, Newspaper, Plus, RotateCcw, Search, ShoppingBag,
@@ -13,7 +13,7 @@ import { useAllGroups } from '../hooks/useAllGroups';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../hooks/usePermissions';
 import { BROKER_INFO_UPDATED_EVENT, getBrokerInfo } from '../services/brokerAuth';
-import NewGroupModal from '../features/groups/components/NewGroupModal';
+import { useMultiScreenStore } from '../store/multiScreenStore';
 import GroupPermissionNotice from '../features/groups/components/GroupPermissionNotice';
 import { getGroupsFolderPath, getGroupsSelectedFromSearch } from '../features/groups/groupRoutes';
 import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
@@ -407,8 +407,8 @@ export default function NavigatorPanel() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
+  const openGroupScreen = useMultiScreenStore((state) => state.openGroupScreen);
   const [loadGroups, setLoadGroups] = useState(false);
-  const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [groupPermissionDenied, setGroupPermissionDenied] = useState(false);
   const { groups, loading } = useAllGroups({ enabled: loadGroups });
   const accountsQuery = useQuery({ ...getSidebarAccountsQueryOptions(''), enabled: loadGroups });
@@ -429,7 +429,9 @@ export default function NavigatorPanel() {
   const serverLabel = brokerInfo?.broker_name || brokerInfo?.name || brokerInfo?.broker_id || 'Broker';
   const managerLogin = String(manager.login ?? '').trim();
   const dailyReportLabel = managerLogin ? `(${managerLogin})- Daily Report` : 'Daily Report';
-  const go = (path) => () => navigate(path);
+  const go = (path) => () => {
+    navigate(path);
+  };
   // Every group is a folder. Ones with subgroups show how many groups are inside.
   // Ones that hold accounts directly show how many accounts, and open that list.
   const renderGroupTreeNode = (node) => {
@@ -925,12 +927,13 @@ export default function NavigatorPanel() {
 
         <TreeNode label="Groups" icon={Users2} count={loadGroups ? (loading ? '…' : groups.length) : null} path="/groups" activePath={location.search ? currentWorkspacePath : location.pathname} onClickNode={go('/groups')} onExpandedChange={(open) => open && setLoadGroups(true)}>
           {groupTree.map((node) => renderGroupTreeNode(node))}
-          <TreeNode label="New Group" icon={Plus} onClickNode={() => { if (canManageGroups) setNewGroupOpen(true); else setGroupPermissionDenied(true); }} />
+          <TreeNode label="New Group" icon={Plus} onClickNode={() => { if (canManageGroups) openGroupScreen(); else setGroupPermissionDenied(true); }} />
         </TreeNode>
 
         <TreeNode label="Mailbox" icon={Mail} disabled disabledReason="Mailbox not available yet" />
 
         <TreeNode label="Support Center" icon={Headphones}>
+          {node('Bug Reports', Bug, '/support/bug-reports')}
           <TreeNode label="News" icon={Newspaper} disabled disabledReason="Support news not available yet" />
           <TreeNode label="Articles" icon={BookOpen}>
             {SUPPORT_ARTICLE_CATEGORIES.map((category) => (
@@ -983,7 +986,6 @@ export default function NavigatorPanel() {
           onClose={closeNavigatorContextMenu}
         />
       )}
-      {newGroupOpen && canManageGroups && <NewGroupModal onClose={() => setNewGroupOpen(false)} onSuccess={() => setNewGroupOpen(false)} />}
       {groupPermissionDenied && <GroupPermissionNotice action="create" onClose={() => setGroupPermissionDenied(false)} />}
       {deleteConfirmItem && (
         <DeleteConfirmModal

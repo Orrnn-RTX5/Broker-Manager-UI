@@ -2,20 +2,21 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import {
-  Activity, ArrowUpDown, BarChart2, ChevronDown, ClipboardList, Copy,
+  Activity, ArrowUpDown, BarChart2, Bug, ChevronDown, ClipboardList, Copy,
   Expand, Folder, FolderOpen, Gavel, Handshake, History, Info, LayoutGrid,
   Keyboard, Plus, Printer, RefreshCw, RotateCcw, Search, Settings2,
   PanelRightOpen, Shield, TrendingUp, User, Users, X,
 } from 'lucide-react';
 
-import NewAccountModal from './Popups/NewAccountModal';
 import AccountLimitModal from './Popups/AccountLimitModal';
 import AccountDetailsModal from './Popups/AccountDetailsModal';
 import KeyboardShortcutsModal from './Popups/KeyboardShortcutsModal';
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation';
+import { requestOpenBugReport } from '../services/bugReportHistory.js';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { useI18nStore } from '../i18n/index.js';
 import { usePermissions } from '../hooks/usePermissions.js';
+import { useMultiScreenStore } from '../store/multiScreenStore';
 import { PERMISSIONS } from '../utils/permissions.js';
 import { normalizeShortcutKey } from './toolbarShortcutKey.js';
 
@@ -251,7 +252,7 @@ const ToolBar = ({
   isOwnerConsoleOpen,
   resetLayout,
 }) => {
-  const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [isAccountLimitModalOpen, setIsAccountLimitModalOpen] = useState(false);
   const [searchLoginId, setSearchLoginId] = useState('');
   const [activeSearchedAccount, setActiveSearchedAccount] = useState(null);
@@ -263,7 +264,9 @@ const ToolBar = ({
   const navigate = useWorkspaceNavigation();
   const { canAct } = usePermissions();
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
-  const go = (path) => () => navigate(path);
+  const go = (path) => () => {
+    navigate(path);
+  };
 
   const refreshData = useCallback(() => {
     queryClient.invalidateQueries();
@@ -344,7 +347,7 @@ const ToolBar = ({
     { id: 'shortcut-toolbox', label: 'Toolbox', icon: Keyboard, tone: 'info', shortcut: 'Ctrl /', onClick: () => setIsKeyboardShortcutsOpen(true) },
   ];
   const commandActions = [
-    { id: 'new-account-command', label: 'Create new account', icon: Plus, tone: 'accent', category: 'Quick action', shortcut: 'Ctrl Shift N', onClick: () => setIsNewAccountModalOpen(true) },
+    { id: 'new-account-command', label: 'Create new account', icon: Plus, tone: 'accent', category: 'Quick action', shortcut: 'Ctrl Shift N', onClick: () => openAccountScreen() },
     { id: 'find-account-command', label: 'Find account by login', icon: Search, tone: 'info', category: 'Quick action', onClick: () => setOpenToolbarMenu('find-account') },
     ...primaryActions.map((action) => ({ ...action, category: 'Navigation' })),
     ...workspaceActions.map((action) => ({ ...action, category: 'Workspace' })),
@@ -367,7 +370,7 @@ const ToolBar = ({
       if (key === 'k') { event.preventDefault(); setIsCommandOpen((open) => !open); }
       if (key === 'r') { event.preventDefault(); refreshData(); }
       if (key === '/') { event.preventDefault(); setIsKeyboardShortcutsOpen(true); }
-      if (event.shiftKey && key === 'n') { event.preventDefault(); setIsNewAccountModalOpen(true); }
+      if (event.shiftKey && key === 'n') { event.preventDefault(); openAccountScreen(); }
     };
     const onPointerDown = (event) => {
       if (!event.target.closest?.('.manager-toolbar')) setOpenToolbarMenu(null);
@@ -378,7 +381,7 @@ const ToolBar = ({
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('pointerdown', onPointerDown);
     };
-  }, [fullscreen, refreshData]);
+  }, [fullscreen, openAccountScreen, refreshData]);
 
   return (
     <>
@@ -416,6 +419,15 @@ const ToolBar = ({
           )}
           <button
             type="button"
+            className="manager-primary-link"
+            onClick={requestOpenBugReport}
+            title="Report a Bug to the RTX5 platform team"
+            aria-label="Report a Bug to the RTX5 platform team"
+          >
+            <Bug size={15} strokeWidth={1.9} />
+          </button>
+          <button
+            type="button"
             className="manager-primary-link manager-reset-layout"
             onClick={handleResetWorkspace}
             title="Reset workspace layout"
@@ -424,13 +436,12 @@ const ToolBar = ({
             <RotateCcw size={15} strokeWidth={1.9} />
             <span>Reset</span>
           </button>
-          <button type="button" className="manager-new-account" onClick={() => setIsNewAccountModalOpen(true)}>
+          <button type="button" className="manager-new-account" onClick={() => openAccountScreen()}>
             <Plus size={16} strokeWidth={2.2} /> <span>New account</span>
           </button>
         </div>
       </nav>
 
-      <NewAccountModal isOpen={isNewAccountModalOpen} onClose={() => setIsNewAccountModalOpen(false)} />
       <AccountLimitModal isOpen={isAccountLimitModalOpen} onClose={() => setIsAccountLimitModalOpen(false)} />
       {activeSearchedAccount && <AccountDetailsModal account={activeSearchedAccount} onClose={() => setActiveSearchedAccount(null)} initialTab="Overview" />}
       {isCommandOpen && <CommandPalette onClose={() => setIsCommandOpen(false)} actions={commandActions} />}

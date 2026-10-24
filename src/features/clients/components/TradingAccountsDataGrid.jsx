@@ -16,6 +16,81 @@ const fmt = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, ma
 
 const TRADING_ACCOUNTS_CACHE_KEY = 'rtx5_trading_accounts_cache_v2';
 
+const compareText = (valA, valB, dirMultiplier) => {
+  const strA = String(valA ?? '').trim();
+  const strB = String(valB ?? '').trim();
+  if (!strA && !strB) return 0;
+  if (!strA) return 1;
+  if (!strB) return -1;
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' }) * dirMultiplier;
+};
+
+const compareNumber = (valA, valB, dirMultiplier) => {
+  const numA = Number(valA ?? 0);
+  const numB = Number(valB ?? 0);
+  const safeA = Number.isFinite(numA) ? numA : 0;
+  const safeB = Number.isFinite(numB) ? numB : 0;
+  return (safeA - safeB) * dirMultiplier;
+};
+
+export const sortTradingAccountRows = (rows = [], sortCol = 'login', sortDir = 'asc') => {
+  if (!Array.isArray(rows) || rows.length <= 1) return rows;
+  const dirMultiplier = String(sortDir).toLowerCase() === 'desc' ? -1 : 1;
+  const col = String(sortCol || 'login').toLowerCase();
+
+  return [...rows].sort((a, b) => {
+    switch (col) {
+      case 'login':
+        return compareNumber(a?.login, b?.login, dirMultiplier) || compareText(a?.login, b?.login, dirMultiplier);
+      case 'name':
+        return compareText(a?.name, b?.name, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      case 'group':
+        return compareText(a?.group, b?.group, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      case 'country':
+        return (
+          compareText(
+            a?.country || a?.raw?.Country || a?.raw?.country,
+            b?.country || b?.raw?.Country || b?.raw?.country,
+            dirMultiplier
+          )
+          || compareText(a?.name, b?.name, dirMultiplier)
+          || compareNumber(a?.login, b?.login, 1)
+        );
+      case 'client':
+        return (
+          compareText(
+            a?.client || a?.raw?.Client || a?.raw?.client || a?.company || a?.name,
+            b?.client || b?.raw?.Client || b?.raw?.client || b?.company || b?.name,
+            dirMultiplier
+          )
+          || compareNumber(a?.login, b?.login, 1)
+        );
+      case 'leverage':
+        return compareNumber(a?.leverage, b?.leverage, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      case 'balance':
+        return compareNumber(a?.balance, b?.balance, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      case 'equity':
+        return compareNumber(a?.equity, b?.equity, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      case 'credit':
+        return (
+          compareNumber(a?.credit, b?.credit, dirMultiplier)
+          || compareNumber(a?.profit, b?.profit, dirMultiplier)
+          || compareNumber(a?.login, b?.login, 1)
+        );
+      case 'profit':
+        return (
+          compareNumber(a?.profit, b?.profit, dirMultiplier)
+          || compareNumber(a?.credit, b?.credit, dirMultiplier)
+          || compareNumber(a?.login, b?.login, 1)
+        );
+      case 'currency':
+        return compareText(a?.currency, b?.currency, dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+      default:
+        return compareText(a?.[col], b?.[col], dirMultiplier) || compareNumber(a?.login, b?.login, 1);
+    }
+  });
+};
+
 const getInitialCachedTradingAccounts = () => {
   try {
     const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(TRADING_ACCOUNTS_CACHE_KEY) : null;
@@ -49,6 +124,10 @@ const TradingAccountsDataGrid = ({
   search = '',
   groupFilter = 'All Groups',
   countryFilter = 'All Countries',
+  sortCol: controlledSortCol,
+  sortDir: controlledSortDir,
+  onSort,
+  showGridlines = true,
   onRowsChange,
   onRowContext,
   onEditAccount,
@@ -58,8 +137,10 @@ const TradingAccountsDataGrid = ({
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
-  const [sortCol, setSortCol] = useState('login');
-  const [sortDir, setSortDir] = useState('asc');
+  const [internalSortCol, setInternalSortCol] = useState('login');
+  const [internalSortDir, setInternalSortDir] = useState('asc');
+  const sortCol = controlledSortCol ?? internalSortCol;
+  const sortDir = controlledSortDir ?? internalSortDir;
   const [selectedRow, setSelectedRow] = useState(null);
   const lastRefreshVersionRef = useRef(refreshVersion);
   const lastTapRef = useRef({ rowKey: null, time: 0 });
@@ -74,12 +155,12 @@ const TradingAccountsDataGrid = ({
 
   const params = useMemo(() => ({
     search,
-    sort_by: sortCol,
-    sort_dir: sortDir,
+    sort_by: 'login',
+    sort_dir: 'asc',
     filters,
-  }), [search, sortCol, sortDir, filters]);
+  }), [search, filters]);
 
-  const isDefaultParams = !search && groupFilter === 'All Groups' && countryFilter === 'All Countries' && sortCol === 'login' && sortDir === 'asc';
+  const isDefaultParams = !search && groupFilter === 'All Groups' && countryFilter === 'All Countries';
 
   const initialData = useMemo(() => {
     if (!isDefaultParams) return undefined;
@@ -128,11 +209,16 @@ const TradingAccountsDataGrid = ({
     placeholderData: (previousData) => previousData || initialData,
   });
 
+  const sortedRows = useMemo(
+    () => sortTradingAccountRows(rows, sortCol, sortDir),
+    [rows, sortCol, sortDir]
+  );
+
   useEffect(() => () => clearTimeout(prefetchTimerRef.current), []);
 
   useEffect(() => {
-    if (onRowsChange) onRowsChange(rows);
-  }, [rows, onRowsChange]);
+    if (onRowsChange) onRowsChange(sortedRows);
+  }, [sortedRows, onRowsChange]);
 
   useEffect(() => {
     if (refreshVersion === lastRefreshVersionRef.current) return;
@@ -147,10 +233,14 @@ const TradingAccountsDataGrid = ({
   }, [refreshVersion, hasRequestedData, markDataRequested, refetch]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
+    if (typeof onSort === 'function') {
+      onSort(col);
+      return;
+    }
+    if (sortCol === col) setInternalSortDir((direction) => direction === 'asc' ? 'desc' : 'asc');
     else {
-      setSortCol(col);
-      setSortDir('asc');
+      setInternalSortCol(col);
+      setInternalSortDir('asc');
     }
   };
 
@@ -165,16 +255,19 @@ const TradingAccountsDataGrid = ({
   };
 
   const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }}
+    <th onClick={() => handleSort(col)} style={{ textAlign: align, cursor: 'pointer', userSelect: 'none' }}
       aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
       title={`Sort by ${label}`}>
       {label}
     </th>
   );
 
+  const gridlineStyle = showGridlines === false
+    ? { '--row-border': 'transparent' }
+    : {};
   const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
-  const rangeStart = rows.length === 0 ? 0 : offset + 1;
-  const rangeEnd = offset + rows.length;
+  const rangeStart = sortedRows.length === 0 ? 0 : offset + 1;
+  const rangeEnd = offset + sortedRows.length;
   const isIdle = !hasRequestedData;
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
   const canUseEditAction = canEditAccounts && typeof onEditAccount === 'function';
@@ -217,11 +310,11 @@ const TradingAccountsDataGrid = ({
           <strong>API Error.</strong> {error?.message || 'Failed to load accounts.'}
         </div>
       )}
-      {isLoading && rows.length === 0 ? (
+      {isLoading && sortedRows.length === 0 ? (
         <GridLoadingState label="Loading trading accounts…" />
       ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
-        <table className="ui-grid trading-accounts-table">
+        <table className={`ui-grid trading-accounts-table ${showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
           <colgroup>
             <col style={{ width: '8.5%' }} />
             <col style={{ width: '13.5%' }} />
@@ -249,7 +342,7 @@ const TradingAccountsDataGrid = ({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="trading-accounts-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
@@ -263,7 +356,7 @@ const TradingAccountsDataGrid = ({
                   ) : isLoading ? 'Loading accounts...' : 'No accounts match the current filters.'}
                 </td>
               </tr>
-            ) : rows.map((row, idx) => {
+            ) : sortedRows.map((row, idx) => {
               const rowKey = `${row.login}-${idx}`;
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : row.profit > 0 ? 'var(--ok-text)' : 'var(--text-3)';
               return (

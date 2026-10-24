@@ -63,9 +63,10 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const [editing, setEditing] = useState(false);
   const [leverageError, setLeverageError] = useState(null);
   const [leverageDefaultMissing, setLeverageDefaultMissing] = useState(false);
+  const [editedLevels, setEditedLevels] = useState({ marginCallLevel: false, stopOutLevel: false, leverage: false });
   const isNewGroup = Boolean(group?.isNew);
 
-  // A new group (OK creates it top-level) reads the broker's default group
+  // A new group (OK creates it top-level) reads the broker's group default
   // leverage once; a miss leaves the field blank with a hint.
   useEffect(() => {
     if (!isNewGroup) return undefined;
@@ -128,6 +129,11 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   useEffect(() => {
     if (tab === 'Symbols' && !overridesView && !overridesLoading && !overridesError) loadSymbolOverrides();
   }, [loadSymbolOverrides, overridesError, overridesLoading, overridesView, tab]);
+
+  const hasChanges = useMemo(
+    () => Boolean(group?.isNew) || stagedOverrides.size > 0 || Object.keys(buildGroupSavePayload(initialForm, form, { isNew: group?.isNew })).length > 0,
+    [form, group?.isNew, initialForm, stagedOverrides]
+  );
 
   const handleSave = async () => {
     if (!canManageGroups) { setPermissionDenied(true); return; }
@@ -217,9 +223,37 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                 <div className="groups-props-row groups-props-levels">
                   <span>Margin call level:</span>
                   <div className="groups-props-inline">
-                    <input className="ui-input ui-input-sm groups-props-number" type="number" min="0" step="1" aria-label="Margin call level" value={numberValue(form.marginCallLevel)} onChange={(event) => update('marginCallLevel', toNumber(event.target.value))} />
+                    <input
+                      className="ui-input ui-input-sm groups-props-number"
+                      type="number"
+                      min="0"
+                      step="1"
+                      aria-label="Margin call level"
+                      placeholder={numberValue(initialForm.marginCallLevel) || '150'}
+                      value={editedLevels.marginCallLevel ? numberValue(form.marginCallLevel) : ''}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        const hasTyped = raw.trim() !== '';
+                        setEditedLevels((prev) => ({ ...prev, marginCallLevel: hasTyped }));
+                        update('marginCallLevel', hasTyped ? toNumber(raw) : initialForm.marginCallLevel);
+                      }}
+                    />
                     <span>Stop out level:</span>
-                    <input className="ui-input ui-input-sm groups-props-number" type="number" min="0" step="1" aria-label="Stop out level" value={numberValue(form.stopOutLevel)} onChange={(event) => update('stopOutLevel', toNumber(event.target.value))} />
+                    <input
+                      className="ui-input ui-input-sm groups-props-number"
+                      type="number"
+                      min="0"
+                      step="1"
+                      aria-label="Stop out level"
+                      placeholder={numberValue(initialForm.stopOutLevel) || '50'}
+                      value={editedLevels.stopOutLevel ? numberValue(form.stopOutLevel) : ''}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        const hasTyped = raw.trim() !== '';
+                        setEditedLevels((prev) => ({ ...prev, stopOutLevel: hasTyped }));
+                        update('stopOutLevel', hasTyped ? toNumber(raw) : initialForm.stopOutLevel);
+                      }}
+                    />
                     <span>in</span>
                     <select className="ui-input ui-input-sm groups-props-unit" aria-label="Level unit" value="percent" readOnly disabled>
                       <option value="percent">%, percent</option>
@@ -256,9 +290,6 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
               <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Every symbol is shown here. Enable or disable trading for this group.</span></div>
               {!overridesView?.groupTrading && overridesView && (
                 <div className="groups-symbols-notice is-danger">Trading is disabled for this group, so every symbol is currently off.</div>
-              )}
-              {overridesView?.legacyAllowList && (
-                <div className="groups-symbols-notice">This group has a legacy allowed-symbol list of {overridesView.allowListCount} symbols. Symbols outside that list cannot be enabled here.</div>
               )}
               <div className="groups-symbols-toolbar">
                 <input
@@ -350,7 +381,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         </div>
 
         <div className="ui-modal-footer">
-          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving} onClick={handleSave}>
+          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving || !hasChanges} onClick={handleSave}>
             {saving ? <Loader2 size={13} className="animate-spin" /> : null}
             OK
           </button>

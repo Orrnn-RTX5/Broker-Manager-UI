@@ -179,7 +179,7 @@ export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
     inflightAllSidebarAccounts = entry;
     run.finally(() => {
       if (inflightAllSidebarAccounts === entry) inflightAllSidebarAccounts = null;
-    });
+    }).catch(() => undefined);
   }
 
   return run;

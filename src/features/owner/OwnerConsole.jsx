@@ -1,5 +1,4 @@
 import { createElement, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Activity, ArrowRight, CheckCircle2, CircleDollarSign, ClipboardCheck,
   FileBarChart, Gavel, Handshake, ServerCog, Settings,
@@ -8,7 +7,7 @@ import {
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
 import { usePermissions } from '../../hooks/usePermissions.js';
 import { PERMISSIONS } from '../../utils/permissions.js';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import {
   OWNER_CONSOLE_ALERTS,
   OWNER_CONSOLE_APPROVALS,
@@ -76,7 +75,7 @@ const WorkflowPanel = ({ title, description, items, navigate, panelId, labelledB
 
 export default function OwnerConsole() {
   const [tab, setTab] = useState('Insights');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [reviewed, setReviewed] = useState(readOwnerConsoleReviewState);
   const navigate = useWorkspaceNavigation();
   const { canAct } = usePermissions();
@@ -127,7 +126,7 @@ export default function OwnerConsole() {
                   type="button"
                   onPointerEnter={() => path && navigate.preload?.(path)}
                   onFocus={() => path && navigate.preload?.(path)}
-                  onClick={() => action === 'new-account' ? setIsNewAccountOpen(true) : navigate(path)}
+                  onClick={() => action === 'new-account' ? openAccountScreen() : navigate(path)}
                 >
                   {createElement(Icon, { size: 15 })}<span>{label}</span>
                 </button>
@@ -164,10 +163,6 @@ export default function OwnerConsole() {
           reviewedIds={reviewed.approvals}
           onReview={markReviewed}
         />
-      )}
-      {isNewAccountOpen && createPortal(
-        <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />,
-        document.body,
       )}
     </aside>
   );

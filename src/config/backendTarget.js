@@ -34,7 +34,7 @@ export const getDeploymentRuntimeConfig = () => runtimeConfigSources().find(
 // derive from that profile, never resurrect a broker baked into the image.
 const deploymentRoutingKeys = new Set([
   'BACKEND_TARGET', 'BACKEND_MODE', 'BROKER_ID', 'FEED_BROKER_ID',
-  'API_HOST', 'API_HOST_EXT', 'WS_HOST', 'WS_FEED_PATH',
+  'API_HOST', 'API_HOST_EXT', 'REPORTS_API_HOST', 'WS_HOST', 'WS_FEED_PATH',
   'MANAGER_WS_HOST', 'MARKET_DATA_SOURCE', 'MANAGER_PROXY_STRIP_MANAGER_PREFIX',
   'POSITION_UPDATES_WS_PATH', 'FEED_WS_URL', 'FEED_STATUS_URL',
   'DISCOVERY_BASE_URL', 'DEFAULT_MT5_SERVER', 'USE_MOCK_DISCOVERY', 'LOCAL_BACKEND',
@@ -125,12 +125,30 @@ export const getBackendTarget = () => normalizeTarget(
 
 export const isDesktopBackendTarget = () => getBackendTarget() === 'desktop';
 
+export const isConfiguredRuntimeBroker = (brokerInfo = {}) => {
+  const configuredBrokerId = getRuntimeConfigValue([
+    'BROKER_ID',
+    'VITE_BROKER_ID',
+    'FEED_BROKER_ID',
+    'VITE_FEED_BROKER_ID',
+  ]).toLowerCase();
+  if (!configuredBrokerId) return false;
+
+  return [
+    brokerInfo?.broker_id,
+    brokerInfo?.id,
+    brokerInfo?.slug,
+    brokerInfo?.handle,
+    brokerInfo?.server_handle,
+    brokerInfo?.server,
+  ].some((candidate) => String(candidate || '').trim().toLowerCase() === configuredBrokerId);
+};
+
 // Discovery intentionally hides backend addresses. Local development supplies
 // the selected broker's addresses without activating the legacy TEST profile.
 const isConfiguredLocalBroker = (brokerInfo = {}) => (
   getRuntimeConfigValue(['LOCAL_BACKEND', 'VITE_LOCAL_BACKEND']) === 'true'
-  && String(brokerInfo.broker_id || '').toLowerCase() ===
-    getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID']).toLowerCase()
+  && isConfiguredRuntimeBroker(brokerInfo)
 );
 
 const getNestedValue = (source, path) => {
@@ -380,7 +398,11 @@ const resolveWebBackendUrl = (brokerInfo = {}, fallbackUrl = '') => {
     return getTestBrokerRuntimeDefaults().publicBackendUrl;
   }
 
+  const configuredRuntimeApiHost = isConfiguredRuntimeBroker(brokerInfo)
+    ? getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST'])
+    : '';
   const candidates = [
+    configuredRuntimeApiHost,
     ...WEB_BACKEND_KEYS.map((key) => getValue(brokerInfo, [key])),
     ...WEB_BACKEND_DOMAIN_KEYS.map((key) => normalizeDomainCandidate(getValue(brokerInfo, [key]))),
     fallbackUrl,
@@ -454,6 +476,12 @@ export const resolveBrokerExtApiUrl = (brokerInfo = {}, backendUrl = '') => {
         || getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
       'https', true
     );
+  }
+  if (!isDesktopBackendTarget() && isConfiguredRuntimeBroker(brokerInfo)) {
+    const configuredExt = getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT'])
+      || getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
+    const resolvedConfiguredExt = sanitizeWebBackendCandidate(configuredExt, brokerInfo, backendUrl);
+    if (resolvedConfiguredExt) return resolvedConfiguredExt;
   }
   const explicitKeys = isDesktopBackendTarget()
     ? ['desktop_ext_api_url', 'desktopExtApiUrl', 'ext_api_url', 'extApiUrl']
@@ -664,6 +692,11 @@ export const resolveBrokerDefaultMt5Server = (brokerInfo = {}, backendUrl = '') 
       || hostnameFromUrl(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']));
   }
 
+  if (isConfiguredRuntimeBroker(brokerInfo)) {
+    const configuredServer = getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']);
+    if (configuredServer) return configuredServer;
+  }
+
   const explicit = getValue(brokerInfo, [
     'env.DEFAULT_MT5_SERVER',
     'env.VITE_DEFAULT_MT5_SERVER',
@@ -780,15 +813,32 @@ export const resolveBrokerLogoUrl = (brokerInfo = {}, options = {}) =>
   buildBrokerLogoCandidates(brokerInfo, options)[0] || '';
 
 export const normalizeBrokerInfo = (brokerInfo = {}, fallbackUrl = '') => {
-  const source = isConfiguredLocalBroker(brokerInfo) ? {
+  const isLocalConfigured = isConfiguredLocalBroker(brokerInfo);
+  const isWebConfigured = !isDesktopBackendTarget() && isConfiguredRuntimeBroker(brokerInfo);
+  const configuredApiHost = getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']);
+  const configuredApiHostExt = getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT']);
+  const configuredFeedWsUrl = getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']);
+  const configuredFeedStatusUrl = getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL']);
+  const configuredDefaultMt5Server = getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']);
+  const configuredBrokerName = getRuntimeConfigValue(['BROKER_NAME', 'VITE_BROKER_NAME']);
+
+  const source = isLocalConfigured ? {
     ...brokerInfo,
-    backend_url: getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
-    desktop_backend_url: getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']),
-    ext_api_url: getRuntimeConfigValue(['API_HOST_EXT', 'VITE_API_HOST_EXT']),
-    ws_url: getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']),
-    feed_ws_url: getRuntimeConfigValue(['FEED_WS_URL', 'VITE_FEED_WS_URL']),
-    feed_status_url: getRuntimeConfigValue(['FEED_STATUS_URL', 'VITE_FEED_STATUS_URL']),
-    default_mt5_server: getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']),
+    backend_url: configuredApiHost,
+    desktop_backend_url: configuredApiHost,
+    ext_api_url: configuredApiHostExt,
+    ws_url: configuredFeedWsUrl,
+    feed_ws_url: configuredFeedWsUrl,
+    feed_status_url: configuredFeedStatusUrl,
+    default_mt5_server: configuredDefaultMt5Server,
+  } : isWebConfigured ? {
+    ...brokerInfo,
+    ...(configuredApiHost ? { backend_url: configuredApiHost, web_backend_url: configuredApiHost } : {}),
+    ...(configuredApiHostExt ? { ext_api_url: configuredApiHostExt, web_ext_api_url: configuredApiHostExt } : {}),
+    ...(configuredFeedWsUrl ? { ws_url: configuredFeedWsUrl, feed_ws_url: configuredFeedWsUrl } : {}),
+    ...(configuredFeedStatusUrl ? { feed_status_url: configuredFeedStatusUrl } : {}),
+    ...(configuredDefaultMt5Server ? { default_mt5_server: configuredDefaultMt5Server } : {}),
+    ...(configuredBrokerName ? { name: configuredBrokerName, broker_name: configuredBrokerName } : {}),
   } : brokerInfo || {};
   const isTest = isTestBrokerInfo(source, fallbackUrl);
   const testDefaults = isTest ? getTestBrokerRuntimeDefaults() : null;

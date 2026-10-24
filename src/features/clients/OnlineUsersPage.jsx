@@ -2,8 +2,8 @@ import { useState } from 'react';
 import './OnlineUsersPage.css';
 import AccountsOnlineGrid from './components/AccountsOnlineGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 
 const ONLINE_COLUMNS = [
   { key: 'login',       label: 'Login ID' },
@@ -15,7 +15,7 @@ const ONLINE_COLUMNS = [
 
 const OnlineUsersPage = () => {
   const [search, setSearch] = useState('');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
 
   const ctl = useGridPageController({
     columns: ONLINE_COLUMNS,
@@ -44,11 +44,9 @@ const OnlineUsersPage = () => {
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
-          onNewClient={() => setIsNewAccountOpen(true)}
+          onNewClient={() => openAccountScreen()}
         />
       )}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

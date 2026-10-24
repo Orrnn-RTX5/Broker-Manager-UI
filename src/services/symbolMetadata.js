@@ -1,5 +1,6 @@
 import { buildFeedStatusUrl, isManagerMarketFeed } from '../config/endpoints';
 import { symbolList, symbolsList } from './api';
+import authService from './authService.js';
 import { desktopFetch } from './desktopHttp.js';
 
 export const SYMBOL_METADATA_FALLBACK_REASON =
@@ -74,17 +75,12 @@ export const fetchSymbolMetadataFallback = async () => {
     }
   }
 
-  try {
-    const rows = await symbolList();
-    if (Array.isArray(rows) && rows.length > 0) {
-      return {
-        source: 'symbol-list',
-        symbols: rows,
-        feedStatus: null,
-      };
-    }
-  } catch {
-    // Fall through to the lighter name-only endpoint.
+  if (!authService.getSessionStatus().authenticated) {
+    return {
+      source: 'none',
+      symbols: [],
+      feedStatus: null,
+    };
   }
 
   try {
@@ -97,7 +93,22 @@ export const fetchSymbolMetadataFallback = async () => {
       };
     }
   } catch {
-    // The caller will keep any cached symbols and show the feed error.
+    // Fall through to cached/full symbol list only if lightweight list is unavailable.
+  }
+
+  if (authService.getSessionClaims().isAdmin) {
+    try {
+      const rows = await symbolList();
+      if (Array.isArray(rows) && rows.length > 0) {
+        return {
+          source: 'symbol-list',
+          symbols: rows,
+          feedStatus: null,
+        };
+      }
+    } catch {
+      // The caller will keep any cached symbols and show the feed error.
+    }
   }
 
   return {

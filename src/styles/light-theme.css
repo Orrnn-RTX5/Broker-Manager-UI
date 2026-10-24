@@ -2,137 +2,254 @@
    Root tokens also cover dialogs rendered through portals outside the shell. */
 html:not(.dark) {
   color-scheme: light;
-  --bg: #f3f3f3;
-  --surface: #ffffff;
-  --surface-2: #f8f8f8;
-  --surface-3: #e8e8e8;
-  --border: #d4d4d4;
-  --border-2: #e5e5e5;
-  --border-3: #bdbdbd;
-  --text: #1f1f1f;
-  --text-2: #424242;
-  --text-3: #616161;
-  --muted: #767676;
-  --accent: #0078d4;
-  --accent-hover: #006fca;
-  --accent-press: #005a9e;
-  --accent-soft: #e5f1fb;
-  --accent-soft-2: #f3f8fc;
-  --accent-border: #9ccbff;
-  --accent-text: #005a9e;
+
+  /* ── RTX5 Light Theme Core Tokens ── */
+  --rtx-light-panel: #ffffff;
+  --rtx-light-canvas: #f5f7fa;
+  --rtx-light-panel-subtle: #f8fafc;
+  --rtx-light-panel-header: #f2f4f7;
+  --rtx-light-hover: #f2f4f7;
+  --rtx-light-selected: #f4f3ff;
+  --rtx-light-text: #101828;
+  --rtx-light-text-alt: #0f172a;
+  --rtx-light-text-secondary: #344054;
+  --rtx-light-text-muted: #667085;
+  --rtx-light-border: #e4e7ec;
+  --rtx-light-border-strong: #d0d5dd;
+  --rtx-light-accent: #6941c6;
+  --rtx-light-quote-up: #1d4ed8;
+  --rtx-light-quote-down: #dc2626;
+
+  /* ── Semantic / Shared Variable Aliases ── */
+  --bg-primary: var(--rtx-light-canvas);
+  --bg-secondary: var(--rtx-light-panel);
+  --bg-tertiary: var(--rtx-light-panel-subtle);
+  --bg-quaternary: var(--rtx-light-panel-header);
+  --bg-elevated: var(--rtx-light-panel-subtle);
+  --bg-canvas: var(--rtx-light-canvas);
+  --background: var(--rtx-light-canvas);
+  --foreground: var(--rtx-light-text);
+  --input: var(--rtx-light-panel);
+
+  --text-primary: var(--rtx-light-text);
+  --text-secondary: #475467;
+  --text-tertiary: var(--rtx-light-text-muted);
+  --text-quaternary: #98a2b3;
+  --text-inverse: #ffffff;
+
+  --border-primary: var(--rtx-light-border);
+  --border-secondary: var(--rtx-light-border-strong);
+  --border-tertiary: #98a2b3;
+
+  --color-primary: #7f56d9;
+  --color-primary-dim: rgba(127, 86, 217, 0.18);
+  --color-primary-dimmer: rgba(127, 86, 217, 0.10);
+  --color-profit: #1d4ed8;
+  --color-quote-up: #1d4ed8;
+  --color-profit-dim: rgba(29, 78, 216, 0.14);
+  --color-profit-dimmer: rgba(29, 78, 216, 0.08);
+  --color-loss: #f04438;
+  --color-loss-dim: rgba(240, 68, 56, 0.14);
+  --color-loss-dimmer: rgba(240, 68, 56, 0.08);
+
+  /* ── Manager UI Surface, Border & Text Tokens ── */
+  --bg: var(--rtx-light-canvas);
+  --surface: var(--rtx-light-panel);
+  --surface-1: var(--rtx-light-panel);
+  --surface-2: var(--rtx-light-panel-subtle);
+  --surface-3: var(--rtx-light-panel-header);
+  --surface-hover: var(--rtx-light-panel-header);
+  --surface-active: var(--rtx-light-border);
+
+  --border: var(--rtx-light-border);
+  --border-2: var(--rtx-light-border);
+  --border-3: var(--rtx-light-border-strong);
+
+  --ink-strong: #0f172a;
+  --ink-1: var(--rtx-light-text);
+  --ink-2: var(--rtx-light-text-secondary);
+  --ink-3: var(--rtx-light-text-muted);
+  --ink-placeholder: var(--rtx-light-text-muted);
+
+  --text: var(--rtx-light-text);
+  --text-2: var(--rtx-light-text-secondary);
+  --text-3: #475467;
+  --muted: var(--rtx-light-text-muted);
+  --muted-foreground: var(--rtx-light-text-muted);
+
+  /* ── Primary Accent (#7f56d9 / #6941c6) ── */
+  --accent: var(--color-primary);
+  --accent-hover: var(--rtx-light-accent);
+  --accent-press: #53389e;
+  --accent-soft: #f4ebff;
+  --accent-soft-2: #f9f5ff;
+  --accent-border: #d6bbfb;
+  --accent-text: var(--rtx-light-accent);
   --accent-contrast: #ffffff;
-  --ok: #0078d4;
-  --ok-soft: #e5f1fb;
-  --ok-text: #0078d4;
-  --ok-border: #9ccbff;
-  --danger: #f06464;
-  --danger-soft: #fde7e9;
-  --danger-text: #f06464;
-  --danger-border: #efa8ae;
-  --warn: #8a6100;
-  --warn-soft: #fff4ce;
-  --warn-text: #6b4b00;
-  --warn-border: #e5c365;
-  --info: #0078d4;
-  --info-soft: #e5f1fb;
-  --info-text: #005a9e;
-  --info-border: #9ccbff;
-  --ring: 0 0 0 3px rgba(0, 120, 212, .24);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
-  --shadow-lg: 0 8px 20px rgba(0, 0, 0, .10);
-  --shadow-xl: 0 12px 28px rgba(0, 0, 0, .12);
-  --shadow-2xl: 0 20px 44px rgba(0, 0, 0, .16);
+
+  /* ── Profit / Quote Up (#1d4ed8) & Loss / Quote Down (#f04438 / #dc2626) ── */
+  --ok: var(--color-profit);
+  --ok-soft: #eff6ff;
+  --ok-text: var(--color-profit);
+  --ok-border: #bfdbfe;
+
+  --danger: var(--color-loss);
+  --danger-soft: #fef3f2;
+  --danger-text: #dc2626;
+  --danger-border: #fecdca;
+
+  --warn: #d97706;
+  --warn-soft: #fffaeb;
+  --warn-text: #b54708;
+  --warn-border: #fedf89;
+
+  --info: var(--color-profit);
+  --info-soft: #eff6ff;
+  --info-text: var(--color-profit);
+  --info-border: #bfdbfe;
+
+  --status-ok-color: var(--color-profit);
+  --status-danger-color: #dc2626;
+  --status-warn-color: #b54708;
+  --status-info-color: var(--color-profit);
+  --status-neutral-color: var(--rtx-light-text-muted);
+
+  /* ── Selection & Docking Tokens ── */
+  --navigation-selected-bg: #f4ebff;
+  --navigation-selected-border: #d6bbfb;
+  --navigation-selected-text: var(--rtx-light-accent);
+
+  --dock-bg: var(--rtx-light-canvas);
+  --dock-panel-bg: var(--rtx-light-panel);
+  --dock-border: var(--rtx-light-border);
+  --dock-titlebar-bg: var(--rtx-light-panel-header);
+  --dock-icon-color: var(--color-primary);
+  --dock-title-text: var(--rtx-light-text);
+  --dock-btn-color: var(--rtx-light-text-muted);
+  --dock-btn-hover-bg: var(--rtx-light-panel-header);
+  --dock-btn-hover-text: var(--rtx-light-text);
+
+  /* ── Focus Ring & Elevation Shadows ── */
+  --ring: 0 0 0 3px rgba(127, 86, 217, 0.22);
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 8px 20px rgba(16, 24, 40, 0.10);
+  --shadow-xl: 0 12px 28px rgba(16, 24, 40, 0.12);
+  --shadow-2xl: 0 20px 44px rgba(16, 24, 40, 0.16);
 }
 
 html:not(.dark) .rtx5-command-shell {
-  --bg-app: #f3f3f3;
-  --bg-panel: #ffffff;
-  --bg-elevated: #f8f8f8;
-  --bg-hover: #e8e8e8;
-  --border: #d4d4d4;
-  --border-2: #e5e5e5;
-  --border-3: #bdbdbd;
-  --text-primary: #1f1f1f;
-  --text-secondary: #424242;
-  --text-tertiary: #616161;
-  --success: #0078d4;
-  --danger: #f06464;
-  --warning: #8a6100;
-  --info: #0078d4;
-  --accent: #0078d4;
-  --accent-hover: #006fca;
-  --accent-press: #005a9e;
-  --accent-soft: #e5f1fb;
-  --accent-soft-2: #f3f8fc;
-  --accent-border: #9ccbff;
-  --accent-text: #005a9e;
+  --bg-app: var(--rtx-light-canvas);
+  --bg-panel: var(--rtx-light-panel);
+  --bg-elevated: var(--rtx-light-panel-subtle);
+  --bg-hover: var(--rtx-light-panel-header);
+  --border: var(--rtx-light-border);
+  --border-2: var(--rtx-light-border);
+  --border-3: var(--rtx-light-border-strong);
+  --text-primary: var(--rtx-light-text);
+  --text-secondary: var(--rtx-light-text-secondary);
+  --text-tertiary: var(--rtx-light-text-muted);
+  --success: var(--color-profit);
+  --danger: var(--color-loss);
+  --warning: #b54708;
+  --info: var(--color-profit);
+  --accent: var(--color-primary);
+  --accent-hover: var(--rtx-light-accent);
+  --accent-press: #53389e;
+  --accent-soft: #f4ebff;
+  --accent-soft-2: #f9f5ff;
+  --accent-border: #d6bbfb;
+  --accent-text: var(--rtx-light-accent);
   --accent-contrast: #ffffff;
-  --ok-soft: #e5f1fb;
-  --ok-text: #0078d4;
-  --ok-border: #9ccbff;
-  --danger-text: #f06464;
-  --danger-border: #efa8ae;
-  --warn-soft: #fff4ce;
-  --warn-text: #6b4b00;
-  --warn-border: #e5c365;
-  --info-soft: #e5f1fb;
-  --info-text: #005a9e;
-  --info-border: #9ccbff;
-  --cc-chrome: #f3f3f3;
-  --cc-toolbar: #f7f7f7;
-  --cc-titlebar: #f3f3f3;
-  --cc-grid: #e5e5e5;
-  --cc-bar: #9e9e9e;
-  --cc-tooltip: #ffffff;
-  --cc-scrollbar-thumb: #c1c1c1;
-  --cc-avatar-bg: #e5f1fb;
-  --cc-avatar-border: #9ccbff;
-  --cc-avatar-text: #005a9e;
-  --cc-map-land-top: #e6e6e6;
-  --cc-map-land-bottom: #d6d6d6;
-  --cc-map-water: rgba(248, 248, 248, .72);
-  --cc-map-coast: #a3a3a3;
-  --cc-map-marker: #0078d4;
-  --cc-map-light-glow: rgba(0, 120, 212, .24);
-  --cc-map-caption: rgba(255, 255, 255, .94);
-  --cc-map-caption-border: rgba(163, 163, 163, .58);
+  --ok: var(--color-profit);
+  --ok-soft: #eff6ff;
+  --ok-text: var(--color-profit);
+  --ok-border: #bfdbfe;
+  --danger-soft: #fef3f2;
+  --danger-text: #dc2626;
+  --danger-border: #fecdca;
+  --warn-soft: #fffaeb;
+  --warn-text: #b54708;
+  --warn-border: #fedf89;
+  --info-soft: #eff6ff;
+  --info-text: var(--color-profit);
+  --info-border: #bfdbfe;
+  --cc-chrome: var(--rtx-light-panel);
+  --cc-toolbar: var(--rtx-light-panel-subtle);
+  --cc-titlebar: var(--rtx-light-panel-header);
+  --cc-statusbar: var(--rtx-light-panel-header);
+  --cc-grid: var(--rtx-light-border);
+  --cc-bar: #98a2b3;
+  --cc-volume: var(--color-primary);
+  --cc-equity: var(--color-profit);
+  --cc-tooltip: var(--rtx-light-panel);
+  --cc-scrollbar-thumb: var(--rtx-light-border-strong);
+  --cc-avatar-bg: #f4ebff;
+  --cc-avatar-border: #d6bbfb;
+  --cc-avatar-text: var(--rtx-light-accent);
+  --cc-map-land-top: var(--rtx-light-border);
+  --cc-map-land-bottom: var(--rtx-light-border-strong);
+  --cc-map-water: rgba(248, 250, 252, 0.85);
+  --cc-map-coast: #98a2b3;
+  --cc-map-marker: var(--color-primary);
+  --cc-map-light-glow: rgba(127, 86, 217, 0.24);
+  --cc-map-caption: rgba(255, 255, 255, 0.94);
+  --cc-map-caption-border: rgba(208, 213, 221, 0.72);
   --cc-market-glow-up: transparent;
   --cc-market-glow-down: transparent;
-  --market-value-up: #0078d4;
-  --market-value-down: #f06464;
-  --market-direction-up: #0078d4;
-  --market-direction-down: #f06464;
+  --market-value-up: var(--color-quote-up);
+  --market-value-down: var(--color-loss);
+  --market-direction-up: var(--color-quote-up);
+  --market-direction-down: var(--color-loss);
   --radius-sm: 6px;
   --radius-md: 8px;
-  --shadow-xs: 0 1px 3px rgba(0, 0, 0, .05);
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, .07);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
-  --shadow-lg: 0 8px 20px rgba(0, 0, 0, .10);
-  --shadow-xl: 0 12px 28px rgba(0, 0, 0, .12);
-  --shadow-2xl: 0 20px 44px rgba(0, 0, 0, .16);
-  --cc-popover-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 2px 6px rgba(16, 24, 40, 0.07);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 8px 20px rgba(16, 24, 40, 0.10);
+  --shadow-xl: 0 12px 28px rgba(16, 24, 40, 0.12);
+  --shadow-2xl: 0 20px 44px rgba(16, 24, 40, 0.16);
+  --cc-popover-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
 }
 
-/* Keep older Tailwind-based panels on the same neutral light palette. */
-html:not(.dark) #root .bg-gray-50 { background-color: #f8f8f8; }
-html:not(.dark) #root .bg-gray-100 { background-color: #f3f3f3; }
-html:not(.dark) #root .bg-gray-200 { background-color: #e8e8e8; }
+/* Scrollbar styling for light mode */
+html:not(.dark) * {
+  scrollbar-color: var(--rtx-light-border-strong) var(--rtx-light-panel-subtle);
+}
+html:not(.dark) *::-webkit-scrollbar-track {
+  background: var(--rtx-light-panel-subtle);
+}
+html:not(.dark) *::-webkit-scrollbar-thumb {
+  background: var(--rtx-light-border-strong);
+  border-color: var(--rtx-light-panel-subtle);
+}
+html:not(.dark) *::-webkit-scrollbar-thumb:hover {
+  background: #98a2b3;
+}
+
+/* Keep Tailwind-based panels and legacy utility classes on the unified light palette */
+html:not(.dark) #root .bg-white { background-color: var(--rtx-light-panel); }
+html:not(.dark) #root .bg-gray-50 { background-color: var(--rtx-light-panel-subtle); }
+html:not(.dark) #root .bg-gray-100 { background-color: var(--rtx-light-canvas); }
+html:not(.dark) #root .bg-gray-200 { background-color: var(--rtx-light-panel-header); }
 html:not(.dark) #root .border-gray-100,
-html:not(.dark) #root .border-gray-200 { border-color: #e5e5e5; }
-html:not(.dark) #root .border-gray-300 { border-color: #d4d4d4; }
+html:not(.dark) #root .border-gray-200 { border-color: var(--rtx-light-border); }
+html:not(.dark) #root .border-gray-300 { border-color: var(--rtx-light-border-strong); }
 html:not(.dark) #root .text-gray-900,
-html:not(.dark) #root .text-gray-800 { color: #1f1f1f; }
-html:not(.dark) #root .text-gray-700 { color: #424242; }
-html:not(.dark) #root .text-gray-600 { color: #616161; }
-html:not(.dark) #root :is(.text-gray-500, .text-gray-400) { color: #767676; }
-html:not(.dark) #root :is(.text-gray-300, .text-gray-200) { color: #616161; }
-html:not(.dark) #root .text-blue-500 { color: #0078d4; }
-html:not(.dark) #root .text-blue-600,
-html:not(.dark) #root .text-blue-700 { color: #005a9e; }
+html:not(.dark) #root .text-gray-800 { color: var(--rtx-light-text); }
+html:not(.dark) #root .text-gray-700 { color: var(--rtx-light-text-secondary); }
+html:not(.dark) #root .text-gray-600 { color: var(--text-secondary); }
+html:not(.dark) #root :is(.text-gray-500, .text-gray-400) { color: var(--rtx-light-text-muted); }
+html:not(.dark) #root :is(.text-gray-300, .text-gray-200) { color: var(--text-secondary); }
+html:not(.dark) #root :is(.text-blue-400, .text-blue-500, .text-blue-600, .text-blue-700) { color: var(--color-profit); }
+html:not(.dark) #root :is(.text-red-300, .text-red-400, .text-red-500, .text-red-600, .text-red-700, .text-rose-400, .text-rose-500, [class~="text-[#ef4444]"], [class~="text-[#dc2626]"]) {
+  color: var(--color-loss) !important;
+}
 html:not(.dark) #root .border-blue-500,
-html:not(.dark) #root .border-blue-600 { border-color: #0078d4; }
-html:not(.dark) #root .hover\:bg-gray-100:hover { background-color: #e8e8e8; }
-html:not(.dark) #root .hover\:bg-blue-50:hover { background-color: #e5f1fb; }
+html:not(.dark) #root .border-blue-600 { border-color: var(--color-primary); }
+html:not(.dark) #root .hover\:bg-gray-100:hover { background-color: var(--rtx-light-panel-header); }
+html:not(.dark) #root .hover\:bg-blue-50:hover { background-color: var(--accent-soft); }
 html:not(.dark) #root :is(button, [role="button"]):is(.bg-blue-500, .bg-blue-600, .bg-blue-700) {
   background-color: var(--accent) !important;
   border-color: var(--accent) !important;
@@ -146,45 +263,239 @@ html:not(.dark) #root :is(button, [role="button"]):is(.bg-blue-500, .bg-blue-600
   border-color: var(--accent-press) !important;
 }
 
-/* The sign-in shell has its own local token set, so bring it into the same theme. */
+/* Remap hardcoded dark utility classes in modals, toasts, and popups when in light mode */
+html:not(.dark) :where(.bg-\[\#1e1e22\], .bg-\[\#1e2025\], .bg-\[\#1e1e1e\], .bg-\[\#1a1a1c\]) {
+  background-color: var(--rtx-light-panel) !important;
+  color: var(--rtx-light-text) !important;
+}
+html:not(.dark) :where(.bg-\[\#25262a\], .bg-\[\#252526\], .bg-\[\#3e3e42\]) {
+  background-color: var(--rtx-light-panel-header) !important;
+}
+html:not(.dark) :where(.bg-\[\#18191b\], .bg-\[\#2c2d33\]) {
+  background-color: var(--rtx-light-panel-subtle) !important;
+}
+html:not(.dark) :where(.border-\[\#3f4146\], .border-\[\#383a3f\], .border-\[\#313338\], .border-\[\#333\], .border-\[\#555\]) {
+  border-color: var(--rtx-light-border) !important;
+}
+html:not(.dark) :where(.text-\[\#d6d8db\], .text-\[\#e2e4e8\], .text-\[\#c4c6ca\]) {
+  color: var(--rtx-light-text) !important;
+}
+html:not(.dark) :where(.text-\[\#9ea0a6\], .text-\[\#8f9298\], .text-\[\#6b7280\]) {
+  color: var(--rtx-light-text-muted) !important;
+}
+
+/* Desktop dropdown menus in light mode */
+html:not(.dark) .manager-menu-dropdown {
+  background-color: var(--rtx-light-panel) !important;
+  border-color: var(--rtx-light-border-strong) !important;
+  color: var(--rtx-light-text) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+html:not(.dark) .manager-menu-dropdown-item {
+  color: var(--rtx-light-text-secondary) !important;
+}
+html:not(.dark) .manager-menu-dropdown-item:hover {
+  background-color: var(--rtx-light-panel-header) !important;
+  color: var(--rtx-light-text) !important;
+}
+html:not(.dark) .manager-menu-dropdown .h-px {
+  background-color: var(--rtx-light-border) !important;
+}
+
+/* Analytics & Server context menus in light mode */
+html:not(.dark) .cc-server-context-menu.is-analytics-menu,
+html:not(.dark) .cc-context-submenu {
+  background: var(--rtx-light-panel) !important;
+  border-color: var(--rtx-light-border-strong) !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--rtx-light-text-secondary) !important;
+}
+html:not(.dark) .cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item,
+html:not(.dark) .cc-context-submenu .cc-server-context-menu-item {
+  color: var(--rtx-light-text-secondary) !important;
+}
+html:not(.dark) .cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:hover,
+html:not(.dark) .cc-server-context-menu.is-analytics-menu .cc-server-context-menu-item:focus-visible,
+html:not(.dark) .cc-context-submenu .cc-server-context-menu-item:hover,
+html:not(.dark) .cc-context-submenu .cc-server-context-menu-item:focus-visible {
+  background: var(--color-primary) !important;
+  border-color: var(--rtx-light-accent) !important;
+  color: #ffffff !important;
+}
+html:not(.dark) .cc-server-context-menu.is-analytics-menu .cc-server-context-menu-separator {
+  background: var(--rtx-light-border) !important;
+}
+html:not(.dark) .cc-server-context-menu-item kbd.cc-menu-shortcut-plain,
+html:not(.dark) .cc-server-context-menu-item .cc-menu-arrow {
+  color: var(--rtx-light-text-muted);
+}
+
+/* Sign-in shell & overlay in light mode */
+html:not(.dark) #root .manager-auth-shell,
 html:not(.dark) .manager-auth-shell {
-  --surface: #ffffff;
-  --surface-2: #f8f8f8;
-  --surface-3: #e8e8e8;
-  --border: #d4d4d4;
-  --border-2: #e5e5e5;
-  --border-3: #bdbdbd;
-  --text: #1f1f1f;
-  --text-2: #424242;
-  --text-3: #616161;
-  --muted: #767676;
-  --accent-soft: #e5f1fb;
-  --accent-text: #005a9e;
-  background: #f3f3f3;
+  --surface: var(--rtx-light-panel);
+  --surface-2: var(--rtx-light-panel-subtle);
+  --surface-3: var(--rtx-light-panel-header);
+  --border: var(--rtx-light-border);
+  --border-2: var(--rtx-light-border);
+  --border-3: var(--rtx-light-border-strong);
+  --text: var(--rtx-light-text);
+  --text-2: var(--rtx-light-text-secondary);
+  --text-3: #475467;
+  --muted: var(--rtx-light-text-muted);
+  --accent-soft: #f4ebff;
+  --accent-text: var(--rtx-light-accent);
+  background: var(--rtx-light-canvas);
+  color: var(--rtx-light-text);
+  color-scheme: light;
+}
+html:not(.dark) #root .manager-auth-shell .manager-dashboard-preview {
+  background: var(--rtx-light-canvas);
+  color: var(--rtx-light-text-secondary);
+}
+html:not(.dark) #root .manager-auth-shell :is(.manager-preview-topbar, .manager-preview-watch, .manager-preview-center, .manager-preview-metric, .manager-preview-side-panel, .manager-preview-detail-row > div) {
+  background: var(--rtx-light-panel);
+  border-color: var(--rtx-light-border);
+  color: var(--rtx-light-text-secondary);
+}
+html:not(.dark) #root .manager-auth-shell :is(.manager-preview-toolbar, .manager-preview-navigator, .manager-preview-side, .manager-preview-terminal) {
+  background: var(--rtx-light-panel-subtle);
+  border-color: var(--rtx-light-border);
+  color: var(--rtx-light-text-muted);
+}
+html:not(.dark) #root .manager-auth-shell .manager-preview-tabs {
+  background: var(--rtx-light-panel-header);
+  border-color: var(--rtx-light-border);
+  color: var(--rtx-light-text-secondary);
+}
+html:not(.dark) #root .manager-auth-shell .manager-auth-scrim {
+  background: radial-gradient(circle at 50% 45%, rgba(245, 247, 250, 0.45) 0%, rgba(228, 231, 236, 0.72) 100%);
 }
 html:not(.dark) .manager-auth-main {
-  background: linear-gradient(180deg, #f8f8f8 0%, #f3f3f3 100%);
+  background: linear-gradient(180deg, var(--rtx-light-panel-subtle) 0%, var(--rtx-light-canvas) 100%);
 }
+html:not(.dark) #root .manager-auth-shell .manager-auth-card,
 html:not(.dark) .manager-auth-card {
-  background: #ffffff;
-  border-color: #d4d4d4;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .10), 0 2px 6px rgba(0, 0, 0, .04);
+  background: var(--rtx-light-panel);
+  border-color: var(--rtx-light-border);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.10), 0 2px 6px rgba(16, 24, 40, 0.04);
 }
-html:not(.dark) .manager-auth-header h1 { color: #1f1f1f; }
-html:not(.dark) .manager-auth-header p { color: #616161; }
-html:not(.dark) .manager-title-rule { background: #d4d4d4; }
-html:not(.dark) .manager-title-rule span { background: #0078d4; }
+html:not(.dark) #root .manager-auth-shell .manager-brand-mark img {
+  filter: none;
+  mix-blend-mode: normal;
+}
+html:not(.dark) #root .manager-auth-shell .manager-auth-header h1,
+html:not(.dark) .manager-auth-header h1 { color: var(--rtx-light-text); }
+html:not(.dark) #root .manager-auth-shell .manager-auth-header p,
+html:not(.dark) .manager-auth-header p { color: var(--rtx-light-text-muted); }
+html:not(.dark) #root .manager-auth-shell .manager-title-rule,
+html:not(.dark) .manager-title-rule { background: var(--rtx-light-border); }
+html:not(.dark) #root .manager-auth-shell .manager-title-rule span,
+html:not(.dark) .manager-title-rule span { background: var(--color-primary); }
+html:not(.dark) #root .manager-auth-shell .manager-form-label { color: var(--rtx-light-text-secondary); }
+html:not(.dark) #root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity, .manager-input) {
+  background: var(--rtx-light-panel);
+  border-color: var(--rtx-light-border-strong);
+  color: var(--rtx-light-text);
+  box-shadow: var(--shadow-xs);
+}
+html:not(.dark) #root .manager-auth-shell .manager-input::placeholder {
+  color: var(--rtx-light-text-muted);
+}
+html:not(.dark) #root .manager-auth-shell .manager-input[readonly] {
+  background: var(--rtx-light-panel-subtle);
+  border-color: var(--rtx-light-border);
+  color: var(--text-secondary);
+}
+html:not(.dark) #root .manager-auth-shell :is(.manager-broker-button, .manager-input):focus-visible,
+html:not(.dark) #root .manager-auth-shell .manager-input:focus:not([readonly]) {
+  background: var(--rtx-light-panel);
+  border-color: var(--color-primary);
+  box-shadow: var(--ring);
+}
+html:not(.dark) #root .manager-auth-shell :is(.manager-broker-button, .manager-broker-identity) > span:first-child {
+  background: #f4ebff !important;
+  color: var(--rtx-light-accent) !important;
+}
+html:not(.dark) #root .manager-auth-shell .manager-broker-count { color: var(--rtx-light-text-muted); }
+html:not(.dark) #root .manager-auth-shell .manager-broker-count span { background: var(--color-primary); }
+html:not(.dark) #root .manager-auth-shell .manager-remember-control { color: var(--rtx-light-text-secondary); }
+html:not(.dark) #root .manager-auth-shell .manager-remember-control input { accent-color: var(--color-primary); }
+html:not(.dark) #root .manager-auth-shell .manager-link-button { color: var(--rtx-light-accent) !important; }
+html:not(.dark) #root .manager-auth-shell .manager-link-button:hover { color: #53389e !important; }
+html:not(.dark) #root .manager-auth-shell .manager-submit-button {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #ffffff;
+  box-shadow: var(--shadow-xs);
+}
+html:not(.dark) #root .manager-auth-shell .manager-submit-button:hover:not(:disabled) {
+  background: var(--rtx-light-accent);
+  border-color: var(--rtx-light-accent);
+}
+html:not(.dark) #root .manager-auth-shell .manager-contact-copy {
+  border-top-color: var(--rtx-light-border);
+  color: var(--rtx-light-text-muted);
+}
+html:not(.dark) #root .manager-auth-shell .manager-login-form [role='listbox'] {
+  background: var(--rtx-light-panel) !important;
+  border-color: var(--rtx-light-border-strong) !important;
+  color: var(--rtx-light-text);
+  box-shadow: var(--shadow-lg);
+}
+html:not(.dark) #root .manager-auth-shell .manager-login-form [role='option']:hover {
+  background: var(--rtx-light-panel-header);
+}
 
 /* Give the dense workspace breathing room without changing dock dimensions. */
 html:not(.dark) #root .symbol-browser-page {
   padding-top: 36px;
 }
 
-/* Legacy dialogs apply a dark !important color to every button. Solid blue
-   actions need white labels, including their icons and disabled states. */
+/* Solid primary action buttons keep white labels and icons */
 html:not(.dark) :is(.ui-btn-primary, button.bg-blue-500, button.bg-blue-600, button.bg-blue-700),
 html:not(.dark) :is(.ui-btn-primary, button.bg-blue-500, button.bg-blue-600, button.bg-blue-700) :is(span, svg) {
   color: #ffffff !important;
+}
+
+/* Keep Bid / Buy / Profit blue (#1d4ed8) in Account Details & Trade tabs */
+html:not(.dark) .legacy-popup :is(.text-blue-300, .text-blue-400, .text-blue-500, .dark\:text-blue-400) {
+  color: var(--color-profit) !important;
+}
+html:not(.dark) .legacy-popup :is(.text-red-300, .text-red-400, .text-red-500, .dark\:text-red-400) {
+  color: var(--color-loss) !important;
+}
+
+/* Result & Confirmation dialogs in light mode */
+html:not(.dark) .result-dialog {
+  --result-surface: var(--rtx-light-panel);
+  --result-raised: var(--rtx-light-panel-subtle);
+  --result-text: var(--rtx-light-text);
+  --result-muted: var(--rtx-light-text-muted);
+  --result-border: var(--rtx-light-border);
+  --result-status: var(--color-primary);
+  --result-status-bg: #f4ebff;
+  --result-status-border: #d6bbfb;
+  --result-action: var(--color-primary);
+  --result-action-hover: var(--rtx-light-accent);
+  box-shadow: var(--shadow-xl);
+}
+html:not(.dark) .result-dialog.is-success {
+  --result-status: var(--color-profit);
+  --result-status-bg: #eff6ff;
+  --result-status-border: #bfdbfe;
+}
+html:not(.dark) .result-dialog.is-error {
+  --result-status: var(--color-loss);
+  --result-status-bg: #fef3f2;
+  --result-status-border: #fecdca;
+}
+html:not(.dark) .trade-close-confirmation-card {
+  --trade-confirm-surface: var(--rtx-light-panel);
+  --trade-confirm-raised: var(--rtx-light-panel-subtle);
+  --trade-confirm-text: var(--rtx-light-text);
+  --trade-confirm-muted: var(--rtx-light-text-muted);
+  --trade-confirm-border: var(--rtx-light-border);
 }
 
 html:not(.dark) .rtx5-command-shell .manager-menu-brand {
@@ -229,9 +540,12 @@ html:not(.dark) .cc-chart-area { height: 210px; padding: 8px 10px; }
 html:not(.dark) .cc-chart-actions button.is-active { background: var(--accent-soft); font-weight: 400; }
 html:not(.dark) .cc-lower-grid { gap: 12px; }
 html:not(.dark) .cc-data-panel :is(th, td) { height: 32px; padding-inline: 10px; border-bottom-color: var(--border-2); }
-html:not(.dark) .cc-data-panel th { color: var(--text-secondary); background: var(--bg-elevated); }
-html:not(.dark) :is(.cc-data-panel, .cc-terminal-table) tbody tr:nth-child(even) { background: #fafafa; }
-html:not(.dark) :is(.cc-data-panel, .cc-terminal-table) tbody tr:hover { background: var(--accent-soft); }
+html:not(.dark) .cc-data-panel th { color: var(--rtx-light-text-secondary); background: var(--rtx-light-panel-header); }
+html:not(.dark) .cc-terminal-table th { color: var(--rtx-light-text-secondary); background: var(--rtx-light-panel-header); }
+html:not(.dark) .ui-grid thead th { color: var(--rtx-light-text-secondary); background: var(--rtx-light-panel-header); border-bottom-color: var(--rtx-light-border); }
+html:not(.dark) :is(.cc-data-panel, .cc-terminal-table, .ui-grid) tbody tr:nth-child(even) { background: var(--rtx-light-panel-subtle); }
+html:not(.dark) :is(.cc-data-panel, .ui-grid) tbody tr:hover,
+html:not(.dark) .ui-grid tbody tr:hover td { background: var(--rtx-light-panel-header); }
 html:not(.dark) .cc-workspace-tab-shell.is-active { background: var(--bg-panel); }
 html:not(.dark) .cc-workspace-tab-shell.is-active .cc-workspace-tab { font-weight: 400; }
 html:not(.dark) .cc-navigator-scroll { padding: 8px 5px; }
@@ -243,11 +557,30 @@ html:not(.dark) .cc-owner-quick-actions .cc-quick-grid { gap: 8px; }
 html:not(.dark) .cc-owner-quick-actions .cc-quick-grid button { min-height: 48px; padding: 8px; border-radius: 6px; background: var(--bg-panel); }
 html:not(.dark) .cc-owner-quick-actions .cc-quick-grid button:hover { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-text); }
 html:not(.dark) .cc-owner-tabs button.is-active { color: var(--accent-text); background: var(--accent-soft-2); }
+
+/* Terminal & Open Positions semantic colors in light mode */
+html:not(.dark) .cc-terminal-trades {
+  --trade-row-odd: var(--rtx-light-panel);
+  --trade-row-even: var(--rtx-light-panel-subtle);
+  --trade-value-text: var(--rtx-light-text);
+  --trade-buy-text: var(--color-profit);
+  --trade-sell-text: var(--color-loss);
+  --trade-profit-text: var(--color-profit);
+  --trade-loss-text: var(--color-loss);
+}
+html:not(.dark) #root .open-positions-page .open-positions-grid {
+  --open-position-value-color: var(--rtx-light-text);
+  --open-position-action-color: var(--rtx-light-text);
+  --open-position-buy-color: var(--color-profit);
+  --open-position-sell-color: var(--color-loss);
+  --open-position-profit-color: var(--color-profit);
+  --open-position-loss-color: var(--color-loss);
+}
 html:not(.dark) .cc-terminal-table :is(th, td) { height: 24px; border-right-color: var(--border-2); }
-html:not(.dark) .cc-terminal-table tbody tr.is-sell { background: #fbd7d1; }
-html:not(.dark) .cc-terminal-table tbody tr.is-buy { background: #d6efdd; }
+html:not(.dark) .cc-terminal-table tbody tr.is-sell { background: #fef3f2; }
+html:not(.dark) .cc-terminal-table tbody tr.is-buy { background: #eff6ff; }
 html:not(.dark) .cc-terminal-table tbody tr.cc-journal-detail,
-html:not(.dark) .cc-terminal-table tbody tr.cc-journal-detail:hover { background: #f4f4f4; }
+html:not(.dark) .cc-terminal-table tbody tr.cc-journal-detail:hover { background: var(--rtx-light-panel-header); }
 html:not(.dark) .cc-terminal-table tbody tr.cc-journal-detail:hover td { color: var(--text-tertiary); }
 html:not(.dark) .cc-terminal-table tbody tr:hover,
 html:not(.dark) .cc-terminal-table tbody tr.is-selected { background: var(--accent); }

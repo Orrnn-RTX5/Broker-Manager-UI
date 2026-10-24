@@ -238,7 +238,8 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
   );
 };
 
-const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess }) => {
+const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess, embedded = false, screenNumber }) => {
+  const titleId = useId();
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
@@ -420,126 +421,162 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
     }
   };
 
-  const title = isEditing ? `Edit group: ${initialData.name}` : duplicateData ? `Duplicate group: ${duplicateData.name}` : 'Create group';
+  const title = isEditing ? `Edit group: ${initialData.name}` : duplicateData ? `Duplicate group: ${duplicateData.name}` : 'New group';
+  const subtitle = isEditing
+    ? 'Update group settings and trading access'
+    : 'Configure group settings and trading access';
+
+  const formContent = (
+    <form
+      className={`ui-modal group-create${embedded ? ' group-create-embedded' : ''}`}
+      role={embedded ? 'region' : 'dialog'}
+      aria-modal={embedded ? undefined : 'true'}
+      aria-labelledby={titleId}
+      onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}
+    >
+      <div className="ui-modal-header group-create-header">
+        <div className="group-create-heading">
+          <span id={titleId} className="group-create-title">
+            {title}{screenNumber ? <span className="multi-screen-badge">#{screenNumber}</span> : null}
+          </span>
+          <small className="group-create-subtitle">{subtitle}</small>
+        </div>
+        <button type="button" className="group-create-close" aria-label="Close" onClick={onClose}><X size={16} /></button>
+      </div>
+
+      <div className="group-create-body">
+        {error && (
+          <div className="group-create-error" role="alert">
+            <AlertCircle size={14} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <section className="group-create-panel">
+          <div className="group-create-section-heading">
+            <h2>Group setup</h2>
+            <p>Set the group name, currency, and account flags.</p>
+          </div>
+          <InputGroup label="Group name" value={formData.name} onChange={(v) => handleChange('name', v)} />
+          <InputGroup label="Description" value={formData.description} onChange={(v) => handleChange('description', v)} />
+          <div className="group-create-grid">
+            <InputGroup label="Currency" value={formData.currency} onChange={(v) => handleChange('currency', v)} />
+            <InputGroup label="Account type" value={formData.accountType} onChange={(v) => handleChange('accountType', v)} />
+          </div>
+          <div className="group-create-grid">
+            <InputGroup label="Parent group (optional)" value={formData.parentGroup || ''} onChange={(v) => handleChange('parentGroup', v)} />
+            <GroupChoice
+              label="Purpose"
+              value={formData.groupPurpose || ''}
+              placeholder="Select"
+              options={GROUP_PURPOSE_OPTIONS}
+              onChange={(v) => handleChange('groupPurpose', v)}
+            />
+          </div>
+          <p className="group-create-note">Leave currency, execution, parent, or purpose blank to use backend derivation. A blank currency is omitted, never hardcoded.</p>
+          <div className="group-create-checks">
+            <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} error={fieldErrors.demo} />
+            <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} error={fieldErrors.tradeAllowed} />
+            <CheckField label="Negative balance protection" checked={formData.negativeBalanceProtection} onChange={(v) => handleChange('negativeBalanceProtection', v)} />
+          </div>
+        </section>
+
+        <section className="group-create-panel">
+          <div className="group-create-section-heading">
+            <h2>Margin &amp; leverage</h2>
+            <p>Configure leverage, margin call, and stop out levels.</p>
+          </div>
+          <div className="group-create-grid">
+            <PresetSelect
+              key={leveragePrefilled ? 'leverage-prefilled' : 'leverage'}
+              label="Leverage"
+              value={formData.leverage}
+              presets={LEVERAGE_PRESETS}
+              onChange={(v) => handleChange('leverage', v)}
+              clearedValue=""
+              placeholder="Select leverage…"
+              customPlaceholder="Ratio, e.g. 150 for 1:150"
+              error={fieldErrors.leverage}
+              hint={leverageDefaultMissing && isBlankLeverage(formData.leverage) && String(formData.parentGroup ?? '').trim() === '' ? GROUP_LEVERAGE_NO_DEFAULT_HINT : null}
+            />
+            <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" error={fieldErrors.marginCallLevel} />
+            <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" error={fieldErrors.stopOutLevel} />
+            <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
+          </div>
+          {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
+            <p className="group-create-note">Stop out is above the margin call. It is normally lower.</p>
+          )}
+        </section>
+
+        <section className="group-create-panel">
+          <div className="group-create-section-heading">
+            <h2>Execution &amp; commission</h2>
+            <p>Define order routing, lot limits, and commissions.</p>
+          </div>
+          <div className="group-create-grid">
+            <GroupChoice
+              label="Execution mode"
+              value={formData.executionMode || ''}
+              placeholder="Select"
+              error={fieldErrors.executionMode}
+              options={EXECUTION_MODE_OPTIONS.some((option) => option.value === formData.executionMode)
+                ? EXECUTION_MODE_OPTIONS
+                : formData.executionMode
+                  ? [{ value: formData.executionMode, label: String(formData.executionMode) }, ...EXECUTION_MODE_OPTIONS]
+                  : EXECUTION_MODE_OPTIONS}
+              onChange={(v) => handleChange('executionMode', v)}
+            />
+            <GroupChoice
+              label="Book"
+              value={formData.routingMode}
+              error={fieldErrors.bookType}
+              options={[
+                { value: 'b_book', label: 'B-Book' },
+                { value: 'a_book', label: 'A-Book' },
+                { value: 'hybrid', label: 'Hybrid' },
+              ]}
+              onChange={(v) => handleChange('routingMode', v)}
+            />
+            <InputGroup label="Commission rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} />
+            <InputGroup label="Commission type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} />
+            <InputGroup label="Max lot per trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} />
+            <InputGroup label="Max total lots" type="number" value={formData.maxTotalLots} onChange={(v) => handleChange('maxTotalLots', v)} />
+            <InputGroup label="Lot divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} />
+            <InputGroup label="Swap multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} />
+          </div>
+        </section>
+
+        <section className="group-create-panel">
+          <div className="group-create-section-heading">
+            <h2>Trading symbols</h2>
+            <p>Choose allowed and restricted trading instruments.</p>
+          </div>
+          <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} />
+          <SymbolSelector label="Blocked symbols" value={formData.symbolsBlocked} onChange={(v) => handleArrayChange('symbolsBlocked', v)} />
+        </section>
+      </div>
+
+      <div className="group-create-footer">
+        <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Cancel</button>
+        <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={loading}>
+          {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Group' : 'Create Group')}
+        </button>
+      </div>
+    </form>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        {formContent}
+        {permissionDenied && <GroupPermissionNotice action={isEditing ? 'change' : 'create'} onClose={() => setPermissionDenied(false)} />}
+      </>
+    );
+  }
 
   return (
     <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="ui-modal group-create" role="dialog" aria-modal="true" aria-labelledby="group-create-title" onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}>
-        <div className="ui-modal-header group-create-header">
-          <div className="group-create-heading">
-            <span id="group-create-title" className="group-create-title">{title}</span>
-            <span className="group-create-subtitle">Book, margin, commission, and the symbols this group can trade.</span>
-          </div>
-          <button type="button" className="group-create-close" aria-label="Close" onClick={onClose}><X size={14} /></button>
-        </div>
-
-        <div className="group-create-body">
-          {error && (
-            <div className="group-create-error" role="alert">
-              <AlertCircle size={14} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <section className="group-create-panel">
-            <h3>General</h3>
-            <InputGroup label="Group name" value={formData.name} onChange={(v) => handleChange('name', v)} />
-            <InputGroup label="Description" value={formData.description} onChange={(v) => handleChange('description', v)} />
-            <div className="group-create-grid">
-              <InputGroup label="Currency" value={formData.currency} onChange={(v) => handleChange('currency', v)} />
-              <InputGroup label="Account type" value={formData.accountType} onChange={(v) => handleChange('accountType', v)} />
-            </div>
-            <div className="group-create-grid">
-              <InputGroup label="Parent group (optional)" value={formData.parentGroup || ''} onChange={(v) => handleChange('parentGroup', v)} />
-              <GroupChoice
-                label="Purpose"
-                value={formData.groupPurpose || ''}
-                placeholder="Select"
-                options={GROUP_PURPOSE_OPTIONS}
-                onChange={(v) => handleChange('groupPurpose', v)}
-              />
-            </div>
-            <p className="group-create-note">Leave currency, execution, parent, or purpose blank to use backend derivation. A blank currency is omitted, never hardcoded.</p>
-            <div className="group-create-checks">
-              <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} error={fieldErrors.demo} />
-              <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} error={fieldErrors.tradeAllowed} />
-              <CheckField label="Negative balance protection" checked={formData.negativeBalanceProtection} onChange={(v) => handleChange('negativeBalanceProtection', v)} />
-            </div>
-          </section>
-
-          <section className="group-create-panel">
-            <h3>Financial</h3>
-            <div className="group-create-grid">
-              <PresetSelect
-                key={leveragePrefilled ? 'leverage-prefilled' : 'leverage'}
-                label="Leverage"
-                value={formData.leverage}
-                presets={LEVERAGE_PRESETS}
-                onChange={(v) => handleChange('leverage', v)}
-                clearedValue=""
-                placeholder="Select leverage…"
-                customPlaceholder="Ratio, e.g. 150 for 1:150"
-                error={fieldErrors.leverage}
-                hint={leverageDefaultMissing && isBlankLeverage(formData.leverage) && String(formData.parentGroup ?? '').trim() === '' ? GROUP_LEVERAGE_NO_DEFAULT_HINT : null}
-              />
-              <PresetSelect label="Margin call (%)" value={formData.marginCallLevel} presets={MARGIN_CALL_PRESETS} onChange={(v) => handleChange('marginCallLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 90" error={fieldErrors.marginCallLevel} />
-              <PresetSelect label="Stop out (%)" value={formData.stopOutLevel} presets={STOP_OUT_PRESETS} onChange={(v) => handleChange('stopOutLevel', v)} placeholder="Select level" customPlaceholder="Percent, e.g. 45" error={fieldErrors.stopOutLevel} />
-              <PresetSelect label="Spread markup" value={formData.spreadMarkup} presets={SPREAD_MARKUP_PRESETS} onChange={(v) => handleChange('spreadMarkup', v)} placeholder="Select markup" customPlaceholder="Points, e.g. 7" />
-            </div>
-            {Number(formData.stopOutLevel) > Number(formData.marginCallLevel) && Number(formData.marginCallLevel) > 0 && (
-              <p className="group-create-note">Stop out is above the margin call. It is normally lower.</p>
-            )}
-          </section>
-
-          <section className="group-create-panel">
-            <h3>Execution and commission</h3>
-            <div className="group-create-grid">
-              <GroupChoice
-                label="Execution mode"
-                value={formData.executionMode || ''}
-                placeholder="Select"
-                error={fieldErrors.executionMode}
-                options={EXECUTION_MODE_OPTIONS.some((option) => option.value === formData.executionMode)
-                  ? EXECUTION_MODE_OPTIONS
-                  : formData.executionMode
-                    ? [{ value: formData.executionMode, label: String(formData.executionMode) }, ...EXECUTION_MODE_OPTIONS]
-                    : EXECUTION_MODE_OPTIONS}
-                onChange={(v) => handleChange('executionMode', v)}
-              />
-              <GroupChoice
-                label="Book"
-                value={formData.routingMode}
-                error={fieldErrors.bookType}
-                options={[
-                  { value: 'b_book', label: 'B-Book' },
-                  { value: 'a_book', label: 'A-Book' },
-                  { value: 'hybrid', label: 'Hybrid' },
-                ]}
-                onChange={(v) => handleChange('routingMode', v)}
-              />
-              <InputGroup label="Commission rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} />
-              <InputGroup label="Commission type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} />
-              <InputGroup label="Max lot per trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} />
-              <InputGroup label="Max total lots" type="number" value={formData.maxTotalLots} onChange={(v) => handleChange('maxTotalLots', v)} />
-              <InputGroup label="Lot divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} />
-              <InputGroup label="Swap multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} />
-            </div>
-          </section>
-
-          <section className="group-create-panel">
-            <h3>Symbols</h3>
-            <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} />
-            <SymbolSelector label="Blocked symbols" value={formData.symbolsBlocked} onChange={(v) => handleArrayChange('symbolsBlocked', v)} />
-          </section>
-        </div>
-
-        <div className="group-create-footer">
-          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Cancel</button>
-          <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={loading}>
-            {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update' : 'Create')}
-          </button>
-        </div>
-      </form>
+      {formContent}
       {permissionDenied && <GroupPermissionNotice action={isEditing ? 'change' : 'create'} onClose={() => setPermissionDenied(false)} />}
     </div>
   );

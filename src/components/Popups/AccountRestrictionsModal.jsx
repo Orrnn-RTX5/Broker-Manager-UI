@@ -1,6 +1,6 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { Children, cloneElement, useId, useState, useEffect, useCallback } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import AccountDialog from './AccountDialog';
 import {
   accountRestrictGet, accountRestrictSet, accountRestrictClear,
@@ -10,9 +10,11 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
 import { hasSpreadSymbol, normalizeSpreadSymbol } from './accountSpreadSymbol.js';
 
-const Toggle = ({ label, checked, onChange, disabled }) => (
-  <label className="flex items-center justify-between gap-2 py-1.5 cursor-pointer">
-    <span className="text-xs" style={{ color: 'var(--text-2)' }}>{label}</span>
+const Toggle = ({ label, checked, onChange, disabled, tone = 'accent' }) => (
+  <label className={`account-restrictions-toggle-card ${checked ? `is-active is-${tone}` : ''} ${disabled ? 'is-disabled' : ''}`}>
+    <span className="account-restrictions-toggle-copy">
+      <span className="account-restrictions-toggle-label">{label}</span>
+    </span>
     <button
       type="button"
       role="switch"
@@ -20,28 +22,29 @@ const Toggle = ({ label, checked, onChange, disabled }) => (
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-      style={{ background: checked ? 'var(--accent)' : 'var(--border-3)' }}
+      className={`account-restrictions-switch ${checked ? `is-checked is-${tone}` : ''}`}
     >
-      <span
-        className="inline-block h-3.5 w-3.5 rounded-full transition-transform"
-        style={{
-          background: 'white',
-          transform: checked ? 'translateX(18px)' : 'translateX(3px)',
-        }}
-      />
+      <span className="account-restrictions-switch-thumb" />
     </button>
   </label>
 );
 
-const Field = ({ label, children }) => {
+const Field = ({ label, hint, unit, children }) => {
   const id = useId();
   const child = Children.only(children);
   const fieldId = child.props.id || id;
-  return <div className="flex flex-col gap-1">
-    <label htmlFor={fieldId} style={{ color: 'var(--text-3)' }}>{label}</label>
-    {cloneElement(child, { id: fieldId })}
-  </div>;
+  return (
+    <div className="account-restrictions-field">
+      <div className="account-restrictions-field-head">
+        <label htmlFor={fieldId}>{label}</label>
+        {hint && <span className="account-restrictions-field-hint">{hint}</span>}
+      </div>
+      <div className={`account-restrictions-input-wrap ${unit ? 'has-unit' : ''}`}>
+        {cloneElement(child, { id: fieldId })}
+        {unit && <span className="account-restrictions-input-unit" aria-hidden="true">{unit}</span>}
+      </div>
+    </div>
+  );
 };
 
 const BASIC_RESTRICTION_FIELDS = [
@@ -226,14 +229,17 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
 
   return (
     <>
-    <AccountDialog title={`Account Restrictions · ${login}`} className="account-restrictions-dialog" onClose={onClose} busy={saving}
-      footer={<>
-        <button type="button" className="account-panel-button is-danger" onClick={() => setConfirmClear(true)} disabled={loading || saving || loadFailed || !hasRestriction || !canEditRestrictions}>Clear All</button>
-        <div>
+    <AccountDialog
+      title={`Account Restrictions · ${login}`}
+      className="account-restrictions-dialog"
+      onClose={onClose}
+      busy={saving}
+      footer={
+        <div className="account-restrictions-footer-actions">
           <button type="button" className="account-panel-button" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="account-panel-button is-primary" onClick={handleSave} disabled={loading || saving || loadFailed || !canEditRestrictions}>{saving ? 'Saving…' : hasRestriction ? 'Save Changes' : 'Create Restrictions'}</button>
         </div>
-      </>}>
+      }>
           {loading && (
             <div className="account-restrictions-loading" role="status">Loading account restrictions…</div>
           )}
@@ -245,118 +251,184 @@ const AccountRestrictionsModal = ({ login, onClose }) => {
           {!loading && !loadFailed && (
             <>
               {!canChangeAnyRestriction && (
-                <div className="flex items-center gap-2 p-2 rounded text-xs" style={{ background: 'var(--warning-soft)', color: 'var(--warning-text)' }}>
-                  <AlertTriangle size={14} /> Read-only: your role does not have permission to change account restrictions or trade overrides.
+                <div className="account-restrictions-banner is-warning">
+                  <AlertTriangle size={14} className="account-restrictions-banner-icon" />
+                  <span>Read-only: your role does not have permission to change account restrictions or trade overrides.</span>
                 </div>
               )}
 
               {canEditRestrictions && !canManipulateRestrictionTrades && (
-                <div className="flex items-center gap-2 p-2 rounded text-xs" style={{ background: 'var(--info-soft)', color: 'var(--info-text)' }}>
-                  Spread, execution, and book controls require manipulate_trades.
-                </div>
-              )}
-
-              {!hasRestriction && (
-                <div className="flex items-center gap-2 p-2 rounded text-xs" style={{ background: 'var(--info-soft)', color: 'var(--info-text)' }}>
-                  No restrictions set for this account. Configure and save to create.
+                <div className="account-restrictions-banner is-info">
+                  <Info size={14} className="account-restrictions-banner-icon" />
+                  <span>Spread, execution, and book controls require manipulate_trades.</span>
                 </div>
               )}
 
               {/* Trading Flags */}
-              <div className="ui-card p-3">
-                <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text)' }}>Trading Flags</h4>
-                <div className="grid grid-cols-2 gap-x-4">
-                  <Toggle label="No Trading" checked={form.no_trading} onChange={v => set('no_trading', v)} disabled={!canEditRestrictions} />
-                  <Toggle label="No Deposit" checked={form.no_deposit} onChange={v => set('no_deposit', v)} disabled={!canEditRestrictions} />
-                  <Toggle label="No Withdraw" checked={form.no_withdraw} onChange={v => set('no_withdraw', v)} disabled={!canEditRestrictions} />
-                  <Toggle label="Close Only" checked={form.close_only} onChange={v => set('close_only', v)} disabled={!canEditRestrictions} />
+              <section className="ui-card account-restrictions-section">
+                <div className="account-restrictions-section-head">
+                  <div className="account-restrictions-section-title-wrap">
+                    <h4 className="account-restrictions-section-title">Trading Flags</h4>
+                  </div>
                 </div>
-              </div>
+                <div className="account-restrictions-grid-2">
+                  <Toggle
+                    label="No Trading"
+                    checked={form.no_trading}
+                    onChange={v => set('no_trading', v)}
+                    disabled={!canEditRestrictions}
+                    tone="danger"
+                  />
+                  <Toggle
+                    label="No Deposit"
+                    checked={form.no_deposit}
+                    onChange={v => set('no_deposit', v)}
+                    disabled={!canEditRestrictions}
+                    tone="warn"
+                  />
+                  <Toggle
+                    label="No Withdraw"
+                    checked={form.no_withdraw}
+                    onChange={v => set('no_withdraw', v)}
+                    disabled={!canEditRestrictions}
+                    tone="warn"
+                  />
+                  <Toggle
+                    label="Close Only"
+                    checked={form.close_only}
+                    onChange={v => set('close_only', v)}
+                    disabled={!canEditRestrictions}
+                    tone="accent"
+                  />
+                </div>
+              </section>
 
               {/* Limits */}
-              <div className="ui-card p-3">
-                <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text)' }}>Limits</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Max Lot">
-                    <input type="number" step="0.01" value={form.max_lot} onChange={e => set('max_lot', Number(e.target.value))} className="ui-input ui-input-sm" disabled={!canEditRestrictions} />
+              <section className="ui-card account-restrictions-section">
+                <div className="account-restrictions-section-head">
+                  <div className="account-restrictions-section-title-wrap">
+                    <h4 className="account-restrictions-section-title">Limits</h4>
+                  </div>
+                </div>
+                <div className="account-restrictions-grid-2 is-fields">
+                  <Field label="Max Lot" hint="Single order cap" unit="LOTS">
+                    <input type="number" step="0.01" value={form.max_lot} onChange={e => set('max_lot', Number(e.target.value))} className="ui-input ui-input-sm tabular" disabled={!canEditRestrictions} />
                   </Field>
-                  <Field label="Max Total Lot">
-                    <input type="number" step="0.01" value={form.max_total_lot} onChange={e => set('max_total_lot', Number(e.target.value))} className="ui-input ui-input-sm" disabled={!canEditRestrictions} />
+                  <Field label="Max Total Lot" hint="Aggregate open volume" unit="LOTS">
+                    <input type="number" step="0.01" value={form.max_total_lot} onChange={e => set('max_total_lot', Number(e.target.value))} className="ui-input ui-input-sm tabular" disabled={!canEditRestrictions} />
                   </Field>
-                  <Field label="Spread Markup">
-                    <input type="number" step="1" value={form.spread_markup} onChange={e => set('spread_markup', Number(e.target.value))} className="ui-input ui-input-sm" disabled={!canSaveTradeRestrictionFields} />
+                  <Field label="Spread Markup" hint="Additional markup" unit="PTS">
+                    <input type="number" step="1" value={form.spread_markup} onChange={e => set('spread_markup', Number(e.target.value))} className="ui-input ui-input-sm tabular" disabled={!canSaveTradeRestrictionFields} />
                   </Field>
-                  <Field label="Custom Leverage">
-                    <input type="number" step="1" value={form.custom_leverage} onChange={e => set('custom_leverage', Number(e.target.value))} className="ui-input ui-input-sm" disabled={!canEditRestrictions} />
+                  <Field label="Custom Leverage" hint="Account leverage ratio" unit="1 : X">
+                    <input type="number" step="1" value={form.custom_leverage} onChange={e => set('custom_leverage', Number(e.target.value))} className="ui-input ui-input-sm tabular" disabled={!canEditRestrictions} />
                   </Field>
                 </div>
-              </div>
+              </section>
 
               {/* Routing */}
-              <div className="ui-card p-3">
-                <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text)' }}>Routing & Execution</h4>
-                <div className="grid grid-cols-2 gap-x-4">
-                  <Toggle label="A-Book Override" checked={form.a_book_override} onChange={v => set('a_book_override', v)} disabled={!canSaveTradeRestrictionFields} />
-                  <Toggle label="B-Book Override" checked={form.b_book_override} onChange={v => set('b_book_override', v)} disabled={!canSaveTradeRestrictionFields} />
+              <section className="ui-card account-restrictions-section">
+                <div className="account-restrictions-section-head">
+                  <div className="account-restrictions-section-title-wrap">
+                    <h4 className="account-restrictions-section-title">Routing & Execution</h4>
+                  </div>
                 </div>
-                <Field label="Execution Delay (ms)">
-                  <input type="number" step="1" value={form.execution_delay_ms} onChange={e => set('execution_delay_ms', Number(e.target.value))} className="ui-input ui-input-sm" disabled={!canSaveTradeRestrictionFields} />
-                </Field>
-              </div>
-
-              {/* Comment */}
-              <Field label="Comment">
-                <input type="text" value={form.comment} onChange={e => set('comment', e.target.value)} className="ui-input ui-input-sm" placeholder="e.g. KYC pending" disabled={!canEditRestrictions} />
-              </Field>
+                <div className="account-restrictions-grid-2">
+                  <Toggle
+                    label="A-Book Override"
+                    checked={form.a_book_override}
+                    onChange={v => set('a_book_override', v)}
+                    disabled={!canSaveTradeRestrictionFields}
+                    tone="accent"
+                  />
+                  <Toggle
+                    label="B-Book Override"
+                    checked={form.b_book_override}
+                    onChange={v => set('b_book_override', v)}
+                    disabled={!canSaveTradeRestrictionFields}
+                    tone="accent"
+                  />
+                </div>
+                <div className="account-restrictions-grid-2 is-fields account-restrictions-exec-row">
+                  <Field label="Execution Delay (ms)" hint="Synthetic fill latency" unit="MS">
+                    <input type="number" step="1" value={form.execution_delay_ms} onChange={e => set('execution_delay_ms', Number(e.target.value))} className="ui-input ui-input-sm tabular" disabled={!canSaveTradeRestrictionFields} />
+                  </Field>
+                  {/* Comment */}
+                  <Field label="Comment" hint="Compliance / audit note">
+                    <input type="text" value={form.comment} onChange={e => set('comment', e.target.value)} className="ui-input ui-input-sm" placeholder="e.g. KYC pending" disabled={!canEditRestrictions} />
+                  </Field>
+                </div>
+              </section>
 
               {/* Advanced Controls (require existing restriction row) */}
               {hasRestriction && (
-                <div className="ui-card p-3 flex flex-col gap-3" style={{ borderColor: 'var(--accent-soft)' }}>
-                  <h4 className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>Per-Symbol Spread Override</h4>
-                  <div className="flex gap-2 items-end">
-                    <Field label="Symbol">
-                      <input type="text" value={spreadSymbol} onChange={e => setSpreadSymbol(e.target.value)} className="ui-input ui-input-sm" style={{ width: 120 }} placeholder="Symbol" />
-                    </Field>
-                    <Field label="Markup">
-                      <input type="number" step="1" value={spreadMarkup} onChange={e => setSpreadMarkup(Number(e.target.value))} className="ui-input ui-input-sm" style={{ width: 80 }} />
-                    </Field>
-                    <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleSpreadSet} disabled={saving || !canManipulateRestrictionTrades || !hasSpreadSymbol(spreadSymbol)} title={!canManipulateRestrictionTrades ? 'Your role does not have permission to change spread overrides.' : (!hasSpreadSymbol(spreadSymbol) ? 'Enter a symbol before setting a spread override.' : undefined)}>Set</button>
-                  </div>
-                  {data?.spreadOverrides && Object.keys(data.spreadOverrides).length > 0 && (
-                    <div className="text-[10px] flex gap-2 flex-wrap" style={{ color: 'var(--text-3)' }}>
-                      {Object.entries(data.spreadOverrides).map(([sym, val]) => (
-                        <span key={sym} className="ui-badge ui-badge-neutral">{sym}: {val}</span>
-                      ))}
+                <section className="ui-card account-restrictions-section is-advanced">
+                  <div className="account-restrictions-section-head">
+                    <div className="account-restrictions-section-title-wrap">
+                      <h4 className="account-restrictions-section-title">Live Symbol & Execution Overrides</h4>
                     </div>
-                  )}
-
-                  <h4 className="text-xs font-semibold mt-2" style={{ color: 'var(--accent-text)' }}>Execution Mode</h4>
-                  <div className="flex gap-2 items-end">
-                    <Field label="Mode">
-                      <select value={execMode} onChange={e => setExecMode(e.target.value)} className="ui-input ui-input-sm" style={{ width: 120 }}>
-                        <option value="instant">Instant</option>
-                        <option value="market">Market</option>
-                        <option value="requote">Requote</option>
-                      </select>
-                    </Field>
-                    <Field label="Delay (ms)">
-                      <input type="number" step="1" value={execDelay} onChange={e => setExecDelay(Number(e.target.value))} className="ui-input ui-input-sm" style={{ width: 80 }} />
-                    </Field>
-                    <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleExecSet} disabled={saving || !canManipulateRestrictionTrades}>Set</button>
                   </div>
 
-                  <h4 className="text-xs font-semibold mt-2" style={{ color: 'var(--accent-text)' }}>Book Assignment</h4>
-                  <div className="flex gap-2 items-end">
-                    <Field label="Book">
-                      <select value={book} onChange={e => setBook(e.target.value)} className="ui-input ui-input-sm" style={{ width: 120 }}>
-                        <option value="auto">Auto</option>
-                        <option value="a">A-Book</option>
-                        <option value="b">B-Book</option>
-                      </select>
-                    </Field>
-                    <button className="ui-btn ui-btn-primary ui-btn-sm" onClick={handleBookSet} disabled={saving || !canManipulateRestrictionTrades}>Set</button>
+                  <div className="account-restrictions-advanced-block">
+                    <h4 className="account-restrictions-subhead">Per-Symbol Spread Override</h4>
+                    <div className="account-restrictions-inline-bar">
+                      <Field label="Symbol">
+                        <input type="text" value={spreadSymbol} onChange={e => setSpreadSymbol(e.target.value)} className="ui-input ui-input-sm" placeholder="Symbol" />
+                      </Field>
+                      <Field label="Markup" unit="PTS">
+                        <input type="number" step="1" value={spreadMarkup} onChange={e => setSpreadMarkup(Number(e.target.value))} className="ui-input ui-input-sm tabular" />
+                      </Field>
+                      <button
+                        className="ui-btn ui-btn-primary ui-btn-sm account-restrictions-inline-btn"
+                        onClick={handleSpreadSet}
+                        disabled={saving || !canManipulateRestrictionTrades || !hasSpreadSymbol(spreadSymbol)}
+                        title={!canManipulateRestrictionTrades ? 'Your role does not have permission to change spread overrides.' : (!hasSpreadSymbol(spreadSymbol) ? 'Enter a symbol before setting a spread override.' : undefined)}
+                      >
+                        Set
+                      </button>
+                    </div>
+                    {data?.spreadOverrides && Object.keys(data.spreadOverrides).length > 0 && (
+                      <div className="account-restrictions-override-tags">
+                        {Object.entries(data.spreadOverrides).map(([sym, val]) => (
+                          <span key={sym} className="ui-badge ui-badge-neutral">{sym}: {val}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
+
+                  <div className="account-restrictions-advanced-grid">
+                    <div className="account-restrictions-advanced-block">
+                      <h4 className="account-restrictions-subhead">Execution Mode</h4>
+                      <div className="account-restrictions-inline-bar">
+                        <Field label="Mode">
+                          <select value={execMode} onChange={e => setExecMode(e.target.value)} className="ui-input ui-input-sm">
+                            <option value="instant">Instant</option>
+                            <option value="market">Market</option>
+                            <option value="requote">Requote</option>
+                          </select>
+                        </Field>
+                        <Field label="Delay (ms)" unit="MS">
+                          <input type="number" step="1" value={execDelay} onChange={e => setExecDelay(Number(e.target.value))} className="ui-input ui-input-sm tabular" />
+                        </Field>
+                        <button className="ui-btn ui-btn-primary ui-btn-sm account-restrictions-inline-btn" onClick={handleExecSet} disabled={saving || !canManipulateRestrictionTrades}>Set</button>
+                      </div>
+                    </div>
+
+                    <div className="account-restrictions-advanced-block">
+                      <h4 className="account-restrictions-subhead">Book Assignment</h4>
+                      <div className="account-restrictions-inline-bar">
+                        <Field label="Book">
+                          <select value={book} onChange={e => setBook(e.target.value)} className="ui-input ui-input-sm">
+                            <option value="auto">Auto</option>
+                            <option value="a">A-Book</option>
+                            <option value="b">B-Book</option>
+                          </select>
+                        </Field>
+                        <button className="ui-btn ui-btn-primary ui-btn-sm account-restrictions-inline-btn" onClick={handleBookSet} disabled={saving || !canManipulateRestrictionTrades}>Set</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               )}
             </>
           )}

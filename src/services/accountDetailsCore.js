@@ -72,6 +72,7 @@ export const createAccountDetailsStore = ({
       .finally(() => {
         if (pending.get(key) === promise) pending.delete(key);
       });
+    promise.catch(() => undefined);
     pending.set(key, promise);
     return promise;
   };

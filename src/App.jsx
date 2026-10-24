@@ -20,6 +20,8 @@ import { prefetchInitialAnalyticsData } from './features/analytics/analyticsQuer
 import { prefetchInitialWorkspaceData } from './features/workspaceQueries.js';
 import { WorkspaceNavigationBridge } from './hooks/useWorkspaceNavigation.js';
 import { clearStoredTerminalPage } from './features/terminal/terminalTrades.js';
+import useSymbolStore from './store/symbolStore';
+import { stopPositionSync } from './services/positionSync';
 
 import Dashboard from './features/dashboard/Dashboard';
 import OnlineUsersDashboard from './features/analytics/OnlineUsersDashboard';
@@ -35,6 +37,7 @@ import DealsPage from './features/clients/DealsPage';
 import OnlineUsersPage from './features/clients/OnlineUsersPage';
 import TradingAccountsDashboard from './features/analytics/TradingAccountsDashboard';
 import CustomAnalyticsDashboard from './features/analytics/CustomAnalyticsDashboard';
+import BugReportsView from './features/support/BugReportsView';
 
 // An authenticated reload starts from the standard dashboard workspace.
 // Do this before BrowserRouter reads the URL so another route does not flash.
@@ -98,6 +101,7 @@ const ROUTE_LOADING_LABELS = Object.freeze({
   '/groups': 'Groups',
   '/symbols': 'Symbols Browser',
   '/symbol-management': 'Symbol Management',
+  '/support/bug-reports': 'Bug Reports',
 });
 
 const getRouteLabel = (pathname) => {
@@ -231,8 +235,12 @@ function App() {
     // expireSession() has already cleared storage. It keeps the shared tokens
     // when they belong to another tab, so this handler must not clear them.
     const handleSessionExpired = () => {
+      useSymbolStore.getState().disconnectWebSocket();
+      stopPositionSync();
       invalidateRealtimeCaches();
+      invalidateSymbolManagementData();
       clearStoredTerminalPage();
+      void queryClient.cancelQueries();
       queryClient.clear();
       sessionSnapshotRef.current = null;
       setIsAuthenticated(false);
@@ -295,25 +303,39 @@ function App() {
     // Immediately prefetch account data used by the workspace shell.
     prefetchInitialWorkspaceData(queryClient);
 
+    let cancelled = false;
+    let idleCallbackId = null;
+
     // Prioritize the active route's data query first. Defer background route warming
     // and auxiliary prefetches so they never compete for network connections or CPU
     // during the critical initial page load and render.
     const warmTimeoutId = setTimeout(() => {
       const runWarming = () => {
+        if (cancelled || !authService.getSessionStatus().authenticated) {
+          return;
+        }
         preloadFrequentWorkspaceRoutes();
         preloadAllWorkspaceRoutes();
         prefetchInitialAnalyticsData(queryClient);
-        preloadSymbolManagementData();
+        if (authService.getSessionClaims().isAdmin) {
+          preloadSymbolManagementData();
+        }
       };
 
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        window.requestIdleCallback(runWarming, { timeout: 2000 });
+        idleCallbackId = window.requestIdleCallback(runWarming, { timeout: 2000 });
       } else {
         runWarming();
       }
     }, 800);
 
-    return () => clearTimeout(warmTimeoutId);
+    return () => {
+      cancelled = true;
+      clearTimeout(warmTimeoutId);
+      if (idleCallbackId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
   }, [isAuthenticated, queryClient]);
 
   useEffect(() => {
@@ -364,6 +386,8 @@ function App() {
   };
 
   const handleLogout = () => {
+    useSymbolStore.getState().disconnectWebSocket();
+    stopPositionSync();
     invalidateRealtimeCaches();
     invalidateSymbolManagementData();
     clearStoredTerminalPage();
@@ -375,6 +399,7 @@ function App() {
     // when isAuthenticated flips below. finishLogout runs on both paths so a
     // revoke failure can never leave the UI half-logged.
     const finishLogout = () => {
+      void queryClient.cancelQueries();
       queryClient.clear();
       clearBrokerInfo();
       sessionSnapshotRef.current = null;
@@ -441,6 +466,7 @@ function App() {
                 <Route path="/symbols" element={<RequirePermission permission="manage_groups"><SymbolsOverviewPage /></RequirePermission>} />
                 <Route path="/symbols/:group" element={<RequirePermission permission="manage_groups"><SymbolListPage /></RequirePermission>} />
                 <Route path="/symbol-management" element={<RequirePermission permission="manage_groups"><SymbolManagementPage /></RequirePermission>} />
+                <Route path="/support/bug-reports" element={<BugReportsView />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

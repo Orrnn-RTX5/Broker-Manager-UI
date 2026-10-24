@@ -87,7 +87,6 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
   compact,
   isConnected,
   onOpenTicks,
-  onPrefetch,
   onSelect,
   quote,
   selected,
@@ -96,7 +95,6 @@ const MarketQuoteRow = memo(function MarketQuoteRow({
 
   return (
     <tr
-      onPointerEnter={() => onPrefetch?.(quote)}
       onClick={() => onSelect(quote)}
       onDoubleClick={() => onOpenTicks(quote)}
       className={`market-row cursor-pointer ${selected ? 'is-selected' : ''}`}
@@ -775,12 +773,12 @@ const MarketData = ({ compact = false }) => {
            labels, values and controls share the same visual weight. */
         .market-watch-type {
           --market-watch-font-size: var(--workspace-ui-small-font-size, 10px);
-          --market-value-up: #0078d4;
-          --market-value-down: #f06464;
+          --market-value-up: var(--color-quote-up, #1d4ed8);
+          --market-value-down: var(--color-loss, #f04438);
           --market-direction-up: var(--market-value-up);
           --market-direction-down: var(--market-value-down);
-          --cc-market-glow-up: rgba(0, 120, 212, 0.12);
-          --cc-market-glow-down: rgba(240, 100, 100, 0.10);
+          --cc-market-glow-up: rgba(29, 78, 216, 0.12);
+          --cc-market-glow-down: rgba(240, 68, 56, 0.10);
         }
         .dark .market-watch-type {
           /* Match the Admin Market Watch palette within this panel. */
@@ -807,12 +805,12 @@ const MarketData = ({ compact = false }) => {
           --cc-market-glow-down: rgba(240, 100, 100, 0.10);
         }
         .market-watch-type .rtx-market-tick-chart {
-          --rtx-tick-chart-bid: #0078d4;
-          --rtx-tick-chart-ask: #f06464;
-          --rtx-tick-chart-plot: #ffffff;
-          --rtx-tick-chart-grid: rgba(15, 23, 42, 0.08);
-          --rtx-tick-chart-frame: #334155;
-          --rtx-tick-chart-separator: #94a3b8;
+          --rtx-tick-chart-bid: var(--color-quote-up, #1d4ed8);
+          --rtx-tick-chart-ask: var(--color-loss, #f04438);
+          --rtx-tick-chart-plot: var(--rtx-light-panel, #ffffff);
+          --rtx-tick-chart-grid: rgba(16, 24, 40, 0.08);
+          --rtx-tick-chart-frame: var(--rtx-light-text-secondary, #344054);
+          --rtx-tick-chart-separator: var(--rtx-light-border-strong, #d0d5dd);
           --rtx-tick-chart-text: #0f172a;
           --rtx-tick-chart-tag-text: #ffffff;
           display: flex;

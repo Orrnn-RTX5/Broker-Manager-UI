@@ -3,38 +3,51 @@ import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import DealsDataGrid from './components/DealsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
 import useSymbolStore from '../../store/symbolStore';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
+import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
 
 const DEAL_COLUMNS = [
   { key: 'ticket',       label: 'Ticket' },
-  { key: 'orderTicket',  label: 'Order Ticket' },
+  { key: 'orderTicket',  label: 'Order' },
   { key: 'login',        label: 'Login' },
   { key: 'username',     label: 'Username' },
   { key: 'accountName',  label: 'Account' },
   { key: 'accountGroup', label: 'Group' },
   { key: 'symbol',       label: 'Symbol' },
   { key: 'action',       label: 'Action' },
-  { key: 'entry',        label: 'Entry' },
   { key: 'volume',       label: 'Volume' },
   { key: 'price',        label: 'Price' },
   { key: 'profit',       label: 'Profit' },
-  { key: 'commission',   label: 'Commission' },
+  { key: 'commission',   label: 'Comm.' },
   { key: 'swap',         label: 'Swap' },
   { key: 'fee',          label: 'Fee' },
   { key: 'time',         label: 'Time' },
   { key: 'comment',      label: 'Comment' },
 ];
 
+const ACTION_FILTER_MAP = {
+  'All Actions': 'All Actions',
+  Buy: 'deal_buy',
+  Sell: 'deal_sell',
+};
+
+const ENTRY_FILTER_MAP = {
+  'All Entries': 'All Entries',
+  'Entry In': 'entry_in',
+  'Entry Out': 'entry_out',
+};
+
 const DealsPage = () => {
+  const headerRef = useOwnerConsoleAutoCollapse('.deals-filters');
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('All Actions');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [entryFilter, setEntryFilter] = useState('All Entries');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const storeSymbols = useSymbolStore((state) => state.symbols);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
 
   const ctl = useGridPageController({
     columns: DEAL_COLUMNS,
@@ -49,7 +62,7 @@ const DealsPage = () => {
 
   const symbolOptions = useMemo(() => {
     const dynamicSymbols = (ctl.grid?.rows || [])
-      .map((row) => row?.symbol)
+      .map((row) => String(row?.symbol || '').trim().toUpperCase())
       .filter(Boolean);
     const catalogSymbols = Object.keys(storeSymbols || {});
     return Array.from(new Set([
@@ -68,39 +81,38 @@ const DealsPage = () => {
     return getDealActions(ctl.contextMenuProps.selectedRow);
   }, [ctl.contextMenuProps.selectedRow, getDealActions]);
 
-  return (
-    <div className="deals-page w-full h-full flex flex-col" {...ctl.pageProps}>
-      <div className="deals-header flex items-center justify-between gap-2">
-        <div className="deals-heading min-w-0">
-          <div className="flex flex-col">
-            <h1 className="font-semibold deals-title" style={{ color: 'var(--text)', fontSize: '11px', lineHeight: '15px' }}>Dealing</h1>
-            <p className="deals-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '13px', marginTop: '4px' }}>Right-click for actions · Double-click a row to update</p>
-          </div>
-        </div>
-        <div className="deals-filters flex items-center gap-2 shrink-0">
-          <FilterDropdown value={actionFilter} className="w-[110px]" fontSize="10px" options={['All Actions', 'deal_buy', 'deal_sell']} onChange={setActionFilter} />
-          <FilterDropdown value={symbolFilter} className="w-[120px]" fontSize="10px" options={symbolOptions} onChange={setSymbolFilter} />
-          <FilterDropdown value={entryFilter} className="w-[120px]" fontSize="10px" options={['All Entries', 'entry_in', 'entry_out']} onChange={setEntryFilter} />
-        </div>
-      </div>
+  const mappedActionFilter = ACTION_FILTER_MAP[actionFilter] || actionFilter;
+  const mappedEntryFilter = ENTRY_FILTER_MAP[entryFilter] || entryFilter;
 
-      <div className="deals-search relative w-full max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input
-          type="text"
-          placeholder="Search login, ticket, symbol…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm h-7"
-          style={{ paddingLeft: 32, fontSize: '10px' }}
-        />
+  return (
+    <div className="deals-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden" {...ctl.pageProps}>
+      <div ref={headerRef} className="deals-header flex flex-row items-center justify-between gap-2 shrink-0">
+        <div className="deals-heading flex items-center gap-2 min-w-0">
+          <h1 className="font-semibold deals-title" style={{ color: 'var(--text)' }}>Dealing</h1>
+        </div>
+        <div className="deals-filters flex items-center gap-2 flex-nowrap shrink-0">
+          <div className="deals-search relative w-[220px] shrink-0">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+            <input
+              type="text"
+              placeholder="Search login, ticket, symbol…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ui-input ui-input-sm h-7 w-full"
+              style={{ paddingLeft: 32 }}
+            />
+          </div>
+          <FilterDropdown value={actionFilter} className="w-[115px]" options={['All Actions', 'Buy', 'Sell']} onChange={setActionFilter} />
+          <FilterDropdown value={symbolFilter} className="w-[120px]" options={symbolOptions} onChange={setSymbolFilter} />
+          <FilterDropdown value={entryFilter} className="w-[120px]" options={['All Entries', 'Entry In', 'Entry Out']} onChange={setEntryFilter} />
+        </div>
       </div>
 
       <DealsDataGrid
         search={search}
-        actionFilter={actionFilter}
+        actionFilter={mappedActionFilter}
         symbolFilter={symbolFilter}
-        entryFilter={entryFilter}
+        entryFilter={mappedEntryFilter}
         {...ctl.gridProps}
       />
 
@@ -108,13 +120,11 @@ const DealsPage = () => {
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           grid={{ ...ctl.grid, extraActions: dealerActions }}
-          onNewClient={() => setIsNewAccountOpen(true)}
+          onNewClient={() => openAccountScreen()}
         />
       )}
 
       {renderDialog()}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

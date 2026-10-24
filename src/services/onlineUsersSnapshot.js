@@ -78,6 +78,7 @@ export const fetchOnlineUsersSnapshot = async (load, { maxAgeMs = REUSE_WINDOW_M
     .finally(() => {
       if (inflight?.promise === promise) inflight = null;
     });
+  promise.catch(() => undefined);
   inflight = { scope, promise };
   return promise;
 };

@@ -5,9 +5,9 @@ import FilterDropdown from '../../components/FilterDropdown';
 import ClientsDataGrid from './components/ClientsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import ClientDetailsModal from '../../components/Popups/ClientDetailsModal';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridController from '../../hooks/useGridController';
 import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { rowsToCSV, rowsToTSV, rowsToJSON, copyToClipboard, downloadBlob, stampedFilename } from '../../utils/gridUtils';
 import { ALL_COUNTRIES } from '../../utils/countries';
 
@@ -32,7 +32,7 @@ const ClientsDashboard = () => {
 
   const [contextMenu, setContextMenu] = useState(null);
   const [detailsClient, setDetailsClient] = useState(null);
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [currentRows, setCurrentRows] = useState([]);
 
   // Filtered rows are lifted from the grid so the context menu operates on them.
@@ -93,36 +93,30 @@ const ClientsDashboard = () => {
 
   return (
     <div
-      className="clients-page p-6 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden"
+      className="clients-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden"
       onContextMenu={handleContextMenu}
     >
       <div ref={headerRef} className="clients-header flex flex-row items-center justify-between gap-2 shrink-0">
         <div className="clients-heading flex items-center gap-2 min-w-0">
-          <div>
-            <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '11px', lineHeight: '18px' }}>Clients</h1>
-            <p className="clients-subtitle" style={{ color: 'var(--text-3)', fontSize: '10px', lineHeight: '14px' }}>
-              Right-click for actions · Double-click a row for details
-            </p>
-          </div>
+          <h1 className="clients-title font-semibold" style={{ color: 'var(--text)', fontSize: '11px', lineHeight: '18px' }}>Clients</h1>
         </div>
 
         <div className="clients-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
+          <div className="clients-search relative w-[220px] shrink-0">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+            <input
+              type="text"
+              placeholder="Search name, email, ID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ui-input ui-input-sm w-full"
+              style={{ paddingLeft: 32, fontSize: '10px' }}
+            />
+          </div>
           <FilterDropdown value={typeFilter} fontSize="10px" className="w-[110px]" options={['All Types', 'Individual', 'Corporate', 'IB']} onChange={setTypeFilter} />
           <FilterDropdown value={statusFilter} fontSize="10px" className="w-[125px]" options={['All Statuses', 'Active', 'Inactive', 'Unregistered', 'Pending']} onChange={setStatusFilter} />
           <FilterDropdown value={countryFilter} fontSize="10px" className="w-[135px]" options={['All Countries', ...ALL_COUNTRIES]} onChange={setCountryFilter} />
         </div>
-      </div>
-
-      <div className="clients-search relative w-full max-w-xs shrink-0">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input
-          type="text"
-          placeholder="Search name, email, ID…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="ui-input ui-input-sm"
-          style={{ paddingLeft: 32, fontSize: '10px' }}
-        />
       </div>
 
       <ClientsDataGrid
@@ -144,7 +138,7 @@ const ClientsDashboard = () => {
           rows={currentRows}
           selectedRow={contextMenu.row}
           entityLabel="client"
-          onNewClient={() => setIsNewAccountOpen(true)}
+          onNewClient={() => openAccountScreen()}
           onOpenDetails={(row) => setDetailsClient(row)}
           onCopyAs={handleCopyAs}
           onExport={handleExport}
@@ -154,8 +148,6 @@ const ClientsDashboard = () => {
       {detailsClient && (
         <ClientDetailsModal client={detailsClient} onClose={() => setDetailsClient(null)} />
       )}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

@@ -136,11 +136,35 @@ export const buildBrokerDiscoveryUrl = (useDevProxy = shouldUseManagerDevProxy()
   return discoveryBaseUrl ? `${discoveryBaseUrl}${path}` : '';
 };
 
+const buildConfiguredRuntimeBrokerEntry = () => {
+  const brokerId = String(getRuntimeBrokerId() || '').trim();
+  const apiHost = String(getRuntimeConfigValue(['API_HOST', 'VITE_API_HOST']) || '').trim();
+  if (!brokerId || !apiHost) return null;
+
+  const name = getRuntimeConfigValue(['BROKER_NAME', 'VITE_BROKER_NAME']) || brokerId;
+  const defaultMt5Server = String(getRuntimeConfigValue(['DEFAULT_MT5_SERVER', 'VITE_DEFAULT_MT5_SERVER']) || '').trim();
+  const explicitServer = String(getRuntimeConfigValue(['BROKER_SERVER', 'VITE_BROKER_SERVER']) || '').trim();
+  const server = explicitServer
+    || (defaultMt5Server ? (defaultMt5Server.includes(':') ? defaultMt5Server : `${defaultMt5Server}:443`) : brokerId);
+
+  return normalizeBrokerInfo({
+    broker_id: brokerId,
+    name,
+    broker_name: name,
+    status: 'active',
+    server,
+    backend_url: apiHost,
+    server_url: apiHost,
+    server_ip: defaultMt5Server,
+    default_mt5_server: defaultMt5Server,
+  });
+};
+
 // ---------------------------------------------------------------------------
 // fetchBrokerList — returns array of broker objects (name + id only shown in UI)
 // Calls:  GET {DISCOVERY_BASE_URL}/api/v2/broker/servers
 // ---------------------------------------------------------------------------
-export const fetchBrokerList = async () => {
+const loadBrokerList = async () => {
   if (USE_MOCK_DISCOVERY) {
     // Local fallback only; set VITE_USE_MOCK_DISCOVERY=true to use it.
     return buildMockBrokerList().filter((b) => b.status === 'active').map((broker) => normalizeBrokerInfo(broker));
@@ -162,11 +186,15 @@ export const fetchBrokerList = async () => {
       }
     );
   } catch {
+    const configuredBroker = buildConfiguredRuntimeBrokerEntry();
+    if (configuredBroker) return [configuredBroker];
     throw new Error('Cannot reach platform. Try again.');
   }
 
   const data = await readJson(response);
   if (!response.ok) {
+    const configuredBroker = buildConfiguredRuntimeBrokerEntry();
+    if (configuredBroker) return [configuredBroker];
     throw new Error(getResponseMessage(data) || 'Failed to load broker list.');
   }
 
@@ -185,6 +213,18 @@ export const fetchBrokerList = async () => {
   }
 
   return usable;
+};
+
+let pendingBrokerList;
+export const fetchBrokerList = () => {
+  // Login screens and development effect replay share discovery in flight.
+  // Clear after settlement so Retry always checks the current platform list.
+  if (!pendingBrokerList) {
+    pendingBrokerList = loadBrokerList().finally(() => {
+      pendingBrokerList = undefined;
+    });
+  }
+  return pendingBrokerList;
 };
 
 // ---------------------------------------------------------------------------
@@ -489,10 +529,13 @@ export const getBrokerDisplayServerName = (broker = {}) => {
   return [
     broker.server_name,
     broker.display_server_name,
+    normalized.default_mt5_server,
     broker.default_mt5_server,
+    normalized.mt5_server,
     broker.mt5_server,
     normalized.server_ip,
     resolveBrokerDefaultMt5Server(normalized, normalized.backend_url),
+    normalized.server_url,
     broker.server_url,
     broker.broker_name,
     broker.name,
