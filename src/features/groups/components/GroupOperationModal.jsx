@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { groupOperationRequest, readSavedOperation, saveOperation } from '../groupOperations.js';
+import { groupOperationErrorMessage, groupOperationRequest, readSavedOperation, saveOperation } from '../groupOperations.js';
 import { canRefreshRejectedOperation, createGroupOperationKey, isTerminalOperation, settingDifferences } from '../groupOperationState.js';
 import './GroupOperationModal.css';
 
@@ -51,7 +51,7 @@ export default function GroupOperationModal({ selection, moveOnly = false, initi
     setPreview(null); setError(''); setBusy(true);
     groupOperationRequest('/preview', request, controller.signal)
       .then(data => { if (!controller.signal.aborted) setPreview(data); })
-      .catch(err => { if (!controller.signal.aborted) setError(err.message); })
+      .catch(err => { if (!controller.signal.aborted) setError(groupOperationErrorMessage(err)); })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();
   }, [request, operation, submission, refresh]);
@@ -89,7 +89,7 @@ export default function GroupOperationModal({ selection, moveOnly = false, initi
       saveOperation({ id: next.id, selection, request, submission: payload });
       setOperation({ id: next.id, state: 'queued' });
     } catch (err) {
-      setError(err.message);
+      setError(groupOperationErrorMessage(err));
       if (canRefreshRejectedOperation(err)) {
         setSubmission(null); saveOperation(null); setPreview(null); setConfirmation('');
       }

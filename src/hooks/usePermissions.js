@@ -88,12 +88,20 @@ export const usePermissions = () => {
     .map((value) => (value === undefined || value === null ? '' : String(value)))
     .join(':');
 
+  // Backend-authoritative group operations gate from manager auth/me. undefined when the
+  // field is absent, so callers can fall back to the deprecated runtime-config list.
+  const groupOperationsEnabled = typeof data?.group_operations_enabled === 'boolean'
+    ? data.group_operations_enabled
+    : undefined;
+
   return {
     isAdmin,
     role: manager.role,
     accessRevision,
     manager,
     permissions,
+    groupOperationsEnabled,
+    groupOperationsLoading: isLoading,
     loading: isLoading && !isAdmin,
     resolved,
     hasPermission,

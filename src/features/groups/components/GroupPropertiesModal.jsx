@@ -19,8 +19,10 @@ import {
   filterGroupSymbolRows,
   isGroupSymbolEditable,
   normalizeGroupSymbolOverrides,
+  stageGroupSymbolStopsOverride,
   summarizeGroupSymbols,
   toggleStagedOverride,
+  validateStopsLevelOverride,
 } from '../groupSymbolOverrides.js';
 import AccountDetailsModal from '../../../components/Popups/AccountDetailsModal';
 import GroupAccountsTab from './GroupAccountsTab';
@@ -312,18 +314,58 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
               )}
               <div className="groups-props-list groups-symbols-list">
                   <table className="ui-grid groups-props-grid" aria-label={`Symbols for ${form.name}`}>
-                    <thead><tr><th scope="col">Symbol</th><th scope="col">Global</th><th scope="col">Group</th><th scope="col">Effective</th><th scope="col">Action</th></tr></thead>
+                    <thead><tr><th scope="col">Symbol</th><th scope="col">Global</th><th scope="col">Group</th><th scope="col">Stops (pts)</th><th scope="col">Effective</th><th scope="col">Action</th></tr></thead>
                     <tbody>
-                      {overridesLoading && <tr><td colSpan={5} className="groups-symbols-state"><Loader2 size={14} className="animate-spin" /> Loading every symbol…</td></tr>}
-                      {!overridesLoading && overridesError && <tr><td colSpan={5} className="groups-symbols-state is-error">{overridesError} <button type="button" onClick={loadSymbolOverrides}>Retry</button></td></tr>}
+                      {overridesLoading && <tr><td colSpan={6} className="groups-symbols-state"><Loader2 size={14} className="animate-spin" /> Loading every symbol…</td></tr>}
+                      {!overridesLoading && overridesError && <tr><td colSpan={6} className="groups-symbols-state is-error">{overridesError} <button type="button" onClick={loadSymbolOverrides}>Retry</button></td></tr>}
                       {!overridesLoading && !overridesError && visibleSymbolRows.map((row) => {
                         const editable = isGroupSymbolEditable(row);
                         const status = GROUP_SYMBOL_STATUS[row.status];
+                        const hasStopsOverride = row.stopsLevelPoints !== null && row.stopsLevelPoints !== undefined;
                         return (
                           <tr key={row.symbol} className={row.staged ? 'groups-symbols-staged' : ''}>
                             <td title={row.category || undefined}><span>{row.symbol}</span>{row.category ? <small>{row.category}</small> : null}</td>
                             <td className={row.globalEnabled ? 'is-on' : 'is-off'}>{row.globalEnabled ? 'Enabled' : 'Disabled'}</td>
                             <td title={status.hint}>{status.label}{row.staged ? ' *' : ''}</td>
+                            <td>
+                              <div className="groups-props-inline">
+                                <input
+                                  type="number"
+                                  className="ui-input ui-input-sm groups-props-number"
+                                  min="0"
+                                  max="2147483647"
+                                  step="1"
+                                  disabled={!editable || !canManageGroups}
+                                  value={hasStopsOverride ? String(row.stopsLevelPoints) : ''}
+                                  placeholder={`Inherit (${row.instrumentStopsLevelPoints ?? 0})`}
+                                  aria-label={`Stops level points for ${row.symbol}`}
+                                  onChange={(event) => {
+                                    const raw = event.target.value;
+                                    const check = validateStopsLevelOverride(raw);
+                                    if (check.error) {
+                                      setError(`${row.symbol}: ${check.error}`);
+                                      return;
+                                    }
+                                    setError(null);
+                                    setStagedOverrides((current) => stageGroupSymbolStopsOverride(current, row, check.value));
+                                  }}
+                                />
+                                {hasStopsOverride && editable && canManageGroups && (
+                                  <button
+                                    type="button"
+                                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                                    aria-label={`Reset stops level for ${row.symbol}`}
+                                    title={`Reset ${row.symbol} stops level to inherit instrument default (${row.instrumentStopsLevelPoints ?? 0} pts)`}
+                                    onClick={() => {
+                                      setError(null);
+                                      setStagedOverrides((current) => stageGroupSymbolStopsOverride(current, row, null));
+                                    }}
+                                  >
+                                    Inherit
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                             <td className={row.effective ? 'is-on' : 'is-off'}>{row.effective ? 'ON' : 'OFF'}</td>
                             <td>
                               <button
@@ -339,7 +381,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                           </tr>
                         );
                       })}
-                      {!overridesLoading && !overridesError && overridesView && visibleSymbolRows.length === 0 && <tr><td colSpan={5} className="groups-symbols-state">No symbols match.</td></tr>}
+                      {!overridesLoading && !overridesError && overridesView && visibleSymbolRows.length === 0 && <tr><td colSpan={6} className="groups-symbols-state">No symbols match.</td></tr>}
                     </tbody>
                   </table>
               </div>

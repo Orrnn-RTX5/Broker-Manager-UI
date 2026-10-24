@@ -2,7 +2,7 @@ import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import GroupOperationModal from './components/GroupOperationModal';
-import { groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
+import { GROUP_OPERATIONS_DISABLED_MESSAGE, groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGroupList } from '../../hooks/useGroupList';
 import { ArrowLeft, Activity, Settings, Database, Clock, BarChart2, ArrowRightLeft, Loader, AlertTriangle } from 'lucide-react';
@@ -16,9 +16,11 @@ const GroupDetailsPage = () => {
   const groupName = getGroupNameFromRouteParam(groupNameParam);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canAct } = usePermissions();
+  const { canAct, groupOperationsEnabled: sessionGroupOperationsEnabled, groupOperationsLoading: sessionGroupOperationsLoading } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const canViewPositions = canAct(PERMISSIONS.VIEW_POSITIONS);
+  // null while the session answer is still loading: the Move button is disabled, so clicks are not dropped silently.
+  const operationsEnabled = groupOperationsEnabled(sessionGroupOperationsEnabled, sessionGroupOperationsLoading);
   const { groups, loading, error } = useGroupList({
     limit: 20,
     offset: 0,
@@ -58,7 +60,10 @@ const GroupDetailsPage = () => {
 
   const handleToggleMoveInput = () => {
     if (!canManageGroups) { showResult.error('Your role does not have permission to manage groups.'); return; }
-    if (!groupOperationsEnabled() && !readSavedOperation()) { showResult.error('Group operations are not enabled for this broker.'); return; }
+    if (!readSavedOperation()) {
+      if (operationsEnabled === null) return; // still loading: show nothing
+      if (!operationsEnabled) { showResult.error(GROUP_OPERATIONS_DISABLED_MESSAGE); return; }
+    }
     setShowOperation(true);
   };
   if (loading) {
@@ -196,6 +201,7 @@ const GroupDetailsPage = () => {
             <button
               className="ui-btn ui-btn-ghost ui-btn-sm p-1"
               title="Move accounts to another group"
+              disabled={operationsEnabled === null}
               onClick={handleToggleMoveInput}
             >
               <ArrowRightLeft size={13} />

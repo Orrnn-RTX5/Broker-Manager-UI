@@ -5,7 +5,7 @@ import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Folder, FolderOpen, Fo
 import GroupPropertiesModal from './components/GroupPropertiesModal';
 import GroupPermissionNotice from './components/GroupPermissionNotice';
 import GroupOperationModal from './components/GroupOperationModal';
-import { groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
+import { GROUP_OPERATIONS_DISABLED_MESSAGE, groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
 import { getSidebarAccountsQueryOptions } from '../../services/sidebarAccounts.js';
 import { usePermissions } from '../../hooks/usePermissions';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
@@ -60,7 +60,7 @@ const GroupsPage = () => {
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
   const queryClient = useQueryClient();
-  const { canAct } = usePermissions();
+  const { canAct, groupOperationsEnabled: sessionGroupOperationsEnabled, groupOperationsLoading: sessionGroupOperationsLoading } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const openGroupScreen = useMultiScreenStore((state) => state.openGroupScreen);
   const folder = getGroupsFolderFromSearch(location.search);
@@ -84,7 +84,8 @@ const GroupsPage = () => {
   const [selectedLogin, setSelectedLogin] = useState(null);
   const [deleteSelection, setDeleteSelection] = useState(null);
   const deleting = Boolean(deleteSelection);
-  const operationsEnabled = groupOperationsEnabled();
+  // null while the session answer is still loading: the button stays disabled and no toast is shown.
+  const operationsEnabled = groupOperationsEnabled(sessionGroupOperationsEnabled, sessionGroupOperationsLoading);
   const [permissionAction, setPermissionAction] = useState(null);
   const searchInputRef = useRef(null);
   const handlersRef = useRef({});
@@ -251,7 +252,8 @@ const GroupsPage = () => {
     if (!node || !requireManage('delete')) return;
     const saved = readSavedOperation();
     if (saved) { setDeleteSelection(saved.selection); return; }
-    if (!operationsEnabled) { showResult.error('Group operations are not enabled for this broker.'); return; }
+    if (operationsEnabled === null) return; // still loading: show nothing
+    if (!operationsEnabled) { showResult.error(GROUP_OPERATIONS_DISABLED_MESSAGE); return; }
     setDeleteSelection(rowIsBranch(node) ? { folder: node.path } : { sources: [node.name] });
   };
 

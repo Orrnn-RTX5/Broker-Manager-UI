@@ -18,6 +18,7 @@ const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) =
     digits: existing?.digits ?? 5,
     contractSize: existing?.contractSize ?? 100000,
     spread: existing?.spread ?? 0,
+    stopsLevelPoints: existing?.stops_level_points ?? existing?.stopsLevelPoints ?? 0,
     calcMode: existing?.calcMode || '',
     category: existing?.category || '',
     enabled: existing?.enabled ?? true,
@@ -32,10 +33,30 @@ const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) =
     setSaving(true);
     setErr('');
     try {
+      const rawStops = form.stopsLevelPoints;
+      const stopsLevelPoints = rawStops === '' || rawStops === null || rawStops === undefined ? 0 : Number(rawStops);
+      if (!Number.isInteger(stopsLevelPoints) || stopsLevelPoints < 0 || stopsLevelPoints > 2147483647) {
+        throw new Error('Stops level points must be a whole number between 0 and 2147483647.');
+      }
       if (isEdit) {
-        await symbolUpdate({ symbol: form.symbol, description: form.description, digits: form.digits, contractSize: form.contractSize, spread: form.spread });
+        await symbolUpdate({
+          symbol: form.symbol,
+          description: form.description,
+          digits: form.digits,
+          contractSize: form.contractSize,
+          spread: form.spread,
+          stops_level_points: stopsLevelPoints,
+        });
       } else {
-        await symbolAdd({ symbol: form.symbol, description: form.description, digits: form.digits, contractSize: form.contractSize, spread: form.spread, category: form.category });
+        await symbolAdd({
+          symbol: form.symbol,
+          description: form.description,
+          digits: form.digits,
+          contractSize: form.contractSize,
+          spread: form.spread,
+          stops_level_points: stopsLevelPoints,
+          category: form.category,
+        });
       }
       onSuccess();
     } catch (e) {
@@ -71,9 +92,25 @@ const SymbolFormModal = ({ symbol: existing, categories, onClose, onSuccess }) =
               <input type="number" className="ui-input ui-input-sm" value={form.spread} onChange={e => set('spread', +e.target.value)} min={0} />
             </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Contract Size</label>
-            <input type="number" className="ui-input ui-input-sm" value={form.contractSize} onChange={e => set('contractSize', +e.target.value)} min={1} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Contract Size</label>
+              <input type="number" className="ui-input ui-input-sm" value={form.contractSize} onChange={e => set('contractSize', +e.target.value)} min={1} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Stops Level (pts)</label>
+              <input
+                type="number"
+                className="ui-input ui-input-sm"
+                aria-label="Stops Level (pts)"
+                placeholder="0 (no minimum)"
+                value={form.stopsLevelPoints}
+                onChange={e => set('stopsLevelPoints', e.target.value === '' ? '' : +e.target.value)}
+                min={0}
+                max={2147483647}
+                step={1}
+              />
+            </div>
           </div>
           {!isEdit && (
             <div className="flex flex-col gap-1">
@@ -440,6 +477,7 @@ const SymbolsTab = ({ actionsHost }) => {
               <col className="symbols-column-digits" />
               <col className="symbols-column-contract" />
               <col className="symbols-column-spread" />
+              <col className="symbols-column-stops" />
               <col className="symbols-column-calc-mode" />
               <col className="symbols-column-status" />
               <col className="symbols-column-actions" />
@@ -452,15 +490,16 @@ const SymbolsTab = ({ actionsHost }) => {
                 <th scope="col">Digits</th>
                 <th scope="col">Contract Size</th>
                 <th scope="col">Spread</th>
+                <th scope="col">Stops (pts)</th>
                 <th scope="col">Calc Mode</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rowWindow.top > 0 && <tr aria-hidden="true"><td colSpan={9} style={{ height: rowWindow.top, padding: 0, border: 0 }} /></tr>}
+              {rowWindow.top > 0 && <tr aria-hidden="true"><td colSpan={10} style={{ height: rowWindow.top, padding: 0, border: 0 }} /></tr>}
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>No symbols found.</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>No symbols found.</td></tr>
               ) : filtered.slice(rowWindow.start, rowWindow.end).map((s, index) => (
                 <tr key={s.symbol} aria-rowindex={rowWindow.start + index + 2}>
                   <td className="symbol-name-cell" style={{ color: 'var(--accent-text)', fontWeight: 400 }}>
@@ -481,6 +520,7 @@ const SymbolsTab = ({ actionsHost }) => {
                     {s.spread ?? '—'}
                     {s.spreadMarkupPips > 0 && <span className="ml-1 text-[10px]" style={{ color: 'var(--warning)' }}>(+{s.spreadMarkupPips})</span>}
                   </td>
+                  <td style={{ color: 'var(--text-2)' }}>{s.stops_level_points ?? s.stopsLevelPoints ?? 0}</td>
                   <td style={{ color: 'var(--text-2)' }}>{s.calcMode || '—'}</td>
                   <td>
                     <span className={`ui-status ${typeof s.enabled !== 'boolean' ? '' : s.enabled ? 'ui-status-ok' : 'ui-status-danger'}`}>
@@ -512,7 +552,7 @@ const SymbolsTab = ({ actionsHost }) => {
                   </td>
                 </tr>
               ))}
-              {rowWindow.bottom > 0 && <tr aria-hidden="true"><td colSpan={9} style={{ height: rowWindow.bottom, padding: 0, border: 0 }} /></tr>}
+              {rowWindow.bottom > 0 && <tr aria-hidden="true"><td colSpan={10} style={{ height: rowWindow.bottom, padding: 0, border: 0 }} /></tr>}
             </tbody>
           </table>
         )}

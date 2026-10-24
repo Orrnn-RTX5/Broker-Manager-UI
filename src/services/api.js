@@ -1700,7 +1700,7 @@ export const dynamicLeverageDelete = (tierId) => apiClient.get(`/DynamicLeverage
 
 export const commissionScheduleList = (symbol) => apiClient.get(`/CommissionScheduleList?${query({ symbol })}`);
 export const commissionScheduleCreate = (body) => apiClient.post('/CommissionScheduleCreate', body);
-export const commissionScheduleDelete = (scheduleId) => apiClient.get(`/CommissionScheduleDelete?${query({ schedule_id: scheduleId })}`);
+export const commissionScheduleDelete = (scheduleId) => apiClient.post('/CommissionScheduleDelete', { schedule_id: scheduleId });
 
 export const swapFreeGroupList = () => apiClient.get('/SwapFreeGroupList');
 export const swapFreeGroupSet = (body) => apiClient.post('/SwapFreeGroupSet', body);

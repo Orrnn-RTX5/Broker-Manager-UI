@@ -5,7 +5,7 @@ export const isTerminalOperation = state => ['succeeded', 'failed'].includes(sta
 // committed before the response was lost.
 export const canRefreshRejectedOperation = error => [
   'invalid_request', 'stale_preview', 'invalid_preview', 'confirmation_required',
-  'validation_failed', 'blocked', 'operation_conflict', 'feature_disabled',
+  'validation_failed', 'blocked', 'operation_conflict', 'feature_disabled', 'GROUP_LIFECYCLE_NOT_ENTITLED',
 ].includes(error?.code) && error?.status >= 400 && error?.status < 600;
 
 export function validSavedOperation(value) {

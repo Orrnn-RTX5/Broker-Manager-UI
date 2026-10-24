@@ -2,21 +2,17 @@
 //
 // The new-group wizard sends only symbol NAME lists (symbolsAllowed /
 // symbolsBlocked) on POST /GroupCreate. It never sends per-symbol financial
-// terms (spread markup, commission, swap multiplier, per-symbol trade gate)
-// at create time, and it never sends `symbolSettings` in the creation
-// payload: the backend stores per-symbol terms through its canonical
-// group-symbol collection endpoints, not through GroupCreate/GroupUpdate.
+// terms (spread markup, commission, swap multiplier, per-symbol trade gate,
+// stops_level_points) at create time, and it never sends `symbolSettings` in
+// the creation payload: the backend stores per-symbol terms through its
+// canonical group-symbol collection endpoints, not through GroupCreate/GroupUpdate.
 //
 // Canonical post-create path (existing backend contract, no new API):
 //   GET  /GroupSymbolsGet?group=<name>          -> { group, symbols[], blocked[] }
 //   POST /GroupSymbolsSave { group, symbols[] } -> whole-list atomic replace
 // Each symbols[] entry uses only these canonical keys:
-//   { symbol, spread_markup, commission, swap_multiplier, trade_allowed }
+//   { symbol, spread_markup, commission, swap_multiplier, trade_allowed, stops_level_points }
 // Omitted numeric/gate keys take the no-override defaults on the server.
-// The enable/disable-only override endpoints used by the properties modal
-// (/GroupSymbolOverridesGet/Save with { group, changes: [{ symbol,
-// trade_allowed }] }) cannot carry financial terms and must not be extended
-// with invented keys.
 //
 // This module only builds/shapes that existing contract for safe post-create
 // use and documents the gap. It introduces no new backend endpoint, no
@@ -32,7 +28,7 @@ export const GROUP_SYMBOL_OVERRIDES_SAVE_ENDPOINT = '/GroupSymbolOverridesSave';
 export const NEW_GROUP_SYMBOL_TERMS_GAP =
   'The new-group wizard does not set per-symbol financial terms at create time. '
   + 'It sends only symbol name lists (symbolsAllowed/symbolsBlocked). '
-  + 'Configure per-symbol spread, commission, swap, or trade terms after creation '
+  + 'Configure per-symbol spread, commission, swap, stops level, or trade terms after creation '
   + 'through the existing canonical GroupSymbolsSave collection endpoint. '
   + 'No new backend contract is introduced here.';
 
@@ -84,6 +80,15 @@ export const buildGroupSymbolsSavePayload = (group, entries = []) => {
       if (typeof entry.trade_allowed !== 'boolean') throw new Error(`${symbol}: trade_allowed must be a boolean.`);
       item.trade_allowed = entry.trade_allowed;
     }
+    if (entry?.stops_level_points !== undefined) {
+      if (
+        entry.stops_level_points !== null
+        && (!isFiniteNumber(entry.stops_level_points) || !Number.isInteger(entry.stops_level_points) || entry.stops_level_points < 0 || entry.stops_level_points > 2147483647)
+      ) {
+        throw new Error(`${symbol}: stops_level_points must be null or an integer between 0 and 2147483647.`);
+      }
+      item.stops_level_points = entry.stops_level_points;
+    }
     symbols.push(item);
   }
   return { group: name, symbols };
@@ -94,7 +99,7 @@ export const isCanonicalGroupSymbolsSavePayload = (payload) => {
   if (!payload || typeof payload !== 'object') return false;
   if (String(payload.group ?? '').trim() === '') return false;
   if (!Array.isArray(payload.symbols)) return false;
-  const allowed = new Set(['symbol', 'spread_markup', 'commission', 'swap_multiplier', 'trade_allowed']);
+  const allowed = new Set(['symbol', 'spread_markup', 'commission', 'swap_multiplier', 'trade_allowed', 'stops_level_points']);
   return payload.symbols.every((item) =>
     item && typeof item === 'object'
     && typeof item.symbol === 'string' && SYMBOL_PATTERN.test(item.symbol)
