@@ -1,4 +1,4 @@
-# RTX5 Broker Manager UI — Agent Guidelines
+# Broker Manager UI — Agent Guidelines
 
 ## Typography Standard (Universal 11px / 400 Rule)
 
