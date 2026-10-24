@@ -3,9 +3,9 @@ import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import OrdersDataGrid from './components/OrdersDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 
 const ORDER_COLUMNS = [
   { key: 'ticket',    label: 'Ticket' },
@@ -29,7 +29,7 @@ const OrdersPage = () => {
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
 
   const ctl = useGridPageController({
     columns: ORDER_COLUMNS,
@@ -104,13 +104,11 @@ const OrdersPage = () => {
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           grid={{ ...ctl.grid, extraActions: dealerActions }}
-          onNewClient={() => setIsNewAccountOpen(true)}
+          onNewClient={() => openAccountScreen()}
         />
       )}
 
       {renderDialog()}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

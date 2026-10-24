@@ -5,6 +5,7 @@ import {
   isManagerMarketFeed,
 } from '../config/endpoints';
 import { getRuntimeConfigValue } from '../config/backendTarget';
+import authService from '../services/authService';
 import { prepareMarketFeed } from '../services/marketFeed';
 import {
   fetchSymbolMetadataFallback,
@@ -21,6 +22,10 @@ import {
   resolveFallbackFeedFields,
   resolveTickFeedFields,
 } from '../utils/symbolFeedLifecycle';
+
+const getSymbolStorageBrokerScope = () => (
+  getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID', 'FEED_BROKER_ID', 'VITE_FEED_BROKER_ID']).toLowerCase()
+);
 
 const WS_CONNECT_TIMEOUT_MS = 10_000;
 const WS_RECONNECT_DELAY_MS = 5_000;
@@ -422,12 +427,13 @@ const useSymbolStore = create(
       feedSymbolNames: null,
 
       refreshFeedInventory: async (socket) => {
-        if (!isManagerMarketFeed()) return;
+        if (isManagerMarketFeed()) return;
         try {
           const status = await fetchFeedStatus();
-          const brokerId = getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID']);
+          const brokerId = getRuntimeConfigValue(['BROKER_ID', 'VITE_BROKER_ID']).toLowerCase();
+          const statusBrokerId = String(status?.broker_id || '').trim().toLowerCase();
           // Only a successful inventory for this broker may prune saved quotes.
-          if (get().ws !== socket || !brokerId || status.broker_id !== brokerId
+          if (get().ws !== socket || !brokerId || statusBrokerId !== brokerId
             || !Array.isArray(status.available_symbols) || status.available_symbols.length === 0) return;
           const names = status.available_symbols.filter((name) => typeof name === 'string' && name.trim());
           if (names.length === 0) return;
@@ -579,8 +585,11 @@ const useSymbolStore = create(
         }
 
         const generation = feedGeneration;
+        const canReconnectFeed = () => (
+          !isManagerMarketFeed() || authService.getSessionStatus().authenticated
+        );
         const connect = async () => {
-          if (generation !== feedGeneration) return;
+          if (generation !== feedGeneration || !canReconnectFeed()) return;
           const existingSocket = get().ws;
           if (isActiveFeedSocket(existingSocket)) return;
 
@@ -604,6 +613,7 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
+            if (!canReconnectFeed()) return;
             get().loadSymbolFallback(message, { setFeedError: true });
             if (!reconnectTimer) {
               reconnectTimer = setTimeout(() => {
@@ -645,7 +655,7 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
-            if (!reconnectTimer) {
+            if (canReconnectFeed() && !reconnectTimer) {
               reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connect();
@@ -666,7 +676,9 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
-            get().loadSymbolFallback(message, { setFeedError: true });
+            if (canReconnectFeed()) {
+              get().loadSymbolFallback(message, { setFeedError: true });
+            }
 
             try {
               ws.close();
@@ -674,7 +686,7 @@ const useSymbolStore = create(
               // The reconnect timer below will create a fresh socket.
             }
 
-            if (!reconnectTimer) {
+            if (canReconnectFeed() && !reconnectTimer) {
               reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connect();
@@ -722,7 +734,7 @@ const useSymbolStore = create(
               ...markCachedSymbolData(state, message),
               isConnected: false, isConnecting: false, ws: null, feedError: message,
             }));
-            if (!get().feedError?.includes('Market feed disabled') && !reconnectTimer) {
+            if (canReconnectFeed() && !get().feedError?.includes('Market feed disabled') && !reconnectTimer) {
               reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connect();
@@ -743,13 +755,15 @@ const useSymbolStore = create(
               ws: null,
               feedError: message,
             }));
-            get().loadSymbolFallback(message, { setFeedError: true });
+            if (canReconnectFeed()) {
+              get().loadSymbolFallback(message, { setFeedError: true });
+            }
             try {
               ws.close();
             } catch {
               // The reconnect timer below will create a fresh socket.
             }
-            if (!reconnectTimer) {
+            if (canReconnectFeed() && !reconnectTimer) {
               reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connect();
@@ -805,15 +819,27 @@ const useSymbolStore = create(
       name: 'rtx-symbols-storage',
       storage: throttledSymbolStorage,
       partialize: (state) => ({ 
+        brokerScope: getSymbolStorageBrokerScope(),
         symbols: state.symbols,
         symbolMetadata: state.symbolMetadata 
       }),
       merge: (persistedState, currentState) => {
+        const currentBrokerScope = getSymbolStorageBrokerScope();
+        const persistedBrokerScope = persistedState && typeof persistedState === 'object'
+          ? String(persistedState.brokerScope || '').trim().toLowerCase()
+          : '';
+        const shouldUsePersisted = Boolean(
+          persistedState
+          && typeof persistedState === 'object'
+          && (!currentBrokerScope || persistedBrokerScope === currentBrokerScope)
+        );
         const mergedState = {
           ...currentState,
-          ...(persistedState && typeof persistedState === 'object' ? persistedState : {}),
+          ...(shouldUsePersisted ? persistedState : {}),
         };
-        const cachedSymbols = markSymbolMapCached(mergedState.symbols, REHYDRATED_SYMBOL_REASON);
+        const cachedSymbols = shouldUsePersisted
+          ? markSymbolMapCached(mergedState.symbols, REHYDRATED_SYMBOL_REASON)
+          : {};
 
         return {
           ...mergedState,
@@ -828,4 +854,5 @@ const useSymbolStore = create(
   )
 );
 
+export { useSymbolStore };
 export default useSymbolStore;

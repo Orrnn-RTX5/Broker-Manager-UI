@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-Copy `.env.example` to `.env.terminal` and set the local broker endpoints before starting the dev server. This file is kept outside Git. Run `npm test` for unit tests and `npm run build` to compile the renderer.
+Copy `.env.example` to `.env` and set the local broker endpoints before starting the dev server. This file is kept outside Git. Run `npm test` for unit tests and `npm run build` to compile the renderer.
 
 ## Broker Target Routing
 
@@ -79,7 +79,7 @@ The default `bridge` mode continues to use the configured `/ws/feed` connection.
 
 ### Build modes
 
-The manager app's `dev`, `build`, and Electron scripts use Vite's `terminal` mode. For local work, copy `.env.example` to `.env.terminal` and keep the active broker in that file. Git ignores `.env.terminal`, and Docker excludes it. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. The bridge feed URL uses the broker ID and strips legacy token query parameters. Do not put feed credentials in a `VITE_` variable; Vite embeds those values in the browser bundle.
+The manager app's `dev` and `build` scripts load `.env` directly, while Electron/desktop builds load `.env` plus `.env.electron` (`VITE_BACKEND_TARGET=desktop`). For local work, copy `.env.example` to `.env` and keep the active broker in that file. Git ignores `.env`, and Docker excludes local `.env.*` files. To switch brokers, change `VITE_BROKER_ID`, `VITE_FEED_BROKER_ID`, `VITE_API_HOST`, `VITE_API_HOST_EXT`, `VITE_REPORTS_API_HOST`, `VITE_WS_HOST`, `VITE_MANAGER_WS_HOST`, `VITE_WS_FEED_PATH`, `VITE_FEED_WS_URL`, `VITE_FEED_STATUS_URL`, `VITE_DEFAULT_MT5_SERVER`, and `VITE_DISCOVERY_BASE_URL` in `.env`, then restart the dev server or rebuild the app. Set `VITE_USE_MOCK_DISCOVERY=false` for the real discovery service. The bridge feed URL uses the broker ID and strips legacy token query parameters. Do not put feed credentials in a `VITE_` variable; Vite embeds those values in the browser bundle.
 
 In CI, `MANAGER_UI_ENV` is written to `.env` before the build. The Docker build excludes local `.env.*` files so the deployed bundle uses the CI configuration.
 

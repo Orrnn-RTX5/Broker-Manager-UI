@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
-import NewGroupModal from './components/NewGroupModal';
+import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import GroupPropertiesModal from './components/GroupPropertiesModal';
 import GroupPermissionNotice from './components/GroupPermissionNotice';
 import GroupOperationModal from './components/GroupOperationModal';
@@ -12,6 +11,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
 import { useAllGroups } from '../../hooks/useAllGroups';
 import { PERMISSIONS } from '../../utils/permissions';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { showResult } from '../../store/resultDialogStore.js';
 import { copyToClipboard, rowsToTSV } from '../../utils/gridUtils';
 import { EDIT_MENU_ACTION_EVENT, isEditableElement, publishEditMenuContext } from '../../utils/editMenuActions';
@@ -62,6 +62,7 @@ const GroupsPage = () => {
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
+  const openGroupScreen = useMultiScreenStore((state) => state.openGroupScreen);
   const folder = getGroupsFolderFromSearch(location.search);
   const navigatorGroup = getGroupsSelectedFromSearch(location.search);
   const isRoot = !folder;
@@ -76,8 +77,8 @@ const GroupsPage = () => {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
-  const [newGroup, setNewGroup] = useState(null);
   const [subgroupDraft, setSubgroupDraft] = useState(null);
+  const [parentMenuOpen, setParentMenuOpen] = useState(false);
   const [propertiesGroup, setPropertiesGroup] = useState(null);
   const [openedGroup, setOpenedGroup] = useState(null);
   const [selectedLogin, setSelectedLogin] = useState(null);
@@ -201,10 +202,11 @@ const GroupsPage = () => {
   const addGroup = (container = targetContainer) => {
     if (!requireManage('create')) return;
     const separator = separatorForContainer(groups, container);
-    setNewGroup({ presetName: container ? `${container}${separator}` : '' });
+    openGroupScreen({ presetName: container ? `${container}${separator}` : '' });
   };
   const askSubgroup = (container = targetContainer) => {
     if (!requireManage('create')) return;
+    setParentMenuOpen(false);
     setSubgroupDraft({ parent: container, name: 'New subgroup' });
   };
   const submitSubgroup = (event) => {
@@ -212,12 +214,13 @@ const GroupsPage = () => {
     const name = subgroupDraft?.name.trim();
     if (!name) return;
     const presetName = nestGroupName(subgroupDraft.parent, name, separatorForContainer(groups, subgroupDraft.parent));
+    setParentMenuOpen(false);
     setSubgroupDraft(null);
-    setNewGroup({ presetName });
+    openGroupScreen({ presetName });
   };
   const duplicateGroup = (node) => {
     if (!node?.group || !requireManage('create')) return;
-    setNewGroup({ duplicateData: node.group });
+    openGroupScreen({ duplicateData: node.group });
   };
 
   const deleteNode = (node) => {
@@ -252,6 +255,9 @@ const GroupsPage = () => {
       } else if (event.key === 'Enter') {
         event.preventDefault();
         if (selectedLogin) openAccountWindow();
+      } else if (event.key === 'Delete') {
+        event.preventDefault();
+        deleteNode(groupRowNode(openedGroup));
       } else if (event.key === 'Escape') {
         setSelectedLogin(null);
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -286,13 +292,20 @@ const GroupsPage = () => {
     }
   };
 
+  const activeTargetNode = useMemo(
+    () => selectedNode || (openedGroup ? groupRowNode(openedGroup) : null),
+    [selectedNode, openedGroup],
+  );
+
   // Keep the top-level Edit menu aware of the explorer selection.
   useEffect(() => {
-    publishEditMenuContext({ selectedCount: selectedNode ? 1 : 0, view: 'groups' });
+    publishEditMenuContext({ selectedCount: activeTargetNode ? 1 : 0, view: 'groups' });
     return () => publishEditMenuContext({ selectedCount: 0 });
-  }, [selectedNode]);
+  }, [activeTargetNode]);
 
-  handlersRef.current = { selectedNode, openProperties, duplicateGroup, copyNode, focusSearch };
+  useEffect(() => {
+    handlersRef.current = { selectedNode: activeTargetNode, openProperties, duplicateGroup, copyNode, focusSearch };
+  });
   useEffect(() => {
     const handleEditMenuAction = (event) => {
       const { action } = event.detail || {};
@@ -410,7 +423,7 @@ const GroupsPage = () => {
             <Pencil size={12} /> Settings
           </button>
           {readSavedOperation() && <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setDeleteSelection(readSavedOperation().selection)}>Operation progress</button>}
-          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={!selectedNode || deleting || !operationsEnabled} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode)}>
+          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={(!selectedNode && !openedGroup) || deleting || !operationsEnabled} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode || (openedGroup ? groupRowNode(openedGroup) : null))}>
             <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
@@ -440,7 +453,7 @@ const GroupsPage = () => {
                     key={row.login}
                     className={selected ? 'is-selected is-account' : 'is-account'}
                     aria-selected={selected}
-                    onClick={() => { setSelectedLogin(row.login); openAccountWindow(); }}
+                    onClick={() => setSelectedLogin(row.login)}
                     onDoubleClick={openAccountWindow}
                   >
                     {GROUP_ACCOUNT_COLUMNS.map((column, index) => (
@@ -585,7 +598,7 @@ const GroupsPage = () => {
           <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(() => copyNode(contextMenu.node))}>
             <Copy size={14} /><span className="flex-1">Copy</span><span className="kbd">Ctrl+C</span>
           </div>
-          <div className="ui-ctxmenu-item" role="menuitem" onClick={menuAction(focusSearch)}>
+          <div className="ui-ctxmenu-item" role="menuitem" onClick={() => { setContextMenu(null); focusSearch(); }}>
             <Search size={14} /><span className="flex-1">Find</span><span className="kbd">Ctrl+F</span>
           </div>
           <div className="ui-ctxmenu-sep" />
@@ -607,44 +620,190 @@ const GroupsPage = () => {
         </div>
       )}
 
-      {subgroupDraft && (
-        <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSubgroupDraft(null); }}>
-          <form className="ui-modal groups-subgroup-dialog" role="dialog" aria-modal="true" aria-labelledby="groups-subgroup-title" onSubmit={submitSubgroup}>
-            <div className="ui-modal-header" id="groups-subgroup-title">Add subgroup</div>
-            <div className="ui-modal-body">
-              <p>Choose the folder that will contain the new subgroup, then name it. The full group name keeps that folder's separator.</p>
-              <label>
-                Inside group
-                <select className="ui-input ui-input-sm" value={subgroupDraft.parent} onChange={(event) => setSubgroupDraft((draft) => ({ ...draft, parent: event.target.value }))}>
-                  <option value="">Groups (top level)</option>
-                  {containers.map((container) => <option key={container} value={container}>{container}</option>)}
-                </select>
-              </label>
-              <label>
-                Subgroup name
-                <input className="ui-input ui-input-sm" autoFocus value={subgroupDraft.name} onChange={(event) => setSubgroupDraft((draft) => ({ ...draft, name: event.target.value }))} />
-              </label>
-            </div>
-            <div className="ui-modal-footer">
-              <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setSubgroupDraft(null)}>Cancel</button>
-              <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={!subgroupDraft.name.trim()}>Continue</button>
-            </div>
-          </form>
-        </div>
-      )}
+      {subgroupDraft && (() => {
+        const subgroupSep = separatorForContainer(groups, subgroupDraft.parent);
+        const trimmedSubgroupName = subgroupDraft.name.trim();
+        const previewPath = nestGroupName(subgroupDraft.parent, trimmedSubgroupName || 'subgroup-name', subgroupSep);
+        const closeSubgroupModal = () => {
+          setParentMenuOpen(false);
+          setSubgroupDraft(null);
+        };
+        return (
+          <div
+            className="ui-modal-backdrop groups-subgroup-backdrop"
+            onMouseDown={(event) => { if (event.target === event.currentTarget) closeSubgroupModal(); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                if (parentMenuOpen) setParentMenuOpen(false);
+                else closeSubgroupModal();
+              }
+            }}
+          >
+            <form
+              className="ui-modal groups-subgroup-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="groups-subgroup-title"
+              onSubmit={submitSubgroup}
+            >
+              <div className="ui-modal-header groups-subgroup-header">
+                <span className="groups-subgroup-header-icon" aria-hidden="true">
+                  <FolderPlus size={15} />
+                </span>
+                <div className="groups-subgroup-heading">
+                  <span id="groups-subgroup-title" className="groups-subgroup-title">New subgroup</span>
+                  <small className="groups-subgroup-subtitle">Place a nested group inside an existing folder hierarchy</small>
+                </div>
+                <button
+                  type="button"
+                  className="groups-subgroup-close"
+                  aria-label="Close subgroup dialog"
+                  onClick={closeSubgroupModal}
+                >
+                  <X size={16} />
+                </button>
+              </div>
 
-      {newGroup && (
-        <NewGroupModal
-          presetName={newGroup.presetName}
-          duplicateData={newGroup.duplicateData}
-          onClose={() => setNewGroup(null)}
-          onSuccess={(saved) => {
-            const notice = describeGroupSave(saved, { created: true });
-            showResult.success(notice.message, { title: notice.title });
-            invalidateGroups();
-          }}
-        />
-      )}
+              <div className="ui-modal-body groups-subgroup-body">
+                <div className="groups-subgroup-section-heading">
+                  <h2>Hierarchy &amp; naming</h2>
+                  <p>Select the parent container folder and define the subgroup identifier.</p>
+                </div>
+
+                <div className="groups-subgroup-fields">
+                  <div className="groups-subgroup-field">
+                    <div className="groups-subgroup-field-label">
+                      <label id="groups-subgroup-parent-label">Inside group</label>
+                      <span>Parent container</span>
+                    </div>
+                    <div className="groups-subgroup-select-wrap">
+                      <button
+                        type="button"
+                        id="groups-subgroup-parent"
+                        className="groups-subgroup-control groups-subgroup-select-btn"
+                        aria-haspopup="listbox"
+                        aria-expanded={parentMenuOpen}
+                        aria-labelledby="groups-subgroup-parent-label"
+                        onClick={() => setParentMenuOpen((open) => !open)}
+                      >
+                        <span className="groups-subgroup-select-value">
+                          {subgroupDraft.parent ? (
+                            <span className="groups-row-glyph" aria-hidden="true">
+                              <GroupFolderIcon />
+                            </span>
+                          ) : (
+                            <Users size={13} className="groups-icon-group" aria-hidden="true" />
+                          )}
+                          <span>{subgroupDraft.parent || 'Groups (top level)'}</span>
+                        </span>
+                        <ChevronDown size={13} className="groups-subgroup-select-chevron" aria-hidden="true" />
+                      </button>
+
+                      {parentMenuOpen && (
+                        <div
+                          className="groups-subgroup-menu"
+                          role="listbox"
+                          aria-labelledby="groups-subgroup-parent-label"
+                        >
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={!subgroupDraft.parent}
+                            className={!subgroupDraft.parent ? 'is-selected' : ''}
+                            onClick={() => {
+                              setSubgroupDraft((draft) => ({ ...draft, parent: '' }));
+                              setParentMenuOpen(false);
+                            }}
+                          >
+                            <span className="groups-subgroup-option-label">
+                              <Users size={13} className="groups-icon-group" aria-hidden="true" />
+                              <span>Groups (top level)</span>
+                            </span>
+                            {!subgroupDraft.parent ? <Check size={12} aria-hidden="true" /> : null}
+                          </button>
+                          {containers.map((container) => {
+                            const isSelected = subgroupDraft.parent === container;
+                            return (
+                              <button
+                                key={container}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                className={isSelected ? 'is-selected' : ''}
+                                onClick={() => {
+                                  setSubgroupDraft((draft) => ({ ...draft, parent: container }));
+                                  setParentMenuOpen(false);
+                                }}
+                              >
+                                <span className="groups-subgroup-option-label">
+                                  <span className="groups-row-glyph" aria-hidden="true">
+                                    <GroupFolderIcon />
+                                  </span>
+                                  <span>{container}</span>
+                                </span>
+                                {isSelected ? <Check size={12} aria-hidden="true" /> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="groups-subgroup-field">
+                    <div className="groups-subgroup-field-label">
+                      <label htmlFor="groups-subgroup-name">
+                        Subgroup name <span className="groups-subgroup-required">*</span>
+                      </label>
+                      <span>Leaf identifier</span>
+                    </div>
+                    <input
+                      id="groups-subgroup-name"
+                      className="ui-input groups-subgroup-control"
+                      placeholder="e.g. pro-ecn, vip-usd, standard"
+                      autoFocus
+                      value={subgroupDraft.name}
+                      onFocus={() => setParentMenuOpen(false)}
+                      onChange={(event) => setSubgroupDraft((draft) => ({ ...draft, name: event.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="groups-subgroup-preview" aria-live="polite">
+                  <div className="groups-subgroup-preview-head">
+                    <span className="groups-subgroup-preview-label">Target group path</span>
+                    <span className="groups-subgroup-preview-sep">Separator: <code>{subgroupSep}</code></span>
+                  </div>
+                  <div className="groups-subgroup-preview-box">
+                    <span className="groups-row-glyph" aria-hidden="true">
+                      <GroupFolderIcon />
+                    </span>
+                    <code className="groups-subgroup-preview-code">
+                      {subgroupDraft.parent ? (
+                        <>
+                          <span className="groups-subgroup-preview-parent">{subgroupDraft.parent}{subgroupSep}</span>
+                          <span>{trimmedSubgroupName || 'subgroup-name'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="groups-subgroup-preview-parent">Groups{subgroupSep}</span>
+                          <span>{ previewPath }</span>
+                        </>
+                      )}
+                    </code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ui-modal-footer groups-subgroup-footer">
+                <span className="groups-subgroup-footer-note">Opens group parameters next</span>
+                <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={closeSubgroupModal}>Cancel</button>
+                <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={!trimmedSubgroupName}>Continue</button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
 
       {permissionAction && <GroupPermissionNotice action={permissionAction} onClose={() => setPermissionAction(null)} />}
       {deleteSelection && <GroupOperationModal

@@ -1,7 +1,7 @@
 import { formatPageLabel } from '../../../utils/pageLabel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import usePagedData from '../../../hooks/usePagedData';
 import useManualGridLoad from '../../../hooks/useManualGridLoad';
 import { getBrokerDealsPage } from '../../../services/api';
@@ -13,8 +13,22 @@ import {
   WORKSPACE_QUERY_META,
 } from '../../../utils/workspaceQueryOptions.js';
 
-const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
+const fmt = (n, d = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).format(Number(n) || 0);
+const fmtPrice = (n) => {
+  const num = Number(n) || 0;
+  const maxDecimals = Math.abs(num) >= 1000 ? 2 : 5;
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: maxDecimals }).format(num);
+};
 const fmtDate = (ts) => {
+  if (!ts) return '-';
+  const dateObj = new Date(ts > 1e11 ? ts : ts * 1000);
+  if (isNaN(dateObj.getTime())) return String(ts);
+  return dateObj.toLocaleString('en-US', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).replace(',', '');
+};
+const fmtFullDate = (ts) => {
   if (!ts) return '-';
   const dateObj = new Date(ts > 1e11 ? ts : ts * 1000);
   if (isNaN(dateObj.getTime())) return String(ts);
@@ -22,6 +36,26 @@ const fmtDate = (ts) => {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
+};
+
+const formatDealAction = (action) => {
+  const raw = String(action || '').trim().toLowerCase();
+  if (!raw) return '-';
+  if (raw === 'deal_buy' || raw === 'buy' || raw === '0') return 'BUY';
+  if (raw === 'deal_sell' || raw === 'sell' || raw === '1') return 'SELL';
+  if (raw === 'deal_balance' || raw === 'balance') return 'BALANCE';
+  if (raw === 'deal_credit' || raw === 'credit') return 'CREDIT';
+  return raw.replace(/^deal_/i, '').replace(/_/g, ' ').toUpperCase();
+};
+
+const formatDealEntry = (entry) => {
+  const raw = String(entry || '').trim().toLowerCase();
+  if (!raw) return '-';
+  if (raw === 'entry_in' || raw === 'in' || raw === '0') return 'IN';
+  if (raw === 'entry_out' || raw === 'out' || raw === '1') return 'OUT';
+  if (raw === 'entry_inout' || raw === 'inout' || raw === '2') return 'IN / OUT';
+  if (raw === 'entry_out_by' || raw === 'out_by' || raw === '3') return 'OUT BY';
+  return raw.replace(/^entry_/i, '').replace(/_/g, ' ').toUpperCase();
 };
 
 const DEALS_SNAPSHOT_KEY = 'rtx5_deals_snapshot_v1';
@@ -102,7 +136,6 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
     isFetching,
     isError,
     error,
-    refetch,
     nextPage,
     prevPage,
   } = usePagedData({
@@ -178,16 +211,13 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
 
   const handleLoadData = () => markDataRequested();
 
-  const handleRefresh = () => {
-    if (!hasRequestedData) {
-      markDataRequested();
-      return;
-    }
-    refetch();
-  };
-
-  const renderHeader = (col, label, align = 'left') => (
-    <th onClick={() => handleSort(col)} style={{ textAlign: align }} aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+  const renderHeader = (col, label, fullLabel = label) => (
+    <th
+      onClick={() => handleSort(col)}
+      style={{ textAlign: 'left' }}
+      title={`Sort by ${fullLabel}`}
+      aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
       {label}
     </th>
   );
@@ -212,31 +242,48 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
         <GridLoadingState label="Loading deals…" />
       ) : (
       <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
-        <table className="ui-grid min-w-max">
-          <thead>
+        <table className="ui-grid deals-table">
+          <colgroup>
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+            <col className="deals-col-data" />
+          </colgroup>
+          <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {renderHeader('ticket', 'Ticket')}
-              {renderHeader('orderTicket', 'Order Ticket')}
+              {renderHeader('orderTicket', 'Order', 'Order Ticket')}
               {renderHeader('login', 'Login')}
               {renderHeader('username', 'Username')}
               {renderHeader('accountName', 'Account')}
               {renderHeader('accountGroup', 'Group')}
               {renderHeader('symbol', 'Symbol')}
               {renderHeader('action', 'Action')}
-              {renderHeader('entry', 'Entry')}
-              {renderHeader('volume', 'Volume', 'right')}
-              {renderHeader('price', 'Price', 'right')}
-              {renderHeader('profit', 'Profit', 'right')}
-              {renderHeader('commission', 'Commission', 'right')}
-              {renderHeader('swap', 'Swap', 'right')}
-              {renderHeader('fee', 'Fee', 'right')}
+              {renderHeader('volume', 'Volume')}
+              {renderHeader('price', 'Price')}
+              {renderHeader('profit', 'Profit')}
+              {renderHeader('commission', 'Comm.', 'Commission')}
+              {renderHeader('swap', 'Swap')}
+              {renderHeader('fee', 'Fee')}
               {renderHeader('time', 'Time')}
               {renderHeader('comment', 'Comment')}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={17} className="text-center py-16" style={{ color: 'var(--muted)', fontSize: '11px' }}>
+              <tr><td colSpan={16} className="deals-grid-empty text-center py-16" style={{ color: 'var(--muted)', fontSize: '11px' }}>
                 {isIdle ? (
                   <div className="flex flex-col items-center gap-3">
                     <span style={{ fontSize: '11px' }}>Deals are not loaded.</span>
@@ -249,8 +296,18 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
               </td></tr>
             ) : rows.map((row, idx) => {
               const rowKey = `${row.ticket}-${idx}`;
-              const isBuy = row.action === 'deal_buy';
-              const profitTone = row.profit < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
+              const actionLabel = formatDealAction(row.action);
+              const isBuy = actionLabel === 'BUY';
+              const isSell = actionLabel === 'SELL';
+              const profitNum = Number(row.profit) || 0;
+              const profitTone = profitNum < 0 ? 'var(--danger-text)' : profitNum > 0 ? 'var(--ok-text)' : 'var(--text-3)';
+              const formattedPrice = fmtPrice(row.price);
+              const formattedProfit = fmt(profitNum);
+              const formattedComm = fmt(row.commission);
+              const formattedSwap = fmt(row.swap);
+              const formattedFee = fmt(row.fee);
+              const formattedTime = fmtDate(row.time);
+              const fullTime = fmtFullDate(row.time);
               return (
                 <tr
                   key={rowKey}
@@ -263,27 +320,26 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="tabular">{row.ticket}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.orderTicket}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.username}</td>
-                  <td>{row.accountName}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.accountGroup}</td>
-                  <td>{row.symbol}</td>
-                  <td className="uppercase">
-                    <span className={`ui-status ${isBuy ? 'ui-status-ok' : 'ui-status-danger'}`}>
-                      {row.action}
+                  <td className="tabular deals-cell-primary" title={String(row.ticket ?? '')}>{row.ticket}</td>
+                  <td className="tabular deals-cell-muted" title={String(row.orderTicket ?? '')}>{row.orderTicket || '-'}</td>
+                  <td className="tabular deals-cell-login" title={String(row.login ?? '')}>{row.login || '-'}</td>
+                  <td className="deals-cell-muted" title={row.username || ''}>{row.username || '-'}</td>
+                  <td className="deals-cell-primary" title={row.accountName || ''}>{row.accountName || '-'}</td>
+                  <td className="deals-cell-muted" title={row.accountGroup || ''}>{row.accountGroup || '-'}</td>
+                  <td className="deals-cell-symbol" title={row.symbol || ''}>{row.symbol || '-'}</td>
+                  <td title={actionLabel}>
+                    <span className={`deals-action-badge ${isBuy ? 'is-buy' : isSell ? 'is-sell' : 'is-neutral'}`}>
+                      {actionLabel}
                     </span>
                   </td>
-                  <td>{row.entry}</td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.price, 5)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right', color: profitTone, fontWeight: 600 }}>{fmt(row.profit)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.commission)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.fee)}</td>
-                  <td className="tabular font-mono" style={{ color: 'var(--text-3)', fontSize: '11px' }}>{fmtDate(row.time)}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{row.comment}</td>
+                  <td className="tabular deals-cell-primary" title={String(row.volume ?? '')}>{row.volume}</td>
+                  <td className="tabular font-mono deals-cell-primary" title={formattedPrice}>{formattedPrice}</td>
+                  <td className="tabular font-mono" style={{ color: profitTone }} title={formattedProfit}>{formattedProfit}</td>
+                  <td className="tabular font-mono deals-cell-muted" title={formattedComm}>{formattedComm}</td>
+                  <td className="tabular font-mono deals-cell-muted" title={formattedSwap}>{formattedSwap}</td>
+                  <td className="tabular font-mono deals-cell-muted" title={formattedFee}>{formattedFee}</td>
+                  <td className="tabular font-mono deals-cell-muted" title={fullTime}>{formattedTime}</td>
+                  <td className="deals-cell-muted" title={row.comment || ''}>{row.comment || '-'}</td>
                 </tr>
               );
             })}
@@ -308,18 +364,8 @@ const DealsDataGrid = ({ search = '', actionFilter = 'All Actions', symbolFilter
               </>
             )}
           </span>
-          {isFetching && !isLoading && (
-            <span className="ui-badge ui-badge-danger" style={{ fontSize: '10px' }}>
-              <AlertTriangle size={10} />
-              Updating
-            </span>
-          )}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleRefresh} disabled={isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>
-            <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
-            {isIdle ? 'Load' : 'Refresh'}
-          </button>
           <button onClick={prevPage} disabled={isIdle || page === 0 || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Prev</button>
           <span className="tabular px-1 pagination-page" style={{ color: 'var(--text-2)', fontSize: '10px' }}>{isIdle ? '-' : formatPageLabel(page, totalPages)}</span>
           <button onClick={nextPage} disabled={isIdle || !hasMore || isFetching} className="ui-btn ui-btn-secondary ui-btn-xs" style={{ fontSize: '10px' }}>Next</button>

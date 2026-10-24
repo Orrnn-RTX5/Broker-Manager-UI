@@ -509,6 +509,7 @@ export const getAccountDetailsManyPage = async (params = {}, options = {}) => {
   }).finally(() => {
     if (accountDetailsFirstPagePromise === request) accountDetailsFirstPagePromise = null;
   });
+  request.catch(() => undefined);
   accountDetailsFirstPagePromise = request;
   return request;
 };
@@ -886,6 +887,7 @@ export const completeAccountPositions = (login, initialRows = [], { onPage } = {
       pendingAccountPositionsContinuations.delete(key);
     }
   });
+  continuationRequest.catch(() => undefined);
 
   pendingAccountPositionsContinuations.set(key, continuationRequest);
   return continuationRequest;
@@ -1490,6 +1492,7 @@ export const symbolsList = ({ force = false, signal } = {}) => {
     }).finally(() => {
       if (symbolsListRequest === request) symbolsListRequest = null;
     });
+    request.catch(() => undefined);
     symbolsListRequest = request;
   }
   return awaitSymbolsListWithSignal(symbolsListRequest, signal);
@@ -1634,6 +1637,7 @@ export const symbolManagementList = ({ force = false, onProgress } = {}) => {
         symbolManagementProgressListeners.clear();
       }
     });
+    request.catch(() => undefined);
     symbolManagementRequest = request;
   }
 

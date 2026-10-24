@@ -216,7 +216,12 @@ export const buildManagerApiUrl = (endpoint = '') => {
     return `/api/manager${rootPath}`;
   }
 
-  return joinUrl(API_HOST, managerPath);
+  const isReportsPath = /^\/reports\/v\d+(?:\/|\?|$)/i.test(managerPath);
+  const reportsHost = isReportsPath
+    ? trimTrailingSlash(getRuntimeConfigValue(['REPORTS_API_HOST', 'VITE_REPORTS_API_HOST']))
+    : '';
+
+  return joinUrl(reportsHost || API_HOST, managerPath);
 };
 
 export const buildBrokerApiUrl = (endpoint = '') => {
@@ -452,8 +457,8 @@ export const buildAccountMetricsWsUrl = (ticket) => buildManagerTicketWsUrl('/On
 
 export const getPositionUpdatesWsPath = () => {
   updateDynamicEndpoints();
-  const fallback = getDeploymentRuntimeConfig()
-    ? buildManagerApiPath('/OnPositionUpdate', shouldUseManagerProxyPrefix(API_HOST))
+  const fallback = getDeploymentRuntimeConfig() || hasPinnedApiHost()
+    ? buildManagerApiPath('/OnPositionUpdate', shouldUseManagerProxyPrefix(API_HOST, readBrokerInfo() || {}))
     : '/OnPositionUpdate';
   const configuredPath = getRuntimeConfigValue(
     ['POSITION_UPDATES_WS_PATH', 'VITE_POSITION_UPDATES_WS_PATH'],
@@ -464,7 +469,9 @@ export const getPositionUpdatesWsPath = () => {
 
 export const buildPositionUpdatesWsUrl = (ticket) => {
   if (!ticket) throw new Error('A one-time websocket ticket is required.');
-  const url = new URL(`${getBaseWsHost()}${getPositionUpdatesWsPath()}`);
+  const url = new URL(toLocalDevFeedProxyUrl(`${getBaseWsHost()}${getPositionUpdatesWsPath()}`, shouldUseManagerDevProxy()));
+  if (url.protocol === 'http:') url.protocol = 'ws:';
+  if (url.protocol === 'https:') url.protocol = 'wss:';
   url.searchParams.set('ticket', String(ticket));
   return url.toString();
 };

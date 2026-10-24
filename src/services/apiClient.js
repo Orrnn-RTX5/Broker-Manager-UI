@@ -86,6 +86,14 @@ const notifyResponseReceived = (callback, response, text) => {
   }
 };
 
+const isTransientGatewayStatus = (status) => (
+  [502, 503, 504, 520, 521, 522, 523, 524].includes(Number(status))
+);
+
+const isAbortError = (error) => (
+  error?.name === 'AbortError' || Number(error?.code) === 20
+);
+
 /**
  * Fetch wrapper that handles:
  * 1. Authorization header attachment
@@ -157,7 +165,11 @@ const apiClient = {
       assertDataAccessScope(accessScope);
       return result;
     } catch (error) {
-      console.error('API request failed:', redactSensitive(error));
+      if (!isAbortError(error) && !isTransientGatewayStatus(error?.status)) {
+        console.error('API request failed:', redactSensitive(error));
+      } else if (API_DEBUG_ENABLED) {
+        console.debug('API request failed (transient/aborted):', redactSensitive(error));
+      }
       throw error;
     }
   },
@@ -172,7 +184,11 @@ const apiClient = {
           expireAndThrow('token_rejected');
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
-        console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text.slice(0, 500)));
+        if (!isTransientGatewayStatus(response.status)) {
+          console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text.slice(0, 500)));
+        } else if (API_DEBUG_ENABLED) {
+          console.debug(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text.slice(0, 500)));
+        }
         throw Object.assign(new Error(errMsg), { status: response.status, statusText: response.statusText });
       }
 
@@ -194,7 +210,11 @@ const apiClient = {
           expireAndThrow('token_rejected');
         }
         const errMsg = `HTTP ${response.status}: ${response.statusText}`;
-        console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
+        if (!isTransientGatewayStatus(response.status)) {
+          console.error(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
+        } else if (API_DEBUG_ENABLED) {
+          console.debug(`[API RESPONSE ERROR] ${response.status}`, errMsg, redactSensitive(text));
+        }
         throw Object.assign(new Error(errMsg), { status: response.status, statusText: response.statusText });
       }
       if (API_DEBUG_ENABLED) {
@@ -211,7 +231,11 @@ const apiClient = {
         expireAndThrow('token_rejected');
       }
       const errorMsg = data.error || data.message || `HTTP ${response.status}`;
-      console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
+      if (!isTransientGatewayStatus(response.status)) {
+        console.error(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
+      } else if (API_DEBUG_ENABLED) {
+        console.debug(`[API RESPONSE ERROR] ${response.status}`, errorMsg, redactSensitive(data));
+      }
       throw Object.assign(new Error(errorMsg), { status: response.status, statusText: response.statusText, code: data?.error?.code || data?.code });
     }
 

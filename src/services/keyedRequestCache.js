@@ -53,6 +53,7 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
       .finally(() => {
         if (pending.get(key) === request) pending.delete(key);
       });
+    request.catch(() => undefined);
 
     pending.set(key, request);
     return request;
@@ -72,6 +73,7 @@ export const createKeyedRequestCache = ({ load, ttlMs = 5_000, now = Date.now })
       .finally(() => {
         if (pending.get(key) === request) pending.delete(key);
       });
+    request.catch(() => undefined);
 
     pending.set(key, request);
     return request;

@@ -1,8 +1,11 @@
 import { createLogger, defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import http from 'node:http'
+import https from 'node:https'
 import process from 'node:process'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -43,11 +46,46 @@ export default defineConfig(({ mode, command }) => {
   } : null
   const apiHost = env.VITE_API_HOST || 'https://backend.orrnn.com'
   const apiHostExt = env.VITE_API_HOST_EXT || apiHost
-  const discoveryHost = env.VITE_DISCOVERY_BASE_URL || 'https://superbackend.orrnn.com'
+  const discoveryHost = env.VITE_DISCOVERY_BASE_URL || env.VITE_API_HOST || 'https://superbackend.orrnn.com'
   const wsHost = env.VITE_WS_HOST || apiHost
   const feedWsUrl = env.VITE_FEED_WS_URL || env.FEED_WS_URL || ''
   const wsFeedPath = env.VITE_WS_FEED_PATH || '/ws/feed'
   const proxySecure = env.VITE_PROXY_INSECURE !== 'true'
+  const agentOptions = { keepAlive: true, keepAliveMsecs: 30000, maxSockets: 6, maxFreeSockets: 6, timeout: 60000, scheduling: 'lifo' }
+  const httpAgent = new http.Agent(agentOptions)
+  const httpsAgent = new https.Agent({ ...agentOptions, rejectUnauthorized: proxySecure })
+  const getProxyAgent = (target = '') => (String(target).startsWith('https:') ? httpsAgent : httpAgent)
+  const attachTlsHandshakeWatchdog = (proxyReq, handshakeTimeoutMs = 2200) => {
+    const onSocket = (socket) => {
+      if (!socket?.encrypted) {
+        proxyReq._tlsEstablished = true
+        return
+      }
+      if (socket._tlsEstablished || socket.secureConnecting === false) {
+        socket._tlsEstablished = true
+        proxyReq._tlsEstablished = true
+        return
+      }
+      const timer = setTimeout(() => {
+        if (!socket._tlsEstablished && !socket.destroyed) {
+          const err = new Error('Upstream TLS handshake timed out')
+          err.code = 'ETIMEDOUT'
+          socket.destroy(err)
+        }
+      }, handshakeTimeoutMs)
+      timer.unref?.()
+      const clear = () => clearTimeout(timer)
+      socket.once('secureConnect', () => {
+        socket._tlsEstablished = true
+        proxyReq._tlsEstablished = true
+        clear()
+      })
+      socket.once('error', clear)
+      socket.once('close', clear)
+    }
+    if (proxyReq.socket) onSocket(proxyReq.socket)
+    else proxyReq.once('socket', onSocket)
+  }
   const stripManagerPrefix = env.VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX === 'true'
   const isDesktopMode = mode === 'electron' || mode === 'desktop'
   const wsProxySource = feedWsUrl || wsHost
@@ -62,10 +100,152 @@ export default defineConfig(({ mode, command }) => {
     ? path.replace(/^\/manager/i, '') || '/'
     : path
 
+  const configureSafeProxy = (proxy, { isWs = false, stripOrigin = false, customOrigin = '' } = {}) => {
+    const web = proxy.web.bind(proxy)
+    proxy.web = (req, res, options, ...args) => {
+      const isBodylessRead = ['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+        && !req.headers['transfer-encoding']
+        && !Number(req.headers['content-length'] || 0)
+      let retries = 0
+      const maxRetries = 4
+      const onError = (error, ...details) => {
+        const failedBeforeTls = req._lastProxyReq && !req._lastProxyReq._tlsEstablished
+        if (retries < maxRetries && (isBodylessRead || failedBeforeTls) && ignoredWsProxyErrorCodes.has(error?.code)
+          && !res.headersSent && !res.destroyed && !req.socket?.destroyed) {
+          retries += 1
+          const retryOptions = isBodylessRead
+            ? { ...options, buffer: Readable.from([]) }
+            : options
+          return web(req, res, retryOptions, onError)
+        }
+        const callback = args.find((arg) => typeof arg === 'function')
+        if (callback) callback(error, ...details)
+        else proxy.emit('error', error, ...details)
+      }
+      return web(req, res, options, onError)
+    }
+    if (isWs) {
+      const ws = proxy.ws.bind(proxy)
+      proxy.ws = (req, socket, head, options, ...args) => {
+        let retries = 0
+        const maxRetries = 3
+        const onError = (error, ...details) => {
+          if (retries < maxRetries && ignoredWsProxyErrorCodes.has(error?.code)
+            && socket && !socket.destroyed && !socket.writableEnded && !socket._wsUpgraded) {
+            retries += 1
+            return ws(req, socket, head, options, onError)
+          }
+          const callback = args.find((arg) => typeof arg === 'function')
+          if (callback) callback(error, ...details)
+          else proxy.emit('error', error, ...details)
+        }
+        return ws(req, socket, head, options, onError)
+      }
+    }
+    proxy.on('error', (_err, _req, res) => {
+      if (res && typeof res.writeHead === 'function' && !res.headersSent && !res.writableEnded) {
+        try {
+          res.writeHead(502, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Upstream broker service temporarily unavailable' }))
+        } catch {
+          // Ignore response write errors on closed sockets.
+        }
+      } else if (res && typeof res.destroy === 'function') {
+        try {
+          res.destroy()
+        } catch {
+          // Ignore socket destroy errors.
+        }
+      }
+    })
+    proxy.on('proxyReq', (proxyReq, req) => {
+      if (req) req._lastProxyReq = proxyReq
+      proxyReq.on('error', () => {})
+      req?.socket?.on?.('error', () => {})
+      attachTlsHandshakeWatchdog(proxyReq)
+      if (customOrigin) {
+        try {
+          const origin = new URL(customOrigin).origin
+          proxyReq.setHeader('origin', origin)
+          proxyReq.setHeader('referer', `${origin}/`)
+        } catch {
+          // Keep the incoming headers if customOrigin is not a valid URL.
+        }
+        proxyReq.removeHeader('cookie')
+      }
+    })
+    if (isWs) {
+      proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+        if (req) req._lastProxyReq = proxyReq
+        proxyReq.on('error', () => {})
+        socket.on('error', () => {})
+        req.socket?.on?.('error', () => {})
+        attachTlsHandshakeWatchdog(proxyReq)
+        proxyReq.once('upgrade', () => {
+          socket._wsUpgraded = true
+        })
+        if (stripOrigin) {
+          proxyReq.removeHeader('origin')
+        }
+      })
+    }
+  }
+
+  const warmUpProxyPool = () => {
+    if (!String(apiHost).startsWith('https:')) return
+    for (let i = 0; i < 2; i += 1) {
+      try {
+        const req = https.request(`${apiHost.replace(/\/+$/, '')}/ConnectionStatus`, {
+          method: 'HEAD',
+          agent: httpsAgent,
+          timeout: 5000,
+        }, (res) => {
+          res.resume()
+        })
+        attachTlsHandshakeWatchdog(req)
+        req.on('error', () => {})
+        req.end()
+      } catch {
+        // Ignore warmup errors.
+      }
+    }
+  }
+
+  const gracefulRestartPlugin = {
+    name: 'graceful-ws-restart',
+    configureServer(server) {
+      warmUpProxyPool()
+      const sockets = new Set()
+      server.httpServer?.on('connection', (socket) => {
+        sockets.add(socket)
+        socket.on('close', () => sockets.delete(socket))
+      })
+      server.httpServer?.on('upgrade', (_req, socket) => {
+        sockets.add(socket)
+        socket.on('close', () => sockets.delete(socket))
+      })
+      const originalClose = server.httpServer?.close?.bind(server.httpServer)
+      if (originalClose && server.httpServer) {
+        server.httpServer.close = (callback) => {
+          for (const socket of sockets) {
+            try {
+              socket.destroy()
+            } catch {
+              // Best-effort cleanup so port 5180 is released immediately on .env reload.
+            }
+          }
+          sockets.clear()
+          return originalClose(callback)
+        }
+      }
+    },
+  }
+
   return {
     base: isDesktopMode ? './' : '/',
     customLogger: viteLogger,
     plugins: [
+      gracefulRestartPlugin,
       localRuntimePlugin,
       react(),
       tailwindcss(),
@@ -93,100 +273,76 @@ export default defineConfig(({ mode, command }) => {
           target: discoveryHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(discoveryHost),
           rewrite: (path) => path.replace(/^\/discovery-api/, ''),
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.on('error', () => {})
-              try {
-                const origin = new URL(discoveryHost).origin
-                proxyReq.setHeader('origin', origin)
-                proxyReq.setHeader('referer', `${origin}/`)
-              } catch {
-                // Keep the incoming headers if the discovery host is not a URL.
-              }
-              // Tunnel auth cookies must reach Vite, not the discovery host.
-              proxyReq.removeHeader('cookie')
-            })
-          },
+          configure: (proxy) => configureSafeProxy(proxy, { customOrigin: discoveryHost }),
         },
         '^/api/manager(?:/|\\?|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHost),
           rewrite: rewriteManagerProxyPath,
+          configure: (proxy) => configureSafeProxy(proxy),
         },
         '^/api/v\\d+(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHost),
+          configure: (proxy) => configureSafeProxy(proxy),
         },
         '^/reports/v\\d+(?:/|$)': {
           target: env.VITE_REPORTS_API_HOST || apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(env.VITE_REPORTS_API_HOST || apiHost),
+          configure: (proxy) => configureSafeProxy(proxy),
         },
         '^/manager(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHost),
           ws: true,
           // Manager session sockets validate the browser Origin. Preserve it;
           // the optional bridge origin stripping does not apply to this route.
           rewrite: rewriteLegacyManagerPath,
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-              proxyReq.on('error', () => {})
-              socket.on('error', () => {})
-              req.socket?.on?.('error', () => {})
-            })
-          },
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true }),
         },
-        '^/OnTick(?:\\?|$)': {
+        '^/On(?:Tick|PositionUpdate|AccountMetrics)(?:\\?|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHost),
           ws: true,
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-              proxyReq.on('error', () => {})
-              socket.on('error', () => {})
-              req.socket?.on?.('error', () => {})
-            })
-          },
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true }),
         },
         '^/Manager(?:/|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHost),
           rewrite: rewriteLegacyManagerPath,
+          configure: (proxy) => configureSafeProxy(proxy),
         },
         // Port 8091 APIs: MarketDepth, SessionOverride, SpreadSchedule
         '/ext-api': {
           target: apiHostExt,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(apiHostExt),
           rewrite: (path) => path.replace(/^\/ext-api/, ''),
+          configure: (proxy) => configureSafeProxy(proxy),
         },
         [wsProxyPath]: {
           target: wsProxyTarget,
           changeOrigin: true,
           secure: proxySecure,
+          agent: getProxyAgent(wsProxyTarget),
           ws: true,
           rewriteWsOrigin: !stripFeedProxyOrigin,
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReqWs', (proxyRequest, req, socket) => {
-              proxyRequest.on('error', () => {})
-              socket.on('error', () => {})
-              req.socket?.on?.('error', () => {})
-              if (stripFeedProxyOrigin) {
-                proxyRequest.removeHeader('origin')
-              }
-            })
-          },
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true, stripOrigin: stripFeedProxyOrigin }),
         },
       }
     }

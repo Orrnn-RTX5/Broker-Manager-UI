@@ -2,11 +2,13 @@ import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendFeedBrokerIdToWsUrl,
+  buildAccountMetricsWsUrl,
   buildBrokerApiUrl,
   buildFeedStatusUrl,
   buildFeedWsUrl,
   buildManagerApiUrl,
   buildManagerMarketWsUrl,
+  buildPositionUpdatesWsUrl,
   isManagerMarketFeed,
   buildManagerApiPath,
   resolveFeedBrokerId,
@@ -42,13 +44,21 @@ afterEach(resetBrowserState);
 
 test('direct manager quotes use a single-use session ticket without bridge credentials', () => {
   globalThis.__RTX_RUNTIME_CONFIG__ = {
-    MARKET_DATA_SOURCE: 'manager', MANAGER_WS_HOST: 'wss://trivanta.orrnn.com',
+    VITE_BROKER_ID: 'trivanta-markets',
+    VITE_API_HOST: 'https://trivanta.orrnn.com',
+    VITE_REPORTS_API_HOST: 'https://trivanta.orrnn.com',
+    VITE_MANAGER_PROXY_STRIP_MANAGER_PREFIX: 'false',
+    MARKET_DATA_SOURCE: 'manager',
+    MANAGER_WS_HOST: 'wss://trivanta.orrnn.com',
   };
   sessionStorage.setItem('broker_info', JSON.stringify({
     broker_id: 'trivanta-markets', backend_url: 'https://trivanta.orrnn.com',
   }));
   assert.equal(isManagerMarketFeed(), true);
   assert.equal(buildManagerMarketWsUrl('one-use'), 'wss://trivanta.orrnn.com/manager/OnTick?ticket=one-use');
+  assert.equal(buildAccountMetricsWsUrl('one-use'), 'wss://trivanta.orrnn.com/manager/OnAccountMetrics?ticket=one-use');
+  assert.equal(buildPositionUpdatesWsUrl('one-use'), 'wss://trivanta.orrnn.com/manager/OnPositionUpdate?ticket=one-use');
+  assert.equal(buildManagerApiUrl('/reports/v1/summary'), 'https://trivanta.orrnn.com/reports/v1/summary');
   assert.throws(() => buildManagerMarketWsUrl(''), /ticket/);
 });
 

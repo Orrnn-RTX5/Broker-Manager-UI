@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Wifi, WifiOff, Activity, Bell, RefreshCw, Settings,
@@ -13,13 +13,15 @@ import WindowMenu from './menus/WindowMenu';
 import HelpMenu from './menus/HelpMenu';
 import HelpCenter from './HelpCenter';
 import BugReportDialog from './BugReportDialog';
-import NewAccountModal from './Popups/NewAccountModal';
+import { bugReportHistoryScope, OPEN_BUG_REPORT_EVENT, recordBugReportReceipt } from '../services/bugReportHistory';
+import { getBrokerInfo } from '../services/brokerAuth';
 import LoginModal from './Popups/LoginModal';
 import ExportCurrentViewDialog from './ExportCurrentViewDialog';
 import apiClient from '../services/apiClient';
 import { usePermissions } from '../hooks/usePermissions.js';
 import useThemeStore from '../store/themeStore.js';
 import useNotificationStore from '../store/notificationStore.js';
+import { useMultiScreenStore } from '../store/multiScreenStore';
 import { DEFAULT_LANGUAGE, useI18nStore, useT } from '../i18n/index.js';
 import { LOCALES } from '../i18n/locales/index.js';
 import { MANAGER_REFRESH_EVENT, refreshWorkspaceData } from '../utils/quickSettingsActions.js';
@@ -34,6 +36,7 @@ const NOTIFICATION_IDS = ['connection', 'dealer-operations', 'executive-overview
 
 const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusChange, toolbar = null }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const t = useT();
   const { manager, loading: isManagerLoading } = usePermissions();
@@ -42,6 +45,21 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
   const [activeMenu, setActiveMenu] = useState(null);
   const [helpSection, setHelpSection] = useState(null);
   const [bugReportOpen, setBugReportOpen] = useState(false);
+  const reportHistoryScope = useMemo(() => {
+    const broker = getBrokerInfo();
+    return bugReportHistoryScope(
+      { login: manager.login, id: manager.id, broker_id: manager.brokerId },
+      broker?.broker_id || ''
+    );
+  }, [manager.brokerId, manager.id, manager.login]);
+  useEffect(() => {
+    const onOpenBugReport = () => {
+      setActiveMenu(null);
+      setBugReportOpen(true);
+    };
+    window.addEventListener(OPEN_BUG_REPORT_EVENT, onOpenBugReport);
+    return () => window.removeEventListener(OPEN_BUG_REPORT_EVENT, onOpenBugReport);
+  }, []);
   const openHelp = (section) => { setActiveMenu(null); setHelpSection(section); };
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -51,7 +69,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [activeTopPopover, setActiveTopPopover] = useState(null);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
@@ -182,7 +200,7 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
 
     const handleNewAccountClick = () => {
       setActiveMenu(null);
-      setIsNewAccountOpen(true);
+      openAccountScreen();
     };
 
     const handleExportClick = () => {
@@ -489,8 +507,14 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
       </div>
       {/* Modals */}
       {helpSection && <HelpCenter key={helpSection} initialSection={helpSection} onClose={() => setHelpSection(null)} />}
-      {bugReportOpen && <BugReportDialog onClose={() => setBugReportOpen(false)} />}
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
+      {bugReportOpen && (
+        <BugReportDialog
+          key={reportHistoryScope}
+          page={location.pathname}
+          onClose={() => setBugReportOpen(false)}
+          onSubmitted={(receipt, form) => recordBugReportReceipt(reportHistoryScope, receipt, form)}
+        />
+      )}
       <ExportCurrentViewDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={handleLoginSuccess} />
     </div>

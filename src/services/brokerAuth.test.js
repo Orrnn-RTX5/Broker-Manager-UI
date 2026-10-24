@@ -137,6 +137,46 @@ test('Orrnn discovery keeps its server handle while the env supplies public endp
   assert.equal(selection.broker.backend_url, 'https://service.orrnn.com');
 });
 
+test('env-configured broker profile overrides private discovery URLs and server display while keeping login handle', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_BACKEND_TARGET: 'web',
+    VITE_BROKER_ID: 'trivanta-markets',
+    VITE_FEED_BROKER_ID: 'trivanta-markets',
+    VITE_API_HOST: 'https://trivanta.orrnn.com',
+    VITE_API_HOST_EXT: 'https://trivanta.orrnn.com',
+    VITE_WS_HOST: 'wss://trivanta.orrnn.com',
+    VITE_FEED_WS_URL: 'wss://trivanta.orrnn.com/ws/feed',
+    VITE_FEED_STATUS_URL: 'https://trivanta.orrnn.com/ws/feed/status',
+    VITE_DEFAULT_MT5_SERVER: 'trivanta.orrnn.com',
+  };
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify([{
+      id: 3,
+      broker_id: 'trivanta-markets',
+      broker_name: 'Trivanta Markets',
+      server: '100.116.90.110:443',
+      server_ip: '100.116.90.110',
+      server_port: 443,
+      server_url: 'https://100.116.90.110:443',
+      ws_url: 'ws://100.116.90.110/ws/feed',
+      feed_ws_url: 'ws://100.116.90.110/ws/feed',
+      feed_status_url: 'http://100.116.90.110/ws/feed/status',
+      status: 'active',
+    }]),
+  });
+
+  const brokers = await fetchBrokerList();
+  const selection = resolveBrokerSelection(brokers);
+  assert.equal(selection.brokerId, '100.116.90.110:443');
+  assert.equal(selection.locked, true);
+  assert.equal(selection.broker.backend_url, 'https://trivanta.orrnn.com');
+  assert.equal(selection.broker.feed_ws_url, 'wss://trivanta.orrnn.com/ws/feed');
+  assert.equal(selection.broker.feed_status_url, 'https://trivanta.orrnn.com/ws/feed/status');
+  assert.equal(getBrokerDisplayServerName(selection.broker), 'trivanta.orrnn.com');
+});
+
 test("broker discovery uses Vite's same-origin proxy when enabled", () => {
   assert.equal(buildBrokerDiscoveryUrl(true), '/discovery-api/api/v2/broker/servers');
   assert.equal(
@@ -576,3 +616,31 @@ test('MOCK_BROKER_LIST includes test broker with backend', () => {
   assert.equal(testBroker.server_port, 8091);
   assert.equal(testBroker.ws_url, 'wss://fxtrustbrokerbackend.orrnn.com/ws/feed');
 });
+
+test('fetchBrokerList shares in-flight discovery requests and falls back to configured broker on 502', async () => {
+  globalThis.__RTX_RUNTIME_CONFIG__ = {
+    VITE_BACKEND_TARGET: 'web',
+    VITE_BROKER_ID: 'orrnn',
+    VITE_BROKER_NAME: 'ORRNN',
+    VITE_API_HOST: 'https://service.orrnn.com',
+    VITE_DEFAULT_MT5_SERVER: '51.195.188.172',
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url: String(url), options });
+    return {
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ error: 'Upstream broker service temporarily unavailable' }),
+    };
+  };
+
+  const [first, second] = await Promise.all([fetchBrokerList(), fetchBrokerList()]);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(first.length, 1);
+  assert.deepEqual(first, second);
+  assert.equal(first[0].broker_id, 'orrnn');
+  assert.equal(first[0].name, 'ORRNN');
+  assert.equal(first[0].backend_url, 'https://service.orrnn.com');
+  assert.equal(getBrokerSelectionId(first[0]), '51.195.188.172:443');
+  assert.equal(getBrokerDisplayServerName(first[0]), '51.195.188.172');
+});

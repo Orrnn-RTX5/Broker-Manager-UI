@@ -25,6 +25,7 @@ export const workspaceRouteLoaders = Object.freeze({
   symbolsOverviewPage: () => import('../features/symbols/SymbolsOverviewPage'),
   symbolListPage: () => import('../features/symbols/SymbolListPage'),
   symbolManagementPage: () => import('../features/symbols/SymbolManagementPage'),
+  bugReportsPage: () => import('../features/support/BugReportsView'),
 });
 
 const routeLoaderEntries = [
@@ -47,6 +48,7 @@ const routeLoaderEntries = [
   ['/ib', 'ibListPage'],
   ['/symbols', 'symbolsOverviewPage'],
   ['/symbol-management', 'symbolManagementPage'],
+  ['/support/bug-reports', 'bugReportsPage'],
 ];
 
 const loaderForPath = (path = '') => {

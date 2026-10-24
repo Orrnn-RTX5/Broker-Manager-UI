@@ -3456,6 +3456,20 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   opacity: 1 !important;
 }
 
+#root .orders-grid .orders-side-badge.is-buy,
+.dark #root .orders-page .orders-grid .orders-side-badge.is-buy {
+  color: #38bdf8 !important;
+  background: transparent;
+  border: 0;
+}
+
+#root .orders-grid .orders-side-badge.is-sell,
+.dark #root .orders-page .orders-grid .orders-side-badge.is-sell {
+  color: #f87171 !important;
+  background: transparent;
+  border: 0;
+}
+
 #root .orders-page .orders-grid .ui-grid thead th {
   height: 28px;
   padding-block: 5px;
@@ -3511,6 +3525,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .clients-page {
   min-width: 0;
   min-height: 0;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 11px;
   line-height: 1.35;
 }
@@ -3520,6 +3537,18 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .clients-heading > div,
 #root .clients-filters {
   min-width: 0;
+}
+
+#root .clients-header,
+#root .clients-search {
+  flex: 0 0 auto;
+}
+
+#root .clients-search .ui-input,
+#root .clients-filters .ui-input {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
 }
 
 #root .clients-subtitle {
@@ -3549,6 +3578,27 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   height: 28px;
   padding-top: 5px;
   padding-bottom: 5px;
+}
+
+#root .clients-grid .clients-table {
+  width: 100%;
+  min-width: 780px;
+  table-layout: fixed;
+}
+
+#root .clients-grid .clients-table :is(th, td):not(.clients-grid-empty) {
+  padding: 8px 12px;
+  text-align: left !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+#root .clients-grid .clients-table :is(th, td).clients-check-cell {
+  width: 36px;
+  padding: 0 8px !important;
+  text-align: center !important;
 }
 
 #root .clients-grid .clients-grid-footer {
@@ -3591,12 +3641,12 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
     grid-template-columns: minmax(0, 1fr);
     align-items: start !important;
     justify-content: stretch !important;
-    gap: 10px !important;
+    gap: 8px !important;
   }
 
   #root .clients-filters {
     display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100% !important;
     margin-top: 0 !important;
     gap: 6px !important;
@@ -3608,13 +3658,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   }
 }
 
-@container (max-width: 480px) {
+@container (max-width: 540px) {
   #root .clients-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  #root .clients-filters > :last-child {
-    grid-column: 1 / -1;
   }
 }
 
@@ -3622,22 +3668,24 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   #root .clients-filters {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  #root .clients-filters > :last-child {
-    grid-column: auto;
-  }
 }
 
 /* Dealing: 10px for small font size (subtitles, search box, filter dropdown boxes, headers, badges, footer summary & buttons), 12px for big font size (title, table data cells) */
 #root .deals-page {
   min-width: 0;
   min-height: 0;
-  padding: 12px;
-  gap: 8px;
-  overflow: hidden;
+  padding: 12px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
+}
+
+#root .deals-header,
+#root .deals-heading,
+#root .deals-filters {
+  min-width: 0;
 }
 
 #root .deals-header,
@@ -3647,15 +3695,6 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .deals-subtitle {
   margin-top: 0 !important;
-}
-
-#root .deals-filters > * {
-  width: 100px;
-  min-width: 0;
-}
-
-#root .deals-grid .ui-grid tbody tr {
-  height: 46px;
 }
 
 #root .deals-search .ui-input,
@@ -3670,15 +3709,43 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   scrollbar-gutter: auto;
 }
 
-@container (max-width: 560px) {
+@container (max-width: 740px) {
+  #root .deals-page {
+    padding: 12px !important;
+    gap: 8px !important;
+  }
+
   #root .deals-header {
-    flex-direction: column;
-    align-items: stretch;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start !important;
+    justify-content: stretch !important;
+    gap: 8px !important;
+  }
+
+  #root .deals-filters {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100% !important;
+    margin-top: 0 !important;
+    gap: 6px !important;
   }
 
   #root .deals-filters > * {
-    flex: 1 1 0;
-    min-width: 0;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+@container (max-width: 540px) {
+  #root .deals-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 330px) {
+  #root .deals-filters {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -3712,6 +3779,28 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   font-size: 11px !important;
   font-weight: 400 !important;
   line-height: 1.35 !important;
+  height: 28px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+#root .deals-grid .deals-table {
+  width: 100%;
+  min-width: 1240px;
+  table-layout: fixed;
+}
+
+#root .deals-grid .deals-table col.deals-col-data {
+  width: calc(100% / 16);
+}
+
+#root .deals-grid .deals-table :is(th, td):not(.deals-grid-empty) {
+  padding: 6px 5px;
+  text-align: left !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 #root .deals-grid .ui-grid tbody td,
@@ -3735,6 +3824,117 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 #root .deals-grid .deals-grid-footer :is(button, .ui-btn),
 #root .deals-grid .deals-grid-footer .pagination-page {
   font-size: 11px !important;
+}
+
+#root .deals-header {
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+
+#root .deals-grid {
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+#root .deals-grid .deals-table thead th {
+  background: var(--surface-2);
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+#root .deals-grid .deals-table thead th:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-3) 65%, var(--surface-2));
+}
+
+#root .deals-grid .deals-table tbody tr {
+  border-bottom: 1px solid var(--border-2);
+  transition: background-color 90ms ease;
+}
+
+#root .deals-grid .deals-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-2) 38%, transparent);
+}
+
+#root .deals-grid .deals-table tbody tr:hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--surface-2));
+}
+
+#root .deals-grid .deals-table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+#root .deals-grid .deals-cell-primary {
+  color: var(--text);
+}
+
+#root .deals-grid .deals-cell-login {
+  color: var(--text-2);
+}
+
+#root .deals-grid .deals-cell-symbol {
+  color: var(--text);
+  letter-spacing: 0.015em;
+}
+
+#root .deals-grid .deals-cell-muted {
+  color: var(--text-3);
+}
+
+#root .deals-grid .deals-action-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  letter-spacing: 0.03em;
+}
+
+#root .deals-grid .deals-action-badge.is-buy {
+  color: #38bdf8;
+  background: transparent;
+  border: 0;
+}
+
+#root .deals-grid .deals-action-badge.is-sell {
+  color: #f87171;
+  background: transparent;
+  border: 0;
+}
+
+#root .deals-grid .deals-entry-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-2);
+  background: color-mix(in srgb, var(--surface-3) 50%, var(--surface-2));
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+#root .deals-grid .deals-entry-badge.is-in {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.26);
+}
+
+#root .deals-grid .deals-entry-badge.is-out {
+  color: var(--text-2);
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.24);
 }
 
 /* Position History: 12px headings, 10px supporting text. */
@@ -4700,7 +4900,7 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .new-account-modal { border-radius: 10px; box-shadow: 0 24px 64px rgb(0 0 0 / 35%); }
 .new-account-form, .new-account-details-grid { gap: 20px; }
 .new-account-security-section { padding-left: 20px; border-left: 1px solid var(--border); background: transparent; }
-.new-account-modal .ui-input, .new-account-modal .ui-select { border-radius: 5px; background: var(--surface-2); }
+.new-account-modal .ui-input, .new-account-modal .ui-select { border-radius: 5px; border-color: var(--border); background: var(--surface-2); box-shadow: none; }
 .new-account-modal-footer .ui-btn { min-height: 30px; min-width: 72px; justify-content: center; }
 @media (max-width: 640px) {
   .new-account-security-section { padding-left: 0; padding-top: 16px; border-left: 0; border-top: 1px solid var(--border); }
@@ -6031,7 +6231,10 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(
   .trading-analytics-title,
   .opened-orders-title,
   .data-state-card-title,
-  .manager-menu-brand-name
+  .manager-menu-brand-name,
+  .group-create-title,
+  .groups-subgroup-title,
+  .new-account-header-copy > span:first-child
 ) {
   color: var(--ink-strong);
   font-weight: 600 !important;
@@ -6048,6 +6251,8 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) :is(
   .account-settings-card-title,
   .account-balance-summary-title,
   .new-account-section-heading,
+  .group-create-section-heading,
+  .groups-subgroup-section-heading,
   .opened-orders-section-title,
   .keyboard-shortcuts-group-heading,
   .cc-metric-card strong,
@@ -6097,3 +6302,191 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
 ) {
   color: #f06464 !important;
 }
+
+/* ============================================================================
+   Multi-Screen Divided Workspace (New Account & New Group โ€” up to 6 screens)
+   ============================================================================ */
+
+.cc-center-split {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cc-center-workspace.has-multi-screens .cc-route-viewport {
+  flex: 1 1 42%;
+  min-width: 280px;
+  height: 100%;
+}
+
+.cc-center-workspace.has-multi-screens .multi-screen-workspace {
+  flex: 1.4 1 58%;
+  min-width: 320px;
+  height: 100%;
+  border-left: 1px solid var(--border);
+}
+
+@container (max-width: 780px) {
+  .cc-route-viewport .cc-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cc-route-viewport .cc-lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cc-route-viewport .cc-chart-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+
+.multi-screen-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.multi-screen-row {
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+}
+
+.multi-screen-pane {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  transition:
+    border-radius 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/* When the user is present on a screen, give it a very slight rounded border
+   and subtle active ring so it is immediately clear which screen is active. */
+.multi-screen-pane.is-active {
+  border-radius: 10px;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 4px 12px rgba(0, 0, 0, 0.14);
+}
+
+.multi-screen-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--surface-3);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.multi-screen-pane.is-active .multi-screen-badge {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+
+.ui-modal.new-account-modal.new-account-embedded {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+.ui-modal.new-account-modal.new-account-embedded .new-account-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ui-modal.new-account-modal.new-account-embedded .new-account-modal-header,
+.ui-modal.new-account-modal.new-account-embedded .new-account-modal-footer {
+  flex-shrink: 0;
+}
+
+@container (max-width: 620px) {
+  .ui-modal.new-account-modal.new-account-embedded .new-account-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-group-field {
+    grid-column: 1 / -1;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container (max-width: 420px) {
+  .ui-modal.new-account-modal.new-account-embedded .new-account-settings-grid,
+  .ui-modal.new-account-modal.new-account-embedded .new-account-contact-grid,
+  .ui-modal.new-account-modal.new-account-embedded .new-account-password-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-modal-header {
+    padding: 6px 10px;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-modal-body {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-section {
+    padding: 6px 8px;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-modal-footer {
+    padding: 5px 8px;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .ui-modal.new-account-modal.new-account-embedded .new-account-required-note {
+    display: none;
+  }
+}
+
+

@@ -65,6 +65,9 @@ const ClientsContextMenu = ({
   onOpenDetails,
   onCopyAs,       // (format: 'csv' | 'tsv' | 'json') => void
   onExport,       // () => void
+  sortCol,
+  sortDir,
+  onSortColumn,
 }) => {
   useEffect(() => {
     const handleClick = () => onClose();
@@ -106,10 +109,22 @@ const ClientsContextMenu = ({
     { text: 'JSON', onClick: () => onCopyAs && onCopyAs('json') },
   ];
 
+  const activeSortCol = sortCol ?? grid?.sortCol;
+  const activeSortDir = sortDir ?? grid?.sortDir ?? 'asc';
+  const handleSortColumn = onSortColumn ?? grid?.onSortColumn;
+
   const columnsMenu = (grid?.columns || []).map(c => ({
     text: c.label || c.key,
-    hasCheck: !grid.hiddenColumns.has(c.key),
-    onClick: () => grid.toggleColumn(c.key),
+    hasCheck: handleSortColumn ? true : !grid.hiddenColumns.has(c.key),
+    rightText: handleSortColumn && activeSortCol === c.key ? (activeSortDir === 'asc' ? '↑ ASC' : '↓ DESC') : undefined,
+    onClick: () => {
+      if (handleSortColumn) {
+        handleSortColumn(c.key);
+        onClose();
+      } else {
+        grid.toggleColumn(c.key);
+      }
+    },
   }));
 
   const selectionSuffix = hasSelection ? ` (${selectedCount} selected)` : '';

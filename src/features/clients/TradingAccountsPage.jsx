@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
 import AccountDetailsModal from '../../components/Popups/AccountDetailsModal';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useGroupList } from '../../hooks/useGroupList';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { ALL_COUNTRIES } from '../../utils/countries';
 import { PERMISSIONS } from '../../utils/permissions';
 
@@ -28,7 +28,9 @@ const TradingAccountsPage = () => {
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('All Groups');
   const [countryFilter, setCountryFilter] = useState('All Countries');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [sortCol, setSortCol] = useState('login');
+  const [sortDir, setSortDir] = useState('asc');
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [restrictLogin, setRestrictLogin] = useState(null);
   const [editAccount, setEditAccount] = useState(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -41,13 +43,26 @@ const TradingAccountsPage = () => {
   );
   const countryOptions = useMemo(() => ['All Countries', ...ALL_COUNTRIES], []);
 
+  const handleSort = useCallback((col) => {
+    if (sortCol === col) {
+      setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  }, [sortCol]);
+
   const ctl = useGridPageController({
     columns: ACCOUNT_COLUMNS,
     rowKey: 'login',
     exportName: 'trading-accounts',
     entityLabel: 'account',
     onClearFilter: () => {
-      setSearch(''); setGroupFilter('All Groups'); setCountryFilter('All Countries');
+      setSearch('');
+      setGroupFilter('All Groups');
+      setCountryFilter('All Countries');
+      setSortCol('login');
+      setSortDir('asc');
     },
   });
 
@@ -90,6 +105,10 @@ const TradingAccountsPage = () => {
         search={search}
         groupFilter={groupFilter}
         countryFilter={countryFilter}
+        sortCol={sortCol}
+        sortDir={sortDir}
+        onSort={handleSort}
+        showGridlines={ctl.grid.showGridlines}
         onEditAccount={setEditAccount}
         canEditAccounts={canEditAccounts}
         refreshVersion={refreshVersion}
@@ -99,7 +118,10 @@ const TradingAccountsPage = () => {
       {ctl.contextMenuProps.isOpen && (
         <ClientsContextMenu
           {...ctl.contextMenuProps}
-          onNewClient={() => setIsNewAccountOpen(true)}
+          sortCol={sortCol}
+          sortDir={sortDir}
+          onSortColumn={handleSort}
+          onNewClient={() => openAccountScreen()}
           onOpenDetails={(row) => setRestrictLogin(row.login)}
         />
       )}
@@ -116,8 +138,6 @@ const TradingAccountsPage = () => {
           onAccountUpdated={() => setRefreshVersion((version) => version + 1)}
         />
       )}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

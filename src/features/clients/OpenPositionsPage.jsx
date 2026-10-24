@@ -3,12 +3,12 @@ import FilterDropdown from '../../components/FilterDropdown';
 import PositionsDataGrid from './components/PositionsDataGrid';
 import ClientsContextMenu from './components/ClientsContextMenu';
 import AccountRestrictionsModal from '../../components/Popups/AccountRestrictionsModal';
-import NewAccountModal from '../../components/Popups/NewAccountModal';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useDealerMenu } from '../../hooks/useDealerMenu';
 import { useAnalyticsRouteTiming } from '../../hooks/useAnalyticsTiming.js';
 import { ANALYTICS_VIEWS } from '../../utils/analyticsQueryOptions.js';
 import useSymbolStore from '../../store/symbolStore';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
 
 const POSITION_COLUMNS = [
@@ -45,7 +45,7 @@ const OpenPositionsPage = () => {
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [symbolFilter, setSymbolFilter] = useState('All Symbols');
   const [reasonFilter, setReasonFilter] = useState('All Reasons');
-  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const [restrictLogin, setRestrictLogin] = useState(null);
 
   const symbolOptions = useMemo(() => {
@@ -134,7 +134,7 @@ const OpenPositionsPage = () => {
         <ClientsContextMenu
           {...ctl.contextMenuProps}
           grid={{ ...ctl.grid, extraActions: dealerActions }}
-          onNewClient={() => setIsNewAccountOpen(true)}
+          onNewClient={() => openAccountScreen()}
           onOpenDetails={(row) => setRestrictLogin(row.login)}
         />
       )}
@@ -144,8 +144,6 @@ const OpenPositionsPage = () => {
       {restrictLogin && (
         <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
-
-      <NewAccountModal isOpen={isNewAccountOpen} onClose={() => setIsNewAccountOpen(false)} />
     </div>
   );
 };

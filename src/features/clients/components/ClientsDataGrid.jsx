@@ -184,11 +184,12 @@ const ClientsDataGrid = ({
   const isInitialLoad = !isIdle && pageRows.length === 0 && (isLoading || isFetching);
   const loadLabel = String(search || '').trim() || Object.keys(filters).length > 0 ? 'Load results' : 'Load first 30';
   const dataColumns = ['id', 'name', 'city', 'type', 'status', 'lead', 'email', 'phone', 'country'];
+  const visibleDataColumns = dataColumns.filter(isVisible);
 
   const renderSkeletonRows = () => Array.from({ length: 8 }, (_, index) => (
     <tr key={`skeleton-${index}`}>
-      {grid && <td />}
-      {dataColumns.filter(isVisible).map((column) => (
+      {grid && <td className="clients-check-cell" />}
+      {visibleDataColumns.map((column) => (
         <td key={column}>
           <span
             className="inline-block h-2.5 rounded animate-pulse"
@@ -213,10 +214,16 @@ const ClientsDataGrid = ({
         </div>
       )}
       <div className="grid-scroll-area w-full min-h-0 overflow-auto flex-1">
-        <table className={`ui-grid min-w-max ${grid?.showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
+        <table className={`ui-grid clients-table ${grid?.showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
+          <colgroup>
+            {grid && <col className="clients-col-check" style={{ width: '36px' }} />}
+            {visibleDataColumns.map((column) => (
+              <col key={column} className="clients-col-data" />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
-              {grid && <th style={{ width: 32 }} />}
+              {grid && <th className="clients-check-cell" style={{ width: 36 }} />}
               {isVisible('id') && renderHeader('id', 'ID')}
               {isVisible('name') && renderHeader('name', 'Name')}
               {isVisible('city') && renderHeader('city', 'City')}
@@ -231,7 +238,7 @@ const ClientsDataGrid = ({
           <tbody>
             {isInitialLoad ? renderSkeletonRows() : pageRows.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
+                <td colSpan={12} className="clients-grid-empty text-center py-16 text-sm" style={{ color: 'var(--muted)' }}>
                   {isIdle ? (
                     <div className="flex flex-col items-center gap-3">
                       <span>Clients are not loaded.</span>
@@ -254,18 +261,18 @@ const ClientsDataGrid = ({
                   style={{ cursor: 'pointer' }}
                 >
                   {grid && (
-                    <td onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }} style={{ textAlign: 'center' }}>
+                    <td className="clients-check-cell" onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }} style={{ textAlign: 'center' }}>
                       <input type="checkbox" checked={isChecked(row.id)} onChange={() => toggleRow(row.id)} onClick={(e) => e.stopPropagation()} />
                     </td>
                   )}
                   {isVisible('id') && (
-                    <td style={{ color: 'var(--text-3)' }}>
+                    <td style={{ color: 'var(--text-3)' }} title={String(row.id ?? '')}>
                       <span className="tabular">{row.id}</span>
                     </td>
                   )}
-                  {isVisible('name') && <td style={{ fontWeight: 500 }}>{row.name}</td>}
-                  {isVisible('city') && <td style={{ color: 'var(--text-2)' }}>{row.city || '-'}</td>}
-                  {isVisible('type') && <td style={{ color: 'var(--text-2)' }}>{row.type}</td>}
+                  {isVisible('name') && <td style={{ fontWeight: 500 }} title={row.name || ''}>{row.name || '-'}</td>}
+                  {isVisible('city') && <td style={{ color: 'var(--text-2)' }} title={row.city || ''}>{row.city || '-'}</td>}
+                  {isVisible('type') && <td style={{ color: 'var(--text-2)' }} title={row.type || ''}>{row.type || '-'}</td>}
                   {isVisible('status') && (
                     <td>
                       <span className={`ui-status ${STATUS_BADGE[row.status] || 'ui-status-neutral'}`}>
@@ -273,20 +280,22 @@ const ClientsDataGrid = ({
                       </span>
                     </td>
                   )}
-                  {isVisible('lead') && <td style={{ color: 'var(--muted)' }}>{row.lead}</td>}
+                  {isVisible('lead') && <td style={{ color: 'var(--muted)' }} title={row.lead || ''}>{row.lead || '-'}</td>}
                   {isVisible('email') && (
-                    <td>
-                      <a
-                        href={`mailto:${row.email}`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ color: 'var(--accent-text)' }}
-                      >
-                        {row.email}
-                      </a>
+                    <td title={row.email || ''}>
+                      {row.email ? (
+                        <a
+                          href={`mailto:${row.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ color: 'var(--accent-text)' }}
+                        >
+                          {row.email}
+                        </a>
+                      ) : '-'}
                     </td>
                   )}
-                  {isVisible('phone') && <td className="font-mono tabular" style={{ color: 'var(--text-2)' }}>{row.phone}</td>}
-                  {isVisible('country') && <td style={{ color: 'var(--text-2)' }}>{row.country}</td>}
+                  {isVisible('phone') && <td className="font-mono tabular" style={{ color: 'var(--text-2)' }} title={row.phone || ''}>{row.phone || '-'}</td>}
+                  {isVisible('country') && <td style={{ color: 'var(--text-2)' }} title={row.country || ''}>{row.country || '-'}</td>}
                 </tr>
               ))
             )}

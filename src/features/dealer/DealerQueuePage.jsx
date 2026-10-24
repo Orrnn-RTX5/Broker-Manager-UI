@@ -123,17 +123,15 @@ const DealerQueuePage = () => {
 
   return (
     <div className="dealer-queue-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden">
-      <div className="dealer-queue-header shrink-0">
-        <div className="dealer-queue-heading min-w-0">
+      <div className="dealer-queue-header flex flex-col md:flex-row items-start md:items-center justify-between pb-0 gap-2 shrink-0">
+        <div className="dealer-queue-heading flex items-center gap-2 min-w-0">
           <h1 className="dealer-queue-title text-[12px] font-semibold" style={{ color: 'var(--text)' }}>Dealer Queue</h1>
-          <p className="dealer-queue-subtitle text-[10px]" style={{ color: 'var(--text-3)' }}>Pending orders awaiting dealer approval · updates every 4 seconds</p>
         </div>
-      </div>
-
-      <div className="dealer-queue-search relative w-full max-w-xs shrink-0">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
-        <input type="text" placeholder="Search ticket, login, symbol…" value={search}
-          onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm" style={{ paddingLeft: 32 }} />
+        <div className="dealer-queue-search relative w-[220px] shrink-0">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
+          <input type="text" placeholder="Search ticket, login, symbol…" value={search}
+            onChange={e => setSearch(e.target.value)} className="ui-input ui-input-sm w-full" style={{ paddingLeft: 32 }} />
+        </div>
       </div>
 
       <div className="dealer-queue-grid ui-card flex flex-col w-full flex-1 min-h-0 overflow-hidden">
