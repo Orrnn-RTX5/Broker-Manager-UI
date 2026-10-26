@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bug, Check, ChevronDown, Copy, FileText, Image as ImageIcon, Info, Loader2, Paperclip, ShieldCheck, Terminal, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, FileText, Image as ImageIcon, Loader2, Paperclip, X } from 'lucide-react';
 
 import {
   CATEGORY_LABELS,
@@ -122,12 +122,6 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
   const titleReady = titleLength >= MIN_TITLE_LENGTH;
   const descriptionReady = descriptionLength >= MIN_DESCRIPTION_LENGTH;
   const canSubmit = titleReady && descriptionReady && !submitting;
-  // A disabled button with no reason is what stopped the first reports.
-  const submitHint = !titleReady
-      ? `Add a title (at least ${MIN_TITLE_LENGTH} characters) to send the report.`
-      : !descriptionReady
-          ? `Describe what happened (at least ${MIN_DESCRIPTION_LENGTH} characters) to send the report.`
-          : '';
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -154,7 +148,6 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
   };
 
   const storageDisabled = options && options.enabled === false;
-  const activeRouteLabel = page || (typeof window !== 'undefined' ? window.location?.pathname || '/' : '/');
 
   // Per-broker support contact merged from the broker config (see brokerAuth
   // fetchBrokerConfig); falls back to vendor-free generic wording when absent.
@@ -170,29 +163,17 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="bug-report-dialog-title"
-        aria-describedby="bug-report-dialog-description"
         tabIndex={-1}
         className="bug-report-dialog"
         onPaste={onPaste}
       >
         <header className="bug-report-header">
-          <span className="bug-report-header-icon">
-            <Bug size={16} strokeWidth={1.8} aria-hidden="true" />
-          </span>
           <div className="bug-report-heading">
             <div className="bug-report-title-row">
               <h2 id="bug-report-dialog-title" className="bug-report-title">Report a bug</h2>
-              <span className="bug-report-module-badge">ISSUE TELEMETRY</span>
             </div>
-            <p id="bug-report-dialog-description" className="bug-report-subtitle">
-              Share an issue with your support team.
-            </p>
           </div>
           <div className="bug-report-header-meta">
-            <span className="bug-report-route-pill" title={`Active view: ${activeRouteLabel}`}>
-              <Terminal size={11} aria-hidden="true" />
-              <span>{activeRouteLabel}</span>
-            </span>
             <button
               type="button"
               onClick={onClose}
@@ -243,9 +224,8 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
 
               <div className="bug-report-form-group">
                 <label className={labelClass} htmlFor="bug-title">
-                  <span className="bug-report-label-text">Title</span>
-                  <span className={`bug-report-required ${titleReady ? 'bug-report-required--met' : ''}`}>
-                    Required
+                  <span className="bug-report-label-text">
+                    Title <span className="bug-report-required-star" aria-hidden="true">*</span>
                   </span>
                 </label>
                 <input
@@ -262,9 +242,8 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
 
               <div className="bug-report-form-group">
                 <label className={labelClass} htmlFor="bug-description">
-                  <span className="bug-report-label-text">What happened?</span>
-                  <span className={`bug-report-required ${descriptionReady ? 'bug-report-required--met' : ''}`}>
-                    Required
+                  <span className="bug-report-label-text">
+                    What happened? <span className="bug-report-required-star" aria-hidden="true">*</span>
                   </span>
                 </label>
                 <textarea
@@ -283,7 +262,6 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                 <div className="bug-report-form-group">
                   <label className={labelClass} htmlFor="bug-category">
                     <span className="bug-report-label-text">Area</span>
-                    <span className="bug-report-field-tag">MODULE</span>
                   </label>
                   <div className="bug-report-select-wrap">
                     <select
@@ -304,18 +282,11 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                 <div className="bug-report-form-group">
                   <label className={labelClass} htmlFor="bug-severity">
                     <span className="bug-report-label-text">Severity</span>
-                    <span className={`bug-report-severity-pill bug-report-severity-pill--${form.severity}`}>
-                      {form.severity.toUpperCase()}
-                    </span>
                   </label>
                   <div className="bug-report-select-wrap">
-                    <span
-                      className={`bug-report-severity-dot bug-report-severity-dot--${form.severity}`}
-                      aria-hidden="true"
-                    />
                     <select
                       id="bug-severity"
-                      className={`${fieldClass} bug-report-select--with-dot`}
+                      className={fieldClass}
                       value={form.severity}
                       onChange={update('severity')}
                       disabled={submitting}
@@ -331,18 +302,17 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
 
               <section className="bug-report-attachments" aria-labelledby="bug-attachments-title">
                 <div className="bug-report-section-heading">
-                  <h3 id="bug-attachments-title">Screenshots and logs</h3>
+                  <h3 id="bug-attachments-title">
+                    Screenshots and logs <span className="bug-report-optional-inline">(Optional)</span>
+                  </h3>
                   <span className="bug-report-counter-pill">
-                    Optional · {attachments.length}/{MAX_ATTACHMENTS} files
+                    {attachments.length}/{MAX_ATTACHMENTS} files
                   </span>
                 </div>
                 <div className="bug-report-upload-row">
                   <div className="bug-report-upload-copy">
-                    <span className="bug-report-upload-icon">
-                      <Paperclip size={15} strokeWidth={1.7} aria-hidden="true" />
-                    </span>
                     <div className="bug-report-upload-text">
-                      <p className="bug-report-upload-primary">Attach a file or paste a screenshot</p>
+                      <p className="bug-report-upload-primary">Attach a file or paste a screenshot (Ctrl+V)</p>
                       <p className="bug-report-help">
                         PNG, JPG, WebP, TXT or LOG · Up to {MAX_FILE_BYTES / (1024 * 1024)} MB each
                       </p>
@@ -395,11 +365,6 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                     ))}
                   </ul>
                 ) : null}
-                <p className="bug-report-help bug-report-attachment-note">
-                  <span>
-                    Paste with <kbd className="bug-report-kbd">Ctrl+V</kbd>. Attachments are shared with the platform team; remove sensitive details first.
-                  </span>
-                </p>
               </section>
 
               <div className={`bug-report-accordion ${showDetails ? 'bug-report-accordion--open' : ''}`}>
@@ -413,10 +378,10 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                 >
                   <span className="bug-report-disclosure-copy">
                     <span className="bug-report-disclosure-label">
-                      <span className="bug-report-disclosure-title">Reproduction details</span>
-                      <span className="bug-report-optional-pill">Optional</span>
+                      <span className="bug-report-disclosure-title">
+                        Reproduction details <span className="bug-report-optional-inline">(Optional)</span>
+                      </span>
                     </span>
-                    <span className="bug-report-help">Steps to reproduce, expected result and actual result</span>
                   </span>
                   <span className="bug-report-disclosure-chevron">
                     <ChevronDown size={14} aria-hidden="true" />
@@ -427,8 +392,9 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                   <div id="bug-reproduction-details" className="bug-report-details">
                     <div className="bug-report-form-group">
                       <label className={labelClass} htmlFor="bug-steps">
-                        <span className="bug-report-label-text">Steps to reproduce (one per line)</span>
-                        <span className="bug-report-field-tag">SEQUENCE</span>
+                        <span className="bug-report-label-text">
+                          Steps to reproduce <span className="bug-report-optional-inline">(Optional)</span>
+                        </span>
                       </label>
                       <textarea
                         id="bug-steps"
@@ -442,8 +408,9 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                     <div className="bug-report-columns">
                       <div className="bug-report-form-group">
                         <label className={labelClass} htmlFor="bug-expected">
-                          <span className="bug-report-label-text">Expected</span>
-                          <span className="bug-report-field-tag bug-report-field-tag--expected">TARGET</span>
+                          <span className="bug-report-label-text">
+                            Expected <span className="bug-report-optional-inline">(Optional)</span>
+                          </span>
                         </label>
                         <textarea
                           id="bug-expected"
@@ -456,8 +423,9 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                       </div>
                       <div className="bug-report-form-group">
                         <label className={labelClass} htmlFor="bug-actual">
-                          <span className="bug-report-label-text">Actual</span>
-                          <span className="bug-report-field-tag bug-report-field-tag--actual">OBSERVED</span>
+                          <span className="bug-report-label-text">
+                            Actual <span className="bug-report-optional-inline">(Optional)</span>
+                          </span>
                         </label>
                         <textarea
                           id="bug-actual"
@@ -473,39 +441,12 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                 ) : null}
               </div>
 
-              <div className="bug-report-environment">
-                <div className="bug-report-environment-chips" aria-hidden="true">
-                  <span className="bug-report-telemetry-chip bug-report-telemetry-chip--primary">
-                    <Info size={11} /> AUTO-DIAGNOSTICS
-                  </span>
-                  <span className="bug-report-telemetry-chip">APP VERSION</span>
-                  <span className="bug-report-telemetry-chip">OS / BROWSER</span>
-                  <span className="bug-report-telemetry-chip">VIEWPORT</span>
-                  <span className="bug-report-telemetry-chip bug-report-telemetry-chip--secure">
-                    <ShieldCheck size={11} /> NO CREDENTIALS SENT
-                  </span>
-                </div>
-                <p className="bug-report-environment-copy">
-                  Your application version, browser, operating system and current screen are attached automatically.
-                  Passwords and session tokens are never included.
-                </p>
-              </div>
-
               {error ? (
                 <p role="alert" className="bug-report-notice bug-report-notice--error">{error}</p>
               ) : null}
             </div>
 
             <footer className="bug-report-footer">
-              <div className="bug-report-status-wrap">
-                <span
-                  className={`bug-report-status-dot ${canSubmit ? 'bug-report-status-dot--ready' : 'bug-report-status-dot--pending'}`}
-                  aria-hidden="true"
-                />
-                <p className="bug-report-submit-hint" id="bug-submit-hint" role="status">
-                  {submitting ? 'Sending your report…' : submitHint || 'Ready to send to the platform team.'}
-                </p>
-              </div>
               <div className="bug-report-actions">
                 <button type="button" onClick={onClose} disabled={submitting} className="bug-report-button">
                   Cancel
@@ -513,7 +454,6 @@ export default function BugReportDialog({ onClose, onSubmitted, page = '' }) {
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  aria-describedby="bug-submit-hint"
                   className="bug-report-button bug-report-button--primary"
                 >
                   {submitting && <Loader2 size={13} className="bug-report-spinner" aria-hidden="true" />}

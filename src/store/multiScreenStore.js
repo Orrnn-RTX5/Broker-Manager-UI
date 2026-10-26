@@ -20,6 +20,9 @@ const createScreenEntry = (prefix, extra = {}) => {
   return {
     id: `${prefix}-screen-${nextScreenCounter}`,
     createdAt: Date.now(),
+    movable: false,
+    position: { x: 0, y: 0 },
+    dockZone: null,
     ...extra,
   };
 };
@@ -30,6 +33,9 @@ export const useMultiScreenStore = create((set, get) => ({
   groupScreens: [],
   activeGroupScreenId: null,
   activeView: null,
+  isWorkspaceMovable: false,
+  workspacePosition: { x: 0, y: 0 },
+  workspaceDockZone: null,
 
   openAccountScreen: (options = {}) => {
     const state = get();
@@ -190,6 +196,101 @@ export const useMultiScreenStore = create((set, get) => ({
     set({ activeView: view });
   },
 
+  toggleWorkspaceMovable: () => {
+    set((state) => {
+      const nextMovable = !state.isWorkspaceMovable;
+      return {
+        isWorkspaceMovable: nextMovable,
+        workspacePosition: nextMovable ? (state.workspacePosition || { x: 0, y: 0 }) : { x: 0, y: 0 },
+        workspaceDockZone: nextMovable ? state.workspaceDockZone : null,
+      };
+    });
+  },
+
+  setWorkspaceMovable: (movable) => {
+    const nextMovable = Boolean(movable);
+    set((state) => ({
+      isWorkspaceMovable: nextMovable,
+      workspacePosition: nextMovable ? (state.workspacePosition || { x: 0, y: 0 }) : { x: 0, y: 0 },
+      workspaceDockZone: nextMovable ? state.workspaceDockZone : null,
+    }));
+  },
+
+  setWorkspacePosition: (position) => {
+    set({
+      workspacePosition: {
+        x: Number(position?.x) || 0,
+        y: Number(position?.y) || 0,
+      },
+    });
+  },
+
+  dockWorkspaceToZone: (zone) => {
+    const normalized = !zone || zone === 'right' ? null : zone;
+    set({
+      isWorkspaceMovable: true,
+      workspaceDockZone: normalized,
+      workspacePosition: { x: 0, y: 0 },
+    });
+  },
+
+  toggleScreenMovable: (mode, screenId) => {
+    const key = mode === 'group' ? 'groupScreens' : 'accountScreens';
+    set((state) => ({
+      [key]: state[key].map((item) => {
+        if (item.id !== screenId) return item;
+        const nextMovable = !item.movable;
+        return {
+          ...item,
+          movable: nextMovable,
+          position: nextMovable ? (item.position || { x: 0, y: 0 }) : { x: 0, y: 0 },
+          dockZone: nextMovable ? (item.dockZone || null) : null,
+        };
+      }),
+    }));
+  },
+
+  setScreenMovable: (mode, screenId, movable) => {
+    const key = mode === 'group' ? 'groupScreens' : 'accountScreens';
+    const nextMovable = Boolean(movable);
+    set((state) => ({
+      [key]: state[key].map((item) => {
+        if (item.id !== screenId) return item;
+        return {
+          ...item,
+          movable: nextMovable,
+          position: nextMovable ? (item.position || { x: 0, y: 0 }) : { x: 0, y: 0 },
+          dockZone: nextMovable ? (item.dockZone || null) : null,
+        };
+      }),
+    }));
+  },
+
+  setScreenPosition: (mode, screenId, position) => {
+    const key = mode === 'group' ? 'groupScreens' : 'accountScreens';
+    const nextPos = {
+      x: Number(position?.x) || 0,
+      y: Number(position?.y) || 0,
+    };
+    set((state) => ({
+      [key]: state[key].map((item) => (
+        item.id === screenId ? { ...item, position: nextPos } : item
+      )),
+    }));
+  },
+
+  dockScreenToZone: (mode, screenId, zone) => {
+    const key = mode === 'group' ? 'groupScreens' : 'accountScreens';
+    const normalized = !zone || zone === 'right' ? null : zone;
+    set((state) => ({
+      [key]: state[key].map((item) => (
+        item.id === screenId
+          ? { ...item, movable: true, dockZone: normalized, position: { x: 0, y: 0 } }
+          : item
+      )),
+    }));
+  },
+
   resetMultiScreens: () => {
     set({
       accountScreens: [],
@@ -197,6 +298,9 @@ export const useMultiScreenStore = create((set, get) => ({
       groupScreens: [],
       activeGroupScreenId: null,
       activeView: null,
+      isWorkspaceMovable: false,
+      workspacePosition: { x: 0, y: 0 },
+      workspaceDockZone: null,
     });
   },
 }));

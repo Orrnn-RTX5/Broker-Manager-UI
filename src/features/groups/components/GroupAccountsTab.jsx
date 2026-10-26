@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, RefreshCw, Search, Users } from 'lucide-react';
+import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
 import { updateManagerAccount } from '../../../services/managerAccountApi.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../groupAccountRows.js';
@@ -103,15 +103,11 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
 
   return (
     <div className="groups-props-page">
-      <div className="groups-props-intro">
-        <Users size={40} className="groups-props-icon" />
-        <span>Accounts in this group. Double-click an account to open it.</span>
-      </div>
       <div className="groups-props-inline groups-accounts-tools">
-        <div className="relative">
+        <div className="relative groups-accounts-search-wrap">
           <Search size={13} className="groups-search-icon" />
           <input
-            className="ui-input ui-input-sm groups-search"
+            className="ui-input ui-input-sm groups-search groups-accounts-search"
             placeholder="Find account..."
             aria-label="Find accounts in this group"
             value={search}
@@ -123,17 +119,6 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         </span>
         <button type="button" className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm" title="Refresh accounts" aria-label="Refresh accounts" disabled={isFetching || applying} onClick={() => refetch()}>
           {isFetching ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-        </button>
-      </div>
-      <div className="groups-props-inline">
-        <button
-          type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
-          disabled={!canApply}
-          title={groupRatio === null || groupRatio === undefined ? 'Group leverage is not set for this group' : `Apply group leverage to all ${rows.length} accounts in this group`}
-          onClick={() => { setApplyResult(null); setApplyError(null); setConfirmOpen(true); }}
-        >
-          {`Apply group leverage to all ${rows.length} accounts in group`}
         </button>
       </div>
       {applyMessage && <p className="groups-props-empty" role="status">{applyMessage}</p>}
@@ -187,6 +172,18 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
           </tbody>
         </table>
         {emptyMessage && visibleRows.length === 0 && <p className="groups-props-empty" role="status">{emptyMessage}</p>}
+      </div>
+      <div className="groups-accounts-footer">
+        <span className="groups-accounts-hint">Double-click an account to open it.</span>
+        <button
+          type="button"
+          className="ui-btn ui-btn-secondary ui-btn-sm"
+          disabled={!canApply}
+          title={groupRatio === null || groupRatio === undefined ? 'Group leverage is not set for this group' : `Apply group leverage to all ${rows.length} accounts in this group`}
+          onClick={() => { setApplyResult(null); setApplyError(null); setConfirmOpen(true); }}
+        >
+          {`Apply group leverage to all ${rows.length} accounts in group`}
+        </button>
       </div>
     </div>
   );

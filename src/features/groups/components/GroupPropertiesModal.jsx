@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Loader2, Pencil, Users, X } from 'lucide-react';
+import { AlertCircle, Loader2, Pencil, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
@@ -214,82 +214,147 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
           {tab === 'Margin' && (
             <div className="groups-props-page">
-              <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Please set up margin requirements.</span></div>
-              <div className="groups-props-form">
-                <label className="groups-props-row">
-                  <span>Risk management:</span>
-                  <select className="ui-input ui-input-sm" value={form.routingMode || 'b_book'} onChange={(event) => update('routingMode', event.target.value)}>
-                    {ROUTING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <div className="groups-props-row groups-props-levels">
-                  <span>Margin call level:</span>
-                  <div className="groups-props-inline">
-                    <input
-                      className="ui-input ui-input-sm groups-props-number"
-                      type="number"
-                      min="0"
-                      step="1"
-                      aria-label="Margin call level"
-                      placeholder={numberValue(initialForm.marginCallLevel) || '150'}
-                      value={editedLevels.marginCallLevel ? numberValue(form.marginCallLevel) : ''}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        const hasTyped = raw.trim() !== '';
-                        setEditedLevels((prev) => ({ ...prev, marginCallLevel: hasTyped }));
-                        update('marginCallLevel', hasTyped ? toNumber(raw) : initialForm.marginCallLevel);
-                      }}
-                    />
-                    <span>Stop out level:</span>
-                    <input
-                      className="ui-input ui-input-sm groups-props-number"
-                      type="number"
-                      min="0"
-                      step="1"
-                      aria-label="Stop out level"
-                      placeholder={numberValue(initialForm.stopOutLevel) || '50'}
-                      value={editedLevels.stopOutLevel ? numberValue(form.stopOutLevel) : ''}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        const hasTyped = raw.trim() !== '';
-                        setEditedLevels((prev) => ({ ...prev, stopOutLevel: hasTyped }));
-                        update('stopOutLevel', hasTyped ? toNumber(raw) : initialForm.stopOutLevel);
-                      }}
-                    />
-                    <span>in</span>
-                    <select className="ui-input ui-input-sm groups-props-unit" aria-label="Level unit" value="percent" readOnly disabled>
-                      <option value="percent">%, percent</option>
-                    </select>
-                  </div>
+              <div className="groups-props-section">
+                <div className="groups-props-section-head">
+                  <div className="groups-props-section-title">Execution &amp; risk management</div>
+                  <div className="groups-props-section-sub">Choose how orders in this group are routed and hedged.</div>
                 </div>
-                <label className="groups-props-check">
-                  <input type="checkbox" checked={Boolean(form.negativeBalanceProtection)} onChange={(event) => update('negativeBalanceProtection', event.target.checked)} />
-                  <span>Compensate negative balance after stop out</span>
-                </label>
-                <label className="groups-props-check is-disabled" title="Not supported by this server">
-                  <input type="checkbox" disabled checked={false} readOnly />
-                  <span>Withdraw credit after negative balance compensation</span>
-                </label>
-                <label className="groups-props-row">
-                  <span>Leverage:</span>
-                  <div className="groups-props-inline">
-                    <span className="groups-props-prefix">1 :</span>
-                    <input className="ui-input ui-input-sm groups-props-number" type="number" min="0" step="1" aria-label="Leverage" value={numberValue(form.leverage)} onChange={(event) => update('leverage', isNewGroup && event.target.value === '' ? '' : toNumber(event.target.value))} />
-                  </div>
-                </label>
-                {leverageError && (
-                  <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{leverageError}</span></div>
-                )}
-                {isNewGroup && leverageDefaultMissing && isBlankLeverage(form.leverage) && !leverageError && (
-                  <p className="group-create-note">{GROUP_LEVERAGE_NO_DEFAULT_HINT}</p>
-                )}
+                <div className="groups-props-section-body">
+                  <label className="groups-props-field">
+                    <span className="groups-props-field-label">Risk management</span>
+                    <select className="ui-input ui-input-sm" value={form.routingMode || 'b_book'} onChange={(event) => update('routingMode', event.target.value)}>
+                      {ROUTING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                </div>
               </div>
+
+              <div className="groups-props-section">
+                <div className="groups-props-section-head">
+                  <div className="groups-props-section-title">Margin requirements</div>
+                  <div className="groups-props-section-sub">Thresholds are measured as a percentage of required margin.</div>
+                </div>
+                <div className="groups-props-section-body groups-props-card-grid">
+                  <label className="groups-props-field">
+                    <span className="groups-props-field-label">Margin call level</span>
+                    <div className="groups-props-input-group">
+                      <input
+                        className="ui-input ui-input-sm groups-props-input-grouped"
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label="Margin call level"
+                        placeholder={numberValue(initialForm.marginCallLevel) || '150'}
+                        value={editedLevels.marginCallLevel ? numberValue(form.marginCallLevel) : ''}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const hasTyped = raw.trim() !== '';
+                          setEditedLevels((prev) => ({ ...prev, marginCallLevel: hasTyped }));
+                          update('marginCallLevel', hasTyped ? toNumber(raw) : initialForm.marginCallLevel);
+                        }}
+                      />
+                      <span className="groups-props-input-addon">%</span>
+                    </div>
+                  </label>
+                  <label className="groups-props-field">
+                    <span className="groups-props-field-label">Stop out level</span>
+                    <div className="groups-props-input-group">
+                      <input
+                        className="ui-input ui-input-sm groups-props-input-grouped"
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label="Stop out level"
+                        placeholder={numberValue(initialForm.stopOutLevel) || '50'}
+                        value={editedLevels.stopOutLevel ? numberValue(form.stopOutLevel) : ''}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const hasTyped = raw.trim() !== '';
+                          setEditedLevels((prev) => ({ ...prev, stopOutLevel: hasTyped }));
+                          update('stopOutLevel', hasTyped ? toNumber(raw) : initialForm.stopOutLevel);
+                        }}
+                      />
+                      <span className="groups-props-input-addon">%</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="groups-props-section">
+                <div className="groups-props-section-head">
+                  <div className="groups-props-section-title">Stop out handling</div>
+                </div>
+                <div className="groups-props-section-body">
+                  <label className="groups-props-check">
+                    <input type="checkbox" checked={Boolean(form.negativeBalanceProtection)} onChange={(event) => update('negativeBalanceProtection', event.target.checked)} />
+                    <span className="groups-props-check-copy">
+                      <span className="groups-props-check-title">Compensate negative balance after stop out</span>
+                      <span className="groups-props-check-sub">Automatically reset negative account equity to zero after forced liquidation.</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="groups-props-section">
+                <div className="groups-props-section-head">
+                  <div className="groups-props-section-title">Leverage</div>
+                  <div className="groups-props-section-sub">Default maximum leverage ratio applied to accounts in this group.</div>
+                </div>
+                <div className="groups-props-section-body">
+                  <label className="groups-props-field groups-props-field-compact">
+                    <span className="groups-props-field-label">Leverage</span>
+                    <div className="groups-props-input-group">
+                      <span className="groups-props-input-addon is-prefix">1 :</span>
+                      <input
+                        className="ui-input ui-input-sm groups-props-input-grouped"
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label="Leverage"
+                        placeholder={numberValue(initialForm.leverage) || '100'}
+                        value={isNewGroup ? numberValue(form.leverage) : (editedLevels.leverage ? numberValue(form.leverage) : '')}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          if (isNewGroup) {
+                            update('leverage', raw === '' ? '' : toNumber(raw));
+                            return;
+                          }
+                          const hasTyped = raw.trim() !== '';
+                          setEditedLevels((prev) => ({ ...prev, leverage: hasTyped }));
+                          update('leverage', hasTyped ? toNumber(raw) : initialForm.leverage);
+                        }}
+                      />
+                    </div>
+                  </label>
+                  {leverageError && (
+                    <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{leverageError}</span></div>
+                  )}
+                  {isNewGroup && leverageDefaultMissing && isBlankLeverage(form.leverage) && !leverageError && (
+                    <p className="group-create-note">{GROUP_LEVERAGE_NO_DEFAULT_HINT}</p>
+                  )}
+                </div>
+              </div>
+
+              <details className="groups-props-disclosure">
+                <summary className="groups-props-disclosure-summary">
+                  <span>Additional settings</span>
+                  <span className="groups-props-disclosure-tag">Not supported by the server yet</span>
+                </summary>
+                <div className="groups-props-disclosure-body">
+                  <label className="groups-props-check is-disabled" title="Not supported by this server">
+                    <input type="checkbox" disabled checked={false} readOnly />
+                    <span className="groups-props-check-copy">
+                      <span className="groups-props-check-title">Withdraw credit after negative balance compensation</span>
+                      <span className="groups-props-check-sub">Requires trade server credit-reclaim support.</span>
+                    </span>
+                  </label>
+                </div>
+              </details>
             </div>
           )}
 
           {tab === 'Symbols' && (
             <div className="groups-props-page">
-              <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Every symbol is shown here. Enable or disable trading for this group.</span></div>
               {!overridesView?.groupTrading && overridesView && (
                 <div className="groups-symbols-notice is-danger">Trading is disabled for this group, so every symbol is currently off.</div>
               )}
@@ -390,7 +455,6 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
           {tab === 'Commissions' && (
             <div className="groups-props-page">
-              <div className="groups-props-intro"><Users size={40} className="groups-props-icon" /><span>Please set up commissions for accounts in the group.</span></div>
               <div className="groups-props-list">
                 <table className="ui-grid groups-props-grid" aria-label="Group commissions">
                   <thead><tr><th scope="col">Name</th><th scope="col">Symbol</th><th scope="col">Type</th><th scope="col" style={{ textAlign: 'right' }}>Charge</th></tr></thead>
@@ -422,12 +486,17 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
           )}
         </div>
 
-        <div className="ui-modal-footer">
-          <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving || !hasChanges} onClick={handleSave}>
-            {saving ? <Loader2 size={13} className="animate-spin" /> : null}
-            OK
-          </button>
-          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Cancel</button>
+        <div className="ui-modal-footer groups-props-footer">
+          <div className="groups-props-footer-status">
+            {hasChanges && !isNewGroup ? <span className="groups-props-dirty-indicator">Unsaved changes</span> : null}
+          </div>
+          <div className="groups-props-footer-actions">
+            <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" disabled={saving || !hasChanges} onClick={handleSave}>
+              {saving ? <Loader2 size={13} className="animate-spin" /> : null}
+              OK
+            </button>
+            <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onClose}>Cancel</button>
+          </div>
         </div>
       </div>
     </div>

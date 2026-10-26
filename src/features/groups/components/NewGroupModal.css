@@ -6,9 +6,12 @@
 }
 
 .ui-modal-header.group-create-header {
-  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
   gap: 12px;
-  padding: 12px 20px;
+  padding: 10px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border-2);
 }

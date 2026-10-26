@@ -1,6 +1,6 @@
 import { useState, useEffect, useId, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, Eye, EyeOff, Move } from 'lucide-react';
 import { useGroupList } from '../../hooks/useGroupList';
 import { createManagerAccount } from '../../services/managerAccountApi';
 import {
@@ -193,7 +193,16 @@ const GroupCombobox = ({ id, value, onChange, groups = [], loading = false, hasM
   );
 };
 
-export const NewAccountModalContent = ({ onClose, onSuccess, embedded = false, screenNumber }) => {
+export const NewAccountModalContent = ({
+  onClose,
+  onSuccess,
+  embedded = false,
+  screenNumber,
+  isMovable: controlledMovable,
+  onToggleMovable,
+  onMoveButtonPointerDown,
+  onHeaderPointerDown,
+}) => {
   // Sweep W5/W4: NO tenant-meaningful hardcoded defaults reach the wire.
   // Group starts '' (never auto-filled), Leverage starts '' (no 1:100
   // placeholder), Currency starts '' (no USD default: resolveDefaultCurrency
@@ -217,6 +226,92 @@ export const NewAccountModalContent = ({ onClose, onSuccess, embedded = false, s
   const instanceId = useId();
   const fid = (suffix) => `${instanceId}-${suffix}`;
   const queryClient = useQueryClient();
+  const [localMovable, setLocalMovable] = useState(false);
+  const [localPosition, setLocalPosition] = useState({ x: 0, y: 0 });
+  const suppressToggleClickRef = useRef(false);
+  const isMovable = controlledMovable !== undefined ? Boolean(controlledMovable) : localMovable;
+
+  const handleToggleMovable = (event) => {
+    if (onToggleMovable) {
+      onToggleMovable(event);
+      return;
+    }
+    if (suppressToggleClickRef.current) {
+      suppressToggleClickRef.current = false;
+      return;
+    }
+    setLocalMovable((prev) => {
+      const next = !prev;
+      if (!next) setLocalPosition({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleLocalMoveButtonPointerDown = (event) => {
+    if (onMoveButtonPointerDown) {
+      onMoveButtonPointerDown(event);
+      return;
+    }
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const basePos = { ...localPosition };
+    let moved = false;
+
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) >= 4) {
+        moved = true;
+        suppressToggleClickRef.current = true;
+        setLocalMovable(true);
+      }
+      if (moved) {
+        moveEvent.preventDefault();
+        setLocalPosition({
+          x: basePos.x + dx,
+          y: basePos.y + dy,
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  const handleLocalPointerDown = (event) => {
+    if (onHeaderPointerDown) {
+      onHeaderPointerDown(event);
+      return;
+    }
+    if (!isMovable || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('button, input, select, textarea, a, label, [role="listbox"], [role="option"], [role="combobox"]')) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const basePos = { ...localPosition };
+    const onMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      setLocalPosition({
+        x: basePos.x + (moveEvent.clientX - startX),
+        y: basePos.y + (moveEvent.clientY - startY),
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
 
   const [form, setForm] = useState({
     Group: '',
@@ -332,21 +427,52 @@ export const NewAccountModalContent = ({ onClose, onSuccess, embedded = false, s
 
   const modalCard = (
     <div
-      className={`ui-modal new-account-modal${embedded ? ' new-account-embedded' : ''}`}
+      className={`ui-modal new-account-modal${embedded ? ' new-account-embedded' : ''}${isMovable ? ' is-movable' : ''}`}
       role={embedded ? 'region' : 'dialog'}
       aria-modal={embedded ? undefined : 'true'}
       aria-labelledby={fid('title')}
+      onPointerDown={!embedded ? handleLocalPointerDown : undefined}
+      style={!embedded && isMovable && (localPosition.x || localPosition.y)
+        ? { transform: `translate3d(${localPosition.x}px, ${localPosition.y}px, 0)` }
+        : undefined}
     >
-      <div className="ui-modal-header new-account-modal-header">
+      <div
+        className={`ui-modal-header new-account-modal-header${isMovable ? ' is-movable' : ''}`}
+        onPointerDown={handleLocalPointerDown}
+      >
         <span className="new-account-header-copy">
           <span id={fid('title')}>
             New account{screenNumber ? <span className="multi-screen-badge">#{screenNumber}</span> : null}
           </span>
           <small>Configure account settings and secure access</small>
         </span>
-        <button type="button" className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm new-account-close" onClick={handleClose} aria-label="Close new account dialog" disabled={loading}>
-          <X size={16} />
-        </button>
+        <div className="new-account-header-actions">
+          <button
+            type="button"
+            className={`ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm new-account-move-toggle${isMovable ? ' is-active' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleToggleMovable(event);
+            }}
+            onPointerDown={handleLocalMoveButtonPointerDown}
+            aria-label={isMovable ? 'Dock new account window' : 'Make new account window movable'}
+            aria-pressed={isMovable}
+            title={isMovable ? 'Movable mode ON — drag header or icon to move (click to dock)' : 'Click or drag to move window'}
+            data-testid={screenNumber ? `new-account-move-toggle-${screenNumber}` : 'new-account-move-toggle'}
+          >
+            <Move size={14} />
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm new-account-close"
+            onClick={handleClose}
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label="Close new account dialog"
+            disabled={loading}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="ui-modal-body new-account-modal-body">
@@ -536,10 +662,21 @@ export const NewAccountModalContent = ({ onClose, onSuccess, embedded = false, s
   );
 };
 
-const NewAccountModal = ({ isOpen, onClose, onSuccess, embedded = false, screenNumber }) => {
+const NewAccountModal = ({ isOpen, onClose, onSuccess, embedded = false, screenNumber, isMovable, onToggleMovable, onMoveButtonPointerDown, onHeaderPointerDown }) => {
   if (!isOpen && !embedded) return null;
 
-  return <NewAccountModalContent onClose={onClose} onSuccess={onSuccess} embedded={embedded} screenNumber={screenNumber} />;
+  return (
+    <NewAccountModalContent
+      onClose={onClose}
+      onSuccess={onSuccess}
+      embedded={embedded}
+      screenNumber={screenNumber}
+      isMovable={isMovable}
+      onToggleMovable={onToggleMovable}
+      onMoveButtonPointerDown={onMoveButtonPointerDown}
+      onHeaderPointerDown={onHeaderPointerDown}
+    />
+  );
 };
 
 export default NewAccountModal;

@@ -103,6 +103,7 @@ test('pages gate on the session field and never show the old message or the bare
     assert.ok(src.includes('=== null) return; // still loading: show nothing'), `${path} must show nothing while loading`);
   }
   assert.ok(read('./GroupDetailsPage.jsx').includes('disabled={operationsEnabled === null}'), 'the Move button must be disabled while the session answer is loading');
+  assert.ok(read('./GroupsPage.jsx').includes('disabled={(!selectedNode && !openedGroup) || deleting || operationsEnabled === null}'), 'the Delete button must be enabled when a group is selected once the session answer has finished loading');
 });
 
 test('the permissions hook exposes the backend boolean, leaves it undefined when absent, and exposes loading', () => {

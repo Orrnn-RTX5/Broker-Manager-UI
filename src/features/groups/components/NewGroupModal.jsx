@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, X, AlertCircle } from 'lucide-react';
+import { Check, ChevronDown, X, AlertCircle, Move } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
 import GroupPermissionNotice from './GroupPermissionNotice';
 import './NewGroupModal.css';
@@ -238,13 +238,111 @@ const PresetSelect = ({ label, value, presets, onChange, placeholder, customPlac
   );
 };
 
-const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSuccess, embedded = false, screenNumber }) => {
+const NewGroupModal = ({
+  initialData,
+  duplicateData,
+  presetName,
+  onClose,
+  onSuccess,
+  embedded = false,
+  screenNumber,
+  isMovable: controlledMovable,
+  onToggleMovable,
+  onMoveButtonPointerDown,
+  onHeaderPointerDown,
+}) => {
   const titleId = useId();
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
   const isEditing = Boolean(initialData);
   const isFreshCreate = !initialData && !duplicateData;
+  const [localMovable, setLocalMovable] = useState(false);
+  const [localPosition, setLocalPosition] = useState({ x: 0, y: 0 });
+  const suppressToggleClickRef = useRef(false);
+  const isMovable = controlledMovable !== undefined ? Boolean(controlledMovable) : localMovable;
+
+  const handleToggleMovable = (event) => {
+    if (onToggleMovable) {
+      onToggleMovable(event);
+      return;
+    }
+    if (suppressToggleClickRef.current) {
+      suppressToggleClickRef.current = false;
+      return;
+    }
+    setLocalMovable((prev) => {
+      const next = !prev;
+      if (!next) setLocalPosition({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleLocalMoveButtonPointerDown = (event) => {
+    if (onMoveButtonPointerDown) {
+      onMoveButtonPointerDown(event);
+      return;
+    }
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const basePos = { ...localPosition };
+    let moved = false;
+
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) >= 4) {
+        moved = true;
+        suppressToggleClickRef.current = true;
+        setLocalMovable(true);
+      }
+      if (moved) {
+        moveEvent.preventDefault();
+        setLocalPosition({
+          x: basePos.x + dx,
+          y: basePos.y + dy,
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  const handleLocalPointerDown = (event) => {
+    if (onHeaderPointerDown) {
+      onHeaderPointerDown(event);
+      return;
+    }
+    if (!isMovable || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('button, input, select, textarea, a, label, [role="listbox"], [role="option"], [role="combobox"]')) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const basePos = { ...localPosition };
+    const onMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      setLocalPosition({
+        x: basePos.x + (moveEvent.clientX - startX),
+        y: basePos.y + (moveEvent.clientY - startY),
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
   const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -422,26 +520,54 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
   };
 
   const title = isEditing ? `Edit group: ${initialData.name}` : duplicateData ? `Duplicate group: ${duplicateData.name}` : 'New group';
-  const subtitle = isEditing
-    ? 'Update group settings and trading access'
-    : 'Configure group settings and trading access';
 
   const formContent = (
     <form
-      className={`ui-modal group-create${embedded ? ' group-create-embedded' : ''}`}
+      className={`ui-modal group-create${embedded ? ' group-create-embedded' : ''}${isMovable ? ' is-movable' : ''}`}
       role={embedded ? 'region' : 'dialog'}
       aria-modal={embedded ? undefined : 'true'}
       aria-labelledby={titleId}
+      onPointerDown={!embedded ? handleLocalPointerDown : undefined}
       onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}
+      style={!embedded && isMovable && (localPosition.x || localPosition.y)
+        ? { transform: `translate3d(${localPosition.x}px, ${localPosition.y}px, 0)` }
+        : undefined}
     >
-      <div className="ui-modal-header group-create-header">
+      <div
+        className={`ui-modal-header group-create-header${isMovable ? ' is-movable' : ''}`}
+        onPointerDown={handleLocalPointerDown}
+      >
         <div className="group-create-heading">
           <span id={titleId} className="group-create-title">
             {title}{screenNumber ? <span className="multi-screen-badge">#{screenNumber}</span> : null}
           </span>
-          <small className="group-create-subtitle">{subtitle}</small>
         </div>
-        <button type="button" className="group-create-close" aria-label="Close" onClick={onClose}><X size={16} /></button>
+        <div className="new-account-header-actions">
+          <button
+            type="button"
+            className={`ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm new-account-move-toggle${isMovable ? ' is-active' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleToggleMovable(event);
+            }}
+            onPointerDown={handleLocalMoveButtonPointerDown}
+            aria-label={isMovable ? 'Dock group window' : 'Make group window movable'}
+            aria-pressed={isMovable}
+            title={isMovable ? 'Movable mode ON — drag header or icon to move (click to dock)' : 'Click or drag to move window'}
+            data-testid={screenNumber ? `new-group-move-toggle-${screenNumber}` : 'new-group-move-toggle'}
+          >
+            <Move size={14} />
+          </button>
+          <button
+            type="button"
+            className="group-create-close"
+            aria-label="Close"
+            onClick={onClose}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="group-create-body">
@@ -473,7 +599,7 @@ const NewGroupModal = ({ initialData, duplicateData, presetName, onClose, onSucc
               onChange={(v) => handleChange('groupPurpose', v)}
             />
           </div>
-          <p className="group-create-note">Leave currency, execution, parent, or purpose blank to use backend derivation. A blank currency is omitted, never hardcoded.</p>
+
           <div className="group-create-checks">
             <CheckField label="Demo group" checked={formData.demo} onChange={(v) => handleChange('demo', v)} error={fieldErrors.demo} />
             <CheckField label="Trade allowed" checked={formData.tradeAllowed} onChange={(v) => handleChange('tradeAllowed', v)} error={fieldErrors.tradeAllowed} />

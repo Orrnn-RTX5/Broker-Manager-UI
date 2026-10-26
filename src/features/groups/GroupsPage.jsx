@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, ExternalLink, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import GroupPropertiesModal from './components/GroupPropertiesModal';
 import GroupPermissionNotice from './components/GroupPermissionNotice';
 import GroupOperationModal from './components/GroupOperationModal';
+import AccountDetailsModal from '../../components/Popups/AccountDetailsModal';
 import { GROUP_OPERATIONS_DISABLED_MESSAGE, groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
+import {
+  extractAccountFields,
+  filterAccountRowsBySearch,
+  filterGroupRowsBySearch,
+  getGroupSearchSuggestions,
+  parseGroupSearchRoute,
+  resolveGroupSearchRoute,
+} from './groupSearchRouter.js';
+import { loadAccountDetails, peekAccountDetails, subscribeToAccountDetails } from '../../services/accountDetails.js';
 import { getSidebarAccountsQueryOptions } from '../../services/sidebarAccounts.js';
 import { usePermissions } from '../../hooks/usePermissions';
 import useWorkspaceNavigation from '../../hooks/useWorkspaceNavigation';
@@ -56,6 +66,12 @@ const rowValues = (node, showFullName) => ({
   ...(node.group ? getGroupRowText(node.group) : EMPTY_TEXT),
 });
 
+const mergeDetailedAccount = (baseAccount, detailedPayload) => {
+  if (!detailedPayload || typeof detailedPayload !== 'object') return baseAccount;
+  if (!baseAccount || typeof baseAccount !== 'object') return detailedPayload;
+  return { ...baseAccount, ...detailedPayload, raw: detailedPayload };
+};
+
 const GroupsPage = () => {
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
@@ -75,12 +91,19 @@ const GroupsPage = () => {
 
   const [allGroups, setAllGroups] = useState(false);
   const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [activeRouteIndex, setActiveRouteIndex] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [subgroupDraft, setSubgroupDraft] = useState(null);
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
   const [propertiesGroup, setPropertiesGroup] = useState(null);
   const [openedGroup, setOpenedGroup] = useState(null);
+  const [openedAccount, setOpenedAccount] = useState(null);
+  const [openedAccountTab, setOpenedAccountTab] = useState('Overview');
+  const [inspectedFieldRoute, setInspectedFieldRoute] = useState(null);
+  const [copiedFieldKey, setCopiedFieldKey] = useState(null);
+  const [detailsRevision, setDetailsRevision] = useState(0);
   const [selectedLogin, setSelectedLogin] = useState(null);
   const [deleteSelection, setDeleteSelection] = useState(null);
   const deleting = Boolean(deleteSelection);
@@ -162,28 +185,98 @@ const GroupsPage = () => {
   const allRows = useMemo(() => groups.map(groupRowNode), [groups]);
   const rows = allGroups ? allRows : folderRows;
   const rowIsBranch = useCallback((node) => !allGroups && isGroupBranch(node), [allGroups]);
-  const visibleRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return rows;
-    return rows.filter((node) => {
-      const values = rowValues(node, true);
-      return [node.name, node.label, ...Object.values(values)].some((value) => String(value).toLowerCase().includes(query));
-    });
-  }, [rows, search]);
+  const activeFolder = allGroups ? '' : folder;
+  const visibleRows = useMemo(
+    () => filterGroupRowsBySearch(rows, search, activeFolder),
+    [rows, search, activeFolder],
+  );
   const columns = allGroups ? ALL_GROUPS_COLUMNS : FOLDER_COLUMNS;
-  const selectedNode = visibleRows.find((node) => node.id === selectedId) ?? null;
+  const selectedNode = useMemo(
+    () => visibleRows.find((node) => node.id === selectedId) ?? null,
+    [visibleRows, selectedId],
+  );
   const folderCount = countGroupsUnder(groups, folder);
   const segments = splitGroupPath(folder);
   const containers = useMemo(() => listGroupContainerPaths(groups), [groups]);
+
+  // Enrich sidebar account rows with any cached full AccountDetails payloads
+  const enrichedRawAccountRows = useMemo(() => {
+    const rawList = accountsQuery.data?.rows;
+    if (!Array.isArray(rawList)) return [];
+    void detailsRevision;
+    return rawList.map((row) => {
+      const login = row?.login ?? row?.Login;
+      if (!login) return row;
+      const detailed = peekAccountDetails(login);
+      return detailed ? mergeDetailedAccount(row, detailed) : row;
+    });
+  }, [accountsQuery.data, detailsRevision]);
+
   const accountRows = useMemo(
-    () => (openedGroup ? accountsInGroup(accountsQuery.data?.rows, openedGroup.name, openedGroup) : []),
-    [accountsQuery.data, openedGroup],
+    () => (openedGroup ? accountsInGroup(enrichedRawAccountRows, openedGroup.name, openedGroup) : []),
+    [enrichedRawAccountRows, openedGroup],
   );
-  const visibleAccounts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return accountRows;
-    return accountRows.filter((row) => GROUP_ACCOUNT_COLUMNS.some((column) => String(row[column.key]).toLowerCase().includes(query)));
-  }, [accountRows, search]);
+  const visibleAccounts = useMemo(
+    () => filterAccountRowsBySearch(accountRows, search, GROUP_ACCOUNT_COLUMNS),
+    [accountRows, search],
+  );
+  const parsedSearchRoute = useMemo(() => parseGroupSearchRoute(search, groups), [search, groups]);
+  const searchSuggestions = useMemo(
+    () => (search.trim()
+      ? getGroupSearchSuggestions({
+        query: search,
+        groups,
+        accountRows: enrichedRawAccountRows,
+        currentFolder: activeFolder,
+        openedGroup,
+        selectedLogin,
+        limit: 10,
+      })
+      : []),
+    [search, groups, enrichedRawAccountRows, activeFolder, openedGroup, selectedLogin],
+  );
+  const safeRouteIndex = searchSuggestions.length > 0
+    ? Math.min(Math.max(activeRouteIndex, 0), searchSuggestions.length - 1)
+    : 0;
+  const activeSuggestion = searchSuggestions[safeRouteIndex] || searchSuggestions[0] || null;
+  const spotlightFieldRoute = activeSuggestion?.type === 'account-field'
+    ? activeSuggestion
+    : (searchSuggestions[0]?.type === 'account-field' ? searchSuggestions[0] : null);
+
+  // Automatically load full AccountDetails when an account is targeted in the router or field inspector
+  const targetDetailLogin = spotlightFieldRoute?.login || inspectedFieldRoute?.login || null;
+  useEffect(() => {
+    if (!targetDetailLogin) return undefined;
+    const unsubscribe = subscribeToAccountDetails(targetDetailLogin, () => {
+      setDetailsRevision((rev) => rev + 1);
+    });
+    if (!peekAccountDetails(targetDetailLogin)) {
+      loadAccountDetails(targetDetailLogin).catch(() => undefined);
+    }
+    return unsubscribe;
+  }, [targetDetailLogin]);
+
+  const resolvedInspector = useMemo(() => {
+    if (!inspectedFieldRoute) return null;
+    void detailsRevision;
+    const login = inspectedFieldRoute.login;
+    const baseAccount = enrichedRawAccountRows.find((r) => String(r?.login ?? r?.Login) === String(login))
+      || inspectedFieldRoute.account
+      || { login };
+    const detailed = peekAccountDetails(login);
+    const mergedAccount = detailed ? mergeDetailedAccount(baseAccount, detailed) : baseAccount;
+    const fields = extractAccountFields(mergedAccount, inspectedFieldRoute.group);
+    const activeField = fields.find((f) => f.key === inspectedFieldRoute.fieldKey) || fields[0];
+    const nameField = fields.find((f) => f.key === 'name');
+    return {
+      login,
+      account: mergedAccount,
+      accountName: nameField?.hasValue ? nameField.value : '',
+      group: inspectedFieldRoute.group,
+      activeField,
+      fields,
+    };
+  }, [inspectedFieldRoute, enrichedRawAccountRows, detailsRevision]);
 
   const invalidateGroups = () => queryClient.invalidateQueries({ queryKey: ['groups'] });
   const openFolder = useCallback((path) => navigate(getGroupsFolderPath(path)), [navigate]);
@@ -191,6 +284,7 @@ const GroupsPage = () => {
     if (openedGroup) {
       setOpenedGroup(null);
       setSelectedLogin(null);
+      setInspectedFieldRoute(null);
       return;
     }
     if (!isRoot && !allGroups) openFolder(getGroupParentPath(folder));
@@ -206,6 +300,7 @@ const GroupsPage = () => {
     setOpenedGroup(group);
     setSelectedId(null);
     setSelectedLogin(null);
+    setInspectedFieldRoute(null);
     setSearch('');
   };
   // A folder with subgroups opens. A group that holds accounts directly lists those accounts.
@@ -215,6 +310,167 @@ const GroupsPage = () => {
     else openGroupAccounts(node.group);
   };
   const openAccountWindow = () => { if (openedGroup) setPropertiesGroup(openedGroup); };
+  const openAccountDetails = (account, tab = 'Overview') => {
+    if (!account) return;
+    setOpenedAccountTab(tab || 'Overview');
+    setOpenedAccount(account);
+  };
+
+  const copyFieldValue = async (key, value) => {
+    if (!value || value === '—') return;
+    try {
+      await copyToClipboard(String(value));
+      setCopiedFieldKey(key);
+      setTimeout(() => setCopiedFieldKey((curr) => (curr === key ? null : curr)), 1600);
+    } catch {
+      showResult.error('Unable to copy value.');
+    }
+  };
+
+  const executeSearchRoute = (route) => {
+    if (!route) return false;
+    if (route.type === 'folder') {
+      setAllGroups(false);
+      setOpenedGroup(null);
+      setSelectedId(null);
+      setSelectedLogin(null);
+      setInspectedFieldRoute(null);
+      setSearch('');
+      setSearchFocused(false);
+      setActiveRouteIndex(0);
+      openFolder(route.folder);
+      return true;
+    }
+    if (route.type === 'group' && route.group) {
+      const targetFolder = route.folder ?? getGroupParentPath(route.group.name);
+      setPrevFolderKey(targetFolder);
+      if (targetFolder !== folder) openFolder(targetFolder);
+      setAllGroups(false);
+      setOpenedGroup(route.group);
+      setSelectedId(null);
+      setSelectedLogin(null);
+      setInspectedFieldRoute(null);
+      setSearch('');
+      setSearchFocused(false);
+      setActiveRouteIndex(0);
+      return true;
+    }
+    if (route.type === 'account-field' && route.field) {
+      const targetGroup = route.group || openedGroup;
+      if (targetGroup) {
+        const targetFolder = route.folder ?? getGroupParentPath(targetGroup.name);
+        setPrevFolderKey(targetFolder);
+        if (targetFolder !== folder) openFolder(targetFolder);
+        setAllGroups(false);
+        setOpenedGroup(targetGroup);
+        setSelectedId(null);
+      }
+      const loginStr = String(route.login ?? '');
+      if (loginStr) setSelectedLogin(loginStr);
+      setInspectedFieldRoute({
+        login: loginStr,
+        account: route.account || loginStr,
+        group: targetGroup,
+        fieldKey: route.field.key,
+      });
+      setSearchFocused(false);
+      setActiveRouteIndex(0);
+      return true;
+    }
+    if (route.type === 'account') {
+      const targetGroup = route.group || openedGroup;
+      if (targetGroup) {
+        const targetFolder = route.folder ?? getGroupParentPath(targetGroup.name);
+        setPrevFolderKey(targetFolder);
+        if (targetFolder !== folder) openFolder(targetFolder);
+        setAllGroups(false);
+        setOpenedGroup(targetGroup);
+        setSelectedId(null);
+      }
+      const loginStr = String(route.login ?? '');
+      if (loginStr) setSelectedLogin(loginStr);
+      openAccountDetails(route.account || loginStr, 'Overview');
+      setSearch('');
+      setSearchFocused(false);
+      setActiveRouteIndex(0);
+      return true;
+    }
+    return false;
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'ArrowDown') {
+      if (searchSuggestions.length > 0) {
+        event.preventDefault();
+        setSearchFocused(true);
+        setActiveRouteIndex((prev) => Math.min(prev + 1, searchSuggestions.length - 1));
+      }
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      if (searchSuggestions.length > 0) {
+        event.preventDefault();
+        setSearchFocused(true);
+        setActiveRouteIndex((prev) => Math.max(prev - 1, 0));
+      }
+      return;
+    }
+    if (event.key === 'Tab' && search.trim() && searchSuggestions.length > 0) {
+      const candidate = searchSuggestions[safeRouteIndex] || searchSuggestions[0];
+      if (candidate?.completionText && candidate.completionText.trim() !== search.trim()) {
+        event.preventDefault();
+        setSearch(candidate.completionText);
+        setActiveRouteIndex(0);
+        setSearchFocused(true);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      if (searchFocused || search) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (searchFocused) setSearchFocused(false);
+        else setSearch('');
+      }
+      return;
+    }
+    if (event.key === 'Enter') {
+      const queryText = search.trim();
+      if (!queryText) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (searchFocused && safeRouteIndex > 0 && searchSuggestions[safeRouteIndex]) {
+        executeSearchRoute(searchSuggestions[safeRouteIndex]);
+        return;
+      }
+
+      const resolved = resolveGroupSearchRoute({
+        query: queryText,
+        groups,
+        accountRows: enrichedRawAccountRows,
+        currentFolder: activeFolder,
+        openedGroup,
+        selectedLogin,
+      }) || searchSuggestions[0];
+
+      if (resolved && executeSearchRoute(resolved)) {
+        return;
+      }
+
+      if (!openedGroup && visibleRows.length === 1) {
+        activate(visibleRows[0]);
+        setSearch('');
+        setSearchFocused(false);
+      } else if (openedGroup && visibleAccounts.length === 1) {
+        const onlyAccount = visibleAccounts[0];
+        setSelectedLogin(onlyAccount.login);
+        openAccountDetails(onlyAccount.account || onlyAccount.login, 'Overview');
+        setSearch('');
+        setSearchFocused(false);
+      }
+    }
+  };
 
   const requireManage = (action = 'change') => {
     if (canManageGroups) return true;
@@ -283,7 +539,11 @@ const GroupsPage = () => {
         goUp();
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        if (selectedLogin) openAccountWindow();
+        if (selectedLogin) {
+          const selectedRow = visibleAccounts.find((row) => row.login === selectedLogin);
+          if (selectedRow?.account) openAccountDetails(selectedRow.account, 'Overview');
+          else openAccountWindow();
+        }
       } else if (event.key === 'Delete') {
         event.preventDefault();
         deleteNode(groupRowNode(openedGroup));
@@ -412,7 +672,7 @@ const GroupsPage = () => {
             <ArrowUp size={13} />
           </button>
           <nav aria-label="Group folder path" className="groups-explorer-crumbs">
-            <button type="button" className={`groups-crumb${isRoot && !allGroups && !openedGroup ? ' is-current' : ''}`} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); openFolder(''); }}>
+            <button type="button" className={`groups-crumb${isRoot && !allGroups && !openedGroup ? ' is-current' : ''}`} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); setInspectedFieldRoute(null); openFolder(''); }}>
               <Users size={13} className="groups-icon-group" />
               <span>Groups</span>
             </button>
@@ -422,7 +682,7 @@ const GroupsPage = () => {
               return (
                 <span key={path} className="groups-crumb-segment">
                   <ChevronRight size={11} className="groups-crumb-sep" />
-                  <button type="button" className={`groups-crumb${current ? ' is-current' : ''}`} aria-current={current ? 'page' : undefined} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); openFolder(path); }}>
+                  <button type="button" className={`groups-crumb${current ? ' is-current' : ''}`} aria-current={current ? 'page' : undefined} onClick={() => { setOpenedGroup(null); setSelectedLogin(null); setInspectedFieldRoute(null); openFolder(path); }}>
                     <Folder size={13} className="groups-icon-folder" fill="currentColor" strokeWidth={1.25} />
                     <span>{part}</span>
                   </button>
@@ -442,17 +702,139 @@ const GroupsPage = () => {
         </div>
 
         <div className="groups-explorer-tools" role="toolbar" aria-label="Group actions">
-          <div className="relative">
+          <div className="relative groups-search-wrap">
             <Search size={13} className="groups-search-icon" />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Find in this view..."
+              placeholder={openedGroup ? `Route or find in ${getGroupLeafName(openedGroup.name)}...` : 'Route (group / account / field)...'}
               aria-label="Find groups in this view"
+              title="Type a route (e.g. group / folder / account / email or leverage) and press Enter"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setActiveRouteIndex(0);
+                setSearchFocused(true);
+              }}
+              onKeyDown={handleSearchKeyDown}
               className="ui-input ui-input-sm groups-search"
             />
+            {search && (
+              <button
+                type="button"
+                className="groups-search-clear"
+                aria-label="Clear search"
+                title="Clear search"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setSearch('');
+                  setActiveRouteIndex(0);
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <X size={11} />
+              </button>
+            )}
+            {searchFocused && search.trim() && (
+              <div
+                className="groups-search-router-menu"
+                role="listbox"
+                aria-label="Group router suggestions"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                <div className="groups-search-router-head">
+                  <span className="groups-search-router-crumbs">
+                    <span>Route:</span>
+                    <strong>{parsedSearchRoute.segments.join(' / ') || search.trim()}</strong>
+                  </span>
+                  <span>Enter ↵</span>
+                </div>
+
+                {spotlightFieldRoute && (
+                  <div className="groups-router-field-spotlight" role="region" aria-label="Account property readout">
+                    <div className="groups-router-field-spotlight-top">
+                      <span className="groups-router-field-spotlight-id">
+                        <AccountMark />
+                        <span>#{spotlightFieldRoute.login}</span>
+                        {spotlightFieldRoute.accountRow?.name ? <span>· {spotlightFieldRoute.accountRow.name}</span> : null}
+                        {spotlightFieldRoute.group?.name ? <span>· {spotlightFieldRoute.group.name}</span> : null}
+                      </span>
+                      <span className="groups-router-field-category">{spotlightFieldRoute.field.category}</span>
+                    </div>
+                    <div className="groups-router-field-spotlight-main">
+                      <span className="groups-router-field-spotlight-label">{spotlightFieldRoute.field.label}</span>
+                      <strong className="groups-router-field-spotlight-val">{spotlightFieldRoute.field.value}</strong>
+                    </div>
+                    <div className="groups-router-field-spotlight-actions">
+                      <button
+                        type="button"
+                        className="groups-router-spotlight-btn"
+                        disabled={!spotlightFieldRoute.field.hasValue}
+                        onClick={() => copyFieldValue(`spotlight:${spotlightFieldRoute.field.key}`, spotlightFieldRoute.field.value)}
+                      >
+                        {copiedFieldKey === `spotlight:${spotlightFieldRoute.field.key}` ? <Check size={11} /> : <Copy size={11} />}
+                        <span>{copiedFieldKey === `spotlight:${spotlightFieldRoute.field.key}` ? 'Copied' : 'Copy value'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="groups-router-spotlight-btn is-primary"
+                        onClick={() => {
+                          executeSearchRoute(spotlightFieldRoute);
+                          openAccountDetails(spotlightFieldRoute.account || spotlightFieldRoute.login, spotlightFieldRoute.field.tab);
+                        }}
+                      >
+                        <ExternalLink size={11} />
+                        <span>Open {spotlightFieldRoute.field.tab} tab</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {searchSuggestions.length > 0 ? (
+                  <div className="groups-search-router-list">
+                    {searchSuggestions.map((item, idx) => {
+                      const isActive = idx === safeRouteIndex;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          role="option"
+                          aria-selected={isActive}
+                          className={`groups-search-router-item${isActive ? ' is-active' : ''}`}
+                          onMouseEnter={() => setActiveRouteIndex(idx)}
+                          onClick={() => executeSearchRoute(item)}
+                        >
+                          <span className="groups-search-router-item-main">
+                            <span className="groups-row-glyph" aria-hidden="true">
+                              {item.type === 'account' || item.type === 'account-field' ? <AccountMark /> : <GroupFolderIcon />}
+                            </span>
+                            <span className="groups-search-router-item-title">{item.title}</span>
+                          </span>
+                          {item.type === 'account-field' ? (
+                            <span className="groups-search-router-item-val">
+                              <span className="groups-search-router-item-meta">{item.field.label}:</span>
+                              <strong>{item.field.value}</strong>
+                            </span>
+                          ) : (
+                            <span className="groups-search-router-item-meta">{item.subtitle}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="groups-search-router-empty">
+                    No matching group, folder, account, or field for &ldquo;{search.trim()}&rdquo;
+                  </div>
+                )}
+                <div className="groups-search-router-foot">
+                  <span>Path: <code>group / account / email | leverage | balance</code></span>
+                  <span>Tab to complete</span>
+                </div>
+              </div>
+            )}
           </div>
           <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" title="Create a group inside the selected folder" onClick={() => addGroup()}>
             <Plus size={13} /> Add group
@@ -464,11 +846,97 @@ const GroupsPage = () => {
             <Pencil size={12} /> Settings
           </button>
           {readSavedOperation() && <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => setDeleteSelection(readSavedOperation().selection)}>Operation progress</button>}
-          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={(!selectedNode && !openedGroup) || deleting || !operationsEnabled} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode || (openedGroup ? groupRowNode(openedGroup) : null))}>
+          <button type="button" className="ui-btn ui-btn-danger ui-btn-sm" disabled={(!selectedNode && !openedGroup) || deleting || operationsEnabled === null} title="Delete the selected group or folder" onClick={() => deleteNode(selectedNode || (openedGroup ? groupRowNode(openedGroup) : null))}>
             <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
       </div>
+
+      {resolvedInspector && (
+        <section className="groups-account-field-inspector" aria-label={`Account ${resolvedInspector.login} field inspector`}>
+          <div className="groups-inspector-header">
+            <div className="groups-inspector-crumbs">
+              {resolvedInspector.group?.name && (
+                <>
+                  <span className="groups-row-glyph" aria-hidden="true"><GroupFolderIcon /></span>
+                  <span>{resolvedInspector.group.name}</span>
+                  <ChevronRight size={11} className="groups-crumb-sep" />
+                </>
+              )}
+              <span className="groups-inspector-account-tag">
+                <AccountMark />
+                <span>#{resolvedInspector.login}</span>
+                {resolvedInspector.accountName ? <span>· {resolvedInspector.accountName}</span> : null}
+              </span>
+              <ChevronRight size={11} className="groups-crumb-sep" />
+              <strong>{resolvedInspector.activeField.label}</strong>
+            </div>
+            <div className="groups-inspector-actions">
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm"
+                disabled={!resolvedInspector.activeField.hasValue}
+                onClick={() => copyFieldValue(`inspector:${resolvedInspector.activeField.key}`, resolvedInspector.activeField.value)}
+              >
+                {copiedFieldKey === `inspector:${resolvedInspector.activeField.key}` ? <Check size={12} /> : <Copy size={12} />}
+                <span>{copiedFieldKey === `inspector:${resolvedInspector.activeField.key}` ? 'Copied' : `Copy ${resolvedInspector.activeField.label}`}</span>
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-primary ui-btn-sm"
+                onClick={() => openAccountDetails(resolvedInspector.account, resolvedInspector.activeField.tab)}
+              >
+                <ExternalLink size={12} />
+                <span>Open {resolvedInspector.activeField.tab} Details</span>
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-icon ui-btn-sm"
+                aria-label="Close field inspector"
+                title="Close field inspector"
+                onClick={() => setInspectedFieldRoute(null)}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+
+          <div className="groups-inspector-body">
+            <div className="groups-inspector-primary">
+              <div className="groups-inspector-primary-head">
+                <span className="groups-inspector-primary-label">{resolvedInspector.activeField.label}</span>
+                <span className="groups-router-field-category">{resolvedInspector.activeField.category}</span>
+              </div>
+              <div className="groups-inspector-primary-value" data-testid="groups-inspector-primary-value">
+                {resolvedInspector.activeField.value}
+              </div>
+            </div>
+
+            <div className="groups-inspector-pills" role="tablist" aria-label="Account properties">
+              {resolvedInspector.fields
+                .filter((field) => field.hasValue || ['email', 'leverage', 'balance', 'equity', 'margin', 'phone', 'status'].includes(field.key))
+                .slice(0, 10)
+                .map((field) => {
+                  const active = field.key === resolvedInspector.activeField.key;
+                  return (
+                    <button
+                      key={field.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`groups-inspector-pill${active ? ' is-active' : ''}`}
+                      onClick={() => setInspectedFieldRoute((prev) => (prev ? { ...prev, fieldKey: field.key } : prev))}
+                      onDoubleClick={() => openAccountDetails(resolvedInspector.account, field.tab)}
+                    >
+                      <span className="groups-inspector-pill-label">{field.label}</span>
+                      <span className="groups-inspector-pill-val">{field.value}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="groups-explorer-table-wrap ui-card" tabIndex={0} onKeyDown={handleKeyDown} aria-busy={loading || fetching}>
         {error && (
@@ -495,7 +963,7 @@ const GroupsPage = () => {
                     className={selected ? 'is-selected is-account' : 'is-account'}
                     aria-selected={selected}
                     onClick={() => setSelectedLogin(row.login)}
-                    onDoubleClick={openAccountWindow}
+                    onDoubleClick={() => (row.account ? openAccountDetails(row.account, 'Overview') : openAccountWindow())}
                   >
                     {GROUP_ACCOUNT_COLUMNS.map((column, index) => (
                       <td key={column.key} style={column.numeric ? { textAlign: 'right' } : undefined}>
@@ -609,10 +1077,10 @@ const GroupsPage = () => {
         <div className="groups-explorer-tip" role="status">
           <Info size={12} />
           <span>{openedGroup
-            ? 'Click an account to open its group window. Backspace returns to the folder.'
+            ? 'Double-click an account to open its details, or route / field (e.g. / email, / leverage).'
             : allGroups
               ? 'Double-click a group to open its accounts.'
-              : 'Double-click a folder to open it. A group with no subgroups opens its accounts. Backspace goes up one level.'}</span>
+              : 'Double-click a folder to open it, or route via search (group / account / field) and press Enter.'}</span>
         </div>
       </div>
 
@@ -867,6 +1335,14 @@ const GroupsPage = () => {
             invalidateGroups();
             queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
           }}
+        />
+      )}
+
+      {openedAccount && (
+        <AccountDetailsModal
+          account={openedAccount}
+          initialTab={openedAccountTab}
+          onClose={() => setOpenedAccount(null)}
         />
       )}
     </div>

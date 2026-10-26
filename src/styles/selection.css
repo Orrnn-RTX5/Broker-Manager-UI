@@ -13,11 +13,11 @@
 /* An inset outline gives borderless tabs and toolbar controls the same frame,
    without changing their size when selected. */
 #root#root#root#root#root :is(
-  button.is-active,
+  button.is-active:not(.groups-props-tab),
   button.is-open,
   button.is-selected,
   button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
-  [role="tab"][aria-selected="true"],
+  [role="tab"][aria-selected="true"]:not(.groups-props-tab),
   [role="radio"][aria-checked="true"],
   [role="option"][aria-selected="true"],
   [aria-current="page"],
@@ -26,8 +26,7 @@
 ),
 body :is(
   .group-create-menu button[aria-selected="true"],
-  .ui-modal [role="tab"][aria-selected="true"],
-  .groups-props-tab.is-active
+  .ui-modal [role="tab"][aria-selected="true"]:not(.groups-props-tab)
 ) {
   background: var(--navigation-selected-bg) !important;
   color: var(--navigation-selected-text) !important;
@@ -41,21 +40,21 @@ body :is(
 }
 
 #root#root#root#root#root :is(
-  button.is-active,
+  button.is-active:not(.groups-props-tab),
   button.is-open,
   button.is-selected,
   button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
-  [role="tab"][aria-selected="true"],
+  [role="tab"][aria-selected="true"]:not(.groups-props-tab),
   .cc-tree-node.is-active > [role="treeitem"],
   .manager-action-popover-item.is-active
 ) :is(span, svg) { color: inherit !important; }
 
 #root#root#root#root#root :is(
-  button.is-active,
+  button.is-active:not(.groups-props-tab),
   button.is-open,
   button.is-selected,
   button[aria-pressed="true"]:not(.manager-password-toggle):not(.manager-link-button),
-  [role="tab"][aria-selected="true"],
+  [role="tab"][aria-selected="true"]:not(.groups-props-tab),
   .cc-tree-node.is-active > [role="treeitem"]
 ):focus-visible,
 body .group-create-menu button[aria-selected="true"]:focus-visible {

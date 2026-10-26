@@ -1,6 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef } from 'react';
-import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, CircleAlert } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
@@ -127,6 +128,115 @@ const clampPopupPosition = (position = {}, size = {}) => {
     x: Math.min(maxX, Math.max(0, Number(position.x) || 0)),
     y: Math.min(maxY, Math.max(0, Number(position.y) || 0)),
   };
+};
+
+const readPopupDockZones = () => {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return {};
+  const shell = document.querySelector('.cc-shell-workspace');
+  const shellRect = shell?.getBoundingClientRect() || {
+    left: 0,
+    top: 64,
+    width: window.innerWidth,
+    height: Math.max(400, window.innerHeight - 92),
+    right: window.innerWidth,
+    bottom: Math.max(464, window.innerHeight - 28),
+  };
+
+  const marketPanel = document.querySelector('[data-panel-id="market_data"]');
+  const navPanel = document.querySelector('[data-panel-id="navigator"]');
+  const mRect = marketPanel?.getBoundingClientRect();
+  const nRect = navPanel?.getBoundingClientRect();
+  const validLeftRects = [mRect, nRect].filter((r) => r && r.width > 40 && r.height > 40);
+
+  let leftRect;
+  if (validLeftRects.length > 0) {
+    const minLeft = Math.round(Math.min(...validLeftRects.map((r) => r.left)));
+    const minTop = Math.round(Math.min(...validLeftRects.map((r) => r.top)));
+    const maxRight = Math.round(Math.max(...validLeftRects.map((r) => r.right)));
+    const maxBottom = Math.round(Math.max(...validLeftRects.map((r) => r.bottom)));
+    const combinedWidth = Math.max(460, maxRight - minLeft);
+    const clampedWidth = Math.min(combinedWidth, Math.max(460, Math.round(shellRect.width * 0.48)));
+    leftRect = {
+      left: minLeft,
+      top: minTop,
+      width: clampedWidth,
+      height: Math.max(300, maxBottom - minTop),
+      right: minLeft + clampedWidth,
+      bottom: maxBottom,
+    };
+  } else {
+    const fallbackWidth = Math.max(460, Math.round(shellRect.width * 0.36));
+    const fallbackHeight = Math.max(320, Math.round(shellRect.height * 0.72));
+    leftRect = {
+      left: Math.round(shellRect.left),
+      top: Math.round(shellRect.top),
+      width: fallbackWidth,
+      height: fallbackHeight,
+      right: Math.round(shellRect.left + fallbackWidth),
+      bottom: Math.round(shellRect.top + fallbackHeight),
+    };
+  }
+
+  const terminalPanel = document.querySelector('[data-panel-id="terminal"]');
+  const tRect = terminalPanel?.getBoundingClientRect();
+  const bottomLeft = tRect && tRect.width > 40 ? Math.round(tRect.left) : Math.round(shellRect.left);
+  const bottomWidth = tRect && tRect.width > 40 ? Math.round(tRect.width) : Math.round(shellRect.width);
+  const bottomEdge = tRect && tRect.height > 40 ? Math.round(tRect.bottom) : Math.round(shellRect.bottom);
+  const bottomHeight = Math.min(
+    Math.max(320, tRect && tRect.height > 40 ? Math.round(tRect.height) : 320),
+    Math.max(320, Math.round(shellRect.height * 0.6))
+  );
+  const bottomTop = Math.max(Math.round(shellRect.top + 60), bottomEdge - bottomHeight);
+  const bottomRect = {
+    left: bottomLeft,
+    top: bottomTop,
+    width: bottomWidth,
+    height: bottomEdge - bottomTop,
+    right: bottomLeft + bottomWidth,
+    bottom: bottomEdge,
+  };
+
+  const centerWorkspace = document.querySelector('.cc-center-workspace');
+  const cRect = centerWorkspace?.getBoundingClientRect();
+  const rightBase = cRect && cRect.width > 120 && cRect.height > 120 ? cRect : shellRect;
+  const rightWidth = Math.max(480, Math.round(rightBase.width * 0.56));
+  const rightLeft = Math.max(Math.round(shellRect.left), Math.round(rightBase.right - rightWidth));
+  const rightRect = {
+    left: rightLeft,
+    top: Math.round(rightBase.top),
+    width: Math.round(rightBase.right - rightLeft),
+    height: Math.round(rightBase.height),
+    right: Math.round(rightBase.right),
+    bottom: Math.round(rightBase.bottom),
+  };
+
+  return {
+    shell: shellRect,
+    left: leftRect,
+    bottom: bottomRect,
+    right: rightRect,
+  };
+};
+
+const detectPopupDockZone = (clientX, clientY, rects) => {
+  if (!rects || !rects.shell) return null;
+  const { shell, left, bottom, right } = rects;
+  if (clientX < shell.left - 24 || clientX > shell.right + 24 || clientY < 0 || clientY > window.innerHeight) {
+    return null;
+  }
+  const bottomTriggerTop = Math.max(bottom.top, shell.bottom - Math.max(240, Math.round(shell.height * 0.32)));
+  if (clientY >= bottomTriggerTop && clientX >= bottom.left && clientX <= bottom.right) {
+    return 'bottom';
+  }
+  const leftTriggerRight = Math.min(left.right, shell.left + Math.max(320, Math.round(shell.width * 0.28)));
+  if (clientX <= leftTriggerRight && clientY >= left.top && clientY <= left.bottom) {
+    return 'left';
+  }
+  const rightTriggerLeft = Math.max(right.left, shell.right - Math.max(320, Math.round(shell.width * 0.28)));
+  if (clientX >= rightTriggerLeft && clientY >= right.top && clientY <= right.bottom) {
+    return 'right';
+  }
+  return null;
 };
 
 const normalizeLanguageOption = (value) => {
@@ -371,27 +481,115 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   });
   const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
   const [isMaximized, setIsMaximized] = useState(false);
-  const [preMaxState, setPreMaxState] = useState({ x: 0, y: 0, w: 0, h: 0 });
+  const [dockZone, setDockZone] = useState(null);
+  const [isDraggingWindow, setIsDraggingWindow] = useState(false);
+  const [hoveredDockZone, setHoveredDockZone] = useState(null);
+  const [dockRects, setDockRects] = useState(() => readPopupDockZones());
+  const hoveredDockZoneRef = useRef(null);
+  const [preMaxState, setPreMaxState] = useState({
+    x: Math.max(0, (window.innerWidth - initialWidth) / 2),
+    y: Math.max(0, (window.innerHeight - initialHeight) / 2),
+    w: initialWidth,
+    h: initialHeight,
+  });
+
+  const applyDockZone = (targetZone, options = {}) => {
+    const { toggleIfSame = true } = options;
+    if (!targetZone || (toggleIfSame && dockZone === targetZone)) {
+      const restoreW = preMaxState.w || initialWidth;
+      const restoreH = preMaxState.h || initialHeight;
+      const restoreX = preMaxState.w ? preMaxState.x : Math.max(0, (window.innerWidth - restoreW) / 2);
+      const restoreY = preMaxState.h ? preMaxState.y : Math.max(0, (window.innerHeight - restoreH) / 2);
+      setDockZone(null);
+      setIsMaximized(false);
+      setSize({ width: restoreW, height: restoreH });
+      setPosition(clampPopupPosition({ x: restoreX, y: restoreY }, { width: restoreW, height: restoreH }));
+      return;
+    }
+
+    const rects = readPopupDockZones();
+    setDockRects(rects);
+    const zoneRect = rects[targetZone];
+    if (!zoneRect) return;
+
+    if (!isMaximized && !dockZone) {
+      setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
+    }
+    setIsMaximized(false);
+    setDockZone(targetZone);
+    setPosition({ x: zoneRect.left, y: zoneRect.top });
+    setSize({ width: zoneRect.width, height: zoneRect.height });
+  };
 
   const handleHeaderMouseDown = (e) => {
-    if (isMaximized || e.target.closest('button') || e.target.closest('.window-controls')) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    if (e.target.closest('button') || e.target.closest('.account-details-window-controls')) return;
     e.preventDefault();
-    let startX = e.clientX;
-    let startY = e.clientY;
+    const startX = e.clientX;
+    const startY = e.clientY;
     let startPosX = position.x;
     let startPosY = position.y;
+    let activeSize = { width: size.width, height: size.height };
+    let moved = false;
+    let currentRects = dockRects;
 
     const handleMouseMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+
+      if (!moved && Math.hypot(dx, dy) >= 5) {
+        moved = true;
+        currentRects = readPopupDockZones();
+        setDockRects(currentRects);
+        setIsDraggingWindow(true);
+
+        if (isMaximized || dockZone) {
+          const restoreW = preMaxState.w || initialWidth;
+          const restoreH = preMaxState.h || initialHeight;
+          activeSize = { width: restoreW, height: restoreH };
+          startPosX = Math.min(Math.max(0, startX - restoreW / 2), Math.max(0, window.innerWidth - restoreW));
+          startPosY = Math.min(Math.max(0, startY - 18), Math.max(0, window.innerHeight - restoreH));
+          setIsMaximized(false);
+          setDockZone(null);
+          setSize(activeSize);
+        } else {
+          setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
+        }
+      }
+
+      if (!moved) return;
+
+      const zone = detectPopupDockZone(moveEvent.clientX, moveEvent.clientY, currentRects);
+      if (hoveredDockZoneRef.current !== zone) {
+        hoveredDockZoneRef.current = zone;
+        setHoveredDockZone(zone);
+      }
+
       setPosition(clampPopupPosition({
-        x: startPosX + (moveEvent.clientX - startX),
-        y: startPosY + (moveEvent.clientY - startY),
-      }, size));
+        x: startPosX + dx,
+        y: startPosY + dy,
+      }, activeSize));
     };
 
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.userSelect = '';
+      const dropZone = hoveredDockZoneRef.current;
+      hoveredDockZoneRef.current = null;
+      setHoveredDockZone(null);
+      setIsDraggingWindow(false);
+      if (moved && dropZone) {
+        const rects = readPopupDockZones();
+        setDockRects(rects);
+        const zoneRect = rects[dropZone];
+        if (zoneRect) {
+          setIsMaximized(false);
+          setDockZone(dropZone);
+          setPosition({ x: zoneRect.left, y: zoneRect.top });
+          setSize({ width: zoneRect.width, height: zoneRect.height });
+        }
+      }
     };
 
     document.body.style.userSelect = 'none';
@@ -408,27 +606,38 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     let startWidth = size.width;
     let startHeight = size.height;
     let startPosX = position.x;
+    let startPosY = position.y;
+    const minW = 420;
+    const minH = 260;
 
     const handleMouseMove = (moveEvent) => {
       let dx = moveEvent.clientX - startX;
       let dy = moveEvent.clientY - startY;
 
       if (edge === 'right') {
-        setSize(prev => ({ ...prev, width: Math.max(500, startWidth + dx) }));
+        setSize(prev => ({ ...prev, width: Math.max(minW, startWidth + dx) }));
       } else if (edge === 'bottom') {
-        setSize(prev => ({ ...prev, height: Math.max(400, startHeight + dy) }));
+        setSize(prev => ({ ...prev, height: Math.max(minH, startHeight + dy) }));
       } else if (edge === 'bottom-right') {
         setSize({
-          width: Math.max(500, startWidth + dx),
-          height: Math.max(400, startHeight + dy)
+          width: Math.max(minW, startWidth + dx),
+          height: Math.max(minH, startHeight + dy)
         });
       } else if (edge === 'left') {
-        let newWidth = Math.max(500, startWidth - dx);
+        let newWidth = Math.max(minW, startWidth - dx);
         let actualDx = newWidth - startWidth;
         setSize(prev => ({ ...prev, width: newWidth }));
         setPosition(prev => ({
           ...prev,
           x: clampPopupPosition({ x: startPosX - actualDx, y: prev.y }, { width: newWidth, height: startHeight }).x,
+        }));
+      } else if (edge === 'top') {
+        let newHeight = Math.max(minH, startHeight - dy);
+        let actualDy = newHeight - startHeight;
+        setSize(prev => ({ ...prev, height: newHeight }));
+        setPosition(prev => ({
+          ...prev,
+          y: clampPopupPosition({ x: prev.x, y: startPosY - actualDy }, { width: startWidth, height: newHeight }).y,
         }));
       }
     };
@@ -441,7 +650,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     };
 
     if (edge === 'left' || edge === 'right') document.body.style.cursor = 'ew-resize';
-    else if (edge === 'bottom') document.body.style.cursor = 'ns-resize';
+    else if (edge === 'bottom' || edge === 'top') document.body.style.cursor = 'ns-resize';
     else if (edge === 'bottom-right') document.body.style.cursor = 'nwse-resize';
     document.body.style.userSelect = 'none';
 
@@ -451,7 +660,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const toggleMaximize = () => {
     if (!isMaximized) {
-      setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
+      if (!dockZone) {
+        setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
+      }
+      setDockZone(null);
       setIsMaximized(true);
     } else {
       setIsMaximized(false);
@@ -465,6 +677,16 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   useEffect(() => {
     const keepPopupVisible = () => {
+      if (dockZone) {
+        const rects = readPopupDockZones();
+        setDockRects(rects);
+        const zoneRect = rects[dockZone];
+        if (zoneRect) {
+          setPosition({ x: zoneRect.left, y: zoneRect.top });
+          setSize({ width: zoneRect.width, height: zoneRect.height });
+        }
+        return;
+      }
       setPosition((currentPosition) => {
         const clampedPosition = clampPopupPosition(currentPosition, size);
         return clampedPosition.x === currentPosition.x && clampedPosition.y === currentPosition.y
@@ -476,7 +698,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     keepPopupVisible();
     window.addEventListener('resize', keepPopupVisible);
     return () => window.removeEventListener('resize', keepPopupVisible);
-  }, [size]);
+  }, [size, dockZone]);
 
   const requireTradeMutationPermission = () => {
     if (canManipulateTrades) return true;
@@ -1109,8 +1331,41 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
   const titleText = `Account ${loginId}${name ? ` · ${name}` : ''}`;
 
+  const dockOverlay =
+    isDraggingWindow && typeof document !== 'undefined'
+      ? createPortal(
+          <div className="multi-screen-dock-overlay account-details-dock-overlay" data-testid="account-details-dock-overlay">
+            {[
+              { id: 'left', label: '◀ Attach to Left', rect: dockRects.left },
+              { id: 'bottom', label: '▼ Attach to Bottom', rect: dockRects.bottom },
+              { id: 'right', label: '▶ Attach to Right', rect: dockRects.right },
+            ].map((zone) => {
+              if (!zone.rect) return null;
+              const isHovered = hoveredDockZone === zone.id;
+              return (
+                <div
+                  key={zone.id}
+                  data-dock-zone={zone.id}
+                  className={`multi-screen-dock-zone multi-screen-dock-zone--${zone.id}${isHovered ? ' is-hovered' : ''}`}
+                  style={{
+                    left: `${zone.rect.left}px`,
+                    top: `${zone.rect.top}px`,
+                    width: `${zone.rect.width}px`,
+                    height: `${zone.rect.height}px`,
+                  }}
+                >
+                  <span className="multi-screen-dock-zone-badge">{zone.label}</span>
+                </div>
+              );
+            })}
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <>
+    {dockOverlay}
     <div className="account-details-backdrop" aria-hidden="true" />
     <div
       ref={windowRef}
@@ -1135,14 +1390,16 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         height: isMaximized ? '100vh' : size.height,
         zIndex: 100000
       }}
-      className="account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden"
+      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone ? ` is-docked is-docked--${dockZone}` : ''}`}
       data-maximized={isMaximized}
+      data-dock-zone={dockZone || 'floating'}
       role="dialog"
       aria-modal="true"
       aria-label={`Account details for ${loginId}`}
     >
       {!isMaximized && (
         <>
+          <div onMouseDown={(e) => handleResizeMouseDown(e, 'top')} className="absolute left-0 right-0 top-0 h-1 cursor-ns-resize hover:bg-blue-500/50 z-10" />
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'left')} className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10 -ml-0.5" />
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'right')} className="absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10" />
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')} className="absolute left-0 right-0 bottom-0 h-1 cursor-ns-resize hover:bg-blue-500/50 z-10" />
@@ -1159,6 +1416,42 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           <span className="account-details-title truncate">{titleText}</span>
         </div>
         <div className="account-details-window-controls ml-2 shrink-0">
+          <div className="account-details-dock-controls" role="group" aria-label="Dock account details window">
+            <button
+              type="button"
+              onClick={() => applyDockZone('left')}
+              aria-pressed={dockZone === 'left'}
+              aria-label="Dock account details left"
+              title={dockZone === 'left' ? 'Undock from left' : 'Set to left'}
+              className={dockZone === 'left' ? 'is-active' : ''}
+              data-dock-action="left"
+            >
+              <PanelLeft size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDockZone('bottom')}
+              aria-pressed={dockZone === 'bottom'}
+              aria-label="Dock account details bottom"
+              title={dockZone === 'bottom' ? 'Undock from bottom' : 'Set to bottom'}
+              className={dockZone === 'bottom' ? 'is-active' : ''}
+              data-dock-action="bottom"
+            >
+              <PanelBottom size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDockZone('right')}
+              aria-pressed={dockZone === 'right'}
+              aria-label="Dock account details right"
+              title={dockZone === 'right' ? 'Undock from right' : 'Set to right'}
+              className={dockZone === 'right' ? 'is-active' : ''}
+              data-dock-action="right"
+            >
+              <PanelRight size={13} />
+            </button>
+          </div>
+          <span className="account-details-controls-sep" aria-hidden="true" />
           <button type="button" onClick={toggleMaximize} aria-label={isMaximized ? 'Restore account details' : 'Maximize account details'}><Square size={13} /></button>
           <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={16} /></button>
         </div>

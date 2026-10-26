@@ -2,9 +2,35 @@
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+.account-details-dock-overlay {
+  z-index: 100001 !important;
+  pointer-events: none;
 }
 #root .account-details-window { border: 1px solid var(--border); border-radius: 3px !important; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / .3); }
+#root .account-details-window.is-docked {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 14px 36px rgb(0 0 0 / .42);
+}
 #root .account-details-titlebar { min-height: 34px; padding: 0 10px; }
+#root .account-details-dock-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+#root .account-details-dock-controls button.is-active {
+  background: var(--accent-soft) !important;
+  color: var(--accent-text) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)) !important;
+}
+#root .account-details-controls-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--border);
+  flex-shrink: 0;
+}
 #root .account-details-tabs { flex: 0 0 auto; min-height: 34px; padding: 3px 6px; gap: 3px; overflow-x: auto; }
 #root .account-details-tab { flex: 0 0 auto; height: 28px; padding: 0 10px; }
 #root .account-details-content { min-height: 0; gap: 12px; padding: 12px; }

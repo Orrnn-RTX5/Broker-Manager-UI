@@ -6324,11 +6324,66 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
   height: 100%;
 }
 
+.cc-center-workspace.has-multi-screens:has(.multi-screen-workspace.is-workspace-docked) .cc-route-viewport {
+  flex: 1 1 100%;
+}
+
 .cc-center-workspace.has-multi-screens .multi-screen-workspace {
   flex: 1.4 1 58%;
   min-width: 320px;
   height: 100%;
   border-left: 1px solid var(--border);
+}
+
+.cc-center-workspace.has-multi-screens .multi-screen-workspace.is-workspace-docked {
+  flex: 0 0 auto;
+  min-width: 240px;
+  overflow: hidden !important;
+}
+
+.multi-screen-dock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  pointer-events: none;
+}
+
+.multi-screen-dock-zone {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px dashed rgba(30, 140, 255, 0.52);
+  border-radius: 6px;
+  background: rgba(30, 140, 255, 0.08);
+  pointer-events: none;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.multi-screen-dock-zone.is-hovered {
+  border-color: rgba(30, 140, 255, 0.98);
+  background: rgba(30, 140, 255, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(30, 140, 255, 0.45), 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.multi-screen-dock-zone-badge {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.65);
+  color: #e0f2fe;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.multi-screen-dock-zone.is-hovered .multi-screen-dock-zone-badge {
+  background: #0284c7;
+  border-color: #7dd3fc;
+  color: #ffffff;
 }
 
 @container (max-width: 780px) {
@@ -6359,14 +6414,153 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
   box-sizing: border-box;
   background: var(--bg);
   overflow: hidden;
+  position: relative;
+}
+
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane),
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane) > div,
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane) > div > div,
+div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane)),
+.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane),
+.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane) .cc-center-split {
+  overflow: visible !important;
+}
+
+div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane)) {
+  z-index: 80;
+}
+
+.multi-screen-workspace.is-workspace-movable,
+.multi-screen-workspace.has-movable-pane {
+  overflow: visible !important;
+  z-index: 40;
+}
+
+.multi-screen-workspace.is-workspace-movable {
+  z-index: 50;
+  cursor: grab;
+  user-select: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border));
+  border-radius: 6px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48);
+}
+
+.multi-screen-workspace.is-Dragging,
+.multi-screen-workspace.is-dragging {
+  z-index: 120;
+  cursor: grabbing !important;
+  transition: none !important;
+}
+
+.multi-screen-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  background: var(--surface-2);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.multi-screen-toolbar.is-movable {
+  cursor: grab;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface-2));
+}
+
+.multi-screen-toolbar.is-movable:active {
+  cursor: grabbing;
+}
+
+.multi-screen-toolbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.multi-screen-toolbar-actions,
+.new-account-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.multi-screen-workspace-move-toggle,
+.new-account-move-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.multi-screen-workspace-move-toggle:active,
+.new-account-move-toggle:active {
+  cursor: grabbing;
+}
+
+.multi-screen-workspace-move-toggle:hover,
+.new-account-move-toggle:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.multi-screen-workspace-move-toggle.is-active,
+.new-account-move-toggle.is-active {
+  background: var(--accent-soft) !important;
+  color: var(--accent-text) !important;
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border)) !important;
+}
+
+.new-account-modal-header.is-movable,
+.group-create-header.is-movable {
+  cursor: grab;
+  user-select: none;
+}
+
+.new-account-modal-header.is-movable:active,
+.group-create-header.is-movable:active {
+  cursor: grabbing;
 }
 
 .multi-screen-row {
+  position: relative;
   display: flex;
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
   gap: 6px;
+}
+
+.multi-screen-row:has(.multi-screen-pane.is-movable) {
+  z-index: 60;
+}
+
+.multi-screen-row:has(.multi-screen-pane.is-movable.is-active) {
+  z-index: 90;
+}
+
+.multi-screen-row:has(.multi-screen-pane.is-dragging) {
+  z-index: 120;
 }
 
 .multi-screen-pane {
@@ -6385,6 +6579,26 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
     border-radius 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;
+}
+
+.multi-screen-pane.is-movable {
+  z-index: 60;
+  cursor: grab;
+  user-select: none;
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 14px 34px rgba(0, 0, 0, 0.48);
+}
+
+.multi-screen-pane.is-movable.is-active {
+  z-index: 90;
+}
+
+.multi-screen-pane.is-dragging {
+  z-index: 120;
+  cursor: grabbing !important;
+  transition: none !important;
 }
 
 /* When the user is present on a screen, give it a very slight rounded border

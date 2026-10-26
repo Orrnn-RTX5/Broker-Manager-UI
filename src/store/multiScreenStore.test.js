@@ -78,6 +78,66 @@ test('buildScreenGridRows divides 1 to 6 screens into balanced rows', () => {
   assert.deepEqual(buildScreenGridRows(make(6)).map((r) => r.length), [3, 3]);
 });
 
+test('Movable toggle works for the whole 6-screen workspace and for one particular account screen', () => {
+  useMultiScreenStore.getState().resetMultiScreens();
+
+  const first = useMultiScreenStore.getState().openAccountScreen();
+  const second = useMultiScreenStore.getState().openAccountScreen();
+
+  // Whole workspace movable toggle
+  assert.equal(useMultiScreenStore.getState().isWorkspaceMovable, false);
+  useMultiScreenStore.getState().toggleWorkspaceMovable();
+  assert.equal(useMultiScreenStore.getState().isWorkspaceMovable, true);
+  useMultiScreenStore.getState().setWorkspacePosition({ x: 40, y: -25 });
+  assert.deepEqual(useMultiScreenStore.getState().workspacePosition, { x: 40, y: -25 });
+
+  // Toggling off docks the workspace back to { x: 0, y: 0 }
+  useMultiScreenStore.getState().toggleWorkspaceMovable();
+  assert.equal(useMultiScreenStore.getState().isWorkspaceMovable, false);
+  assert.deepEqual(useMultiScreenStore.getState().workspacePosition, { x: 0, y: 0 });
+
+  // Individual account screen movable toggle
+  useMultiScreenStore.getState().toggleScreenMovable('account', first.screenId);
+  let screens = useMultiScreenStore.getState().accountScreens;
+  assert.equal(screens[0].movable, true);
+  assert.equal(screens[1].movable, false);
+
+  useMultiScreenStore.getState().setScreenPosition('account', first.screenId, { x: -60, y: 30 });
+  screens = useMultiScreenStore.getState().accountScreens;
+  assert.deepEqual(screens[0].position, { x: -60, y: 30 });
+  assert.deepEqual(screens[1].position, { x: 0, y: 0 });
+
+  // Toggling off resets that particular account screen position to { x: 0, y: 0 }
+  useMultiScreenStore.getState().toggleScreenMovable('account', first.screenId);
+  screens = useMultiScreenStore.getState().accountScreens;
+  assert.equal(screens[0].movable, false);
+  assert.deepEqual(screens[0].position, { x: 0, y: 0 });
+
+  // Direct setWorkspaceMovable and setScreenMovable (when dragging the Move button directly)
+  useMultiScreenStore.getState().setWorkspaceMovable(true);
+  assert.equal(useMultiScreenStore.getState().isWorkspaceMovable, true);
+  useMultiScreenStore.getState().setScreenMovable('account', second.screenId, true);
+  screens = useMultiScreenStore.getState().accountScreens;
+  assert.equal(screens[1].movable, true);
+
+  // Attaching (docking) workspace and individual screens to marked sections (left, bottom, right)
+  useMultiScreenStore.getState().dockWorkspaceToZone('left');
+  assert.equal(useMultiScreenStore.getState().workspaceDockZone, 'left');
+  assert.deepEqual(useMultiScreenStore.getState().workspacePosition, { x: 0, y: 0 });
+  useMultiScreenStore.getState().dockWorkspaceToZone('bottom');
+  assert.equal(useMultiScreenStore.getState().workspaceDockZone, 'bottom');
+  useMultiScreenStore.getState().dockWorkspaceToZone('right');
+  assert.equal(useMultiScreenStore.getState().workspaceDockZone, null);
+
+  useMultiScreenStore.getState().dockScreenToZone('account', first.screenId, 'left');
+  screens = useMultiScreenStore.getState().accountScreens;
+  assert.equal(screens[0].dockZone, 'left');
+  assert.deepEqual(screens[0].position, { x: 0, y: 0 });
+  useMultiScreenStore.getState().dockScreenToZone('account', first.screenId, 'right');
+  screens = useMultiScreenStore.getState().accountScreens;
+  assert.equal(screens[0].dockZone, null);
+});
+
 test('MultiScreenWorkspace highlights the active screen with a slight rounded border', () => {
   const workspaceSource = readFileSync(new URL('../components/MultiScreenWorkspace.jsx', import.meta.url), 'utf8');
   const cssSource = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
@@ -143,3 +203,20 @@ test('Dealing page places search in header filter row, removes subtitle line, an
   assert.match(dealsGridSource, /<colgroup>/);
   assert.match(cssSource, /#root \.deals-grid \.deals-table\s*\{[\s\S]*?table-layout:\s*fixed;/);
 });
+
+test('AccountDetailsModal supports movable drag and 3-place docking (left, bottom, right)', () => {
+  const modalSource = readFileSync(new URL('../components/Popups/AccountDetailsModal.jsx', import.meta.url), 'utf8');
+  const modalCss = readFileSync(new URL('../components/Popups/AccountDetailsModal.css', import.meta.url), 'utf8');
+
+  assert.match(modalSource, /readPopupDockZones/);
+  assert.match(modalSource, /detectPopupDockZone/);
+  assert.match(modalSource, /applyDockZone\('left'\)/);
+  assert.match(modalSource, /applyDockZone\('bottom'\)/);
+  assert.match(modalSource, /applyDockZone\('right'\)/);
+  assert.match(modalSource, /data-dock-action="left"/);
+  assert.match(modalSource, /data-dock-action="bottom"/);
+  assert.match(modalSource, /data-dock-action="right"/);
+  assert.match(modalSource, /data-testid="account-details-dock-overlay"/);
+  assert.match(modalCss, /#root \.account-details-backdrop\s*\{[\s\S]*?pointer-events:\s*none;/);
+});
+
