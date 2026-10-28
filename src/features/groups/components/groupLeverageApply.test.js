@@ -34,7 +34,7 @@ test('apply group leverage writes only exact-group members, each with ExpectedGr
   ]);
   assert.deepEqual(calls, [
     ['1001', { Leverage: 200, ExpectedGroup: 'Grp' }],
-    ['1003', { Leverage: 200, ExpectedGroup: ' Grp ' }], // stored value, byte-exact (B1 contract)
+    ['1003', { Leverage: 200, ExpectedGroup: ' Grp ' }], // stored value, byte-exact (ExpectedGroup contract)
   ]);
   assert.deepEqual(result, { succeeded: 2, failed: 0, total: 2, succeededLogins: ['1001', '1003'] });
 });
@@ -69,7 +69,7 @@ test('a normalized member (trimmed group) still sends its stored group byte-exac
   assert.deepEqual(calls, [['1001', { Leverage: 200, ExpectedGroup: ' Grp ' }]]);
 });
 
-// Fix 3: one apply write per group at a time. The registry is module-level, so it holds across remounts.
+// One apply write per group at a time. The registry is module-level, so it holds across remounts.
 // Every begin is paired with an end in `finally`, so a failing assertion never leaks an in-flight mark.
 test('the in-flight registry admits one apply per group and clears when the apply ends', () => {
   try {
@@ -119,7 +119,7 @@ test('the in-flight registry notifies subscribers when a write starts or ends, n
   }
 });
 
-// SF1: Apply selects members with the same accessor as the account list. A row whose `group` is ''
+// Apply selects members with the same accessor as the account list. A row whose `group` is ''
 // and whose `accountGroup` is 'Beta' is listed under Beta, so Apply must patch it too.
 test('a row with an empty group and accountGroup Beta is patched with ExpectedGroup Beta, like the listed row', async () => {
   const raw = [

@@ -55,7 +55,7 @@ test('a fresh membership read is never reused from a read that started before it
   assert.deepEqual((await defaultCaller).rows, [{ login: '1' }], 'the default caller gets the shared read');
 });
 
-// SF2: the group-apply refresh runs after the last PATCH. It advances the cache revision first, so a
+// The group-apply refresh runs after the last PATCH. It advances the cache revision first, so a
 // plain read that started before that PATCH is not reused as the post-write result.
 test('after the post-write revision advance, a read in flight before the last PATCH is not the post-write result', async () => {
   let reads = 0;

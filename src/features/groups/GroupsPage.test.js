@@ -39,7 +39,7 @@ test('folder/selection/intent sync uses render-phase adjustments, not setState i
   assert.ok(navFx.includes('return undefined;'), 'intent effect must navigate then end without setState');
 });
 
-// B3-R / round 5: Enter on a multi-segment path opens only a fully resolved route. The decision is the pure
+// Enter on a multi-segment path opens only a fully resolved route. The decision is the pure
 // resolveGroupEnterTarget (behaviour is tested in groupSearchRouter.test.js); this pins that Enter routes
 // through it with the typed query and the groups (the helper reads the path segments from them).
 test('Enter decides its target through resolveGroupEnterTarget with the typed query and groups', () => {

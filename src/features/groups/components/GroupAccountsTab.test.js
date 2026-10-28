@@ -237,7 +237,21 @@ test('clicking Apply and confirming updates only differing members', async () =>
   assert.match(body, /Applied group leverage to 2 of 2 accounts\./);
 });
 
-// B1 (UI): the Apply membership is the server's answer at apply time, not the rows on screen.
+// Listed members that the apply did not patch (already at the group leverage, or without a login) are reported.
+test('apply reports the listed accounts it did not change when listed members exceed the patched total', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  // Four members are listed. 900001 and 900002 differ and are patched; 900003 already matches; 900004 has no leverage.
+  assert.deepEqual(host.updateCalls.map(([login]) => login), ['900001', '900002']);
+  assert.match(
+    document.body.textContent,
+    /Applied group leverage to 2 of 2 accounts\. 2 listed accounts were not changed \(already at group leverage or without a login\)\./,
+  );
+});
+
+// The Apply membership is the server's answer at apply time, not the rows on screen.
 test('apply uses fresh server membership: an account that left the group since load is never patched', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
   // The server moves 900001 out of the group after the tab loaded (the cached row is stale).
@@ -299,7 +313,7 @@ test('partial failure patches only succeeded rows', async () => {
   assert.ok(rows.some((text) => text.includes('900002') && text.includes('1 : 50')), 'failed row keeps its own ratio');
 });
 
-// SF2: the post-write refresh is the one that runs AFTER the writes. The revision advances after the last
+// The post-write refresh is the one that runs AFTER the writes. The revision advances after the last
 // PATCH and before the list re-read, so no read that started before a PATCH can be the refreshed result.
 test('after an apply, the cache revision advances after the last PATCH and before the post-write re-read', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
@@ -334,7 +348,7 @@ test('confirm copy names the ratio and count', () => {
   });
 });
 
-// B1/NIT: the Apply membership is one fresh server read, and the "already use" count comes from it.
+// The Apply membership is one fresh server read, and the "already use" count comes from it.
 test('apply requests one fresh membership read and reports the fresh member count', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
   // Every current member already matches; the server also gained an account since load.
@@ -355,7 +369,7 @@ test('apply requests one fresh membership read and reports the fresh member coun
   assert.match(document.body.textContent, /All 5 accounts already use group leverage 1 : 200\./, 'the count is the fresh membership');
 });
 
-// S2: a result for one group must never show under a group the tab was switched to mid-apply.
+// A result for one group must never show under a group the tab was switched to mid-apply.
 test('an apply result is not shown under a group the tab was switched to while it ran', async () => {
   const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
   let release;
@@ -372,7 +386,7 @@ test('an apply result is not shown under a group the tab was switched to while i
   assert.doesNotMatch(document.body.textContent, /already use group leverage/, 'no stale status under the new group');
 });
 
-// Fix 2: the apply's fresh read is older than any cache write made while the apply runs, so it must not replace it.
+// The apply's fresh read is older than any cache write made while the apply runs, so it must not replace it.
 test('a newer list written to the cache during the apply is not replaced by the older fresh read', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
   let releaseFresh;
@@ -393,7 +407,7 @@ test('a newer list written to the cache during the apply is not replaced by the 
   await settle();
 });
 
-// Fix 3: a tab switch or remount must not re-enable Apply while the group's write is still in flight.
+// A tab switch or remount must not re-enable Apply while the group's write is still in flight.
 test('a remounted tab keeps Apply disabled while the group write is in flight, then re-enables it', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
   let releaseWrites;
@@ -415,7 +429,7 @@ test('a remounted tab keeps Apply disabled while the group write is in flight, t
   assert.doesNotMatch(document.body.textContent, /Applying group leverage/, 'the applying text clears once the write finishes');
 });
 
-// N3: a fresh read that finds no members says so, instead of "All 0 accounts ...".
+// A fresh read that finds no members says so, instead of "All 0 accounts ...".
 test('an apply whose fresh read finds no members says the group has no accounts', async () => {
   await renderTab({ groupName: GROUP, groupLeverage: 200 });
   // Every member left the group since load.

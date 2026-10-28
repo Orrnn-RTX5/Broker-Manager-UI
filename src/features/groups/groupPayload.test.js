@@ -14,10 +14,11 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('./groupPayload.js', import.meta.url))],
   bundle: true, write: false, format: 'esm', platform: 'browser',
   plugins: [{ name: 'group-save-transport', setup(builder) {
-    builder.onResolve({ filter: /\/(managerFetch|managerAccountApi|sidebarAccounts)\.js$/ }, ({ path }) => ({ path, namespace: 'group-test' }));
+    builder.onResolve({ filter: /\/(managerFetch|managerAccountApi|sidebarAccounts|realtimeCacheRevision)\.js$/ }, ({ path }) => ({ path, namespace: 'group-test' }));
     builder.onLoad({ filter: /.*/, namespace: 'group-test' }, ({ path }) => ({ loader: 'js', contents:
       path.includes('managerFetch') ? 'export const fetchManagerApi = (...args) => globalThis.__groupPayloadTest.request(...args);' :
       path.includes('managerAccountApi') ? 'export const updateManagerAccount = (...args) => globalThis.__groupPayloadTest.updateAccount(...args);' :
+      path.includes('realtimeCacheRevision') ? 'export const advanceRealtimeCacheRevision = () => globalThis.__groupPayloadTest.advanceRevision();' :
       'export const fetchAllSidebarAccounts = (...args) => globalThis.__groupPayloadTest.loadAccounts(...args);',
     }));
   } }],
@@ -36,6 +37,7 @@ beforeEach(() => {
   };
   runtime.loadAccounts = async () => { throw new Error('Unexpected account load'); };
   runtime.updateAccount = async () => { throw new Error('Unexpected account update'); };
+  runtime.advanceRevision = () => {};
 });
 after(() => { delete globalThis.__groupPayloadTest; });
 
@@ -439,7 +441,7 @@ test('a group edit never patches the accounts of a group that differs only by ca
 
   assert.deepEqual(accountUpdates.map((update) => update.login).sort(), [1001, 1004], 'only the exact (trimmed) group');
   assert.ok(accountUpdates.every((update) => update.patch.Leverage === 200 && update.patch.StopOutLevel === 30));
-  // B1 contract: ExpectedGroup is the account's stored group, byte-exact (no trim).
+  // ExpectedGroup is the account's stored group, byte-exact (no trim).
   assert.deepEqual(
     Object.fromEntries(accountUpdates.map((update) => [update.login, update.patch.ExpectedGroup])),
     { 1001: 'Grp', 1004: ' Grp ' },
@@ -496,7 +498,7 @@ test('a blank group name never patches any account', async () => {
   }
 });
 
-// B1 (UI): group-wide writes read membership from the server, and the query cache
+// Group-wide writes read membership from the server, and the query cache
 // is written only for the logins the server accepted.
 const cacheClient = (cachedRows) => {
   const writes = [];
@@ -565,7 +567,7 @@ test('the group-wide write path asks the server for a fresh membership read', as
   assert.deepEqual(requests, [{ fresh: true }]);
 });
 
-// SF1 (group save path): a member listed under Grp through accountGroup alone (group '') is patched, with
+// A member listed under Grp through accountGroup alone (group '') is patched on the group save path, with
 // the stored group as ExpectedGroup. The save path used to skip it silently while the list showed it.
 test('the group save path patches an accountGroup-only member with ExpectedGroup Grp, like the list', async () => {
   const updates = [];
@@ -576,4 +578,29 @@ test('the group save path patches an accountGroup-only member with ExpectedGroup
   assert.deepEqual(updates, [[1001, 'Grp'], [1002, 'Grp']]);
   assert.equal(result.accountsUpdated, 2);
   assert.deepEqual(result.accountErrors, []);
+});
+
+// The group save path advances the realtime cache revision after its last account PATCH, so a read that
+// started before that PATCH is never reused or cached. The list is invalidated only after this returns.
+test('the group save path advances the cache revision after the last account PATCH', async () => {
+  const events = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { events.push(`patch:${login}`); };
+  runtime.advanceRevision = () => { events.push('bump'); };
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, cacheClient([]));
+
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(events, ['patch:1001', 'patch:1002', 'bump']);
+});
+
+test('submitGroup advances the cache revision after the last account PATCH of an edit', async () => {
+  const events = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { events.push(`patch:${login}`); };
+  runtime.advanceRevision = () => { events.push('bump'); };
+  const saved = await submitGroup({ originalName: 'Grp', payload: { leverage: 200 }, queryClient: cacheClient([]) });
+
+  assert.equal(saved.accountsUpdated, 1);
+  assert.deepEqual(saved.accountErrors, []);
+  assert.deepEqual(events, ['patch:1001', 'bump']);
 });

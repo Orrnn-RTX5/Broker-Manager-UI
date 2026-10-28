@@ -323,7 +323,7 @@ test('an exact group name still owns the account route', () => {
   assert.equal(route.group.name, 'ALPHA');
 });
 
-// B3-R: an account with a BLANK stored group has no owner. No query spelling, case or fuzzy
+// An account with a BLANK stored group has no owner. No query spelling, case or fuzzy
 // typo may route it to any group, including the group the typed segment matches.
 test('an account with an empty stored group never routes to any group, whatever the typed group', () => {
   const blankRows = [
@@ -343,7 +343,7 @@ test('an account with an empty stored group never routes to any group, whatever 
   }
 });
 
-// B3-R2 / round 5: the blank-group account may sit in any segment after the group. The fixture is shared
+// The blank-group account may sit in any segment after the group. The fixture is shared
 // by every Enter test below. The Enter decision is made as GroupsPage makes it, on the root folder.
 const BLANK_OWNER_ROWS = [
   { login: '500003', Name: 'Blank Owner', group: '', balance: 10, equity: 10, leverage: 100 },
@@ -368,9 +368,9 @@ test('Enter opens nothing for a blank-group account, in every path and field-suf
   }
 });
 
-// Round 5 (B1): a multi-segment path opens only a route the router fully resolved. Name forms of a
-// blank-group account used to open the visible group Beta through the single-row fallback.
-test('Enter opens nothing for the review name forms of a blank-group account', () => {
+// A multi-segment path opens only a route the router fully resolved. This case has no group named Beta/Blank,
+// so the name forms of a blank-group account open nothing. The Beta/Blank case has its own test below.
+test('Enter opens nothing for name forms of a blank-group account when no group of that path exists', () => {
   for (const query of [
     'Beta / Blank Owner', 'Beta / Blank O', 'Beta / Blank Owner / email',
     'Beta / 500002 / Blank Owner', 'Beta / Blank Owner / 500002',
@@ -380,13 +380,38 @@ test('Enter opens nothing for the review name forms of a blank-group account', (
   }
 });
 
-// Round 5 (SF4): the name of an account in another group is not a match under the typed group.
+// When a group exists at the typed path, Enter opens that group, never the blank-group account it would hide.
+test('Enter opens the group Beta/Blank for "Beta / Blank O", never the blank-group account', () => {
+  const groups = [...CASE_SAMPLE_GROUPS, { name: 'Beta/Blank', currency: 'USD', leverage: 100 }];
+  const route = resolveGroupSearchRoute({ query: 'Beta / Blank O', groups, accountRows: BLANK_OWNER_ROWS });
+  assert.equal(route?.type, 'group', 'the typed path resolves to the group route');
+  assert.equal(route.group.name, 'Beta/Blank');
+  assert.equal(route.login, undefined, 'the blank-group account 500003 is never routed');
+
+  const target = enterTargetFor('Beta / Blank O', { groups });
+  assert.equal(target?.kind, 'route');
+  assert.equal(target.route.type, 'group', 'Enter opens the group route');
+  assert.equal(target.route.group.name, 'Beta/Blank');
+  assert.equal(target.route.login, undefined, 'Enter never opens the blank-group account 500003');
+});
+
+// An account stored only through accountGroup (group '') is a member of that group, so its path routes there.
+test('Enter opens the account route under Beta for an account stored only by accountGroup', () => {
+  const accountRows = [...BLANK_OWNER_ROWS, { login: '500004', Name: 'Accgroup Acc', group: '', accountGroup: 'Beta', balance: 10, equity: 10, leverage: 100 }];
+  const target = enterTargetFor('Beta / 500004', { accountRows });
+  assert.equal(target?.kind, 'route');
+  assert.equal(target.route.type, 'account');
+  assert.equal(target.route.login, '500004');
+  assert.equal(target.route.group.name, 'Beta');
+});
+
+// The name of an account in another group is not a match under the typed group.
 test('Enter opens nothing when the typed account name belongs to another group', () => {
   assert.equal(enterTargetFor('Beta / Alpha Acc'), null, 'Alpha Acc is in ALPHA, not Beta');
   assert.equal(enterTargetFor('ALPHA / Beta Acc'), null, 'Beta Acc is in Beta, not ALPHA');
 });
 
-// Round 5 regression: single-segment queries and resolved path routes keep opening.
+// Single-segment queries and resolved path routes keep opening.
 test('Enter still opens a plain group name, a resolved account path, and a resolved subgroup path', () => {
   const beta = enterTargetFor('Beta');
   assert.equal(beta?.kind, 'route');

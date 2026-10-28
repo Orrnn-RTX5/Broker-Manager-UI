@@ -1,6 +1,7 @@
 import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
+import { advanceRealtimeCacheRevision } from '../../services/realtimeCacheRevision.js';
 import { accountGroupName, accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, storedGroupOf } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
 import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
@@ -305,6 +306,9 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, queryClie
       accountErrors.push(`${row.login}: ${err.message}`);
     }
   }
+  // The account writes are over. Advance the cache revision before the caller invalidates the list, so no
+  // read that started before the last PATCH is reused or cached (sidebarAccounts reuses only same-revision reads).
+  advanceRealtimeCacheRevision();
   if (succeededLogins.length > 0) writeAccountCache(queryClient, patch, succeededLogins);
   return { accountsUpdated: succeededLogins.length, accountErrors };
 };
