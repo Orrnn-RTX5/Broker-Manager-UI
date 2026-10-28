@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
-import { getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
+import { fetchAllSidebarAccounts, getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
 import { updateManagerAccount } from '../../../services/managerAccountApi.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../groupAccountRows.js';
 import { applyGroupLeverage, buildApplyConfirmCopy } from './groupLeverageApply.js';
@@ -53,11 +53,14 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
     setConfirmOpen(false);
     setApplying(true);
     setApplyError(null);
+    // The result is tagged with the group it was started for: a switch to another group meanwhile must not show it there.
+    const startedFor = groupKey;
     try {
-      // Members are read fresh from the server, never from the rows already on screen:
-      // an account that left the group since the last load must not be patched.
-      const fresh = await refetch({ throwOnError: true });
-      const members = accountsInGroup(fresh.data?.rows, groupName, { leverage: groupLeverage }).map((row) => row.account);
+      // Members are read fresh from the server, never from the rows already on screen, and never
+      // from a read that started before this click: an account that left the group must not be patched.
+      const fresh = await fetchAllSidebarAccounts({ fresh: true });
+      queryClient.setQueryData(getSidebarAccountsQueryOptions('').queryKey, fresh);
+      const members = accountsInGroup(fresh?.rows, groupName, { leverage: groupLeverage }).map((row) => row.account);
       const result = await applyGroupLeverage({
         members,
         expectedGroup: groupName,
@@ -79,23 +82,27 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
           };
         });
       }
-      setApplyResult(result);
+      setApplyResult({ ...result, groupKey: startedFor, memberCount: members.length });
     } catch (err) {
-      setApplyError(err?.message || 'Could not apply group leverage.');
+      setApplyError({ groupKey: startedFor, message: err?.message || 'Could not apply group leverage.' });
     } finally {
       setApplying(false);
     }
   };
 
+  // Only a result or error started for the group on screen is shown.
+  const shownResult = applyResult && applyResult.groupKey === groupKey ? applyResult : null;
+  const shownError = applyError && applyError.groupKey === groupKey ? applyError.message : null;
+
   const applyMessage = applying
     ? 'Applying group leverage…'
-    : applyResult && applyResult.total === 0
+    : shownResult && shownResult.total === 0
       ? (groupRatio === null || groupRatio === undefined
         ? 'Group leverage is not set for this group, so there is nothing to apply.'
-        : `All ${rows.length} accounts already use group leverage 1 : ${groupRatio}.`)
-      : applyResult
-        ? `Applied group leverage to ${applyResult.succeeded} of ${applyResult.total} accounts.`
-        + (applyResult.failed > 0 ? ` ${applyResult.failed} could not be updated.` : '')
+        : `All ${shownResult.memberCount} accounts already use group leverage 1 : ${groupRatio}.`)
+      : shownResult
+        ? `Applied group leverage to ${shownResult.succeeded} of ${shownResult.total} accounts.`
+        + (shownResult.failed > 0 ? ` ${shownResult.failed} could not be updated.` : '')
         : null;
 
   const emptyMessage = error
@@ -127,7 +134,7 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
         </button>
       </div>
       {applyMessage && <p className="groups-props-empty" role="status">{applyMessage}</p>}
-      {applyError && <p className="groups-props-error" role="alert">{applyError}</p>}
+      {shownError && <p className="groups-props-error" role="alert">{shownError}</p>}
       {confirmOpen && !applying && (() => {
         const copy = buildApplyConfirmCopy({ groupRatio, count: rows.length });
         return (

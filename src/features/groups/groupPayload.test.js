@@ -555,3 +555,12 @@ test('a 409-refused account keeps its cached leverage; only accepted logins are 
   assert.equal(result.accountsUpdated, 1);
   assert.equal(result.accountErrors.length, 1);
 });
+
+// The group-wide write path asks for a fresh membership read, never a shared in-flight one.
+test('the group-wide write path asks the server for a fresh membership read', async () => {
+  const requests = [];
+  runtime.loadAccounts = async (options) => { requests.push(options); return { rows: [] }; };
+  runtime.updateAccount = async () => { throw new Error('no members, must not patch'); };
+  await applyGroupSettingsToAccounts('Grp', { leverage: 200 });
+  assert.deepEqual(requests, [{ fresh: true }]);
+});

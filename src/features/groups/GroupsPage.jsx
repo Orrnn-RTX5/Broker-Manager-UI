@@ -12,6 +12,7 @@ import {
   filterAccountRowsBySearch,
   filterGroupRowsBySearch,
   getGroupSearchSuggestions,
+  isBlankGroupAccountQuery,
   parseGroupSearchRoute,
   resolveGroupSearchRoute,
 } from './groupSearchRouter.js';
@@ -457,6 +458,9 @@ const GroupsPage = () => {
       if (resolved && executeSearchRoute(resolved)) {
         return;
       }
+
+      // An account with no stored group owns no group: open nothing, not even a visible group the typed segment matches.
+      if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;
 
       if (!openedGroup && visibleRows.length === 1) {
         activate(visibleRows[0]);

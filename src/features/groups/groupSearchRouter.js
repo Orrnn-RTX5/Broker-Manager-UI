@@ -946,6 +946,8 @@ const resolveCoreRoute = ({
           return { login, name: String(raw?.Name ?? raw?.name ?? ''), email: String(raw?.Email ?? raw?.email ?? ''), account: raw, groupName };
         });
         const globalMatch = globalCandidates.find((item) => item.login === lastSegment);
+        // An account with no stored group has no owner. Fail closed: name no group at all.
+        if (globalMatch && !globalMatch.groupName) return null;
         // The stored group owns the account. Its exact record when one exists, else a name-only
         // object for the stored name. Never prefixNode.group: that is a case-insensitive segment match.
         const owningGroup = globalMatch?.groupName
@@ -1536,4 +1538,20 @@ export const filterAccountRowsBySearch = (accountRows, search, columns = []) => 
   }
 
   return accountRows;
+};
+
+/**
+ * True when a path query (`<group> / <login>`) names an account whose stored group is blank.
+ * Such an account has no owning group, so the page must open nothing for it, not even a
+ * visible group matched by the typed segment.
+ */
+export const isBlankGroupAccountQuery = (query, accountRows = []) => {
+  const { isPathQuery, segments } = parseGroupSearchRoute(query);
+  if (!isPathQuery || segments.length < 2) return false;
+  const login = segments.at(-1);
+  return (accountRows || []).some((raw) => {
+    const rowLogin = String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim();
+    const groupName = String(raw?.group ?? raw?.Group ?? '').trim();
+    return rowLogin === login && !groupName;
+  });
 };

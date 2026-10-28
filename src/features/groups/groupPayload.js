@@ -286,7 +286,7 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, queryClie
   if (Object.keys(patch).length === 0) return { accountsUpdated: 0, accountErrors: [] };
   // Membership is always read from the server. The react-query cache can be stale or
   // partial, so it never decides which accounts are patched.
-  const page = await fetchAllSidebarAccounts({});
+  const page = await fetchAllSidebarAccounts({ fresh: true });
   const seen = new Set();
   const expectedGroup = groupNameKey(groupName);
   const rows = accountsInGroup(page?.rows, groupName).filter((row) => {

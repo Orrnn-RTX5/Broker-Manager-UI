@@ -38,3 +38,12 @@ test('folder/selection/intent sync uses render-phase adjustments, not setState i
   const navFx = src.slice(src.indexOf('navigate(`${location.pathname}${location.search}`, { replace: true, state: null });'));
   assert.ok(navFx.includes('return undefined;'), 'intent effect must navigate then end without setState');
 });
+
+// B3-R: Enter on a query naming a blank-group account must open nothing, not a visible group
+// that the typed segment fuzzy-matches (the page fallback would otherwise activate it).
+test('Enter never opens a visible group for a blank-group account query', () => {
+  assert.ok(src.includes('if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;'), 'Enter must return before the single-row fallbacks');
+  const guard = src.indexOf('if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;');
+  const fallback = src.indexOf('if (!openedGroup && visibleRows.length === 1) {');
+  assert.ok(guard !== -1 && fallback > guard, 'the guard must sit before the visible-row fallback');
+});

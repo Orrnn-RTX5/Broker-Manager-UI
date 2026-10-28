@@ -5,6 +5,7 @@ import {
   filterAccountRowsBySearch,
   filterGroupRowsBySearch,
   getGroupSearchSuggestions,
+  isBlankGroupAccountQuery,
   matchAccountField,
   parseGroupSearchRoute,
   resolveGroupSearchRoute,
@@ -320,4 +321,36 @@ test('an exact group name still owns the account route', () => {
   assert.equal(route.type, 'account');
   assert.equal(route.login, '500002');
   assert.equal(route.group.name, 'ALPHA');
+});
+
+// B3-R: an account with a BLANK stored group has no owner. No query spelling, case or fuzzy
+// typo may route it to any group, including the group the typed segment matches.
+test('an account with an empty stored group never routes to any group, whatever the typed group', () => {
+  const blankRows = [
+    [{ login: '500003', Name: 'Blank Owner', group: '', balance: 10, equity: 10, leverage: 100 }],
+    [{ login: '500003', Name: 'Blank Owner', group: '   ', balance: 10, equity: 10, leverage: 100 }],
+  ];
+  for (const accountRows of blankRows) {
+    for (const query of ['ALPHA / 500003', 'alpha / 500003', 'Beta / 500003', 'Alph / 500003', 'Bet / 500003', 'ALPHA /500003']) {
+      const route = resolveGroupSearchRoute({ query, groups: CASE_SAMPLE_GROUPS, accountRows });
+      assert.equal(route, null, `${query} must not route (blank group: ${JSON.stringify(accountRows[0].group)})`);
+      const suggestions = getGroupSearchSuggestions({ query, groups: CASE_SAMPLE_GROUPS, accountRows });
+      assert.ok(
+        suggestions.every((item) => item.type !== 'account' && item.type !== 'account-field' && item.type !== 'group' && item.type !== 'folder'),
+        `${query} must not suggest any group or account route`,
+      );
+      assert.equal(isBlankGroupAccountQuery(query, accountRows), true, `${query} is a blank-group account query`);
+    }
+  }
+});
+
+test('isBlankGroupAccountQuery flags only path queries that name a blank-group login', () => {
+  const rows = [
+    { login: '500003', group: '' },
+    { login: '500002', group: 'Beta' },
+  ];
+  assert.equal(isBlankGroupAccountQuery('ALPHA / 500003', rows), true);
+  assert.equal(isBlankGroupAccountQuery('500003', rows), false, 'a bare login is not a path query');
+  assert.equal(isBlankGroupAccountQuery('Beta / 500002', rows), false, 'a stored group is not blank');
+  assert.equal(isBlankGroupAccountQuery('ALPHA / 500999', rows), false, 'an unknown login is not blank-group');
 });

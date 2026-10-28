@@ -38,6 +38,8 @@ const host = {
   updateCalls: [],
   rejectLogins: new Set(),
   conflictLogins: new Set(),
+  gate: null,
+  freshReads: [],
 };
 globalThis.__groupAccountsTabHost = host;
 
@@ -49,6 +51,12 @@ const STUBS = {
       queryFn: async () => { host.fetches += 1; return { rows: host.rows.map((row) => ({ ...row })) }; },
       staleTime: 5 * 60 * 1000,
     });
+    export const fetchAllSidebarAccounts = async (options = {}) => {
+      host.freshReads.push(options);
+      host.fetches += 1;
+      if (host.gate) await host.gate;
+      return { rows: host.rows.map((row) => ({ ...row })) };
+    };
   `,
   managerAccountApi: `
     const host = globalThis.__groupAccountsTabHost;
@@ -156,6 +164,8 @@ beforeEach(() => {
   host.updateCalls.length = 0;
   host.rejectLogins = new Set();
   host.conflictLogins = new Set();
+  host.gate = null;
+  host.freshReads = [];
 });
 
 afterEach(() => unmountTab());
@@ -286,4 +296,42 @@ test('confirm copy names the ratio and count', () => {
     message: 'Group leverage is not set for this group, so there is nothing to apply.',
     confirmLabel: 'Apply',
   });
+});
+
+// B1/NIT: the Apply membership is one fresh server read, and the "already use" count comes from it.
+test('apply requests one fresh membership read and reports the fresh member count', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  // Every current member already matches; the server also gained an account since load.
+  host.rows = [
+    member('900001', 200),
+    member('900002', 200),
+    member('900003', 200),
+    member('900004', undefined),
+    member('900005', 200),
+    { login: '900009', Name: 'Fixture outsider', group: 'Fixture/Other', leverage: 10 },
+  ];
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.deepEqual(host.freshReads, [{ fresh: true }], 'the apply read is the fresh option, not a shared in-flight read');
+  assert.deepEqual(host.updateCalls, [], 'nothing differs, so nothing is written');
+  assert.match(document.body.textContent, /All 5 accounts already use group leverage 1 : 200\./, 'the count is the fresh membership');
+});
+
+// S2: a result for one group must never show under a group the tab was switched to mid-apply.
+test('an apply result is not shown under a group the tab was switched to while it ran', async () => {
+  const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  let release;
+  host.gate = new Promise((resolve) => { release = resolve; });
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+  await view.rerender({ groupName: 'Fixture/Other', groupLeverage: 200 });
+  release();
+  await settle();
+
+  assert.deepEqual(host.updateCalls.map(([login]) => login), ['900001', '900002'], 'the server writes for the started group still happen');
+  assert.doesNotMatch(document.body.textContent, /Applied group leverage to/, 'the old counts must not show under the new group');
+  assert.doesNotMatch(document.body.textContent, /already use group leverage/, 'no stale status under the new group');
 });
