@@ -118,6 +118,13 @@
   line-height: 1.4;
 }
 
+.group-create-hint {
+  margin: 2px 0 6px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .group-create-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

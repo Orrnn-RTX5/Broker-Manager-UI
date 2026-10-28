@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X, AlertCircle, Move } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
+import { ALLOW_ALL_SYMBOLS, emptyAllowedSymbolsError, isAllowAllSymbols, symbolKey } from '../groupSymbolAvailability.js';
 import GroupPermissionNotice from './GroupPermissionNotice';
 import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
@@ -252,6 +253,7 @@ const NewGroupModal = ({
   onHeaderPointerDown,
 }) => {
   const titleId = useId();
+  const refusedSymbolsId = useId();
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
@@ -349,6 +351,24 @@ const NewGroupModal = ({
   // Mapped GROUP_POLICY server errors, keyed by policy field and rendered
   // inline on the named field. Cleared per field on edit and on resubmit.
   const [fieldErrors, setFieldErrors] = useState({});
+  // Allowed symbols the last save refused (no enabled instrument). Shown as one
+  // list and marked in the picker; cleared on resubmit.
+  const [refusedSymbols, setRefusedSymbols] = useState([]);
+  // The explicit list kept while "Allow all symbols" is on, restored when it
+  // is turned off again in the same edit.
+  const explicitAllowedRef = useRef('');
+  const allowAllSymbols = isAllowAllSymbols(formData.symbolsAllowed);
+  const setAllowAllSymbols = (on) => {
+    setFormData((prev) => {
+      if (on === isAllowAllSymbols(prev.symbolsAllowed)) return prev;
+      if (on) {
+        explicitAllowedRef.current = prev.symbolsAllowed;
+        return { ...prev, symbolsAllowed: ALLOW_ALL_SYMBOLS };
+      }
+      return { ...prev, symbolsAllowed: explicitAllowedRef.current };
+    });
+    setRefusedSymbols([]);
+  };
   const [permissionDenied, setPermissionDenied] = useState(false);
 
   // Duplicate/edit sources keep their value and count as touched, so parent
@@ -431,6 +451,11 @@ const NewGroupModal = ({
 
   const handleArrayChange = (key, csvString) => {
     setFormData(prev => ({ ...prev, [key]: csvString }));
+    // A refused symbol the operator removed is no longer flagged.
+    if (key === 'symbolsAllowed') {
+      const kept = new Set(String(csvString ?? '').split(',').map(symbolKey).filter(Boolean));
+      setRefusedSymbols((prev) => (prev.some((symbol) => !kept.has(symbolKey(symbol))) ? prev.filter((symbol) => kept.has(symbolKey(symbol))) : prev));
+    }
   };
 
   const handleSubmit = async () => {
@@ -446,6 +471,16 @@ const NewGroupModal = ({
     });
     if (fieldError) {
       setError(fieldError);
+      setFieldErrors({});
+      return;
+    }
+    const allowedError = emptyAllowedSymbolsError({
+      value: formData.symbolsAllowed,
+      initialValue: initialData?.symbolsAllowed,
+      isEditing,
+    });
+    if (allowedError) {
+      setError(allowedError);
       setFieldErrors({});
       return;
     }
@@ -466,6 +501,7 @@ const NewGroupModal = ({
       setLoading(true);
       setError(null);
       setFieldErrors({});
+      setRefusedSymbols([]);
 
       const payload = isEditing
         ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
@@ -512,7 +548,14 @@ const NewGroupModal = ({
         }
       } else {
         setFieldErrors({});
-        setError(err instanceof Error ? err.message : mapped);
+        const refused = Array.isArray(err?.unavailableSymbols) ? err.unavailableSymbols : [];
+        if (refused.length > 0 && err.symbolsNotConfigured) {
+          setRefusedSymbols(refused);
+          setError(null);
+        } else {
+          // Any other refusal (feed scope, group in use, ...) keeps the server text.
+          setError(err instanceof Error ? err.message : mapped);
+        }
       }
     } finally {
       setLoading(false);
@@ -677,7 +720,21 @@ const NewGroupModal = ({
             <h2>Trading symbols</h2>
             <p>Choose allowed and restricted trading instruments.</p>
           </div>
-          <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} />
+          <CheckField label="Allow all symbols" checked={allowAllSymbols} onChange={setAllowAllSymbols} />
+          <p className="group-create-hint">
+            {allowAllSymbols
+              ? 'Every symbol with an enabled instrument is allowed, including symbols enabled later. Blocked symbols still apply.'
+              : String(formData.symbolsAllowed ?? '').trim() === ''
+                ? 'No symbols are listed: the server then allows every enabled instrument. Select symbols, or tick "Allow all symbols" to make that explicit.'
+                : 'Only symbols with an enabled instrument can be selected.'}
+          </p>
+          <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} restrictToConfigured refusedSymbols={refusedSymbols} disabled={allowAllSymbols} />
+          {refusedSymbols.length > 0 ? (
+            <FieldError
+              id={refusedSymbolsId}
+              message={`These symbols are not configured: ${refusedSymbols.join(', ')}. Remove them from Allowed symbols, or enable them in Admin → Symbol Management, then save again.`}
+            />
+          ) : null}
           <SymbolSelector label="Blocked symbols" value={formData.symbolsBlocked} onChange={(v) => handleArrayChange('symbolsBlocked', v)} />
         </section>
       </div>

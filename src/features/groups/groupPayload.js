@@ -3,6 +3,7 @@ import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
 import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, sameGroupName } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
+import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
 
 export { buildAccountPatchFromGroup, describeGroupSave };
 
@@ -316,7 +317,16 @@ export const submitGroup = async ({ originalName, payload, queryClient }) => {
   } catch {
     throw new Error(responseText || 'Invalid JSON received from server');
   }
-  if (!res.ok) throw new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+  if (!res.ok) {
+    const error = new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+    // Every allowed symbol the save refused for having no enabled instrument,
+    // so the form can show them all at once (empty for any other failure).
+    error.unavailableSymbols = parseUnavailableSymbols(responseData, error.message);
+    // Only the "no enabled internal instrument" refusal means "not configured";
+    // other refusals that list symbols (e.g. the feed scope) keep their text.
+    error.symbolsNotConfigured = error.unavailableSymbols.length > 0 && isNotConfiguredRefusal(responseData, error.message);
+    throw error;
+  }
   if (!originalName) return { ...(responseData && typeof responseData === 'object' ? responseData : {}), submitted: payload };
   const saved = responseData && typeof responseData === 'object' ? responseData : {};
   try {
