@@ -197,8 +197,8 @@ test('clicking Apply and confirming updates only differing members', async () =>
   await click(buttonByExactText('Apply'));
 
   assert.deepEqual(host.updateCalls, [
-    ['900001', { Leverage: 200 }],
-    ['900002', { Leverage: 200 }],
+    ['900001', { Leverage: 200, ExpectedGroup: GROUP }],
+    ['900002', { Leverage: 200, ExpectedGroup: GROUP }],
   ]);
   assert.equal(host.fetches, 1, 'no refetch — succeeded rows are patched in the cache');
   const body = view.container.textContent;

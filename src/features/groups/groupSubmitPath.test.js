@@ -184,9 +184,10 @@ test('blank routing/book/currency (incl. whitespace) are omitted, never sent as 
 });
 
 test('parent group naming the group itself is refused', () => {
+  // Case-sensitive group names: 'fixture/alpha' is another group, so it is a valid parent.
   assert.equal(
     validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: 'fixture/alpha', groupPurpose: '' }),
-    'Parent group must name another group.',
+    null,
   );
   assert.equal(
     validateNewGroupFields({ name: 'Fixture/Alpha', parentGroup: 'Fixture/Alpha', groupPurpose: '' }),
