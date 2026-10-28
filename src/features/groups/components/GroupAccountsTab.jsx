@@ -56,6 +56,7 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
     try {
       const result = await applyGroupLeverage({
         members: rows.map((row) => row.account),
+        expectedGroup: groupName,
         groupLeverage,
         confirm: true,
         updateAccount: updateManagerAccount,

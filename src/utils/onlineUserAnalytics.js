@@ -282,7 +282,7 @@ export const buildOnlineUserAnalytics = (rows = [], filters = {}, accounts = [])
     const rowGroup = cleanValue(row.group) || 'Unspecified';
     const { name: rowCountry, geoName } = resolveOnlineUserCountry(row.country);
 
-    if (group && rowGroup.toLowerCase() !== group.toLowerCase()) continue;
+    if (group && rowGroup.trim() !== String(group).trim()) continue; // group names are case-sensitive identities
     if (type && rowType.toLowerCase() !== type.toLowerCase()) continue;
     if (build && cleanValue(row.version) !== build) continue;
     if (filterCountryGeo && geoName.toLowerCase() !== filterCountryGeo) continue;

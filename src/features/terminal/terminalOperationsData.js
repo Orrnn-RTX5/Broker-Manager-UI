@@ -107,7 +107,7 @@ export async function collectTerminalGroups(fetchPage, { signal } = {}) {
     if (!Array.isArray(result?.rows)) throw new Error('Group settings are unavailable.');
     const before = groups.size;
     for (const row of result.rows) {
-      const name = readText(row, ['name', 'Name', 'group', 'Group']).toLowerCase();
+      const name = readText(row, ['name', 'Name', 'group', 'Group']); // exact: group names are case-sensitive
       if (name) groups.set(name, row);
     }
     if (!result.hasMore) return [...groups.values()];

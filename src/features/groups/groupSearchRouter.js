@@ -729,26 +729,41 @@ export const resolveGroupNodeBySegments = (groups, segments, currentFolder = '')
  * Collects all accounts belonging to `targetNode` (either directly in `targetNode.group`
  * or in any subgroup underneath `targetNode.path`).
  */
+/**
+ * The group record for a name: an exact (trimmed, case-sensitive) match first;
+ * a case-insensitive match only when exactly ONE group matches that way (never
+ * guess between "Arijit" and "ARIJIT"). Otherwise null.
+ */
+export const resolveGroupByName = (groups, name) => {
+  const target = String(name ?? '').trim();
+  if (!target) return null;
+  const list = groups || [];
+  const exact = list.find((g) => groupRowNode(g).name.trim() === target);
+  if (exact) return exact;
+  const folded = list.filter((g) => groupRowNode(g).name.trim().toLowerCase() === target.toLowerCase());
+  return folded.length === 1 ? folded[0] : null;
+};
+
 export const collectAccountsUnderNode = (groups, accountRows, targetNode) => {
   if (!targetNode || !Array.isArray(accountRows)) return [];
 
+  // Group names are case-sensitive identities (see groupNameKey): no case folding.
   const targetPath = String(targetNode.path || targetNode.name || '').trim();
-  const targetLower = targetPath.toLowerCase();
   const matchingGroups = new Map();
 
   if (targetNode.group?.name) {
-    matchingGroups.set(targetNode.group.name.toLowerCase(), targetNode.group);
+    matchingGroups.set(targetNode.group.name.trim(), targetNode.group);
   }
 
   for (const item of groups || []) {
     const node = groupRowNode(item);
-    const nameLower = node.name.toLowerCase();
+    const name = node.name.trim();
     if (
-      nameLower === targetLower
-      || nameLower.startsWith(`${targetLower}\\`)
-      || nameLower.startsWith(`${targetLower}/`)
+      name === targetPath
+      || name.startsWith(`${targetPath}\\`)
+      || name.startsWith(`${targetPath}/`)
     ) {
-      matchingGroups.set(nameLower, node.group);
+      matchingGroups.set(name, node.group);
     }
   }
 
@@ -936,7 +951,7 @@ const resolveCoreRoute = ({
         });
         const globalMatch = globalCandidates.find((item) => item.login === lastSegment);
         const owningGroup = globalMatch?.groupName
-          ? (groups.find((g) => groupRowNode(g).name.toLowerCase() === globalMatch.groupName.toLowerCase()) || prefixNode.group || { name: prefixNode.path })
+          ? (resolveGroupByName(groups, globalMatch.groupName) || prefixNode.group || { name: prefixNode.path })
           : (prefixNode.group || { name: prefixNode.path });
         return {
           type: 'account',

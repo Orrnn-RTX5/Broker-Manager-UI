@@ -52,10 +52,18 @@ export const normalizeAccount = (account) => {
   ]);
   const name = firstPresent(sources, ['Name', 'name', 'accountName', 'AccountName', 'username', 'Username']);
   const group = firstPresent(sources, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
+  // A row that was normalized before (sessionStorage restore, cache merge) already has `group`
+  // trimmed; keep its byte-exact `storedGroup` when it still names the same group.
+  const storedGroup = typeof account.storedGroup === 'string' && group !== undefined
+    && account.storedGroup.trim() === String(group).trim()
+    ? account.storedGroup
+    : (group !== undefined ? String(group) : undefined);
 
   return {
     ...source,
-    ...(group !== undefined ? { group: String(group).trim() } : {}),
+    // `group` is trimmed for display and identity; `storedGroup` keeps the server value
+    // byte-exact for the ExpectedGroup precondition on account PATCHes (B1 contract).
+    ...(group !== undefined ? { group: String(group).trim(), storedGroup } : {}),
     login: login === undefined || login === null ? '' : String(login).trim(),
     Name: name || [source.FirstName || source.firstName, source.LastName || source.lastName].filter(Boolean).join(' ') || '',
     balance,

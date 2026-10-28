@@ -40,7 +40,7 @@ import {
   separatorForContainer,
   splitGroupPath,
 } from './groupTree.js';
-import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup } from './groupAccountRows.js';
+import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup, groupNameKey } from './groupAccountRows.js';
 import { describeGroupSave } from './groupAccountRows.js';
 import { AccountMark, GroupFolderIcon } from './groupMarks.jsx';
 import './GroupsExplorer.css';
@@ -998,7 +998,7 @@ const GroupsPage = () => {
                 const asFolder = !allGroups;
                 const values = rowValues(node, !branch);
                 const selected = node.id === selectedId;
-                const nestedCount = branch ? node.count : (accountCounts.get(String(node.name || '').trim().toLowerCase()) || 0);
+                const nestedCount = branch ? node.count : (accountCounts.get(groupNameKey(node.name)) || 0);
                 return (
                   <tr
                     key={node.id}

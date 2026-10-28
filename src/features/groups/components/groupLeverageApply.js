@@ -15,15 +15,22 @@ import { readLeverageRatio } from '../groupAccountRows.js';
  * Push the group leverage onto members whose leverage differs. Returns
  * { succeeded, failed, total }. Never writes unless confirm is true and a
  * working updateAccount function is provided.
+ *
+ * expectedGroup is the exact (case-sensitive, trim only) group name. Members of
+ * any other group are skipped. Every PATCH carries `ExpectedGroup` = the
+ * member's stored group value byte-exact (B1 contract), so the backend refuses
+ * (409 ACCOUNT_GROUP_MISMATCH) an account that left the group.
  */
-export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount }) => {
+export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount, expectedGroup }) => {
   const leverage = readLeverageRatio({ leverage: groupLeverage });
-  if (!confirm || !leverage || typeof updateAccount !== 'function') {
+  const group = String(expectedGroup ?? '').trim();
+  if (!confirm || !leverage || typeof updateAccount !== 'function' || !group) {
     return { succeeded: 0, failed: 0, total: 0, succeededLogins: [] };
   }
+  const storedGroup = (member) => String(member?.storedGroup ?? member?.group ?? member?.Group ?? member?.accountGroup ?? member?.AccountGroup ?? '');
   const candidates = (members || []).filter((member) => {
     const login = member?.login;
-    return login !== undefined && login !== null && String(login).trim() !== '';
+    return login !== undefined && login !== null && String(login).trim() !== '' && storedGroup(member).trim() === group;
   });
   const stale = candidates.filter((member) => (readLeverageRatio(member) ?? leverage) !== leverage);
   let succeeded = 0;
@@ -31,7 +38,7 @@ export const applyGroupLeverage = async ({ members, groupLeverage, confirm, upda
   const succeededLogins = [];
   for (const member of stale) {
     try {
-      await updateAccount(member.login, { Leverage: leverage });
+      await updateAccount(member.login, { Leverage: leverage, ExpectedGroup: storedGroup(member) });
       succeeded += 1;
       succeededLogins.push(member.login);
     } catch {

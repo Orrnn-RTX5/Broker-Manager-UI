@@ -1,7 +1,7 @@
 import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
-import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, sameGroupName } from './groupAccountRows.js';
+import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, sameGroupName } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
 import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
 
@@ -127,19 +127,20 @@ export const validateNewGroupFields = ({ name, parentGroup, groupPurpose } = {})
     return 'Purpose must be customer or coverage.';
   }
   const parent = String(parentGroup ?? '').trim();
-  if (parent !== '' && parent.toLowerCase() === String(name ?? '').trim().toLowerCase()) {
+  if (parent !== '' && parent === String(name ?? '').trim()) {
     return 'Parent group must name another group.';
   }
   return null;
 };
 
 // Parent-group tradeAllowed default for the new-group wizard. The
-// operator-typed parent name resolves against GroupList rows with an exact,
-// case-insensitive (trimmed) match: near-misses never inherit. The record's
+// operator-typed parent name resolves against GroupList rows with an exact
+// (trimmed, case-sensitive) match: near-misses, including another group that
+// differs only by case, never inherit. The record's
 // boolean tradeAllowed wins when present (the API's known casings are
 // accepted); anything else reports null so the caller keeps the global
 // default. No tenant, broker, currency, symbol, rate, or group names here.
-const normalizeParentKey = (value) => String(value ?? '').trim().toLowerCase();
+const normalizeParentKey = (value) => String(value ?? '').trim();
 
 const parentRecordOf = (groups, parentGroup) => {
   const target = normalizeParentKey(parentGroup);
@@ -270,16 +271,26 @@ const writeAccountCache = (queryClient, groupName, originalName, patch) => {
   });
 };
 
-/** Write the group's leverage, margin, and name onto every account in that group. */
+/**
+ * Write the group's leverage and margin levels onto every account of EXACTLY
+ * that group (case-sensitive, trim only). Each PATCH carries `ExpectedGroup` =
+ * the account's stored group value byte-exact (B1 contract), so the backend
+ * refuses (409 ACCOUNT_GROUP_MISMATCH) an account that left that group; every
+ * row is re-checked before any call.
+ */
 export const applyGroupSettingsToAccounts = async (groupName, payload, originalName = groupName, queryClient) => {
-  const patch = buildAccountPatchFromGroup(payload, originalName);
+  if (!groupNameKey(groupName)) return { accountsUpdated: 0, accountErrors: [] };
+  const patch = buildAccountPatchFromGroup(payload);
   if (Object.keys(patch).length === 0) return { accountsUpdated: 0, accountErrors: [] };
   const cachedRows = queryClient
     ? queryClient.getQueriesData({ queryKey: ['sidebar-accounts'] }).flatMap(([, data]) => data?.rows || [])
     : [];
   const page = cachedRows.length ? { rows: cachedRows } : await fetchAllSidebarAccounts({});
   const seen = new Set();
+  const expectedGroup = groupNameKey(groupName);
   const rows = accountsInGroup(page?.rows, groupName).filter((row) => {
+    // Defence in depth: never patch a row whose group is not exactly this one.
+    if (groupNameKey(accountGroupName(row.account)) !== expectedGroup) return false;
     const login = String(row.login);
     if (seen.has(login)) return false;
     seen.add(login);
@@ -288,7 +299,7 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, originalN
   const accountErrors = [];
   for (const row of rows) {
     try {
-      await updateManagerAccount(row.login, patch);
+      await updateManagerAccount(row.login, { ...patch, ExpectedGroup: String(row.account?.storedGroup ?? accountGroupName(row.account)) });
     } catch (err) {
       accountErrors.push(`${row.login}: ${err.message}`);
     }
@@ -297,8 +308,18 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, originalN
   return { accountsUpdated: rows.length - accountErrors.length, accountErrors };
 };
 
+export const GROUP_RENAME_UNSUPPORTED = 'A group cannot be renamed. Create a group with the new name and move the accounts to it.';
+
 /** POST a group to /GroupCreate, or to /GroupUpdate when `originalName` names an existing group. */
-export const submitGroup = async ({ originalName, payload, queryClient }) => {
+export const submitGroup = async ({ originalName, payload: rawPayload, queryClient }) => {
+  // Edits never send `name`: the backend cannot rename a group, and a changed
+  // name must not look saved (or move accounts). Refuse a real rename up front.
+  let payload = rawPayload;
+  if (originalName && Object.prototype.hasOwnProperty.call(payload || {}, 'name')) {
+    if (groupNameKey(payload.name) !== groupNameKey(originalName)) throw new Error(GROUP_RENAME_UNSUPPORTED);
+    const { name: _name, ...rest } = payload;
+    payload = rest;
+  }
   if (originalName && Object.keys(payload).length === 0) {
     return { submitted: payload, accountsUpdated: 0, accountErrors: [], unchanged: true };
   }

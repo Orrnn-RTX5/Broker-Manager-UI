@@ -9,7 +9,7 @@ import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
-import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
+import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, buildGroupSavePayload, buildNewGroupPayload, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
@@ -345,7 +345,8 @@ const NewGroupModal = ({
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
   };
-  const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
+  const [initialForm] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
+  const [formData, setFormData] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Mapped GROUP_POLICY server errors, keyed by policy field and rendered
@@ -503,8 +504,11 @@ const NewGroupModal = ({
       setFieldErrors({});
       setRefusedSymbols([]);
 
+      // Edits send only the changed fields (like GroupPropertiesModal), so an
+      // untouched save never re-pushes leverage/margin onto the group's
+      // accounts. A changed name is refused by submitGroup (no group rename).
       const payload = isEditing
-        ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
+        ? buildGroupSavePayload(initialForm, formData)
         : buildNewGroupPayload(formData, { leverageTouched: leverageTouched.current });
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
@@ -513,7 +517,7 @@ const NewGroupModal = ({
         payload.symbolsBlocked = payload.symbolsBlocked.split(',').map(s => s.trim()).filter(Boolean);
       }
 
-      // Update writes the group's leverage, margin, and name onto each account in the group.
+      // Update writes the changed leverage/margin onto each account of exactly this group.
       const saved = await submitGroup({
         originalName: isEditing ? String(initialData.name) : '',
         payload,

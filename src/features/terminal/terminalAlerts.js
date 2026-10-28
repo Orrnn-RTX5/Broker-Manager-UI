@@ -27,9 +27,10 @@ const readText = (source, keys) => {
   return '';
 };
 
-const groupKey = (name) => String(name || '').trim().toLowerCase();
+// Group names are case-sensitive identities ("Arijit" and "ARIJIT" are two groups).
+const groupKey = (name) => String(name || '').trim();
 
-/** Map of lower-cased group name → { call, stop } for groups that define levels. */
+/** Map of exact (trimmed) group name → { call, stop } for groups that define levels. */
 export const buildGroupMarginLevels = (groups = []) => {
   const levels = new Map();
   groups.forEach((group) => {
