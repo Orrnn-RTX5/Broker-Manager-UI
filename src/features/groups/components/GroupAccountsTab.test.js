@@ -37,6 +37,7 @@ const host = {
   fetches: 0,
   updateCalls: [],
   rejectLogins: new Set(),
+  conflictLogins: new Set(),
 };
 globalThis.__groupAccountsTabHost = host;
 
@@ -53,6 +54,7 @@ const STUBS = {
     const host = globalThis.__groupAccountsTabHost;
     export const updateManagerAccount = async (login, payload) => {
       host.updateCalls.push([String(login), payload]);
+      if (host.conflictLogins.has(String(login))) throw Object.assign(new Error('ACCOUNT_GROUP_MISMATCH'), { status: 409 });
       if (host.rejectLogins.has(String(login))) throw new Error('Rejected by server');
       return { success: true };
     };
@@ -153,6 +155,7 @@ beforeEach(() => {
   host.fetches = 0;
   host.updateCalls.length = 0;
   host.rejectLogins = new Set();
+  host.conflictLogins = new Set();
 });
 
 afterEach(() => unmountTab());
@@ -200,9 +203,50 @@ test('clicking Apply and confirming updates only differing members', async () =>
     ['900001', { Leverage: 200, ExpectedGroup: GROUP }],
     ['900002', { Leverage: 200, ExpectedGroup: GROUP }],
   ]);
-  assert.equal(host.fetches, 1, 'no refetch — succeeded rows are patched in the cache');
+  assert.equal(host.fetches, 2, 'Apply re-reads the members from the server once (mount + apply); succeeded rows are still patched in the cache');
   const body = view.container.textContent;
   assert.match(body, /Applied group leverage to 2 of 2 accounts\./);
+});
+
+// B1 (UI): the Apply membership is the server's answer at apply time, not the rows on screen.
+test('apply uses fresh server membership: an account that left the group since load is never patched', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  // The server moves 900001 out of the group after the tab loaded (the cached row is stale).
+  host.rows = host.rows.map((row) => (row.login === '900001' ? { ...row, group: 'Fixture/Other' } : row));
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.deepEqual(host.updateCalls, [['900002', { Leverage: 200, ExpectedGroup: GROUP }]], 'only the server-confirmed member is patched');
+  assert.match(document.body.textContent, /Applied group leverage to 1 of 1 accounts\./);
+});
+
+test('apply patches a server member that the loaded list did not show', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  host.rows.push(member('900005', 50));
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.deepEqual(
+    host.updateCalls.map(([login]) => login),
+    ['900001', '900002', '900005'],
+    'a server row missing from the loaded list is patched',
+  );
+  assert.match(document.body.textContent, /Applied group leverage to 3 of 3 accounts\./);
+});
+
+test('a 409-refused account keeps its shown leverage; only the accepted account changes', async () => {
+  host.conflictLogins = new Set(['900002']);
+  const view = await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.equal(host.updateCalls.length, 2);
+  assert.match(document.body.textContent, /Applied group leverage to 1 of 2 accounts\./);
+  const rows = [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.textContent);
+  assert.ok(rows.some((text) => text.includes('900001') && text.includes('1 : 200')), 'accepted row shows the new ratio');
+  assert.ok(rows.some((text) => text.includes('900002') && text.includes('1 : 50')), '409-refused row keeps the value the server still holds');
 });
 
 test('cancel writes nothing and reports nothing', async () => {
