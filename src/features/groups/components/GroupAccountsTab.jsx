@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { fetchAllSidebarAccounts, getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
 import { updateManagerAccount } from '../../../services/managerAccountApi.js';
+import { advanceRealtimeCacheRevision } from '../../../services/realtimeCacheRevision.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../groupAccountRows.js';
 import {
   applyGroupLeverage,
@@ -97,6 +98,9 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
       setApplyError({ groupKey: startedFor, message: err?.message || 'Could not apply group leverage.' });
     } finally {
       endGroupApply(groupName);
+      // The writes are over. Advance the cache revision first, so no read that started before the last
+      // PATCH is reused or cached (sidebarAccounts only reuses in-flight reads of the same revision).
+      advanceRealtimeCacheRevision();
       // Re-read the shared list now that the writes are over, so it shows the server state.
       void queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
     }
@@ -117,6 +121,9 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
       : shownResult
         ? `Applied group leverage to ${shownResult.succeeded} of ${shownResult.total} accounts.`
         + (shownResult.failed > 0 ? ` ${shownResult.failed} could not be updated.` : '')
+        + (shownResult.memberCount > shownResult.total
+          ? ` ${shownResult.memberCount - shownResult.total} listed ${shownResult.memberCount - shownResult.total === 1 ? 'account was' : 'accounts were'} not changed (already at group leverage or without a login).`
+          : '')
         : null;
 
   const emptyMessage = error

@@ -460,7 +460,7 @@ const GroupsPage = () => {
         visibleRows,
         visibleAccounts,
         query: queryText,
-        accountRows: enrichedRawAccountRows,
+        groups,
       });
       if (!target) return;
       if (target.kind === 'route') {

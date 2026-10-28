@@ -564,3 +564,16 @@ test('the group-wide write path asks the server for a fresh membership read', as
   await applyGroupSettingsToAccounts('Grp', { leverage: 200 });
   assert.deepEqual(requests, [{ fresh: true }]);
 });
+
+// SF1 (group save path): a member listed under Grp through accountGroup alone (group '') is patched, with
+// the stored group as ExpectedGroup. The save path used to skip it silently while the list showed it.
+test('the group save path patches an accountGroup-only member with ExpectedGroup Grp, like the list', async () => {
+  const updates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: '', accountGroup: 'Grp' }] });
+  runtime.updateAccount = async (login, payload) => { updates.push([login, payload.ExpectedGroup]); };
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, cacheClient([]));
+
+  assert.deepEqual(updates, [[1001, 'Grp'], [1002, 'Grp']]);
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(result.accountErrors, []);
+});

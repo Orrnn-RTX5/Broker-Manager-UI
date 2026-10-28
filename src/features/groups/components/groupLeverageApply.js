@@ -9,7 +9,7 @@
 // file exports only the component, and so both helpers are directly
 // unit-testable. Tenant-agnostic: no tenant, broker, group, or account
 // literals; values flow from the selected group and its members.
-import { groupNameKey, readLeverageRatio } from '../groupAccountRows.js';
+import { groupNameKey, readLeverageRatio, storedGroupOf } from '../groupAccountRows.js';
 
 // In-flight registry: the group names with an apply write running. It lives at module level, so
 // it survives a tab switch or remount (component state would not). Keyed by the exact group name
@@ -60,10 +60,10 @@ export const applyGroupLeverage = async ({ members, groupLeverage, confirm, upda
   if (!confirm || !leverage || typeof updateAccount !== 'function' || !group) {
     return { succeeded: 0, failed: 0, total: 0, succeededLogins: [] };
   }
-  const storedGroup = (member) => String(member?.storedGroup ?? member?.group ?? member?.Group ?? member?.accountGroup ?? member?.AccountGroup ?? '');
+  // Same accessor as the account list (accountsInGroup), so every listed member is a candidate here.
   const candidates = (members || []).filter((member) => {
     const login = member?.login;
-    return login !== undefined && login !== null && String(login).trim() !== '' && storedGroup(member).trim() === group;
+    return login !== undefined && login !== null && String(login).trim() !== '' && storedGroupOf(member).trim() === group;
   });
   const stale = candidates.filter((member) => (readLeverageRatio(member) ?? leverage) !== leverage);
   let succeeded = 0;
@@ -71,7 +71,7 @@ export const applyGroupLeverage = async ({ members, groupLeverage, confirm, upda
   const succeededLogins = [];
   for (const member of stale) {
     try {
-      await updateAccount(member.login, { Leverage: leverage, ExpectedGroup: storedGroup(member) });
+      await updateAccount(member.login, { Leverage: leverage, ExpectedGroup: storedGroupOf(member) });
       succeeded += 1;
       succeededLogins.push(member.login);
     } catch {

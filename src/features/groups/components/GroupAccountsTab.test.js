@@ -41,6 +41,7 @@ const host = {
   gate: null,
   updateGate: null,
   freshReads: [],
+  events: [],
 };
 globalThis.__groupAccountsTabHost = host;
 // Gates a test holds open. afterEach releases any left held, so a failed test cannot leave a write in flight.
@@ -51,12 +52,13 @@ const STUBS = {
     const host = globalThis.__groupAccountsTabHost;
     export const getSidebarAccountsQueryOptions = (search = '') => ({
       queryKey: ['sidebar-accounts', String(search || '').trim()],
-      queryFn: async () => { host.fetches += 1; return { rows: host.rows.map((row) => ({ ...row })) }; },
+      queryFn: async () => { host.fetches += 1; host.events.push('read'); return { rows: host.rows.map((row) => ({ ...row })) }; },
       staleTime: 5 * 60 * 1000,
     });
     export const fetchAllSidebarAccounts = async (options = {}) => {
       host.freshReads.push(options);
       host.fetches += 1;
+      host.events.push('read');
       if (host.gate) await host.gate;
       return { rows: host.rows.map((row) => ({ ...row })) };
     };
@@ -65,6 +67,7 @@ const STUBS = {
     const host = globalThis.__groupAccountsTabHost;
     export const updateManagerAccount = async (login, payload) => {
       host.updateCalls.push([String(login), payload]);
+      host.events.push('patch:' + String(login));
       if (host.updateGate) await host.updateGate;
       if (host.conflictLogins.has(String(login))) throw Object.assign(new Error('ACCOUNT_GROUP_MISMATCH'), { status: 409 });
       if (host.rejectLogins.has(String(login))) throw new Error('Rejected by server');
@@ -75,6 +78,9 @@ const STUBS = {
     };
     export const createManagerAccount = async () => { throw new Error('createManagerAccount must not be called'); };
     export const deleteManagerAccount = async () => { throw new Error('deleteManagerAccount must not be called'); };
+  `,
+  realtimeCacheRevision: `
+    export const advanceRealtimeCacheRevision = () => { globalThis.__groupAccountsTabHost.events.push('bump'); };
   `,
 };
 
@@ -94,8 +100,8 @@ const bundled = await build({
   plugins: [{
     name: 'group-accounts-tab-host',
     setup(builder) {
-      builder.onResolve({ filter: /(sidebarAccounts|managerAccountApi)(\.js)?$/ }, ({ path }) => ({
-        path: path.match(/(sidebarAccounts|managerAccountApi)/)[1],
+      builder.onResolve({ filter: /(sidebarAccounts|managerAccountApi|realtimeCacheRevision)(\.js)?$/ }, ({ path }) => ({
+        path: path.match(/(sidebarAccounts|managerAccountApi|realtimeCacheRevision)/)[1],
         namespace: 'group-accounts-tab-host',
       }));
       builder.onLoad({ filter: /.*/, namespace: 'group-accounts-tab-host' }, ({ path }) => ({ loader: 'js', contents: STUBS[path] }));
@@ -174,6 +180,7 @@ beforeEach(() => {
   host.gate = null;
   host.updateGate = null;
   host.freshReads = [];
+  host.events.length = 0;
 });
 
 afterEach(async () => {
@@ -290,6 +297,23 @@ test('partial failure patches only succeeded rows', async () => {
   const rows = [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.textContent);
   assert.ok(rows.some((text) => text.includes('900001') && text.includes('1 : 200')), 'succeeded row shows the new ratio');
   assert.ok(rows.some((text) => text.includes('900002') && text.includes('1 : 50')), 'failed row keeps its own ratio');
+});
+
+// SF2: the post-write refresh is the one that runs AFTER the writes. The revision advances after the last
+// PATCH and before the list re-read, so no read that started before a PATCH can be the refreshed result.
+test('after an apply, the cache revision advances after the last PATCH and before the post-write re-read', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  await click(buttonByText('Apply group leverage'));
+  host.events.length = 0;
+  await click(buttonByExactText('Apply'));
+
+  const events = [...host.events];
+  const lastPatch = events.reduce((at, event, index) => (event.startsWith('patch:') ? index : at), -1);
+  const bump = events.indexOf('bump');
+  assert.ok(lastPatch >= 0, 'the apply wrote at least one account');
+  assert.ok(bump > lastPatch, `the revision must advance after the last PATCH (events: ${events.join(', ')})`);
+  assert.ok(events.indexOf('read', bump) > bump, `the post-write re-read must follow the bump (events: ${events.join(', ')})`);
+  assert.equal(events.filter((event) => event === 'bump').length, 1, 'one bump per apply');
 });
 
 test('tab source keeps writes out of effects', () => {

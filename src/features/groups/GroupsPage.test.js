@@ -39,12 +39,11 @@ test('folder/selection/intent sync uses render-phase adjustments, not setState i
   assert.ok(navFx.includes('return undefined;'), 'intent effect must navigate then end without setState');
 });
 
-// B3-R: Enter on a query naming a blank-group account must open nothing, not a visible group
-// that the typed segment fuzzy-matches. The decision is the pure resolveGroupEnterTarget (behaviour
-// is tested in groupSearchRouter.test.js); this pins that Enter routes through it with the typed query.
-test('Enter decides its target through resolveGroupEnterTarget with the typed query and accounts', () => {
+// B3-R / round 5: Enter on a multi-segment path opens only a fully resolved route. The decision is the pure
+// resolveGroupEnterTarget (behaviour is tested in groupSearchRouter.test.js); this pins that Enter routes
+// through it with the typed query and the groups (the helper reads the path segments from them).
+test('Enter decides its target through resolveGroupEnterTarget with the typed query and groups', () => {
   assert.ok(src.includes('const target = resolveGroupEnterTarget({'), 'Enter must use the pure target helper');
-  assert.ok(src.includes('query: queryText,'), 'the helper must receive the typed query for the blank-group guard');
-  assert.ok(src.includes('accountRows: enrichedRawAccountRows,\n      });'), 'the helper must receive the account rows for the blank-group guard');
+  assert.ok(src.includes('query: queryText,\n        groups,\n      });'), 'the helper must receive the typed query and the groups for the path check');
   assert.ok(!src.includes('if (!openedGroup && visibleRows.length === 1) {'), 'the visible-row fallback must not be inlined in the page');
 });

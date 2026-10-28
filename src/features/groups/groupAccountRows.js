@@ -68,6 +68,11 @@ export const toGroupAccountRow = (account, groupSettings) => {
 
 export const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
 
+/** The account's stored group, byte-exact (ExpectedGroup precondition): the normalized `storedGroup`, else the raw accessor. */
+export const storedGroupOf = (account) => (
+  typeof account?.storedGroup === 'string' ? account.storedGroup : String(accountGroupName(account) ?? '')
+);
+
 export const accountsInGroup = (accounts, groupName, groupSettings) =>
   (accounts || []).filter((account) => sameGroupName(accountGroupName(account), groupName)).map((account) => toGroupAccountRow(account, groupSettings));
 

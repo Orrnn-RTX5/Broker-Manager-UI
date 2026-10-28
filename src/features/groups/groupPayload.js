@@ -1,7 +1,7 @@
 import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
-import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey } from './groupAccountRows.js';
+import { accountGroupName, accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, storedGroupOf } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
 import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
 
@@ -248,8 +248,6 @@ export const toSymbolList = (value) => {
   return [];
 };
 
-const accountGroupName = (account) => account?.group ?? account?.Group ?? account?.accountGroup ?? account?.AccountGroup;
-
 // Writes the patch only onto the logins the server accepted. A refused or failed
 // account keeps the value the server still holds.
 const writeAccountCache = (queryClient, patch, succeededLogins) => {
@@ -301,7 +299,7 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, queryClie
   const succeededLogins = [];
   for (const row of rows) {
     try {
-      await updateManagerAccount(row.login, { ...patch, ExpectedGroup: String(row.account?.storedGroup ?? accountGroupName(row.account)) });
+      await updateManagerAccount(row.login, { ...patch, ExpectedGroup: storedGroupOf(row.account) });
       succeededLogins.push(row.login);
     } catch (err) {
       accountErrors.push(`${row.login}: ${err.message}`);

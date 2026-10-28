@@ -1540,21 +1540,6 @@ export const filterAccountRowsBySearch = (accountRows, search, columns = []) => 
   return accountRows;
 };
 
-/**
- * True when a path query (`<group> / <login>`) names an account whose stored group is blank.
- * Such an account has no owning group, so the page must open nothing for it, not even a
- * visible group matched by the typed segment.
- */
-export const isBlankGroupAccountQuery = (query, accountRows = []) => {
-  const { isPathQuery, segments } = parseGroupSearchRoute(query);
-  if (!isPathQuery || segments.length < 2) return false;
-  // The account may sit in any segment after the group: `<group> / <login>` or `<group> / <login> / <field>`.
-  return segments.slice(1).some((segment) => {
-    const row = (accountRows || []).find((raw) => String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim() === segment);
-    return row !== undefined && !String(accountGroupName(row) ?? '').trim();
-  });
-};
-
 // Only routes that executeSearchRoute actually runs. Mirrors its guards so a route is never "taken" without effect.
 const isExecutableGroupRoute = (route) => {
   if (!route) return false;
@@ -1568,6 +1553,8 @@ const isExecutableGroupRoute = (route) => {
  * Decides what Enter activates on the Groups page, without the DOM.
  * Returns `{ kind: 'route', route }`, `{ kind: 'row', row }` (the single visible group row),
  * `{ kind: 'account', account }` (the single visible account of the opened group), or `null` (open nothing).
+ * A multi-segment path opens only the route the router fully resolved. It never falls back to a visible
+ * row, a visible account, or a suggestion from a partial match.
  */
 export const resolveGroupEnterTarget = ({
   route = null,
@@ -1576,12 +1563,13 @@ export const resolveGroupEnterTarget = ({
   visibleRows = [],
   visibleAccounts = [],
   query = '',
-  accountRows = [],
+  groups = [],
 } = {}) => {
+  if (parseGroupSearchRoute(query, groups).segments.length > 1) {
+    return isExecutableGroupRoute(route) ? { kind: 'route', route } : null;
+  }
   const resolved = route || suggestions[0] || null;
   if (resolved && isExecutableGroupRoute(resolved)) return { kind: 'route', route: resolved };
-  // An account with no stored group owns no group: open nothing, not even a visible group the typed segment matches.
-  if (isBlankGroupAccountQuery(query, accountRows)) return null;
   if (!openedGroup && visibleRows.length === 1) return { kind: 'row', row: visibleRows[0] };
   if (openedGroup && visibleAccounts.length === 1) return { kind: 'account', account: visibleAccounts[0] };
   return null;
