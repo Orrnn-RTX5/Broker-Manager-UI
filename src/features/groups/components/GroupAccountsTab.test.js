@@ -39,9 +39,12 @@ const host = {
   rejectLogins: new Set(),
   conflictLogins: new Set(),
   gate: null,
+  updateGate: null,
   freshReads: [],
 };
 globalThis.__groupAccountsTabHost = host;
+// Gates a test holds open. afterEach releases any left held, so a failed test cannot leave a write in flight.
+const pendingGates = [];
 
 const STUBS = {
   sidebarAccounts: `
@@ -62,8 +65,12 @@ const STUBS = {
     const host = globalThis.__groupAccountsTabHost;
     export const updateManagerAccount = async (login, payload) => {
       host.updateCalls.push([String(login), payload]);
+      if (host.updateGate) await host.updateGate;
       if (host.conflictLogins.has(String(login))) throw Object.assign(new Error('ACCOUNT_GROUP_MISMATCH'), { status: 409 });
       if (host.rejectLogins.has(String(login))) throw new Error('Rejected by server');
+      // The fake server keeps the accepted leverage, so the list re-read after the writes shows it.
+      const stored = host.rows.find((row) => String(row.login) === String(login));
+      if (stored) stored.leverage = payload.Leverage;
       return { success: true };
     };
     export const createManagerAccount = async () => { throw new Error('createManagerAccount must not be called'); };
@@ -165,10 +172,15 @@ beforeEach(() => {
   host.rejectLogins = new Set();
   host.conflictLogins = new Set();
   host.gate = null;
+  host.updateGate = null;
   host.freshReads = [];
 });
 
-afterEach(() => unmountTab());
+afterEach(async () => {
+  pendingGates.splice(0).forEach((release) => release());
+  await settle();
+  await unmountTab();
+});
 
 // jsdom keeps the event loop alive until its window is closed.
 after(() => { dom.window.close(); });
@@ -213,7 +225,7 @@ test('clicking Apply and confirming updates only differing members', async () =>
     ['900001', { Leverage: 200, ExpectedGroup: GROUP }],
     ['900002', { Leverage: 200, ExpectedGroup: GROUP }],
   ]);
-  assert.equal(host.fetches, 2, 'Apply re-reads the members from the server once (mount + apply); succeeded rows are still patched in the cache');
+  assert.equal(host.fetches, 3, 'mount, the apply membership read, then one list re-read after the writes; succeeded rows show the new leverage after that re-read');
   const body = view.container.textContent;
   assert.match(body, /Applied group leverage to 2 of 2 accounts\./);
 });
@@ -334,4 +346,61 @@ test('an apply result is not shown under a group the tab was switched to while i
   assert.deepEqual(host.updateCalls.map(([login]) => login), ['900001', '900002'], 'the server writes for the started group still happen');
   assert.doesNotMatch(document.body.textContent, /Applied group leverage to/, 'the old counts must not show under the new group');
   assert.doesNotMatch(document.body.textContent, /already use group leverage/, 'no stale status under the new group');
+});
+
+// Fix 2: the apply's fresh read is older than any cache write made while the apply runs, so it must not replace it.
+test('a newer list written to the cache during the apply is not replaced by the older fresh read', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  let releaseFresh;
+  let releaseWrites;
+  host.gate = new Promise((resolve) => { releaseFresh = resolve; pendingGates.push(resolve); });
+  host.updateGate = new Promise((resolve) => { releaseWrites = resolve; pendingGates.push(resolve); });
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+  // A concurrent refresh lands a newer list while the fresh membership read is still running.
+  mounted.queryClient.setQueryData(['sidebar-accounts', ''], { rows: host.rows.map((row) => ({ ...row })), newerWrite: true });
+  releaseFresh();
+  await settle();
+
+  assert.ok(host.updateCalls.length > 0, 'the writes must have started, so the older fresh read has already landed');
+  assert.equal(mounted.queryClient.getQueryData(['sidebar-accounts', ''])?.newerWrite, true, 'the older fresh read must not replace the newer cache entry');
+  releaseWrites();
+  await settle();
+});
+
+// Fix 3: a tab switch or remount must not re-enable Apply while the group's write is still in flight.
+test('a remounted tab keeps Apply disabled while the group write is in flight, then re-enables it', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  let releaseWrites;
+  host.updateGate = new Promise((resolve) => { releaseWrites = resolve; pendingGates.push(resolve); });
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+  assert.ok(host.updateCalls.length > 0, 'the first write must be in flight');
+
+  // Tab switch away and back: the component unmounts and mounts again for the same group.
+  await unmountTab();
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  assert.equal(buttonByText('Apply group leverage').disabled, true, 'Apply stays disabled for the group whose write is in flight');
+  assert.match(document.body.textContent, /Applying group leverage/, 'the applying text shows after the remount');
+
+  releaseWrites();
+  await settle();
+  assert.equal(buttonByText('Apply group leverage').disabled, false, 'Apply re-enables once the write finishes');
+  assert.doesNotMatch(document.body.textContent, /Applying group leverage/, 'the applying text clears once the write finishes');
+});
+
+// N3: a fresh read that finds no members says so, instead of "All 0 accounts ...".
+test('an apply whose fresh read finds no members says the group has no accounts', async () => {
+  await renderTab({ groupName: GROUP, groupLeverage: 200 });
+  // Every member left the group since load.
+  host.rows = [{ login: '900009', Name: 'Fixture outsider', group: 'Fixture/Other', leverage: 10 }];
+
+  await click(buttonByText('Apply group leverage'));
+  await click(buttonByExactText('Apply'));
+
+  assert.deepEqual(host.updateCalls, [], 'no members, so nothing is written');
+  assert.match(document.body.textContent, /This group has no accounts\./, 'the zero-member status is named as such');
+  assert.doesNotMatch(document.body.textContent, /All 0 accounts/, 'the zero-member status must not read "All 0 accounts"');
 });

@@ -12,8 +12,8 @@ import {
   filterAccountRowsBySearch,
   filterGroupRowsBySearch,
   getGroupSearchSuggestions,
-  isBlankGroupAccountQuery,
   parseGroupSearchRoute,
+  resolveGroupEnterTarget,
   resolveGroupSearchRoute,
 } from './groupSearchRouter.js';
 import { loadAccountDetails, peekAccountDetails, subscribeToAccountDetails } from '../../services/accountDetails.js';
@@ -446,33 +446,38 @@ const GroupsPage = () => {
         return;
       }
 
-      const resolved = resolveGroupSearchRoute({
-        query: queryText,
-        groups,
-        accountRows: enrichedRawAccountRows,
-        currentFolder: activeFolder,
+      const target = resolveGroupEnterTarget({
+        route: resolveGroupSearchRoute({
+          query: queryText,
+          groups,
+          accountRows: enrichedRawAccountRows,
+          currentFolder: activeFolder,
+          openedGroup,
+          selectedLogin,
+        }),
+        suggestions: searchSuggestions,
         openedGroup,
-        selectedLogin,
-      }) || searchSuggestions[0];
-
-      if (resolved && executeSearchRoute(resolved)) {
+        visibleRows,
+        visibleAccounts,
+        query: queryText,
+        accountRows: enrichedRawAccountRows,
+      });
+      if (!target) return;
+      if (target.kind === 'route') {
+        executeSearchRoute(target.route);
         return;
       }
-
-      // An account with no stored group owns no group: open nothing, not even a visible group the typed segment matches.
-      if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;
-
-      if (!openedGroup && visibleRows.length === 1) {
-        activate(visibleRows[0]);
+      if (target.kind === 'row') {
+        activate(target.row);
         setSearch('');
         setSearchFocused(false);
-      } else if (openedGroup && visibleAccounts.length === 1) {
-        const onlyAccount = visibleAccounts[0];
-        setSelectedLogin(onlyAccount.login);
-        openAccountDetails(onlyAccount.account || onlyAccount.login, 'Overview');
-        setSearch('');
-        setSearchFocused(false);
+        return;
       }
+      const onlyAccount = target.account;
+      setSelectedLogin(onlyAccount.login);
+      openAccountDetails(onlyAccount.account || onlyAccount.login, 'Overview');
+      setSearch('');
+      setSearchFocused(false);
     }
   };
 

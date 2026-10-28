@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { fetchAllSidebarAccounts, getSidebarAccountsQueryOptions } from '../../../services/sidebarAccounts.js';
 import { updateManagerAccount } from '../../../services/managerAccountApi.js';
 import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, readLeverageRatio } from '../groupAccountRows.js';
-import { applyGroupLeverage, buildApplyConfirmCopy } from './groupLeverageApply.js';
+import {
+  applyGroupLeverage,
+  beginGroupApply,
+  buildApplyConfirmCopy,
+  endGroupApply,
+  isGroupApplyInFlight,
+  subscribeGroupApply,
+} from './groupLeverageApply.js';
 import DepositDialog from '../../../components/Popups/DepositDialog.jsx';
 
 // Lists the trading accounts that belong to one group, from the shared account list.
@@ -20,7 +27,9 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const [search, setSearch] = useState('');
   const [selectedLogin, setSelectedLogin] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [applying, setApplying] = useState(false);
+  // Apply is busy while THIS group has a write in flight, wherever it started: a tab switch or
+  // remount must not re-enable Apply for a group whose write is still running.
+  const applying = useSyncExternalStore(subscribeGroupApply, () => isGroupApplyInFlight(groupName));
   const [applyResult, setApplyResult] = useState(null);
   const [applyError, setApplyError] = useState(null);
 
@@ -49,17 +58,18 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const canApply = rows.length > 0 && groupRatio !== null && !applying;
 
   const handleConfirmApply = async () => {
-    if (applying) return;
     setConfirmOpen(false);
-    setApplying(true);
+    // One write per group at a time: refuse while this group's apply is still in flight.
+    if (!beginGroupApply(groupName)) return;
     setApplyError(null);
     // The result is tagged with the group it was started for: a switch to another group meanwhile must not show it there.
     const startedFor = groupKey;
     try {
       // Members are read fresh from the server, never from the rows already on screen, and never
       // from a read that started before this click: an account that left the group must not be patched.
+      // This read is never written into the shared list cache: it can be older than a cache write
+      // made while the apply runs. The list re-reads after the writes instead (see finally).
       const fresh = await fetchAllSidebarAccounts({ fresh: true });
-      queryClient.setQueryData(getSidebarAccountsQueryOptions('').queryKey, fresh);
       const members = accountsInGroup(fresh?.rows, groupName, { leverage: groupLeverage }).map((row) => row.account);
       const result = await applyGroupLeverage({
         members,
@@ -86,7 +96,9 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
     } catch (err) {
       setApplyError({ groupKey: startedFor, message: err?.message || 'Could not apply group leverage.' });
     } finally {
-      setApplying(false);
+      endGroupApply(groupName);
+      // Re-read the shared list now that the writes are over, so it shows the server state.
+      void queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
     }
   };
 
@@ -97,9 +109,11 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
   const applyMessage = applying
     ? 'Applying group leverage…'
     : shownResult && shownResult.total === 0
-      ? (groupRatio === null || groupRatio === undefined
-        ? 'Group leverage is not set for this group, so there is nothing to apply.'
-        : `All ${shownResult.memberCount} accounts already use group leverage 1 : ${groupRatio}.`)
+      ? (shownResult.memberCount === 0
+        ? 'This group has no accounts.'
+        : groupRatio === null || groupRatio === undefined
+          ? 'Group leverage is not set for this group, so there is nothing to apply.'
+          : `All ${shownResult.memberCount} accounts already use group leverage 1 : ${groupRatio}.`)
       : shownResult
         ? `Applied group leverage to ${shownResult.succeeded} of ${shownResult.total} accounts.`
         + (shownResult.failed > 0 ? ` ${shownResult.failed} could not be updated.` : '')

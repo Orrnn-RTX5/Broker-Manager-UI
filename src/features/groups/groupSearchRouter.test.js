@@ -8,6 +8,7 @@ import {
   isBlankGroupAccountQuery,
   matchAccountField,
   parseGroupSearchRoute,
+  resolveGroupEnterTarget,
   resolveGroupSearchRoute,
   scoreSegmentMatch,
 } from './groupSearchRouter.js';
@@ -353,4 +354,68 @@ test('isBlankGroupAccountQuery flags only path queries that name a blank-group l
   assert.equal(isBlankGroupAccountQuery('500003', rows), false, 'a bare login is not a path query');
   assert.equal(isBlankGroupAccountQuery('Beta / 500002', rows), false, 'a stored group is not blank');
   assert.equal(isBlankGroupAccountQuery('ALPHA / 500999', rows), false, 'an unknown login is not blank-group');
+});
+
+// B3-R2: the blank-group account may sit in any segment after the group, so field-suffix forms count too.
+const BLANK_OWNER_ROWS = [
+  { login: '500003', Name: 'Blank Owner', group: '', balance: 10, equity: 10, leverage: 100 },
+  { login: '500002', Name: 'Beta Acc', group: 'Beta', balance: 10, equity: 10, leverage: 100 },
+  { login: '500001', Name: 'Alpha Acc', group: 'ALPHA', balance: 10, equity: 10, leverage: 100 },
+];
+
+// The Enter decision as GroupsPage makes it, on the root folder with no opened group.
+const enterTargetFor = (query, { accountRows = BLANK_OWNER_ROWS, openedGroup = null, visibleAccounts = [] } = {}) => {
+  const visibleRows = filterGroupRowsBySearch(getGroupFolderRows(CASE_SAMPLE_GROUPS, ''), query, '');
+  const route = resolveGroupSearchRoute({ query, groups: CASE_SAMPLE_GROUPS, accountRows, currentFolder: '', openedGroup });
+  const suggestions = getGroupSearchSuggestions({ query, groups: CASE_SAMPLE_GROUPS, accountRows, currentFolder: '', openedGroup });
+  return resolveGroupEnterTarget({ route, suggestions, openedGroup, visibleRows, visibleAccounts, query, accountRows });
+};
+
+test('isBlankGroupAccountQuery flags a blank-group login in any segment after the group', () => {
+  for (const query of ['Beta / 500003 / email', 'Beta / 500003 / balance', 'Be / 500003 / email', 'Be / 500003 / balance', 'Beta /500003/email', 'Beta / 500003 /']) {
+    assert.equal(isBlankGroupAccountQuery(query, BLANK_OWNER_ROWS), true, `${query} names the blank-group account`);
+  }
+  assert.equal(isBlankGroupAccountQuery('Beta / 500002 / email', BLANK_OWNER_ROWS), false, 'a stored group is not blank');
+  assert.equal(isBlankGroupAccountQuery('Beta / 500099 / email', BLANK_OWNER_ROWS), false, 'an unknown login is not blank-group');
+});
+
+test('isBlankGroupAccountQuery reads the group the same way the account list does (accountGroup counts)', () => {
+  const rows = [{ login: '500004', group: '', accountGroup: 'Beta' }];
+  assert.equal(isBlankGroupAccountQuery('Beta / 500004', rows), false, 'an account whose accountGroup is set is not blank-group');
+});
+
+test('Enter opens nothing for a blank-group account, in every path and field-suffix form', () => {
+  for (const query of [
+    'Beta / 500003', 'Beta / 500003 /', 'Beta / 500003 / email', 'Beta / 500003 / balance',
+    'Be / 500003', 'Be / 500003 / email', 'Be / 500003 / balance', 'beta / 500003 / email',
+    'ALPHA / 500003 / email', 'Beta /500003/email', '/ 500003 / email', '/ 500003 / balance',
+  ]) {
+    assert.equal(enterTargetFor(query), null, `Enter on "${query}" must open nothing`);
+  }
+});
+
+test('Enter still activates the single visible group when no route or suggestion applies (no regression)', () => {
+  const beta = getGroupFolderRows(CASE_SAMPLE_GROUPS, '').find((row) => row.name === 'Beta');
+  const target = resolveGroupEnterTarget({ visibleRows: [beta], query: 'Bet', accountRows: BLANK_OWNER_ROWS });
+  assert.equal(target?.kind, 'row');
+  assert.equal(target.row.name, 'Beta');
+  assert.equal(enterTargetFor('Beta')?.kind, 'route', 'a plain group name still resolves to its group route first');
+});
+
+test('Enter still routes a valid account path and field path', () => {
+  const account = enterTargetFor('ALPHA / 500001');
+  assert.equal(account?.kind, 'route');
+  assert.equal(account.route.type, 'account');
+  assert.equal(account.route.login, '500001');
+  const field = enterTargetFor('ALPHA / 500001 / email');
+  assert.equal(field?.kind, 'route');
+  assert.equal(field.route.type, 'account-field');
+});
+
+test('Enter activates the single visible account of the opened group (no regression)', () => {
+  const beta = CASE_SAMPLE_GROUPS[1];
+  const onlyAccount = { login: '500002', account: BLANK_OWNER_ROWS[1] };
+  const target = resolveGroupEnterTarget({ openedGroup: beta, visibleRows: [], visibleAccounts: [onlyAccount], query: '500002', accountRows: BLANK_OWNER_ROWS });
+  assert.equal(target?.kind, 'account');
+  assert.equal(target.account.login, '500002');
 });

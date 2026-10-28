@@ -8,7 +8,7 @@ import {
   listGroupContainerPaths,
   splitGroupPath,
 } from './groupTree.js';
-import { accountsInGroup, readLeverageRatio } from './groupAccountRows.js';
+import { accountGroupName, accountsInGroup, readLeverageRatio } from './groupAccountRows.js';
 
 const ROUTE_SEPARATOR_REGEX = /[\\/>]+/;
 
@@ -942,7 +942,7 @@ const resolveCoreRoute = ({
       if (/^\d+$/.test(lastSegment)) {
         const globalCandidates = (accountRows || []).map((raw) => {
           const login = String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim();
-          const groupName = String(raw?.group ?? raw?.Group ?? '').trim();
+          const groupName = String(accountGroupName(raw) ?? '').trim();
           return { login, name: String(raw?.Name ?? raw?.name ?? ''), email: String(raw?.Email ?? raw?.email ?? ''), account: raw, groupName };
         });
         const globalMatch = globalCandidates.find((item) => item.login === lastSegment);
@@ -1548,10 +1548,41 @@ export const filterAccountRowsBySearch = (accountRows, search, columns = []) => 
 export const isBlankGroupAccountQuery = (query, accountRows = []) => {
   const { isPathQuery, segments } = parseGroupSearchRoute(query);
   if (!isPathQuery || segments.length < 2) return false;
-  const login = segments.at(-1);
-  return (accountRows || []).some((raw) => {
-    const rowLogin = String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim();
-    const groupName = String(raw?.group ?? raw?.Group ?? '').trim();
-    return rowLogin === login && !groupName;
+  // The account may sit in any segment after the group: `<group> / <login>` or `<group> / <login> / <field>`.
+  return segments.slice(1).some((segment) => {
+    const row = (accountRows || []).find((raw) => String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim() === segment);
+    return row !== undefined && !String(accountGroupName(row) ?? '').trim();
   });
+};
+
+// Only routes that executeSearchRoute actually runs. Mirrors its guards so a route is never "taken" without effect.
+const isExecutableGroupRoute = (route) => {
+  if (!route) return false;
+  if (route.type === 'folder' || route.type === 'account') return true;
+  if (route.type === 'group') return Boolean(route.group);
+  if (route.type === 'account-field') return Boolean(route.field);
+  return false;
+};
+
+/**
+ * Decides what Enter activates on the Groups page, without the DOM.
+ * Returns `{ kind: 'route', route }`, `{ kind: 'row', row }` (the single visible group row),
+ * `{ kind: 'account', account }` (the single visible account of the opened group), or `null` (open nothing).
+ */
+export const resolveGroupEnterTarget = ({
+  route = null,
+  suggestions = [],
+  openedGroup = null,
+  visibleRows = [],
+  visibleAccounts = [],
+  query = '',
+  accountRows = [],
+} = {}) => {
+  const resolved = route || suggestions[0] || null;
+  if (resolved && isExecutableGroupRoute(resolved)) return { kind: 'route', route: resolved };
+  // An account with no stored group owns no group: open nothing, not even a visible group the typed segment matches.
+  if (isBlankGroupAccountQuery(query, accountRows)) return null;
+  if (!openedGroup && visibleRows.length === 1) return { kind: 'row', row: visibleRows[0] };
+  if (openedGroup && visibleAccounts.length === 1) return { kind: 'account', account: visibleAccounts[0] };
+  return null;
 };

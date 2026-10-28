@@ -40,10 +40,11 @@ test('folder/selection/intent sync uses render-phase adjustments, not setState i
 });
 
 // B3-R: Enter on a query naming a blank-group account must open nothing, not a visible group
-// that the typed segment fuzzy-matches (the page fallback would otherwise activate it).
-test('Enter never opens a visible group for a blank-group account query', () => {
-  assert.ok(src.includes('if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;'), 'Enter must return before the single-row fallbacks');
-  const guard = src.indexOf('if (isBlankGroupAccountQuery(queryText, enrichedRawAccountRows)) return;');
-  const fallback = src.indexOf('if (!openedGroup && visibleRows.length === 1) {');
-  assert.ok(guard !== -1 && fallback > guard, 'the guard must sit before the visible-row fallback');
+// that the typed segment fuzzy-matches. The decision is the pure resolveGroupEnterTarget (behaviour
+// is tested in groupSearchRouter.test.js); this pins that Enter routes through it with the typed query.
+test('Enter decides its target through resolveGroupEnterTarget with the typed query and accounts', () => {
+  assert.ok(src.includes('const target = resolveGroupEnterTarget({'), 'Enter must use the pure target helper');
+  assert.ok(src.includes('query: queryText,'), 'the helper must receive the typed query for the blank-group guard');
+  assert.ok(src.includes('accountRows: enrichedRawAccountRows,\n      });'), 'the helper must receive the account rows for the blank-group guard');
+  assert.ok(!src.includes('if (!openedGroup && visibleRows.length === 1) {'), 'the visible-row fallback must not be inlined in the page');
 });

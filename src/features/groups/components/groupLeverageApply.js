@@ -9,7 +9,40 @@
 // file exports only the component, and so both helpers are directly
 // unit-testable. Tenant-agnostic: no tenant, broker, group, or account
 // literals; values flow from the selected group and its members.
-import { readLeverageRatio } from '../groupAccountRows.js';
+import { groupNameKey, readLeverageRatio } from '../groupAccountRows.js';
+
+// In-flight registry: the group names with an apply write running. It lives at module level, so
+// it survives a tab switch or remount (component state would not). Keyed by the exact group name
+// (case-sensitive, trim only, like group identity). Components subscribe so Apply re-renders when
+// a write starts or ends. An entry is always cleared in `finally` by the caller.
+const inFlightGroupApplies = new Set();
+const registryListeners = new Set();
+
+const notifyRegistry = () => {
+  for (const listener of registryListeners) listener();
+};
+
+/** Marks a group's apply as started. False when that group already has a write in flight. */
+export const beginGroupApply = (groupName) => {
+  const key = groupNameKey(groupName);
+  if (!key || inFlightGroupApplies.has(key)) return false;
+  inFlightGroupApplies.add(key);
+  notifyRegistry();
+  return true;
+};
+
+/** Clears a group's in-flight mark. Call from `finally`. */
+export const endGroupApply = (groupName) => {
+  if (inFlightGroupApplies.delete(groupNameKey(groupName))) notifyRegistry();
+};
+
+export const isGroupApplyInFlight = (groupName) => inFlightGroupApplies.has(groupNameKey(groupName));
+
+/** Subscribes to registry changes (for useSyncExternalStore). Returns the unsubscribe function. */
+export const subscribeGroupApply = (listener) => {
+  registryListeners.add(listener);
+  return () => { registryListeners.delete(listener); };
+};
 
 /**
  * Push the group leverage onto members whose leverage differs. Returns

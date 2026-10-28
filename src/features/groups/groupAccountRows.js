@@ -66,7 +66,7 @@ export const toGroupAccountRow = (account, groupSettings) => {
   };
 };
 
-const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
+export const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
 
 export const accountsInGroup = (accounts, groupName, groupSettings) =>
   (accounts || []).filter((account) => sameGroupName(accountGroupName(account), groupName)).map((account) => toGroupAccountRow(account, groupSettings));

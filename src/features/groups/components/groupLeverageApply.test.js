@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyGroupLeverage } from './groupLeverageApply.js';
+import {
+  applyGroupLeverage,
+  beginGroupApply,
+  endGroupApply,
+  isGroupApplyInFlight,
+  subscribeGroupApply,
+} from './groupLeverageApply.js';
 import { normalizeAccount } from '../../../utils/sidebarAccountRows.js';
 
 // Owner rule 2026-10-28: group names are case-sensitive identities. "Apply
@@ -60,4 +66,41 @@ test('a 409 ACCOUNT_GROUP_MISMATCH counts as failed and does not stop the others
 test('a normalized member (trimmed group) still sends its stored group byte-exact', async () => {
   const { calls } = await run([normalizeAccount({ login: '1001', group: ' Grp ', leverage: 100 })]);
   assert.deepEqual(calls, [['1001', { Leverage: 200, ExpectedGroup: ' Grp ' }]]);
+});
+
+// Fix 3: one apply write per group at a time. The registry is module-level, so it holds across remounts.
+test('the in-flight registry admits one apply per group and clears when the apply ends', () => {
+  assert.equal(beginGroupApply('Fixture/Registry'), true);
+  assert.equal(beginGroupApply('Fixture/Registry'), false, 'a second apply for the same group is refused while one is in flight');
+  assert.equal(isGroupApplyInFlight('Fixture/Registry'), true);
+  endGroupApply('Fixture/Registry');
+  assert.equal(isGroupApplyInFlight('Fixture/Registry'), false, 'the entry clears when the apply ends');
+  assert.equal(beginGroupApply('Fixture/Registry'), true, 'after the apply ends, the group can apply again');
+  endGroupApply('Fixture/Registry');
+});
+
+test('the in-flight registry keys groups by exact name: case is identity, surrounding spaces are not', () => {
+  assert.equal(beginGroupApply('Fixture/Keys'), true);
+  assert.equal(beginGroupApply('fixture/keys'), true, 'a differently-cased group is a different group');
+  assert.equal(beginGroupApply(' Fixture/Keys '), false, 'trimmed, the padded name is the same group and is refused');
+  endGroupApply('Fixture/Keys');
+  endGroupApply('fixture/keys');
+  assert.equal(isGroupApplyInFlight('Fixture/Keys'), false);
+});
+
+test('the in-flight registry notifies subscribers when a write starts or ends, not on refused or repeated calls', () => {
+  let notified = 0;
+  const unsubscribe = subscribeGroupApply(() => { notified += 1; });
+  beginGroupApply('Fixture/Notify');
+  assert.equal(notified, 1);
+  beginGroupApply('Fixture/Notify');
+  assert.equal(notified, 1, 'a refused begin changes nothing');
+  endGroupApply('Fixture/Notify');
+  assert.equal(notified, 2);
+  endGroupApply('Fixture/Notify');
+  assert.equal(notified, 2, 'ending a group that is not in flight changes nothing');
+  unsubscribe();
+  beginGroupApply('Fixture/Notify');
+  assert.equal(notified, 2, 'an unsubscribed listener is not called');
+  endGroupApply('Fixture/Notify');
 });
