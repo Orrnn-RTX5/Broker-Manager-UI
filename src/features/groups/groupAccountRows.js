@@ -13,7 +13,7 @@ const money = (value) => {
     : number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Group names are case-sensitive identities: "Arijit" and "ARIJIT" are two
+// Group names are case-sensitive identities: "Alpha" and "ALPHA" are two
 // groups with their own accounts. Keys trim only, never fold case (search may
 // still be case-insensitive; identity never is).
 export const groupNameKey = (name) => String(name ?? '').trim();

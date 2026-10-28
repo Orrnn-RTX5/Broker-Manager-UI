@@ -54,8 +54,12 @@ const GroupAccountsTab = ({ groupName, groupLeverage, onOpenAccount }) => {
     setApplying(true);
     setApplyError(null);
     try {
+      // Members are read fresh from the server, never from the rows already on screen:
+      // an account that left the group since the last load must not be patched.
+      const fresh = await refetch({ throwOnError: true });
+      const members = accountsInGroup(fresh.data?.rows, groupName, { leverage: groupLeverage }).map((row) => row.account);
       const result = await applyGroupLeverage({
-        members: rows.map((row) => row.account),
+        members,
         expectedGroup: groupName,
         groupLeverage,
         confirm: true,

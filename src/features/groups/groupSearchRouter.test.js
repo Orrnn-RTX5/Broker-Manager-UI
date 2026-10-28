@@ -288,3 +288,36 @@ test('filterGroupRowsBySearch and filterAccountRowsBySearch keep relevant rows v
   assert.equal(filteredAccounts.length, 1);
   assert.equal(filteredAccounts[0].login, '200029');
 });
+
+const CASE_SAMPLE_GROUPS = [
+  { name: 'ALPHA', currency: 'USD', leverage: 100 },
+  { name: 'Beta', currency: 'USD', leverage: 100 },
+];
+
+// Owner rule: search may fold case, group identity may not. An account keeps its stored group
+// however the query spells or places the segment, and never takes the typed group's name.
+test('group identity is exact: an account stored under "Alpha" always routes with group "Alpha", never the typed group', () => {
+  for (const query of ['Beta / 500001', 'ALPHA / 500001', 'alpha / 500001']) {
+    const route = resolveGroupSearchRoute({
+      query,
+      groups: CASE_SAMPLE_GROUPS,
+      accountRows: [{ login: '500001', Name: 'Case Variant', group: 'Alpha', balance: 10, equity: 10, leverage: 100 }],
+    });
+    assert.ok(route, query);
+    assert.equal(route.type, 'account', query);
+    assert.equal(route.login, '500001', query);
+    assert.equal(route.group.name, 'Alpha', query);
+  }
+});
+
+test('an exact group name still owns the account route', () => {
+  const route = resolveGroupSearchRoute({
+    query: 'Beta / 500002',
+    groups: CASE_SAMPLE_GROUPS,
+    accountRows: [{ login: '500002', Name: 'Exact Owner', group: 'ALPHA', balance: 10, equity: 10, leverage: 100 }],
+  });
+  assert.ok(route);
+  assert.equal(route.type, 'account');
+  assert.equal(route.login, '500002');
+  assert.equal(route.group.name, 'ALPHA');
+});

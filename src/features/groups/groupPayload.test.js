@@ -495,3 +495,63 @@ test('a blank group name never patches any account', async () => {
     assert.deepEqual(await applyGroupSettingsToAccounts(name, { leverage: 200 }), { accountsUpdated: 0, accountErrors: [] });
   }
 });
+
+// B1 (UI): group-wide writes read membership from the server, and the query cache
+// is written only for the logins the server accepted.
+const cacheClient = (cachedRows) => {
+  const writes = [];
+  return {
+    writes,
+    getQueriesData: () => [[['sidebar-accounts'], { rows: cachedRows }]],
+    setQueriesData: (_filter, updater) => {
+      const next = updater({ rows: cachedRows });
+      writes.push(next);
+      return next;
+    },
+  };
+};
+
+test('a stale cache never decides membership: an account the server moved out of the group is not patched', async () => {
+  const accountUpdates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Other' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { accountUpdates.push(login); };
+  const queryClient = cacheClient([{ login: 1001, group: 'Grp', leverage: 100 }]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.deepEqual(accountUpdates, [1002], 'no PATCH for 1001, which the server says is in Other');
+  assert.equal(result.accountsUpdated, 1);
+});
+
+test('a server row missing from the cache IS patched', async () => {
+  const accountUpdates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { accountUpdates.push(login); };
+  const queryClient = cacheClient([{ login: 1001, group: 'Grp', leverage: 100 }]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.deepEqual(accountUpdates, [1001, 1002]);
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(result.accountErrors, []);
+});
+
+test('a 409-refused account keeps its cached leverage; only accepted logins are written to the cache', async () => {
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => {
+    if (login === 1002) throw Object.assign(new Error('ACCOUNT_GROUP_MISMATCH'), { status: 409 });
+  };
+  const queryClient = cacheClient([
+    { login: 1001, group: 'Grp', leverage: 100, Leverage: 100 },
+    { login: 1002, group: 'Grp', leverage: 100, Leverage: 100 },
+  ]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.equal(queryClient.writes.length, 1);
+  const [cached] = queryClient.writes;
+  assert.equal(cached.rows.find((row) => row.login === 1001).leverage, 200, 'accepted account shows the new leverage');
+  assert.equal(cached.rows.find((row) => row.login === 1002).leverage, 100, '409-refused account keeps the leverage the server still holds');
+  assert.equal(result.accountsUpdated, 1);
+  assert.equal(result.accountErrors.length, 1);
+});

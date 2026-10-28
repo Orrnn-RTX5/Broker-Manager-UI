@@ -726,24 +726,20 @@ export const resolveGroupNodeBySegments = (groups, segments, currentFolder = '')
 };
 
 /**
- * Collects all accounts belonging to `targetNode` (either directly in `targetNode.group`
- * or in any subgroup underneath `targetNode.path`).
- */
-/**
- * The group record for a name: an exact (trimmed, case-sensitive) match first;
- * a case-insensitive match only when exactly ONE group matches that way (never
- * guess between "Arijit" and "ARIJIT"). Otherwise null.
+ * The group record for a name: an exact match after trimming, case-sensitive.
+ * Group names are identities ("Alpha" and "ALPHA" are two groups), so there is
+ * no case-insensitive fallback. Returns null when no record matches exactly.
  */
 export const resolveGroupByName = (groups, name) => {
   const target = String(name ?? '').trim();
   if (!target) return null;
-  const list = groups || [];
-  const exact = list.find((g) => groupRowNode(g).name.trim() === target);
-  if (exact) return exact;
-  const folded = list.filter((g) => groupRowNode(g).name.trim().toLowerCase() === target.toLowerCase());
-  return folded.length === 1 ? folded[0] : null;
+  return (groups || []).find((g) => groupRowNode(g).name.trim() === target) || null;
 };
 
+/**
+ * Collects all accounts belonging to `targetNode` (either directly in `targetNode.group`
+ * or in any subgroup underneath `targetNode.path`).
+ */
 export const collectAccountsUnderNode = (groups, accountRows, targetNode) => {
   if (!targetNode || !Array.isArray(accountRows)) return [];
 
@@ -950,8 +946,10 @@ const resolveCoreRoute = ({
           return { login, name: String(raw?.Name ?? raw?.name ?? ''), email: String(raw?.Email ?? raw?.email ?? ''), account: raw, groupName };
         });
         const globalMatch = globalCandidates.find((item) => item.login === lastSegment);
+        // The stored group owns the account. Its exact record when one exists, else a name-only
+        // object for the stored name. Never prefixNode.group: that is a case-insensitive segment match.
         const owningGroup = globalMatch?.groupName
-          ? (resolveGroupByName(groups, globalMatch.groupName) || prefixNode.group || { name: prefixNode.path })
+          ? (resolveGroupByName(groups, globalMatch.groupName) || { name: globalMatch.groupName })
           : (prefixNode.group || { name: prefixNode.path });
         return {
           type: 'account',

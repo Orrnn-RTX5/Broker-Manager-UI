@@ -32,7 +32,7 @@ const hasExplicitThresholds = (account) => (
   && hasNumber(account, ['stopOutLevel', 'StopOutLevel', 'stop_out_level'])
 );
 
-// Group names are case-sensitive identities ("Arijit" and "ARIJIT" are two groups): trim only.
+// Group names are case-sensitive identities ("Alpha" and "ALPHA" are two groups): trim only.
 const groupName = (source) => String(source?.name ?? source?.Name ?? source?.group ?? source?.Group ?? '').trim();
 const accountGroupName = (account) => String(
   account?.group ?? account?.Group ?? account?.accountGroup ?? account?.AccountGroup ?? ''

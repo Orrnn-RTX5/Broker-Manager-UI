@@ -1,7 +1,7 @@
 import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
-import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, sameGroupName } from './groupAccountRows.js';
+import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
 import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
 
@@ -250,15 +250,17 @@ export const toSymbolList = (value) => {
 
 const accountGroupName = (account) => account?.group ?? account?.Group ?? account?.accountGroup ?? account?.AccountGroup;
 
-const writeAccountCache = (queryClient, groupName, originalName, patch) => {
+// Writes the patch only onto the logins the server accepted. A refused or failed
+// account keeps the value the server still holds.
+const writeAccountCache = (queryClient, patch, succeededLogins) => {
   if (!queryClient) return;
+  const succeeded = new Set(succeededLogins.map(String));
   queryClient.setQueriesData({ queryKey: ['sidebar-accounts'] }, (data) => {
     if (!data?.rows) return data;
     return {
       ...data,
       rows: data.rows.map((account) => {
-        const name = accountGroupName(account);
-        if (!sameGroupName(name, groupName) && !sameGroupName(name, originalName)) return account;
+        if (!succeeded.has(String(account?.login))) return account;
         return {
           ...account,
           ...(patch.Leverage ? { leverage: patch.Leverage, Leverage: patch.Leverage } : {}),
@@ -278,14 +280,13 @@ const writeAccountCache = (queryClient, groupName, originalName, patch) => {
  * refuses (409 ACCOUNT_GROUP_MISMATCH) an account that left that group; every
  * row is re-checked before any call.
  */
-export const applyGroupSettingsToAccounts = async (groupName, payload, originalName = groupName, queryClient) => {
+export const applyGroupSettingsToAccounts = async (groupName, payload, queryClient) => {
   if (!groupNameKey(groupName)) return { accountsUpdated: 0, accountErrors: [] };
   const patch = buildAccountPatchFromGroup(payload);
   if (Object.keys(patch).length === 0) return { accountsUpdated: 0, accountErrors: [] };
-  const cachedRows = queryClient
-    ? queryClient.getQueriesData({ queryKey: ['sidebar-accounts'] }).flatMap(([, data]) => data?.rows || [])
-    : [];
-  const page = cachedRows.length ? { rows: cachedRows } : await fetchAllSidebarAccounts({});
+  // Membership is always read from the server. The react-query cache can be stale or
+  // partial, so it never decides which accounts are patched.
+  const page = await fetchAllSidebarAccounts({});
   const seen = new Set();
   const expectedGroup = groupNameKey(groupName);
   const rows = accountsInGroup(page?.rows, groupName).filter((row) => {
@@ -297,15 +298,17 @@ export const applyGroupSettingsToAccounts = async (groupName, payload, originalN
     return true;
   });
   const accountErrors = [];
+  const succeededLogins = [];
   for (const row of rows) {
     try {
       await updateManagerAccount(row.login, { ...patch, ExpectedGroup: String(row.account?.storedGroup ?? accountGroupName(row.account)) });
+      succeededLogins.push(row.login);
     } catch (err) {
       accountErrors.push(`${row.login}: ${err.message}`);
     }
   }
-  if (rows.length > accountErrors.length) writeAccountCache(queryClient, groupName, originalName, patch);
-  return { accountsUpdated: rows.length - accountErrors.length, accountErrors };
+  if (succeededLogins.length > 0) writeAccountCache(queryClient, patch, succeededLogins);
+  return { accountsUpdated: succeededLogins.length, accountErrors };
 };
 
 export const GROUP_RENAME_UNSUPPORTED = 'A group cannot be renamed. Create a group with the new name and move the accounts to it.';
@@ -351,7 +354,7 @@ export const submitGroup = async ({ originalName, payload: rawPayload, queryClie
   if (!originalName) return { ...(responseData && typeof responseData === 'object' ? responseData : {}), submitted: payload };
   const saved = responseData && typeof responseData === 'object' ? responseData : {};
   try {
-    const applied = await applyGroupSettingsToAccounts(originalName, payload, originalName, queryClient);
+    const applied = await applyGroupSettingsToAccounts(originalName, payload, queryClient);
     return { ...saved, ...applied, submitted: payload };
   } catch (err) {
     return { ...saved, accountsUpdated: 0, accountErrors: [err.message], submitted: payload };

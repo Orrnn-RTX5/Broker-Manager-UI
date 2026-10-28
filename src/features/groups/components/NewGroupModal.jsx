@@ -729,7 +729,9 @@ const NewGroupModal = ({
             {allowAllSymbols
               ? 'Every symbol with an enabled instrument is allowed, including symbols enabled later. Blocked symbols still apply.'
               : String(formData.symbolsAllowed ?? '').trim() === ''
-                ? 'No symbols are listed: the server then allows every enabled instrument. Select symbols, or tick "Allow all symbols" to make that explicit.'
+                ? (emptyAllowedSymbolsError({ value: formData.symbolsAllowed, initialValue: initialData?.symbolsAllowed, isEditing }) === null
+                  ? 'No symbols are listed: the server then allows every enabled instrument. Select symbols, or tick "Allow all symbols" to make that explicit.'
+                  : 'Select at least one symbol, or tick "Allow all symbols", before saving.')
                 : 'Only symbols with an enabled instrument can be selected.'}
           </p>
           <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} restrictToConfigured refusedSymbols={refusedSymbols} disabled={allowAllSymbols} />

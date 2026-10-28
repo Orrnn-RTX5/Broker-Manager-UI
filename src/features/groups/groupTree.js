@@ -5,7 +5,7 @@
 export const GROUP_PATH_SEPARATOR = '\\';
 const PATH_SEPARATORS = /[/\\]/;
 
-// Group names are case-sensitive: "Arijit" and "ARIJIT" are two groups, so path
+// Group names are case-sensitive: "Alpha" and "ALPHA" are two groups, so path
 // keys never fold case (only the / and \ separators are treated alike). Sorting
 // stays case-insensitive for reading, with an exact tie-break so it is stable.
 const pathKey = (value) => String(value ?? '');

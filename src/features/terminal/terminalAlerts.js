@@ -27,7 +27,7 @@ const readText = (source, keys) => {
   return '';
 };
 
-// Group names are case-sensitive identities ("Arijit" and "ARIJIT" are two groups).
+// Group names are case-sensitive identities ("Alpha" and "ALPHA" are two groups).
 const groupKey = (name) => String(name || '').trim();
 
 /** Map of exact (trimmed) group name → { call, stop } for groups that define levels. */
