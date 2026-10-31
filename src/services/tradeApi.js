@@ -191,11 +191,24 @@ const fetchManagerJson = async (endpoint, options = {}) => {
   return data;
 };
 
-export const orderModify = ({ ticket, stoploss, takeprofit }) => {
+export const orderModify = async ({ ticket, login, price, stoploss, takeprofit }) => {
+  if ((price !== undefined && price !== null && Number(price) > 0) || (login && Number(login) > 0)) {
+    try {
+      const { modifyManagerPendingOrder } = await import('./managerTradeApi.js');
+      return await modifyManagerPendingOrder({ ticket, login, price, stoploss, takeprofit });
+    } catch (err) {
+      if (err?.code || err?.status || err?.commandStatus) throw err;
+    }
+  }
+  const modifyParams = new URLSearchParams({ ticket: String(ticket) });
+  if (stoploss !== undefined && stoploss !== null) modifyParams.set('stoploss', String(stoploss));
+  if (takeprofit !== undefined && takeprofit !== null) modifyParams.set('takeprofit', String(takeprofit));
+  return tradeClient.post(`/OrderModify?${modifyParams.toString()}`, {});
   const params = new URLSearchParams({ ticket: String(ticket) });
-  if (stoploss !== undefined && stoploss !== null) params.set('stoploss', String(stoploss));
-  if (takeprofit !== undefined && takeprofit !== null) params.set('takeprofit', String(takeprofit));
-  return tradeClient.post(`/OrderModify?${params.toString()}`, {});
+
+
+
+
 };
 
 export const orderDelete = (ticket) =>
@@ -516,8 +529,9 @@ export const dealPerform = (payload) => tradeClient.post('/DealPerform', payload
 
 export const positionModifyStops = orderModify;
 
-export const orderPriceChange = (ticket, price) =>
-  postQuery('/OrderPriceChange', { ticket, price });
+
+export const orderPriceChange = (ticket, price, login) =>
+  orderModify({ ticket, login, price });
 
 export const orderReject = ({ ticket, comment }) => {
   const params = new URLSearchParams({ ticket: String(ticket) });

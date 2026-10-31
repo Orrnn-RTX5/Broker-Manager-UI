@@ -15,7 +15,16 @@ import {
 
 
 import useSymbolStore from '../../store/symbolStore';
-import { placeManagerOrder } from '../../services/managerTradeApi';
+import { placeManagerOrder, placeManagerPendingOrder } from '../../services/managerTradeApi';
+
+const PENDING_ORDER_TYPES = [
+  { value: 'buy_limit', label: 'Buy Limit', side: 'buy' },
+  { value: 'sell_limit', label: 'Sell Limit', side: 'sell' },
+  { value: 'buy_stop', label: 'Buy Stop', side: 'buy' },
+  { value: 'sell_stop', label: 'Sell Stop', side: 'sell' },
+  { value: 'buy_stop_limit', label: 'Buy Stop Limit', side: 'buy' },
+  { value: 'sell_stop_limit', label: 'Sell Stop Limit', side: 'sell' },
+];
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 import DepositDialog from './DepositDialog';
 import { COMMENT_PRESETS, normalizeCommentForDefault, detectCommentLanguage } from '../../utils/commentTranslation';
@@ -69,6 +78,7 @@ const PricePipsDisplay = ({ price, digits = 5, colorClass = 'text-white' }) => {
 const AccountTradeTab = ({
   loginId,
   positions = [],
+  pendingOrders = [],
   // Tenant symbol catalog (optional). Default empty preserves today's
   // behavior: symbols then come only from the row, positions and live feed.
   symbols = [],
@@ -92,12 +102,18 @@ const AccountTradeTab = ({
   // values count as empty and later positions are scanned past an empty
   // first entry -- both fail-safe, both invent nothing.
   const [modalSymbol, setModalSymbol] = useState(
-    resolveTradeSymbol({ selectedTicketRow, positions, catalog: symbols })
+    resolveTradeSymbol({ selectedTicketRow, positions: [...positions, ...pendingOrders], catalog: symbols })
   );
   const [tradeSL, setTradeSL] = useState('0.00000');
   const [tradeTP, setTradeTP] = useState('0.00000');
   const [tradeVolume, setTradeVolume] = useState('0.01');
   const [tradeComment, setTradeComment] = useState('');
+  const [executionMode, setExecutionMode] = useState('market');
+  const [pendingOrderType, setPendingOrderType] = useState('buy_limit');
+  const [pendingPrice, setPendingPrice] = useState('0.00000');
+  const [pendingLimitPrice, setPendingLimitPrice] = useState('0.00000');
+  const [pendingExpiryType, setPendingExpiryType] = useState('gtc');
+  const [pendingExpiryDateTime, setPendingExpiryDateTime] = useState('');
   const [isAutoPipTrack, setIsAutoPipTrack] = useState(false);
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
@@ -112,7 +128,8 @@ const AccountTradeTab = ({
   };
   const stopsChanged = Boolean(selectedTicketRow) && (
     Number(tradeSL) !== Number(selectedTicketRow?.priceSl || 0) ||
-    Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0)
+    Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0) ||
+    ((Boolean(selectedTicketRow?.isPendingOrder) || (typeof adapter !== 'undefined' && adapter?.entity === 'order')) && Number(typeof pendingPrice !== 'undefined' ? pendingPrice : 0) !== Number(selectedTicketRow?.priceOpen || selectedTicketRow?.priceTrigger || 0))
   );
   const volumeChanged = Boolean(selectedTicketRow) && Number(tradeVolume) !== Number(selectedTicketRow.volume ?? selectedTicketRow.lots ?? 0);
   // Fail-closed: empty symbol stays empty (no invented fallback) and gates
@@ -223,14 +240,29 @@ const AccountTradeTab = ({
 
   // Available symbols list
   const availableSymbols = useMemo(() => {
-    const set = new Set(buildTradeSymbolList({ catalog: symbols, positions, activeSymbol: modalSymbol }));
+    const set = new Set(buildTradeSymbolList({ catalog: symbols, positions: [...positions, ...pendingOrders], activeSymbol: modalSymbol }));
     const storeSymbols = useSymbolStore.getState().symbols || {};
     Object.keys(storeSymbols).forEach((s) => set.add(s));
     return Array.from(set).sort();
-  }, [modalSymbol, positions, symbols]);
+  }, [modalSymbol, positions, pendingOrders, symbols]);
   // Fail-closed: with no symbol from any source (catalog, positions, active
   // symbol, live feed) the order form is replaced by operator guidance below.
   const hasAnySymbol = availableSymbols.length > 0;
+
+  const isSelectedPendingOrder = Boolean(selectedTicketRow?.isPendingOrder) || adapter?.entity === 'order';
+  const isStopLimitOrder = pendingOrderType === 'buy_stop_limit' || pendingOrderType === 'sell_stop_limit';
+  const pendingOrderMeta = PENDING_ORDER_TYPES.find((item) => item.value === pendingOrderType) || PENDING_ORDER_TYPES[0];
+
+  // Sync trigger price when a pending order row is selected or updated
+  useEffect(() => {
+    if (!selectedTicketRow || (!selectedTicketRow.isPendingOrder && adapter?.entity !== 'order')) return;
+    const rowSymbol = selectedTicketRow.symbol ?? modalSymbol;
+    const formatDigits = rowSymbol ? getSymbolDigits(rowSymbol) : digits;
+    const rawTrigger = Number(selectedTicketRow.priceOpen ?? selectedTicketRow.priceTrigger ?? 0);
+    if (Number.isFinite(rawTrigger) && rawTrigger > 0) {
+      setPendingPrice(rawTrigger.toFixed(formatDigits));
+    }
+  }, [Number(selectedTicketRow?.position ?? selectedTicketRow?.ticket ?? 0), Number(selectedTicketRow?.priceOpen ?? selectedTicketRow?.priceTrigger ?? 0), Boolean(selectedTicketRow?.isPendingOrder), adapter?.entity, modalSymbol, digits]);
 
   // Reuse the shared feed; opening or switching this tab never creates a socket.
   useEffect(() => {
@@ -310,17 +342,43 @@ const AccountTradeTab = ({
         throw new Error(result.error?.message || result.error || result.message || 'Trade update rejected.');
       }
     };
+    const triggerPrice = Number(pendingPrice);
+    const savedTriggerPrice = Number(selectedTicketRow?.priceOpen || selectedTicketRow?.priceTrigger || 0);
+    const priceChanged = isSelectedPendingOrder && Number.isFinite(triggerPrice) && triggerPrice > 0 && triggerPrice !== savedTriggerPrice;
+    if (isSelectedPendingOrder && (!String(pendingPrice || '').trim() || !Number.isFinite(triggerPrice) || triggerPrice <= 0)) {
+      showError('Update trade', new Error('Trigger price must be greater than 0 for a pending order.'));
+      return;
+    }
     setIsUpdatingTrade(true);
     isAutoPipTrackRef.current = false;
     setIsAutoPipTrack(false);
     try {
       if (stopsChanged) {
         if (adapter.modifyStops) {
-          checkResult(await adapter.modifyStops({ ticket, stoploss: sl, takeprofit: tp }));
-          saved.priceSl = sl;
-          saved.priceTp = tp;
-          changed.push('SL/TP');
+          checkResult(await adapter.modifyStops({
+            ticket,
+            login: Number(loginId),
+            ...(priceChanged ? { price: triggerPrice } : {}),
+            stoploss: sl,
+            takeprofit: tp,
+          }));
+          if (priceChanged) {
+            saved.priceOpen = triggerPrice;
+            saved.priceTrigger = triggerPrice;
+            changed.push('Price');
+          }
+          if (sl !== Number(saved.priceSl || 0) || tp !== Number(saved.priceTp || 0) || !priceChanged) {
+            saved.priceSl = sl;
+            saved.priceTp = tp;
+            changed.push('SL/TP');
+          }
         } else {
+          if (priceChanged && adapter.modifyField) {
+            checkResult(await adapter.modifyField({ ticket, field: 'price', value: triggerPrice }));
+            saved.priceOpen = triggerPrice;
+            saved.priceTrigger = triggerPrice;
+            changed.push('Price');
+          }
           if (sl !== Number(saved.priceSl || 0)) {
             checkResult(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
             saved.priceSl = sl;
@@ -333,17 +391,20 @@ const AccountTradeTab = ({
           }
         }
       }
-      if (volumeChanged) {
+      if (volumeChanged && !isSelectedPendingOrder) {
         checkResult(await adapter.modifyField({ ticket, field: 'volume', value: lots }));
         saved.volume = lots;
         saved.lots = lots;
         changed.push('volume');
       }
       setSelectedTicketRow(saved);
-      showResult('Update trade', { message: `${changed.join(" and ")} updated successfully for position #${ticket}.` });
+      showResult('Update trade', { message: `${changed.join(" and ")} updated successfully for ${isSelectedPendingOrder ? 'order' : 'position'} #${ticket}.` });
       onTradePlaced?.();
     } catch (err) {
       setSelectedTicketRow(saved);
+      if (isSelectedPendingOrder) {
+        setPendingPrice(Number(saved.priceOpen || saved.priceTrigger || 0).toFixed(digits));
+      }
       setTradeSL(Number(saved.priceSl || 0).toFixed(digits));
       setTradeTP(Number(saved.priceTp || 0).toFixed(digits));
       setTradeVolume(String(saved.volume ?? saved.lots ?? '0.01'));
@@ -351,6 +412,97 @@ const AccountTradeTab = ({
       if (changed.length) onTradePlaced?.();
     } finally {
       setIsUpdatingTrade(false);
+    }
+  };
+
+  const handlePlacePendingOrder = async (overrideOrderType) => {
+    if (tradeConfirmationRef.current || isPlacingTrade || isUpdatingTrade || selectedTicketRow) return;
+    if (!requireTradeMutationPermission()) return;
+
+    const login = Number(loginId);
+    const lots = Number(tradeVolume);
+    const price = Number(pendingPrice);
+    const priceLimit = Number(pendingLimitPrice || 0);
+    const stoploss = Number(tradeSL || 0);
+    const takeprofit = Number(tradeTP || 0);
+    const symbol = String(modalSymbol || '').trim();
+    const resolvedType = overrideOrderType || pendingOrderType;
+    const typeMeta = PENDING_ORDER_TYPES.find((item) => item.value === resolvedType) || pendingOrderMeta;
+    const requiresLimitPrice = resolvedType === 'buy_stop_limit' || resolvedType === 'sell_stop_limit';
+
+    if (!Number.isSafeInteger(login) || login <= 0) {
+      showError('Place pending order', new Error('Account login must be a positive integer.'));
+      return;
+    }
+    if (!symbol) {
+      showError('Place pending order', new Error('Select a symbol before placing an order.'));
+      return;
+    }
+    if (!Number.isFinite(lots) || lots <= 0 || lots > 1000) {
+      showError('Place pending order', new Error('Volume must be greater than 0 and no more than 1,000 lots.'));
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      showError('Place pending order', new Error('Trigger price must be greater than 0 for a pending order.'));
+      return;
+    }
+    if (requiresLimitPrice && (!Number.isFinite(priceLimit) || priceLimit <= 0)) {
+      showError('Place pending order', new Error('Stop Limit price must be greater than 0 for a stop-limit order.'));
+      return;
+    }
+    if (!Number.isFinite(stoploss) || stoploss < 0 || !Number.isFinite(takeprofit) || takeprofit < 0) {
+      showError('Place pending order', new Error('Stop loss and take profit must be zero or positive prices.'));
+      return;
+    }
+
+    let expiryPayload;
+    if (pendingExpiryType === 'today') {
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 0);
+      expiryPayload = Math.floor(endOfDay.getTime() / 1000);
+    } else if (pendingExpiryType === 'specified') {
+      const parsedExpiry = pendingExpiryDateTime ? new Date(pendingExpiryDateTime) : null;
+      if (!parsedExpiry || Number.isNaN(parsedExpiry.getTime()) || parsedExpiry.getTime() <= Date.now()) {
+        showError('Place pending order', new Error('Specified expiration time must be a valid future date and time.'));
+        return;
+      }
+      expiryPayload = Math.floor(parsedExpiry.getTime() / 1000);
+    }
+
+    const confirmed = await new Promise((resolve) => {
+      tradeConfirmationRef.current = resolve;
+      setTradeConfirmation({
+        operation: typeMeta.label,
+        message: `Place a ${typeMeta.label.toUpperCase()} pending order for ${lots} lots of ${symbol} at ${price.toFixed(digits)}${requiresLimitPrice ? ` (limit ${priceLimit.toFixed(digits)})` : ''} on account #${login}?`,
+      });
+    });
+    if (!confirmed) return;
+
+    setIsPlacingTrade(true);
+    try {
+      const result = await placeManagerPendingOrder({
+        login,
+        symbol,
+        type: resolvedType,
+        orderType: resolvedType,
+        lots,
+        price,
+        ...(requiresLimitPrice ? { priceLimit } : {}),
+        stoploss,
+        takeprofit,
+        ...(expiryPayload ? { expiry: expiryPayload } : {}),
+        comment: normalizeCommentForDefault(tradeComment.trim()),
+      });
+      const ticketStr = result?.ticket ? ` (#${result.ticket})` : '';
+      showResult(`Place ${typeMeta.label} order`, {
+        message: `${typeMeta.label} ${lots} lots of ${symbol} at ${price.toFixed(digits)}${ticketStr} placed successfully for account #${login}.`,
+      });
+      setTradeComment('');
+      onTradePlaced?.(result);
+    } catch (err) {
+      showError(`Place ${typeMeta.label} order`, err);
+    } finally {
+      setIsPlacingTrade(false);
     }
   };
 
@@ -474,6 +626,17 @@ const AccountTradeTab = ({
     return { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
       askBadgeY, bidBadgeY, yAxisTicks, askPoints: getPoints(true), bidPoints: getPoints(false) };
   }, [tickHistory, modalSymbol, digits, pipSize]);
+
+  useEffect(() => {
+    if (selectedTicketRow || executionMode !== 'pending') return;
+    const refPrice = pendingOrderMeta.side === 'buy' ? (currentAsk || currentBid) : (currentBid || currentAsk);
+    if (refPrice > 0 && (!Number(pendingPrice) || Number(pendingPrice) <= 0)) {
+      setPendingPrice(refPrice.toFixed(digits));
+    }
+    if (isStopLimitOrder && refPrice > 0 && (!Number(pendingLimitPrice) || Number(pendingLimitPrice) <= 0)) {
+      setPendingLimitPrice(refPrice.toFixed(digits));
+    }
+  }, [executionMode, modalSymbol, currentAsk, currentBid, digits, selectedTicketRow, pendingOrderMeta.side, isStopLimitOrder, pendingPrice, pendingLimitPrice]);
 
   return (
     <form id="account-trade-update-form" className="account-trade-workspace" onSubmit={(event) => { event.preventDefault(); handleUpdateTrade(); }}>
@@ -648,7 +811,7 @@ const AccountTradeTab = ({
               </span>
               <div>
                 <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block leading-none">
-                  Modify Position
+                  {isSelectedPendingOrder ? 'Modify Pending Order' : 'Modify Position'}
                 </span>
                 <span className="font-mono font-bold text-[12px] text-blue-400 leading-tight">
                   #{selectedTicketRow.position || selectedTicketRow.ticket}
@@ -676,28 +839,38 @@ const AccountTradeTab = ({
             {selectedTicketRow && (
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  selectedTicketRow.type === 'buy'
+                  String(selectedTicketRow.type || selectedTicketRow.side || '').toLowerCase().includes('buy')
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                     : 'bg-red-500/20 text-red-400 border border-red-500/30'
                 }`}
               >
-                {selectedTicketRow.type} {selectedTicketRow.volume || selectedTicketRow.lots || ''} Lots
+                {selectedTicketRow.side || selectedTicketRow.type} {selectedTicketRow.volume || selectedTicketRow.lots || ''} Lots
               </span>
             )}
-            {positions.length > 1 && (
+            {(positions.length + pendingOrders.length) > 1 && (
               <select
                 value={selectedTicketRow ? (selectedTicketRow.position || selectedTicketRow.ticket) : ''}
                 onChange={(e) => {
-                  const pos = positions.find((p) => String(p.position || p.ticket) === e.target.value);
-                  if (pos) handleModifySLTP(pos);
+                  const posItem = positions.find((p) => String(p.position || p.ticket) === e.target.value);
+                  if (posItem) {
+                    handleModifySLTP(posItem);
+                    return;
+                  }
+                  const ordItem = pendingOrders.find((o) => String(o.ticket || o.position) === e.target.value);
+                  if (ordItem) handleModifySLTP({ ...ordItem, isPendingOrder: true });
                 }}
                 className="text-[10px] font-mono font-medium bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 py-0.5 text-gray-300 focus:outline-none cursor-pointer"
-                title="Switch position"
+                title="Switch position or pending order"
               >
-                <option value="" disabled>Switch Position</option>
+                <option value="" disabled>Switch Ticket</option>
                 {positions.map((p) => (
-                  <option key={p.position || p.ticket} value={p.position || p.ticket}>
-                    #{p.position || p.ticket} ({p.symbol} {p.type})
+                  <option key={`pos-${p.position || p.ticket}`} value={p.position || p.ticket}>
+                    Pos #{p.position || p.ticket} ({p.symbol} {p.type})
+                  </option>
+                ))}
+                {pendingOrders.map((o) => (
+                  <option key={`ord-${o.ticket || o.position}`} value={o.ticket || o.position}>
+                    Ord #{o.ticket || o.position} ({o.symbol} {o.side || o.type})
                   </option>
                 ))}
               </select>
@@ -706,7 +879,7 @@ const AccountTradeTab = ({
         </div>
 
         {/* Middle Form: Compact, Clean 2-Column Grid */}
-        <div className="account-trade-form flex-1 flex flex-col py-0 min-h-0">
+        <div className="account-trade-form flex-1 flex flex-col py-0 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
           {/* Symbol */}
           <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Symbol:</span>
@@ -714,8 +887,18 @@ const AccountTradeTab = ({
               <select
                 value={modalSymbol}
                 onChange={(e) => {
-                  setModalSymbol(e.target.value);
+                  const nextSym = e.target.value;
+                  setModalSymbol(nextSym);
                   setTickHistory([]);
+                  const quote = readTradeQuote(nextSym);
+                  const nextDigits = getSymbolDigits(nextSym);
+                  if (quote && !selectedTicketRow) {
+                    const seed = pendingOrderMeta.side === 'buy' ? quote.ask : quote.bid;
+                    if (seed > 0) {
+                      setPendingPrice(seed.toFixed(nextDigits));
+                      setPendingLimitPrice(seed.toFixed(nextDigits));
+                    }
+                  }
                 }}
                 className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-white font-bold text-[12px] font-mono focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
               >
@@ -740,12 +923,84 @@ const AccountTradeTab = ({
           {/* Type */}
           <div className="account-trade-field-row grid items-center gap-2 mb-1">
             <span className="text-gray-400 text-right font-medium text-[10px]">Type:</span>
-            <div className="h-6.5 flex items-center px-2 bg-[var(--surface-2)] border border-[var(--border)] rounded text-gray-200 font-semibold text-[12px] truncate">
-              {selectedTicketRow
-                ? `${selectedTicketRow.type === 'buy' ? 'Buy' : 'Sell'} Position S/L · T/P Modification`
-                : 'Market Order Execution'}
-            </div>
+            {selectedTicketRow ? (
+              <div className="h-6.5 flex items-center px-2 bg-[var(--surface-2)] border border-[var(--border)] rounded text-gray-200 font-semibold text-[12px] truncate">
+                {isSelectedPendingOrder
+                  ? `${selectedTicketRow.side || String(selectedTicketRow.type || 'Pending').toUpperCase()} Order Price · S/L · T/P Modification`
+                  : `${selectedTicketRow.type === 'buy' ? 'Buy' : 'Sell'} Position S/L · T/P Modification`}
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  aria-label="Order execution mode"
+                  value={executionMode}
+                  onChange={(e) => {
+                    const nextMode = e.target.value;
+                    setExecutionMode(nextMode);
+                    if (nextMode === 'pending') {
+                      const seed = pendingOrderMeta.side === 'buy' ? (currentAsk || currentBid) : (currentBid || currentAsk);
+                      if (seed > 0) {
+                        setPendingPrice(seed.toFixed(digits));
+                        setPendingLimitPrice(seed.toFixed(digits));
+                      }
+                    }
+                  }}
+                  className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 font-semibold text-[12px] focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
+                >
+                  <option value="market">Market Order Execution</option>
+                  <option value="pending">Pending Order</option>
+                </select>
+                <ChevronDown
+                  size={13}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+            )}
           </div>
+
+          {/* Pending Order Type Selector */}
+          {!selectedTicketRow && executionMode === 'pending' && (
+            <div className="account-trade-field-row grid items-center gap-2 mb-1">
+              <span className="text-gray-400 text-right font-medium text-[10px]">Order Type:</span>
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <select
+                    aria-label="Pending order type"
+                    value={pendingOrderType}
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      setPendingOrderType(nextType);
+                      const nextMeta = PENDING_ORDER_TYPES.find((item) => item.value === nextType);
+                      const refPrice = nextMeta?.side === 'buy' ? (currentAsk || currentBid) : (currentBid || currentAsk);
+                      if (refPrice > 0 && (!Number(pendingPrice) || Number(pendingPrice) <= 0)) {
+                        setPendingPrice(refPrice.toFixed(digits));
+                      }
+                    }}
+                    className="w-full h-6.5 bg-[var(--surface-2)] border border-blue-500/40 rounded px-2 text-white font-bold text-[12px] focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
+                  >
+                    {PENDING_ORDER_TYPES.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={13}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
+                    pendingOrderMeta.side === 'buy'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {pendingOrderMeta.side}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Volume */}
           <div className="account-trade-field-row grid items-center gap-2 mb-1">
@@ -755,7 +1010,8 @@ const AccountTradeTab = ({
                 <button
                   type="button"
                   onClick={() => adjustVolume(-0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                  disabled={isSelectedPendingOrder}
+                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors disabled:opacity-40"
                   aria-label="Decrease volume"
                 >
                   <Minus size={11} />
@@ -764,13 +1020,15 @@ const AccountTradeTab = ({
                   type="text"
                   value={tradeVolume}
                   aria-label="Volume"
+                  disabled={isSelectedPendingOrder}
                   onChange={(e) => setTradeVolume(e.target.value)}
-                  className="w-14 h-full text-center font-mono font-bold text-blue-400 bg-transparent text-[12px] focus:outline-none"
+                  className="w-14 h-full text-center font-mono font-bold text-blue-400 bg-transparent text-[12px] focus:outline-none disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={() => adjustVolume(0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                  disabled={isSelectedPendingOrder}
+                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors disabled:opacity-40"
                   aria-label="Increase volume"
                 >
                   <Plus size={11} />
@@ -783,8 +1041,9 @@ const AccountTradeTab = ({
                   <button
                     key={vol}
                     type="button"
+                    disabled={isSelectedPendingOrder}
                     onClick={() => setTradeVolume(vol)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors disabled:opacity-40 ${
                       tradeVolume === vol
                         ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 font-bold'
                         : 'bg-[var(--surface-2)] text-gray-400 border-[var(--border)] hover:bg-[var(--surface-2)] font-medium'
@@ -799,22 +1058,142 @@ const AccountTradeTab = ({
 
           {/* At Price */}
           <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">At Price:</span>
-            <div className="flex items-center gap-2.5">
-              <div className="h-6.5 px-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded flex items-center font-mono font-bold text-[12px] text-white">
-                {currentAsk ? currentAsk.toFixed(digits) : 'Market Price'}
+            <span className="text-gray-400 text-right font-medium text-[10px]">
+              {(!selectedTicketRow && executionMode === 'pending') || isSelectedPendingOrder ? 'Trigger Price:' : 'At Price:'}
+            </span>
+            {(!selectedTicketRow && executionMode === 'pending') || isSelectedPendingOrder ? (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center bg-[var(--surface-2)] border border-blue-500/40 rounded overflow-hidden h-6.5">
+                  <button
+                    type="button"
+                    onClick={() => adjustByPips(setPendingPrice, -1)}
+                    className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                    aria-label="Decrease trigger price"
+                  >
+                    <Minus size={11} />
+                  </button>
+                  <input
+                    type="text"
+                    value={pendingPrice}
+                    aria-label="Trigger price"
+                    onChange={(e) => setPendingPrice(e.target.value)}
+                    className="w-24 h-full text-center font-mono font-bold text-white bg-transparent text-[12px] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adjustByPips(setPendingPrice, 1)}
+                    className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                    aria-label="Increase trigger price"
+                  >
+                    <Plus size={11} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ref = pendingOrderMeta.side === 'buy' ? (currentAsk || currentBid) : (currentBid || currentAsk);
+                    if (ref > 0) setPendingPrice(ref.toFixed(digits));
+                  }}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--surface-2)] border border-[var(--border)] text-blue-400 hover:border-blue-500/40 transition-colors"
+                  title="Fill current market price"
+                >
+                  Market
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustByPips(setPendingPrice, -10)}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--surface-2)] border border-[var(--border)] text-gray-300 hover:text-white"
+                >
+                  -10p
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustByPips(setPendingPrice, 10)}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--surface-2)] border border-[var(--border)] text-gray-300 hover:text-white"
+                >
+                  +10p
+                </button>
               </div>
-              <label className="flex items-center gap-1.5 text-[10px] text-gray-300 font-normal cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={isAutoPipTrack}
-                  onChange={(e) => { isAutoPipTrackRef.current = e.target.checked; setIsAutoPipTrack(e.target.checked); }}
-                  className="rounded bg-[var(--surface-2)] border-[var(--border)] text-blue-500 focus:ring-0 w-3.5 h-3.5"
-                />
-                <span>Auto-track live ticks</span>
-              </label>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <div className="h-6.5 px-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded flex items-center font-mono font-bold text-[12px] text-white">
+                  {currentAsk ? currentAsk.toFixed(digits) : 'Market Price'}
+                </div>
+                <label className="flex items-center gap-1.5 text-[10px] text-gray-300 font-normal cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isAutoPipTrack}
+                    onChange={(e) => { isAutoPipTrackRef.current = e.target.checked; setIsAutoPipTrack(e.target.checked); }}
+                    className="rounded bg-[var(--surface-2)] border-[var(--border)] text-blue-500 focus:ring-0 w-3.5 h-3.5"
+                  />
+                  <span>Auto-track live ticks</span>
+                </label>
+              </div>
+            )}
           </div>
+
+          {/* Stop Limit Price (for Buy Stop Limit / Sell Stop Limit) */}
+          {!selectedTicketRow && executionMode === 'pending' && isStopLimitOrder && (
+            <div className="account-trade-field-row grid items-center gap-2 mb-1">
+              <span className="text-gray-400 text-right font-medium text-[10px]">Stop Limit:</span>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center bg-[var(--surface-2)] border border-blue-500/40 rounded overflow-hidden h-6.5">
+                  <button
+                    type="button"
+                    onClick={() => adjustByPips(setPendingLimitPrice, -1)}
+                    className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                    aria-label="Decrease stop limit price"
+                  >
+                    <Minus size={11} />
+                  </button>
+                  <input
+                    type="text"
+                    value={pendingLimitPrice}
+                    aria-label="Stop limit price"
+                    onChange={(e) => setPendingLimitPrice(e.target.value)}
+                    className="w-24 h-full text-center font-mono font-bold text-white bg-transparent text-[12px] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adjustByPips(setPendingLimitPrice, 1)}
+                    className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
+                    aria-label="Increase stop limit price"
+                  >
+                    <Plus size={11} />
+                  </button>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono">Limit execution price</span>
+              </div>
+            </div>
+          )}
+
+          {/* Expiration (Pending Orders) */}
+          {!selectedTicketRow && executionMode === 'pending' && (
+            <div className="account-trade-field-row grid items-center gap-2 mb-1">
+              <span className="text-gray-400 text-right font-medium text-[10px]">Expiration:</span>
+              <div className="flex items-center gap-1.5">
+                <select
+                  aria-label="Order expiration"
+                  value={pendingExpiryType}
+                  onChange={(e) => setPendingExpiryType(e.target.value)}
+                  className="h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 font-semibold text-[11px] focus:border-blue-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="gtc">GTC (Good Till Cancelled)</option>
+                  <option value="today">Today (End of Day)</option>
+                  <option value="specified">Specified Date/Time</option>
+                </select>
+                {pendingExpiryType === 'specified' && (
+                  <input
+                    type="datetime-local"
+                    aria-label="Expiration date and time"
+                    value={pendingExpiryDateTime}
+                    onChange={(e) => setPendingExpiryDateTime(e.target.value)}
+                    className="flex-1 min-w-0 h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 text-gray-200 text-[11px] font-mono focus:border-blue-500 focus:outline-none"
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Stop Loss & Take Profit Cards */}
           <div className="grid grid-cols-2 gap-2 my-1">
@@ -970,6 +1349,28 @@ const AccountTradeTab = ({
             <div><span className="text-[10px] text-gray-400">ASK</span><PricePipsDisplay price={currentAsk} digits={digits} colorClass="text-red-300" /></div>
             <span className="account-trade-spread text-[10px] text-gray-400">Spread: {spreadPips} pips</span>
           </div>
+          {/* Pending Order Primary Submit Button */}
+          {!selectedTicketRow && executionMode === 'pending' && (
+            <div className="my-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => handlePlacePendingOrder()}
+                disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol || !(Number(pendingPrice) > 0)}
+                title={!hasTradeSymbol ? 'Select a symbol before placing an order' : (!(Number(pendingPrice) > 0) ? 'Enter a valid trigger price greater than 0' : `Place ${pendingOrderMeta.label} pending order`)}
+                className={`w-full h-8 rounded-lg font-extrabold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  pendingOrderMeta.side === 'buy'
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/40'
+                    : 'bg-red-600 hover:bg-red-500 text-white border border-red-400/40'
+                }`}
+              >
+                {pendingOrderMeta.side === 'buy' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+                {isPlacingTrade
+                  ? 'Placing Pending Order…'
+                  : `Place ${pendingOrderMeta.label} @ ${Number(pendingPrice) > 0 ? Number(pendingPrice).toFixed(digits) : '--'}`}
+              </button>
+            </div>
+          )}
+
           {/* Market execution actions */}
           <div className="grid grid-cols-2 items-center gap-2 my-1 select-none shrink-0">
             {/* SELL Box */}
@@ -1009,7 +1410,7 @@ const AccountTradeTab = ({
                 onClick={() => setSelectedTicketRow(null)}
                 disabled={isUpdatingTrade || isPlacingTrade}
                 className="h-8 px-3 rounded border border-gray-500/50 bg-gray-500/10 hover:bg-gray-500/20 text-gray-300 font-semibold text-[12px] flex items-center gap-1 transition-colors disabled:opacity-50"
-                title="Clear the selected position and prepare a new market order"
+                title="Clear the selected ticket and prepare a new order"
               >
                 <Plus size={13} /> New order
               </button>
@@ -1023,7 +1424,7 @@ const AccountTradeTab = ({
                 <CheckCircle2 size={14} />
                 {isUpdatingTrade
                   ? 'Modifying…'
-                  : `Modify Position #${selectedTicketRow.position || selectedTicketRow.ticket}`}
+                  : `Modify ${isSelectedPendingOrder ? 'Order' : 'Position'} #${selectedTicketRow.position || selectedTicketRow.ticket}`}
               </button>
 
               {canCloseTrades && (
@@ -1034,24 +1435,26 @@ const AccountTradeTab = ({
                   }
                   disabled={!hasTradeSymbol}
                   className="h-8 px-3 rounded border border-red-500/50 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-[12px] flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!hasTradeSymbol ? 'Select a symbol before closing' : 'Close Position'}
+                  title={!hasTradeSymbol ? 'Select a symbol before closing' : (isSelectedPendingOrder ? 'Cancel Pending Order' : 'Close Position')}
                 >
-                  <Trash2 size={13} /> Close
+                  <Trash2 size={13} /> {isSelectedPendingOrder ? 'Cancel' : 'Close'}
                 </button>
               )}
             </div>
           ) : (
             <div className="mt-0.5 p-1.5 rounded bg-[var(--surface-2)] border border-[var(--border)] shrink-0">
-              {positions.length > 0 ? (
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1 text-gray-400">
-                    <span className="font-medium">Select an open position to modify:</span>
-                    <span className="font-mono text-gray-500">{positions.length} open</span>
+              {(positions.length > 0 || pendingOrders.length > 0) ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[10px] text-gray-400">
+                    <span className="font-medium">Select an open position or pending order to modify:</span>
+                    <span className="font-mono text-gray-500">
+                      {positions.length} open{pendingOrders.length > 0 ? ` · ${pendingOrders.length} pending` : ''}
+                    </span>
                   </div>
                   <div className="flex flex-wrap gap-1 max-h-[52px] overflow-y-auto custom-scrollbar">
                     {positions.map((p) => (
                       <button
-                        key={p.position || p.ticket}
+                        key={`pos-${p.position || p.ticket}`}
                         type="button"
                         onClick={() => handleModifySLTP(p)}
                         className="px-2 py-0.5 rounded bg-[var(--surface-2)] hover:bg-blue-600/25 border border-[var(--border)] text-[10px] font-mono font-medium text-gray-200 flex items-center gap-1.5 transition-colors"
@@ -1067,11 +1470,29 @@ const AccountTradeTab = ({
                         <span className="text-gray-400 font-semibold">{p.symbol}</span>
                       </button>
                     ))}
+                    {pendingOrders.map((o) => (
+                      <button
+                        key={`ord-${o.ticket || o.position}`}
+                        type="button"
+                        onClick={() => handleModifySLTP({ ...o, isPendingOrder: true })}
+                        className="px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/30 text-[10px] font-mono font-medium text-gray-200 flex items-center gap-1.5 transition-colors"
+                        title={`Pending ${o.side || o.type} @ ${o.priceOpen || o.priceTrigger}`}
+                      >
+                        <span className="font-bold text-amber-400">
+                          {String(o.side || o.type || 'PENDING').toUpperCase()}
+                        </span>
+                        <span className="text-gray-300">#{o.ticket || o.position}</span>
+                        <span className="text-gray-400 font-semibold">{o.symbol}</span>
+                        <span className="text-amber-300/90">@{o.priceOpen || o.priceTrigger}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               ) : (
                 <div className="text-center text-gray-400 py-1 text-[10px] font-normal">
-                  Use the SELL or BUY quote above to place a new market order for account #{loginId}.
+                  {executionMode === 'pending'
+                    ? `Configure trigger price and click Place ${pendingOrderMeta.label} above for account #${loginId}.`
+                    : `Use the SELL or BUY quote above to place a new market order for account #${loginId}.`}
                 </div>
               )}
             </div>

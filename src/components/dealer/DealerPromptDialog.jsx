@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const DealerPromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
+const DealerPromptDialog = ({ title, fields = [], onSubmit, onCancel, loading }) => {
   const [values, setValues] = useState(() => {
     const init = {};
     fields.forEach((field) => {

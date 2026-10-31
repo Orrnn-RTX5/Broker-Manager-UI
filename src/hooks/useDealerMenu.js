@@ -19,6 +19,8 @@ import {
   positionCommentChange,
   positionForceClose,
   positionForceCloseAll,
+  orderModify,
+  orderDelete,
   orderPriceChange,
   orderReject,
   orderApprove,
@@ -197,6 +199,45 @@ export const useDealerMenu = (onRefresh) => {
     const ticket = order?.ticket;
     return [
       {
+        text: 'Modify Order (Price / SL / TP)',
+        icon: DollarSign,
+        iconTone: 'accent',
+        onClick: () => setDialog({
+          title: `Modify Pending Order - #${ticket}`,
+          fields: [
+            {
+              key: 'price',
+              label: 'Trigger Price',
+              type: 'number',
+              step: '0.00001',
+              required: true,
+              defaultValue: order?.priceOpen || order?.priceTrigger || '',
+            },
+            {
+              key: 'stoploss',
+              label: 'Stop Loss (SL)',
+              type: 'number',
+              step: '0.00001',
+              defaultValue: order?.priceSl ?? 0,
+            },
+            {
+              key: 'takeprofit',
+              label: 'Take Profit (TP)',
+              type: 'number',
+              step: '0.00001',
+              defaultValue: order?.priceTp ?? 0,
+            },
+          ],
+          onSubmit: (values) => exec(() => orderModify({
+            ticket,
+            login: order?.login || order?.accountLogin || order?.account_login,
+            price: Number(values.price),
+            stoploss: values.stoploss === '' || values.stoploss === undefined ? undefined : Number(values.stoploss),
+            takeprofit: values.takeprofit === '' || values.takeprofit === undefined ? undefined : Number(values.takeprofit),
+          })),
+        }),
+      },
+      {
         text: 'Change Price',
         icon: DollarSign,
         iconTone: 'accent',
@@ -208,9 +249,23 @@ export const useDealerMenu = (onRefresh) => {
             type: 'number',
             step: '0.00001',
             required: true,
-            defaultValue: order?.priceOpen || '',
+            defaultValue: order?.priceOpen || order?.priceTrigger || '',
           }],
-          onSubmit: (values) => exec(() => orderPriceChange(ticket, values.price)),
+          onSubmit: (values) => exec(() => orderPriceChange(ticket, values.price, order?.login || order?.accountLogin || order?.account_login)),
+        }),
+      },
+      {
+        text: 'Cancel Pending Order',
+        icon: XSquare,
+        iconTone: 'danger',
+        onClick: () => setDialog({
+          title: `Cancel Pending Order - #${ticket}`,
+          fields: [{
+            key: 'confirm',
+            type: 'note',
+            text: `Cancel pending order #${ticket} (${order?.symbol || ''} ${order?.side || order?.type || ''})?`,
+          }],
+          onSubmit: () => exec(() => orderDelete(ticket)),
         }),
       },
       { isSep: true },

@@ -2,7 +2,7 @@ import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Minus, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
-import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
+import { completeAccountPositions, getAccountPendingOrders, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
 import { useLivePositions, useLiveAccountMetrics } from '../../hooks/useLiveTrading';
@@ -12,11 +12,11 @@ import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import AccountTradeTab from './AccountTradeTab';
 import DepositDialog from './DepositDialog';
-import { orderDelete } from '../../services/tradeApi';
+
 import { changeManagerPassword, checkManagerPassword } from '../../services/managerPasswordApi';
 import { loadAccountDetails, peekAccountDetails, updateCachedAccountDetails } from '../../services/accountDetails';
 import { useAccountDetails } from '../../hooks/useAccountDetails';
-import { closeManagerPosition } from '../../services/managerTradeApi';
+import { cancelManagerPendingOrder, closeManagerPosition } from '../../services/managerTradeApi';
 import { submitManagerTransaction } from '../../services/managerFinanceApi';
 import { updateManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -397,9 +397,9 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
       style={style}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <TradeContextMenuItem text={`TRADE #${data?.position || '---'}`} isHeader />
-      <TradeContextMenuItem icon={Plus} text="New Order" color="var(--ok-text)" />
-      <TradeContextMenuItem icon={CheckCircle2} text="Close Position" color="var(--danger-text)" disabled={!canCloseTrades} onClick={() => { onCloseTrade(data.position); onClose(); }} />
+      <TradeContextMenuItem text={`${data?.isPendingOrder ? 'ORDER' : 'TRADE'} #${data?.position || data?.ticket || '---'}`} isHeader />
+      <TradeContextMenuItem icon={Plus} text="New Order" color="var(--ok-text)" onClick={() => { onModify(null); onClose(); }} />
+      <TradeContextMenuItem icon={CheckCircle2} text={data?.isPendingOrder ? 'Cancel Pending Order' : 'Close Position'} color="var(--danger-text)" disabled={!canCloseTrades} onClick={() => { onCloseTrade(data.position || data.ticket); onClose(); }} />
       <TradeContextMenuItem icon={Edit3} text="Modify or Cancel" color="var(--accent)" disabled={!canManipulateTrades} onClick={() => { onModify(data); onClose(); }} />
       <TradeContextMenuItem icon={Play} text="Activate" />
       <TradeContextMenuSeparator />
@@ -491,6 +491,7 @@ const AccountDetailsModal = ({
   };
 
   const [snapshotPositions, setPositions] = useState(() => initialPositions || []);
+  const [pendingOrders, setPendingOrders] = useState([]);
   const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
   const positions = useLivePositions(showPositions ? snapshotPositions : [], loginId, showPositions, positionsSnapshotRevision);
   const liveMetrics = useLiveAccountMetrics(loginId);
@@ -507,7 +508,7 @@ const AccountDetailsModal = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
   const tradeConfirmationRef = useRef(null);
-  const isOrderCancellation = entity === 'order';
+  const isOrderCancellation = entity === 'order' || Boolean(pendingTradeClose?.isPendingOrder) || Boolean(selectedTicketRow?.isPendingOrder);
   const previousLoginIdRef = useRef(loginId);
 
   useEffect(() => {
@@ -526,6 +527,7 @@ const AccountDetailsModal = ({
     setDepositSuccess(null);
     finishDepositConfirmation(false);
     setPositions(canViewPositions ? (peekAccountPositions(loginId) || []) : []);
+    setPendingOrders([]);
     setPositionsError('');
     setHistoryRows([]);
     setHistoryError('');
@@ -922,6 +924,26 @@ const AccountDetailsModal = ({
       return;
     }
     const ticket = trade?.position ?? trade?.ticket;
+    const pendingDetails = ticket !== undefined && ticket !== null
+      ? pendingOrders.find((order) => String(order.ticket ?? order.position) === String(ticket))
+      : undefined;
+    const isTargetPending = entity === 'order'
+      || Boolean(trade?.isPendingOrder)
+      || Boolean(pendingDetails)
+      || Boolean(selectedTicketRow?.isPendingOrder && String(selectedTicketRow.position ?? selectedTicketRow.ticket) === String(ticket));
+    if (isTargetPending) {
+      const orderRow = pendingDetails || (selectedTicketRow?.isPendingOrder ? selectedTicketRow : {});
+      setPendingTradeClose({
+        ...orderRow,
+        ...trade,
+        position: ticket,
+        ticket,
+        symbol: trade?.symbol || orderRow?.symbol || '',
+        type: trade?.side || trade?.type || orderRow?.side || orderRow?.type || 'PENDING',
+        isPendingOrder: true,
+      });
+      return;
+    }
     const positionDetails = entity === 'position' && ticket !== undefined && ticket !== null
       ? positions.find(position => String(position.position) === String(ticket))
       : undefined;
@@ -941,11 +963,14 @@ const AccountDetailsModal = ({
 
   const handleDeleteTrade = async (ticket) => {
     if (!requireTradeClosePermission()) return;
+    const isTargetPending = entity === 'order'
+      || Boolean(pendingTradeClose?.isPendingOrder)
+      || pendingOrders.some((o) => String(o.ticket ?? o.position) === String(ticket));
     // Defense in depth behind requestTradeClose and the disabled confirm
     // button: never send a position close when the ticket's symbol cannot be
     // resolved from the positions list already in scope (or the pending
     // confirmation row). Orders cancel by ticket and stay ungated here.
-    if (entity === 'position') {
+    if (entity === 'position' && !isTargetPending) {
       const resolvedSymbol = [positions.find((position) => String(position.position) === String(ticket))?.symbol, pendingTradeClose?.symbol]
         .map((value) => String(value ?? '').trim())
         .find((value) => value !== '') ?? '';
@@ -955,38 +980,44 @@ const AccountDetailsModal = ({
       }
     }
     setIsDeleting(true);
-    const label = entity === 'order' ? `Cancel Order #${ticket}` : `Close Position #${ticket}`;
+    const label = isTargetPending ? `Cancel Order #${ticket}` : `Close Position #${ticket}`;
     try {
       let result;
-      if (entity === 'order') {
-        result = await orderDelete(ticket);
+      if (isTargetPending) {
+        result = await cancelManagerPendingOrder({ login: loginId, ticket });
       } else {
         result = await closeManagerPosition(ticket);
       }
       console.log(`[${label}] response:`, redactSensitive(result));
       const message = result?.message || JSON.stringify(result);
       const outcome = normalizeResult(result);
-      if (entity === 'order') {
+      if (isTargetPending) {
         showResult({ ...result, message: `${label}\n\n${message}` });
       }
       // A completed HTTP request can still report a rejected or pending close.
       // Only remove a trade when the result confirms success.
       if (outcome.type !== 'success') return;
       invalidatePositionsCache(loginId);
-      setPositions(prev => prev.filter(p => String(p.position) !== String(ticket)));
-      if (entity === 'position') {
+      if (isTargetPending) {
+        setPendingOrders(prev => prev.filter(o => String(o.ticket ?? o.position) !== String(ticket)));
         setSelectedTicketRow(null);
         setPositionSyncRevision(revision => revision + 1);
+      } else {
+        setPositions(prev => prev.filter(p => String(p.position) !== String(ticket)));
+        if (entity === 'position') {
+          setSelectedTicketRow(null);
+          setPositionSyncRevision(revision => revision + 1);
+        }
       }
     } catch (err) {
       console.error(`[${label}] error:`, err);
       const status = err?.code || err?.status || 'ERROR';
       const message = `${label} failed\n\nstatus: ${status}\nmessage: ${err?.message || String(err)}`;
-      if (entity === 'order') showResult.error(message);
+      if (isTargetPending) showResult.error(message);
     } finally {
       setIsDeleting(false);
       setPendingTradeClose(null);
-      if (entity === 'position') {
+      if (entity === 'position' && !isTargetPending) {
         // Keep the full account trade list visible after either outcome.
         setFocusedTicket(null);
         setActiveTab('Overview');
@@ -1146,10 +1177,15 @@ const AccountDetailsModal = ({
       setPositionsLoading(true);
       setPositionsError('');
       try {
-        let mine = await getAccountPositions(loginId);
+        const [mineInitial, myPending] = await Promise.all([
+          getAccountPositions(loginId),
+          getAccountPendingOrders(loginId).catch(() => []),
+        ]);
+        let mine = mineInitial;
         if (!active) return;
         setPositionsSnapshotRevision(startedRevision);
         setPositions(mine);
+        setPendingOrders(Array.isArray(myPending) ? myPending : []);
 
         if (hasAccountPositionsContinuation(loginId)) {
           mine = await completeAccountPositions(loginId, mine, {
@@ -1163,11 +1199,13 @@ const AccountDetailsModal = ({
 
         // When the popup was opened via double-click on a row, `focusedTicket`
         // holds that row's ticket. Auto-select it so the Trade tab is pre-wired
-        // to that position (no more "Select a row" placeholder).
+        // to that position or pending order.
         if (focusedTicket) {
           const hit = mine.find(p =>
             String(p.position ?? p.ticket) === String(focusedTicket)
-          );
+          ) || (Array.isArray(myPending) ? myPending.find(o =>
+            String(o.ticket ?? o.position) === String(focusedTicket)
+          ) : null);
           if (hit) {
             setSelectedTicketRow(hit);
           } else {
@@ -1180,6 +1218,7 @@ const AccountDetailsModal = ({
               type: '',
               priceSl: 0,
               priceTp: 0,
+              isPendingOrder: entity === 'order',
             });
           }
         }
@@ -1201,6 +1240,7 @@ const AccountDetailsModal = ({
             type: '',
             priceSl: 0,
             priceTp: 0,
+            isPendingOrder: entity === 'order',
           });
         }
       } finally {
@@ -1844,6 +1884,58 @@ const AccountDetailsModal = ({
                               );
                             })}
 
+                            {(showPositions ? (focusedTicket ? pendingOrders.filter(o => String(o.ticket ?? o.position) === String(focusedTicket)) : pendingOrders) : []).map((ord) => {
+                              const ordTicket = ord.ticket || ord.position;
+                              const sideText = String(ord.side || ord.type || 'pending').toLowerCase().replace(/_/g, ' ');
+                              const volNum = Number(ord.volume ?? ord.lots ?? 0);
+                              const pendingRow = { ...ord, position: ordTicket, ticket: ordTicket, isPendingOrder: true };
+                              return (
+                                <div
+                                  key={`pending-${ordTicket}`}
+                                  onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pendingRow });
+                                  }}
+                                  className="account-overview-pos-grid account-overview-pos-row cursor-pointer opacity-90"
+                                  title="Working pending order — double-click to modify or cancel"
+                                >
+                                  <div className="is-left account-overview-pos-symbol">
+                                    <PositionSymbolIcon type={sideText.includes('buy') ? 'buy' : 'sell'} />
+                                    <span className="truncate">{ord.symbol}</span>
+                                  </div>
+                                  <div className="is-right text-amber-400 font-semibold">{sideText}</div>
+                                  <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : ord.volume}</div>
+                                  <div
+                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                    className="is-right tabular cursor-pointer"
+                                    title="Double-click to modify trigger price"
+                                  >
+                                    {Number(ord.priceOpen || ord.priceTrigger || 0).toFixed(5)}
+                                  </div>
+                                  <div
+                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                    className="is-right tabular cursor-pointer"
+                                    title="Double-click to modify S/L"
+                                  >
+                                    {Number(ord.priceSl || 0).toFixed(5)}
+                                  </div>
+                                  <div
+                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                    className="is-right tabular cursor-pointer"
+                                    title="Double-click to modify T/P"
+                                  >
+                                    {Number(ord.priceTp || 0).toFixed(5)}
+                                  </div>
+                                  <div className="is-right tabular">—</div>
+                                  <div className="is-right tabular">0.00</div>
+                                  <div className="is-right is-last tabular text-amber-400 font-semibold">
+                                    placed
+                                  </div>
+                                </div>
+                              );
+                            })}
+
                             {/* Grey Financial Summary Strip */}
                             <div
                               className="account-overview-summary-strip"
@@ -2058,9 +2150,10 @@ const AccountDetailsModal = ({
                 loginId={loginId}
                 account={account}
                 positions={showPositions ? positions : []}
+                pendingOrders={showPositions ? pendingOrders : []}
                 selectedTicketRow={showPositions ? selectedTicketRow : null}
                 setSelectedTicketRow={setSelectedTicketRow}
-                adapter={adapter}
+                adapter={selectedTicketRow?.isPendingOrder ? orderAdapter : adapter}
                 canManipulateTrades={canManipulateTrades}
                 canCloseTrades={canCloseTrades}
                 handleModifySLTP={handleModifySLTP}

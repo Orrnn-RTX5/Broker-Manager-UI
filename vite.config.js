@@ -282,6 +282,14 @@ export default defineConfig(({ mode, command }) => {
           rewrite: (path) => path.replace(/^\/discovery-api/, ''),
           configure: (proxy) => configureSafeProxy(proxy, { customOrigin: discoveryHost }),
         },
+        '^/ws/manager-trade(?:\\?|$)': {
+          target: discoveryHost,
+          changeOrigin: true,
+          secure: proxySecure,
+          agent: getProxyAgent(discoveryHost),
+          ws: true,
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true, customOrigin: discoveryHost }),
+        },
         '^/api/manager(?:/|\\?|$)': {
           target: apiHost,
           changeOrigin: true,

@@ -168,30 +168,41 @@ const normalizeLots = (p = {}) => {
 
 export const normalizeOrderRow = (p = {}) => {
   let type = 'unknown';
-  if (typeof p.type === 'string') type = p.type.toLowerCase();
-  else if (typeof p.side === 'string') type = p.side.toLowerCase();
+  if (typeof p.type === 'string' && p.type.trim()) type = p.type.trim().toLowerCase();
+  else if (typeof p.side === 'string' && p.side.trim()) type = p.side.trim().toLowerCase();
   else if (p.type === 0 || p.cmd === 0) type = 'buy';
   else if (p.type === 1 || p.cmd === 1) type = 'sell';
 
   const volume = normalizeLots(p);
+  const rawPrice = p.priceOpen ?? p.PriceOpen ?? p.openPrice ?? p.priceTrigger ?? p.price_trigger ?? p.price ?? 0;
+  const rawLimitPrice = p.priceLimit ?? p.price_limit ?? p.limitPrice ?? 0;
+  const rawSl = p.priceSl ?? p.sl ?? p.stopLoss ?? p.stop_loss ?? 0;
+  const rawTp = p.priceTp ?? p.tp ?? p.takeProfit ?? p.take_profit ?? 0;
+  const status = String(p.status || '').trim();
+  const sideLabel = p.side || (typeof p.type === 'string' ? p.type.replace(/_/g, ' ').toUpperCase() : type.toUpperCase());
 
   return {
-    ticket: p.ticket || p.position || 0,
-    login: String(p.login || p.Login || ''),
-    name: p.accountName || p.AccountName || p.username || '',
+    ticket: p.ticket || p.position || p.order_id || 0,
+    position: p.ticket || p.position || p.order_id || 0,
+    login: String(p.login || p.Login || p.account_id || ''),
+    name: p.accountName || p.AccountName || p.username || p.name || '',
     email: p.username || p.email || '',
     group: p.accountGroup || p.AccountGroup || p.group || '',
     symbol: p.symbol || p.Symbol || '',
     type,
-    side: p.side || '',
+    side: sideLabel,
     volume,
-    priceOpen: p.priceOpen || p.PriceOpen || p.openPrice || 0,
-    priceSl: p.priceSl || p.sl || 0,
-    priceTp: p.priceTp || p.tp || 0,
-    status: p.status || '',
-    timeSetup: p.timeSetup || p.timeCreate || 0,
-    timeDone: p.timeDone || p.timeUpdate || 0,
+    priceOpen: Number(rawPrice) || 0,
+    priceTrigger: Number(p.priceTrigger ?? p.price_trigger ?? rawPrice) || 0,
+    priceLimit: Number(rawLimitPrice) || 0,
+    priceSl: Number(rawSl) || 0,
+    priceTp: Number(rawTp) || 0,
+    status,
+    timeSetup: p.timeSetup || p.timeCreate || p.created_at || 0,
+    timeDone: p.timeDone || p.timeUpdate || p.updated_at || 0,
+    timeExpiry: p.timeExpiry || p.expiry_time || 0,
     comment: String(p.comment || ''),
+    isPendingOrder: status.toLowerCase() === 'pending' || /limit|stop/i.test(type),
   };
 };
 
@@ -1283,9 +1294,74 @@ export const getOrders = async () => {
   return page.rows;
 };
 
-export const getOrdersPage = async (params = {}, options = {}) => (
-  getPaged('/BrokerOrders', params, normalizeOrderRow, ['orders'], options)
-);
+export const getAccountPendingOrders = async (login, options = {}) => {
+  const normalizedLogin = String(login ?? '').trim();
+  if (!normalizedLogin) return [];
+  const data = await apiClient.get(`/Orders?${arrayQuery('logins[]', [normalizedLogin])}`, options);
+  const records = getRecords(data, 'orders');
+  return records
+    .map(normalizeOrderRow)
+    .filter((row) => String(row.login) === normalizedLogin);
+};
+
+export const getAccountPendingOrderHistory = async (login, options = {}) => {
+  const normalizedLogin = String(login ?? '').trim();
+  if (!normalizedLogin) return [];
+  const data = await apiClient.get(`/PendingOrderHistory?${query({ login: normalizedLogin })}`, options);
+  const records = getRecords(data, 'orders');
+  return records
+    .map(normalizeOrderRow)
+    .filter((row) => !row.login || String(row.login) === normalizedLogin);
+};
+
+export const getOrdersPage = async (params = {}, options = {}) => {
+  const basePage = await getPaged('/BrokerOrders', params, normalizeOrderRow, ['orders'], options);
+  if (Number(params.offset || 0) > 0) return basePage;
+  try {
+    const accountRows = Array.isArray(accountDetailsFirstPage?.rows) ? accountDetailsFirstPage.rows : [];
+    const accountByLogin = new Map(accountRows.map((row) => [String(row.login ?? row.Login ?? ''), row]));
+    const searchStr = String(params.search || '').trim();
+    const candidateLogins = new Set([
+      ...knownPositionLogins,
+      ...accountRows.slice(0, 50).map((row) => String(row.login ?? row.Login ?? '')).filter(Boolean),
+    ]);
+    if (/^\d+$/.test(searchStr)) candidateLogins.add(searchStr);
+    const logins = [...candidateLogins].filter((l) => /^\d+$/.test(l)).slice(0, 50);
+    if (logins.length === 0) return basePage;
+    const pendingData = await apiClient.get(`/Orders?${arrayQuery('logins[]', logins)}`, options);
+    const pendingRecords = getRecords(pendingData, 'orders').map((raw) => {
+      const normalized = normalizeOrderRow(raw);
+      const acct = accountByLogin.get(String(normalized.login));
+      if (acct) {
+        return {
+          ...normalized,
+          name: normalized.name || acct.name || acct.Name || '',
+          email: normalized.email || acct.email || acct.Email || '',
+          group: normalized.group || acct.group || acct.Group || '',
+        };
+      }
+      return normalized;
+    });
+    if (pendingRecords.length === 0) return basePage;
+    const existingTickets = new Set((basePage.rows || []).map((r) => String(r.ticket)));
+    const filteredPending = pendingRecords.filter((row) => {
+      if (!row.ticket || existingTickets.has(String(row.ticket))) return false;
+      if (!searchStr) return true;
+      const q = searchStr.toLowerCase();
+      return [row.ticket, row.login, row.name, row.email, row.group, row.symbol, row.type, row.side, row.status, row.comment]
+        .some((val) => String(val ?? '').toLowerCase().includes(q));
+    });
+    if (filteredPending.length === 0) return basePage;
+    const combinedRows = [...filteredPending, ...(basePage.rows || [])];
+    return {
+      ...basePage,
+      rows: combinedRows,
+      total: Number(basePage.total || 0) + filteredPending.length,
+    };
+  } catch {
+    return basePage;
+  }
+};
 
 export const getBrokerDeals = async () => {
   const page = await getBrokerDealsPage({ limit: 30, offset: 0 });
