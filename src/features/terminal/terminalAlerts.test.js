@@ -31,8 +31,8 @@ test('group levels override defaults and margin level falls back to equity / mar
     { login: '8', group: 'PREP\\real\\A', margin: 1000, equity: 1400 },
     { login: '9', group: 'other', margin: 1000, equity: 1300 },
   ], groups);
+  // Group names are case-sensitive: 'prep\real\a' is another group and keeps the defaults.
   assert.deepEqual(alerts.map((a) => [a.login, a.type, Math.round(a.marginLevel)]), [
-    ['7', 'margin-call', 130],
     ['8', 'margin-call', 140],
   ]);
 });

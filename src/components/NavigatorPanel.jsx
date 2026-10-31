@@ -17,7 +17,7 @@ import { useMultiScreenStore } from '../store/multiScreenStore';
 import GroupPermissionNotice from '../features/groups/components/GroupPermissionNotice';
 import { getGroupsFolderPath, getGroupsSelectedFromSearch } from '../features/groups/groupRoutes';
 import { buildGroupNavigatorTree, getGroupParentPath } from '../features/groups/groupTree.js';
-import { accountsByGroupName, countAccountsByGroup } from '../features/groups/groupAccountRows.js';
+import { accountsByGroupName, countAccountsByGroup, groupNameKey } from '../features/groups/groupAccountRows.js';
 import { AccountMark, GroupFolderIcon } from '../features/groups/groupMarks.jsx';
 import { getSidebarAccountsQueryOptions } from '../services/sidebarAccounts.js';
 import { PERMISSIONS } from '../utils/permissions';
@@ -436,7 +436,7 @@ function NavigatorPanel() {
   // Ones that hold accounts directly show how many accounts, and open that list.
   const renderGroupTreeNode = (node) => {
     if (node.type === 'group') {
-      const groupKey = String(node.group?.name || node.path).trim().toLowerCase();
+      const groupKey = groupNameKey(node.group?.name || node.path);
       const groupPath = getGroupsFolderPath(getGroupParentPath(node.path), node.path);
       const accounts = accountsByGroup.get(groupKey) || [];
       const accountCount = accounts.length || accountCounts.get(groupKey) || 0;

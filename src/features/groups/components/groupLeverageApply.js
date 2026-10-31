@@ -9,21 +9,61 @@
 // file exports only the component, and so both helpers are directly
 // unit-testable. Tenant-agnostic: no tenant, broker, group, or account
 // literals; values flow from the selected group and its members.
-import { readLeverageRatio } from '../groupAccountRows.js';
+import { groupNameKey, readLeverageRatio, storedGroupOf } from '../groupAccountRows.js';
+
+// In-flight registry: the group names with an apply write running. It lives at module level, so
+// it survives a tab switch or remount (component state would not). Keyed by the exact group name
+// (case-sensitive, trim only, like group identity). Components subscribe so Apply re-renders when
+// a write starts or ends. An entry is always cleared in `finally` by the caller.
+const inFlightGroupApplies = new Set();
+const registryListeners = new Set();
+
+const notifyRegistry = () => {
+  for (const listener of registryListeners) listener();
+};
+
+/** Marks a group's apply as started. False when that group already has a write in flight. */
+export const beginGroupApply = (groupName) => {
+  const key = groupNameKey(groupName);
+  if (!key || inFlightGroupApplies.has(key)) return false;
+  inFlightGroupApplies.add(key);
+  notifyRegistry();
+  return true;
+};
+
+/** Clears a group's in-flight mark. Call from `finally`. */
+export const endGroupApply = (groupName) => {
+  if (inFlightGroupApplies.delete(groupNameKey(groupName))) notifyRegistry();
+};
+
+export const isGroupApplyInFlight = (groupName) => inFlightGroupApplies.has(groupNameKey(groupName));
+
+/** Subscribes to registry changes (for useSyncExternalStore). Returns the unsubscribe function. */
+export const subscribeGroupApply = (listener) => {
+  registryListeners.add(listener);
+  return () => { registryListeners.delete(listener); };
+};
 
 /**
  * Push the group leverage onto members whose leverage differs. Returns
  * { succeeded, failed, total }. Never writes unless confirm is true and a
  * working updateAccount function is provided.
+ *
+ * expectedGroup is the exact (case-sensitive, trim only) group name. Members of
+ * any other group are skipped. Every PATCH carries `ExpectedGroup` = the
+ * member's stored group value byte-exact (B1 contract), so the backend refuses
+ * (409 ACCOUNT_GROUP_MISMATCH) an account that left the group.
  */
-export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount }) => {
+export const applyGroupLeverage = async ({ members, groupLeverage, confirm, updateAccount, expectedGroup }) => {
   const leverage = readLeverageRatio({ leverage: groupLeverage });
-  if (!confirm || !leverage || typeof updateAccount !== 'function') {
+  const group = String(expectedGroup ?? '').trim();
+  if (!confirm || !leverage || typeof updateAccount !== 'function' || !group) {
     return { succeeded: 0, failed: 0, total: 0, succeededLogins: [] };
   }
+  // Same accessor as the account list (accountsInGroup), so every listed member is a candidate here.
   const candidates = (members || []).filter((member) => {
     const login = member?.login;
-    return login !== undefined && login !== null && String(login).trim() !== '';
+    return login !== undefined && login !== null && String(login).trim() !== '' && storedGroupOf(member).trim() === group;
   });
   const stale = candidates.filter((member) => (readLeverageRatio(member) ?? leverage) !== leverage);
   let succeeded = 0;
@@ -31,7 +71,7 @@ export const applyGroupLeverage = async ({ members, groupLeverage, confirm, upda
   const succeededLogins = [];
   for (const member of stale) {
     try {
-      await updateAccount(member.login, { Leverage: leverage });
+      await updateAccount(member.login, { Leverage: leverage, ExpectedGroup: storedGroupOf(member) });
       succeeded += 1;
       succeededLogins.push(member.login);
     } catch {

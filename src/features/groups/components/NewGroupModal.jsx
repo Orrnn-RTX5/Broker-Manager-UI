@@ -3,12 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X, AlertCircle, Move } from 'lucide-react';
 import SymbolSelector from './SymbolSelector';
+import { ALLOW_ALL_SYMBOLS, emptyAllowedSymbolsError, isAllowAllSymbols, symbolKey } from '../groupSymbolAvailability.js';
 import GroupPermissionNotice from './GroupPermissionNotice';
 import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
-import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, GROUP_ALLOWED_FIELDS, bookTypeForRoutingMode, buildNewGroupPayload, pickGroupPayloadFields as pickAllowedFields, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
+import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, buildGroupSavePayload, buildNewGroupPayload, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
@@ -252,6 +253,7 @@ const NewGroupModal = ({
   onHeaderPointerDown,
 }) => {
   const titleId = useId();
+  const refusedSymbolsId = useId();
   const queryClient = useQueryClient();
   const { canAct } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
@@ -347,12 +349,31 @@ const NewGroupModal = ({
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
   };
-  const [formData, setFormData] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
+  const [initialForm] = useState(() => buildNewGroupFormData({ initialData, duplicateData, presetName }));
+  const [formData, setFormData] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Mapped GROUP_POLICY server errors, keyed by policy field and rendered
   // inline on the named field. Cleared per field on edit and on resubmit.
   const [fieldErrors, setFieldErrors] = useState({});
+  // Allowed symbols the last save refused (no enabled instrument). Shown as one
+  // list and marked in the picker; cleared on resubmit.
+  const [refusedSymbols, setRefusedSymbols] = useState([]);
+  // The explicit list kept while "Allow all symbols" is on, restored when it
+  // is turned off again in the same edit.
+  const explicitAllowedRef = useRef('');
+  const allowAllSymbols = isAllowAllSymbols(formData.symbolsAllowed);
+  const setAllowAllSymbols = (on) => {
+    setFormData((prev) => {
+      if (on === isAllowAllSymbols(prev.symbolsAllowed)) return prev;
+      if (on) {
+        explicitAllowedRef.current = prev.symbolsAllowed;
+        return { ...prev, symbolsAllowed: ALLOW_ALL_SYMBOLS };
+      }
+      return { ...prev, symbolsAllowed: explicitAllowedRef.current };
+    });
+    setRefusedSymbols([]);
+  };
   const [permissionDenied, setPermissionDenied] = useState(false);
 
   // Duplicate/edit sources keep their value and count as touched, so parent
@@ -435,6 +456,11 @@ const NewGroupModal = ({
 
   const handleArrayChange = (key, csvString) => {
     setFormData(prev => ({ ...prev, [key]: csvString }));
+    // A refused symbol the operator removed is no longer flagged.
+    if (key === 'symbolsAllowed') {
+      const kept = new Set(String(csvString ?? '').split(',').map(symbolKey).filter(Boolean));
+      setRefusedSymbols((prev) => (prev.some((symbol) => !kept.has(symbolKey(symbol))) ? prev.filter((symbol) => kept.has(symbolKey(symbol))) : prev));
+    }
   };
 
   const handleSubmit = async () => {
@@ -450,6 +476,16 @@ const NewGroupModal = ({
     });
     if (fieldError) {
       setError(fieldError);
+      setFieldErrors({});
+      return;
+    }
+    const allowedError = emptyAllowedSymbolsError({
+      value: formData.symbolsAllowed,
+      initialValue: initialData?.symbolsAllowed,
+      isEditing,
+    });
+    if (allowedError) {
+      setError(allowedError);
       setFieldErrors({});
       return;
     }
@@ -470,9 +506,13 @@ const NewGroupModal = ({
       setLoading(true);
       setError(null);
       setFieldErrors({});
+      setRefusedSymbols([]);
 
+      // Edits send only the changed fields (like GroupPropertiesModal), so an
+      // untouched save never re-pushes leverage/margin onto the group's
+      // accounts. A changed name is refused by submitGroup (no group rename).
       const payload = isEditing
-        ? pickAllowedFields(formData, GROUP_ALLOWED_FIELDS)
+        ? buildGroupSavePayload(initialForm, formData)
         : buildNewGroupPayload(formData, { leverageTouched: leverageTouched.current });
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
@@ -481,7 +521,7 @@ const NewGroupModal = ({
         payload.symbolsBlocked = payload.symbolsBlocked.split(',').map(s => s.trim()).filter(Boolean);
       }
 
-      // Update writes the group's leverage, margin, and name onto each account in the group.
+      // Update writes the changed leverage/margin onto each account of exactly this group.
       const saved = await submitGroup({
         originalName: isEditing ? String(initialData.name) : '',
         payload,
@@ -516,7 +556,14 @@ const NewGroupModal = ({
         }
       } else {
         setFieldErrors({});
-        setError(err instanceof Error ? err.message : mapped);
+        const refused = Array.isArray(err?.unavailableSymbols) ? err.unavailableSymbols : [];
+        if (refused.length > 0 && err.symbolsNotConfigured) {
+          setRefusedSymbols(refused);
+          setError(null);
+        } else {
+          // Any other refusal (feed scope, group in use, ...) keeps the server text.
+          setError(err instanceof Error ? err.message : mapped);
+        }
       }
     } finally {
       setLoading(false);
@@ -681,7 +728,23 @@ const NewGroupModal = ({
             <h2>Trading symbols</h2>
             <p>Choose allowed and restricted trading instruments.</p>
           </div>
-          <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} />
+          <CheckField label="Allow all symbols" checked={allowAllSymbols} onChange={setAllowAllSymbols} />
+          <p className="group-create-hint">
+            {allowAllSymbols
+              ? 'Every symbol with an enabled instrument is allowed, including symbols enabled later. Blocked symbols still apply.'
+              : String(formData.symbolsAllowed ?? '').trim() === ''
+                ? (emptyAllowedSymbolsError({ value: formData.symbolsAllowed, initialValue: initialData?.symbolsAllowed, isEditing }) === null
+                  ? 'No symbols are listed: the server then allows every enabled instrument. Select symbols, or tick "Allow all symbols" to make that explicit.'
+                  : 'Select at least one symbol, or tick "Allow all symbols", before saving.')
+                : 'Only symbols with an enabled instrument can be selected.'}
+          </p>
+          <SymbolSelector label="Allowed symbols" value={formData.symbolsAllowed} onChange={(v) => handleArrayChange('symbolsAllowed', v)} restrictToConfigured refusedSymbols={refusedSymbols} disabled={allowAllSymbols} />
+          {refusedSymbols.length > 0 ? (
+            <FieldError
+              id={refusedSymbolsId}
+              message={`These symbols are not configured: ${refusedSymbols.join(', ')}. Remove them from Allowed symbols, or enable them in Admin → Symbol Management, then save again.`}
+            />
+          ) : null}
           <SymbolSelector label="Blocked symbols" value={formData.symbolsBlocked} onChange={(v) => handleArrayChange('symbolsBlocked', v)} />
         </section>
       </div>

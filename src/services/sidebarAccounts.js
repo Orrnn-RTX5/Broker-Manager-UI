@@ -151,13 +151,16 @@ export const fetchSidebarAccountDetails = async (login, { signal } = {}) => {
 
 let inflightAllSidebarAccounts = null;
 
-export const fetchAllSidebarAccounts = async ({ search = '', signal } = {}) => {
+// `fresh: true` starts its own read and never reuses one already in flight. Write paths that
+// decide membership (group-wide patches) use it, so their read cannot have started before the click.
+export const fetchAllSidebarAccounts = async ({ search = '', signal, fresh = false } = {}) => {
   const normalizedSearch = String(search || '').trim();
   const scope = getDataAccessScope();
   const revision = getRealtimeCacheRevision();
 
   if (
     !normalizedSearch
+    && !fresh
     && inflightAllSidebarAccounts
     && inflightAllSidebarAccounts.revision === revision
     && matchesDataAccessScope(inflightAllSidebarAccounts.scope)

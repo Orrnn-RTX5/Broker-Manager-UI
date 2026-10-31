@@ -13,8 +13,12 @@ const money = (value) => {
     : number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export const sameGroupName = (left, right) =>
-  String(left ?? '').trim().toLowerCase() === String(right ?? '').trim().toLowerCase();
+// Group names are case-sensitive identities: "Alpha" and "ALPHA" are two
+// groups with their own accounts. Keys trim only, never fold case (search may
+// still be case-insensitive; identity never is).
+export const groupNameKey = (name) => String(name ?? '').trim();
+
+export const sameGroupName = (left, right) => groupNameKey(left) === groupNameKey(right);
 
 export const GROUP_ACCOUNT_COLUMNS = [
   { key: 'login', label: 'Login' },
@@ -62,7 +66,12 @@ export const toGroupAccountRow = (account, groupSettings) => {
   };
 };
 
-const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
+export const accountGroupName = (account) => pick(account, ['group', 'Group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName']);
+
+/** The account's stored group, byte-exact (ExpectedGroup precondition): the normalized `storedGroup`, else the raw accessor. */
+export const storedGroupOf = (account) => (
+  typeof account?.storedGroup === 'string' ? account.storedGroup : String(accountGroupName(account) ?? '')
+);
 
 export const accountsInGroup = (accounts, groupName, groupSettings) =>
   (accounts || []).filter((account) => sameGroupName(accountGroupName(account), groupName)).map((account) => toGroupAccountRow(account, groupSettings));
@@ -71,7 +80,7 @@ export const accountsInGroup = (accounts, groupName, groupSettings) =>
 export const accountsByGroupName = (accounts) => {
   const map = new Map();
   for (const account of accounts || []) {
-    const key = String(accountGroupName(account) ?? '').trim().toLowerCase();
+    const key = groupNameKey(accountGroupName(account));
     const login = String(account?.login ?? '').trim();
     if (!key || !login) continue;
     const list = map.get(key) || [];
@@ -84,12 +93,13 @@ export const accountsByGroupName = (accounts) => {
   return map;
 };
 
-/** Account fields that follow the group when a manager edits it. */
-export const buildAccountPatchFromGroup = (payload, originalName) => {
+/**
+ * Account fields that follow the group when a manager edits it. Never `Group`:
+ * the backend cannot rename a group (GroupUpdate ignores `name`), so a save must
+ * never move accounts.
+ */
+export const buildAccountPatchFromGroup = (payload) => {
   const patch = {};
-  const nextName = String(payload?.name ?? '').trim();
-  const previousName = String(originalName ?? '').trim();
-  if (nextName && previousName && nextName !== previousName) patch.Group = nextName;
   const leverage = readLeverageRatio(payload);
   if (leverage) patch.Leverage = leverage;
   // Empty financial dropdowns are stored as 0. Sending that clears or rejects
@@ -115,7 +125,7 @@ export const describeGroupSave = (saved, { created = false } = {}) => {
 export const countAccountsByGroup = (accounts) => {
   const counts = new Map();
   for (const account of accounts || []) {
-    const key = String(account?.group ?? '').trim().toLowerCase();
+    const key = groupNameKey(accountGroupName(account));
     if (!key) continue;
     counts.set(key, (counts.get(key) || 0) + 1);
   }

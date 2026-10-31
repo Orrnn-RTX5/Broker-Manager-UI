@@ -30,17 +30,23 @@ const DealerPromptDialog = ({ title, fields, onSubmit, onCancel, loading }) => {
         <div className="flex flex-col gap-4 my-2">
           {fields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{field.label}</label>
-              <input
-                type={field.type || 'text'}
-                step={field.step}
-                value={values[field.key]}
-                onChange={(event) => setValues((previous) => ({ ...previous, [field.key]: event.target.value }))}
-                className="ui-input"
-                placeholder={field.placeholder}
-                required={field.required}
-                autoFocus={field === fields[0]}
-              />
+              {field.type === 'note' ? (
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{field.text}</p>
+              ) : (
+                <>
+                  <label className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{field.label}</label>
+                  <input
+                    type={field.type || 'text'}
+                    step={field.step}
+                    value={values[field.key]}
+                    onChange={(event) => setValues((previous) => ({ ...previous, [field.key]: event.target.value }))}
+                    className="ui-input"
+                    placeholder={field.placeholder}
+                    required={field.required}
+                    autoFocus={field === fields[0]}
+                  />
+                </>
+              )}
               {field.hint && <span className="text-[10px] leading-tight" style={{ color: 'var(--warn-text)' }}>{field.hint}</span>}
             </div>
           ))}

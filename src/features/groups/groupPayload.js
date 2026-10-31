@@ -1,8 +1,10 @@
 import { fetchManagerApi } from '../../services/managerFetch.js';
 import { updateManagerAccount } from '../../services/managerAccountApi.js';
 import { fetchAllSidebarAccounts } from '../../services/sidebarAccounts.js';
-import { accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, sameGroupName } from './groupAccountRows.js';
+import { advanceRealtimeCacheRevision } from '../../services/realtimeCacheRevision.js';
+import { accountGroupName, accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, storedGroupOf } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
+import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
 
 export { buildAccountPatchFromGroup, describeGroupSave };
 
@@ -126,19 +128,20 @@ export const validateNewGroupFields = ({ name, parentGroup, groupPurpose } = {})
     return 'Purpose must be customer or coverage.';
   }
   const parent = String(parentGroup ?? '').trim();
-  if (parent !== '' && parent.toLowerCase() === String(name ?? '').trim().toLowerCase()) {
+  if (parent !== '' && parent === String(name ?? '').trim()) {
     return 'Parent group must name another group.';
   }
   return null;
 };
 
 // Parent-group tradeAllowed default for the new-group wizard. The
-// operator-typed parent name resolves against GroupList rows with an exact,
-// case-insensitive (trimmed) match: near-misses never inherit. The record's
+// operator-typed parent name resolves against GroupList rows with an exact
+// (trimmed, case-sensitive) match: near-misses, including another group that
+// differs only by case, never inherit. The record's
 // boolean tradeAllowed wins when present (the API's known casings are
 // accepted); anything else reports null so the caller keeps the global
 // default. No tenant, broker, currency, symbol, rate, or group names here.
-const normalizeParentKey = (value) => String(value ?? '').trim().toLowerCase();
+const normalizeParentKey = (value) => String(value ?? '').trim();
 
 const parentRecordOf = (groups, parentGroup) => {
   const target = normalizeParentKey(parentGroup);
@@ -246,17 +249,17 @@ export const toSymbolList = (value) => {
   return [];
 };
 
-const accountGroupName = (account) => account?.group ?? account?.Group ?? account?.accountGroup ?? account?.AccountGroup;
-
-const writeAccountCache = (queryClient, groupName, originalName, patch) => {
+// Writes the patch only onto the logins the server accepted. A refused or failed
+// account keeps the value the server still holds.
+const writeAccountCache = (queryClient, patch, succeededLogins) => {
   if (!queryClient) return;
+  const succeeded = new Set(succeededLogins.map(String));
   queryClient.setQueriesData({ queryKey: ['sidebar-accounts'] }, (data) => {
     if (!data?.rows) return data;
     return {
       ...data,
       rows: data.rows.map((account) => {
-        const name = accountGroupName(account);
-        if (!sameGroupName(name, groupName) && !sameGroupName(name, originalName)) return account;
+        if (!succeeded.has(String(account?.login))) return account;
         return {
           ...account,
           ...(patch.Leverage ? { leverage: patch.Leverage, Leverage: patch.Leverage } : {}),
@@ -269,35 +272,59 @@ const writeAccountCache = (queryClient, groupName, originalName, patch) => {
   });
 };
 
-/** Write the group's leverage, margin, and name onto every account in that group. */
-export const applyGroupSettingsToAccounts = async (groupName, payload, originalName = groupName, queryClient) => {
-  const patch = buildAccountPatchFromGroup(payload, originalName);
+/**
+ * Write the group's leverage and margin levels onto every account of EXACTLY
+ * that group (case-sensitive, trim only). Each PATCH carries `ExpectedGroup` =
+ * the account's stored group value byte-exact (B1 contract), so the backend
+ * refuses (409 ACCOUNT_GROUP_MISMATCH) an account that left that group; every
+ * row is re-checked before any call.
+ */
+export const applyGroupSettingsToAccounts = async (groupName, payload, queryClient) => {
+  if (!groupNameKey(groupName)) return { accountsUpdated: 0, accountErrors: [] };
+  const patch = buildAccountPatchFromGroup(payload);
   if (Object.keys(patch).length === 0) return { accountsUpdated: 0, accountErrors: [] };
-  const cachedRows = queryClient
-    ? queryClient.getQueriesData({ queryKey: ['sidebar-accounts'] }).flatMap(([, data]) => data?.rows || [])
-    : [];
-  const page = cachedRows.length ? { rows: cachedRows } : await fetchAllSidebarAccounts({});
+  // Membership is always read from the server. The react-query cache can be stale or
+  // partial, so it never decides which accounts are patched.
+  const page = await fetchAllSidebarAccounts({ fresh: true });
   const seen = new Set();
+  const expectedGroup = groupNameKey(groupName);
   const rows = accountsInGroup(page?.rows, groupName).filter((row) => {
+    // Defence in depth: never patch a row whose group is not exactly this one.
+    if (groupNameKey(accountGroupName(row.account)) !== expectedGroup) return false;
     const login = String(row.login);
     if (seen.has(login)) return false;
     seen.add(login);
     return true;
   });
   const accountErrors = [];
+  const succeededLogins = [];
   for (const row of rows) {
     try {
-      await updateManagerAccount(row.login, patch);
+      await updateManagerAccount(row.login, { ...patch, ExpectedGroup: storedGroupOf(row.account) });
+      succeededLogins.push(row.login);
     } catch (err) {
       accountErrors.push(`${row.login}: ${err.message}`);
     }
   }
-  if (rows.length > accountErrors.length) writeAccountCache(queryClient, groupName, originalName, patch);
-  return { accountsUpdated: rows.length - accountErrors.length, accountErrors };
+  // The account writes are over. Advance the cache revision before the caller invalidates the list, so no
+  // read that started before the last PATCH is reused or cached (sidebarAccounts reuses only same-revision reads).
+  advanceRealtimeCacheRevision();
+  if (succeededLogins.length > 0) writeAccountCache(queryClient, patch, succeededLogins);
+  return { accountsUpdated: succeededLogins.length, accountErrors };
 };
 
+export const GROUP_RENAME_UNSUPPORTED = 'A group cannot be renamed. Create a group with the new name and move the accounts to it.';
+
 /** POST a group to /GroupCreate, or to /GroupUpdate when `originalName` names an existing group. */
-export const submitGroup = async ({ originalName, payload, queryClient }) => {
+export const submitGroup = async ({ originalName, payload: rawPayload, queryClient }) => {
+  // Edits never send `name`: the backend cannot rename a group, and a changed
+  // name must not look saved (or move accounts). Refuse a real rename up front.
+  let payload = rawPayload;
+  if (originalName && Object.prototype.hasOwnProperty.call(payload || {}, 'name')) {
+    if (groupNameKey(payload.name) !== groupNameKey(originalName)) throw new Error(GROUP_RENAME_UNSUPPORTED);
+    const { name: _name, ...rest } = payload;
+    payload = rest;
+  }
   if (originalName && Object.keys(payload).length === 0) {
     return { submitted: payload, accountsUpdated: 0, accountErrors: [], unchanged: true };
   }
@@ -316,11 +343,20 @@ export const submitGroup = async ({ originalName, payload, queryClient }) => {
   } catch {
     throw new Error(responseText || 'Invalid JSON received from server');
   }
-  if (!res.ok) throw new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+  if (!res.ok) {
+    const error = new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+    // Every allowed symbol the save refused for having no enabled instrument,
+    // so the form can show them all at once (empty for any other failure).
+    error.unavailableSymbols = parseUnavailableSymbols(responseData, error.message);
+    // Only the "no enabled internal instrument" refusal means "not configured";
+    // other refusals that list symbols (e.g. the feed scope) keep their text.
+    error.symbolsNotConfigured = error.unavailableSymbols.length > 0 && isNotConfiguredRefusal(responseData, error.message);
+    throw error;
+  }
   if (!originalName) return { ...(responseData && typeof responseData === 'object' ? responseData : {}), submitted: payload };
   const saved = responseData && typeof responseData === 'object' ? responseData : {};
   try {
-    const applied = await applyGroupSettingsToAccounts(originalName, payload, originalName, queryClient);
+    const applied = await applyGroupSettingsToAccounts(originalName, payload, queryClient);
     return { ...saved, ...applied, submitted: payload };
   } catch (err) {
     return { ...saved, accountsUpdated: 0, accountErrors: [err.message], submitted: payload };

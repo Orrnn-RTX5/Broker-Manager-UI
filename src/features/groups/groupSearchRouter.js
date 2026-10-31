@@ -8,7 +8,7 @@ import {
   listGroupContainerPaths,
   splitGroupPath,
 } from './groupTree.js';
-import { accountsInGroup, readLeverageRatio } from './groupAccountRows.js';
+import { accountGroupName, accountsInGroup, readLeverageRatio } from './groupAccountRows.js';
 
 const ROUTE_SEPARATOR_REGEX = /[\\/>]+/;
 
@@ -726,29 +726,40 @@ export const resolveGroupNodeBySegments = (groups, segments, currentFolder = '')
 };
 
 /**
+ * The group record for a name: an exact match after trimming, case-sensitive.
+ * Group names are identities ("Alpha" and "ALPHA" are two groups), so there is
+ * no case-insensitive fallback. Returns null when no record matches exactly.
+ */
+export const resolveGroupByName = (groups, name) => {
+  const target = String(name ?? '').trim();
+  if (!target) return null;
+  return (groups || []).find((g) => groupRowNode(g).name.trim() === target) || null;
+};
+
+/**
  * Collects all accounts belonging to `targetNode` (either directly in `targetNode.group`
  * or in any subgroup underneath `targetNode.path`).
  */
 export const collectAccountsUnderNode = (groups, accountRows, targetNode) => {
   if (!targetNode || !Array.isArray(accountRows)) return [];
 
+  // Group names are case-sensitive identities (see groupNameKey): no case folding.
   const targetPath = String(targetNode.path || targetNode.name || '').trim();
-  const targetLower = targetPath.toLowerCase();
   const matchingGroups = new Map();
 
   if (targetNode.group?.name) {
-    matchingGroups.set(targetNode.group.name.toLowerCase(), targetNode.group);
+    matchingGroups.set(targetNode.group.name.trim(), targetNode.group);
   }
 
   for (const item of groups || []) {
     const node = groupRowNode(item);
-    const nameLower = node.name.toLowerCase();
+    const name = node.name.trim();
     if (
-      nameLower === targetLower
-      || nameLower.startsWith(`${targetLower}\\`)
-      || nameLower.startsWith(`${targetLower}/`)
+      name === targetPath
+      || name.startsWith(`${targetPath}\\`)
+      || name.startsWith(`${targetPath}/`)
     ) {
-      matchingGroups.set(nameLower, node.group);
+      matchingGroups.set(name, node.group);
     }
   }
 
@@ -931,12 +942,16 @@ const resolveCoreRoute = ({
       if (/^\d+$/.test(lastSegment)) {
         const globalCandidates = (accountRows || []).map((raw) => {
           const login = String(raw?.login ?? raw?.Login ?? raw?.account_id ?? '').trim();
-          const groupName = String(raw?.group ?? raw?.Group ?? '').trim();
+          const groupName = String(accountGroupName(raw) ?? '').trim();
           return { login, name: String(raw?.Name ?? raw?.name ?? ''), email: String(raw?.Email ?? raw?.email ?? ''), account: raw, groupName };
         });
         const globalMatch = globalCandidates.find((item) => item.login === lastSegment);
+        // An account with no stored group has no owner. Fail closed: name no group at all.
+        if (globalMatch && !globalMatch.groupName) return null;
+        // The stored group owns the account. Its exact record when one exists, else a name-only
+        // object for the stored name. Never prefixNode.group: that is a case-insensitive segment match.
         const owningGroup = globalMatch?.groupName
-          ? (groups.find((g) => groupRowNode(g).name.toLowerCase() === globalMatch.groupName.toLowerCase()) || prefixNode.group || { name: prefixNode.path })
+          ? (resolveGroupByName(groups, globalMatch.groupName) || { name: globalMatch.groupName })
           : (prefixNode.group || { name: prefixNode.path });
         return {
           type: 'account',
@@ -1523,4 +1538,39 @@ export const filterAccountRowsBySearch = (accountRows, search, columns = []) => 
   }
 
   return accountRows;
+};
+
+// Only routes that executeSearchRoute actually runs. Mirrors its guards so a route is never "taken" without effect.
+const isExecutableGroupRoute = (route) => {
+  if (!route) return false;
+  if (route.type === 'folder' || route.type === 'account') return true;
+  if (route.type === 'group') return Boolean(route.group);
+  if (route.type === 'account-field') return Boolean(route.field);
+  return false;
+};
+
+/**
+ * Decides what Enter activates on the Groups page, without the DOM.
+ * Returns `{ kind: 'route', route }`, `{ kind: 'row', row }` (the single visible group row),
+ * `{ kind: 'account', account }` (the single visible account of the opened group), or `null` (open nothing).
+ * A multi-segment path opens only the route the router fully resolved. It never falls back to a visible
+ * row, a visible account, or a suggestion from a partial match.
+ */
+export const resolveGroupEnterTarget = ({
+  route = null,
+  suggestions = [],
+  openedGroup = null,
+  visibleRows = [],
+  visibleAccounts = [],
+  query = '',
+  groups = [],
+} = {}) => {
+  if (parseGroupSearchRoute(query, groups).segments.length > 1) {
+    return isExecutableGroupRoute(route) ? { kind: 'route', route } : null;
+  }
+  const resolved = route || suggestions[0] || null;
+  if (resolved && isExecutableGroupRoute(resolved)) return { kind: 'route', route: resolved };
+  if (!openedGroup && visibleRows.length === 1) return { kind: 'row', row: visibleRows[0] };
+  if (openedGroup && visibleAccounts.length === 1) return { kind: 'account', account: visibleAccounts[0] };
+  return null;
 };

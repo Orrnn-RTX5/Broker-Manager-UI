@@ -112,8 +112,9 @@ test('configured alerts use actual thresholds and disclose missing readings/conf
     { login: '5', margin: 0 },
     { login: '6', margin: 100, marginLevel: 80, marginCallLevel: 40, stopOutLevel: 50 },
   ], groups);
-  assert.deepEqual(result.alerts.map((row) => [row.login, row.type, row.threshold]), [['1', 'stop-out', 80], ['2', 'margin-call', 150]]);
-  assert.deepEqual(result.unresolved.map((row) => row.login), ['3', '4', '6']);
+  // Group names are case-sensitive: 'REAL' is not the configured 'real', so login 1 has no thresholds.
+  assert.deepEqual(result.alerts.map((row) => [row.login, row.type, row.threshold]), [['2', 'margin-call', 150]]);
+  assert.deepEqual(result.unresolved.map((row) => row.login), ['1', '3', '4', '6']);
   assert.equal(result.unresolved[0].reason, 'Broker margin thresholds unavailable');
   assert.deepEqual(assessConfiguredMarginAlerts([{ login: '7', margin: 100, equity: 0, marginCallLevel: 100, stopOutLevel: 0 }]).alerts.map((row) => row.type), ['stop-out']);
 });

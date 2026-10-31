@@ -5,10 +5,17 @@
 export const GROUP_PATH_SEPARATOR = '\\';
 const PATH_SEPARATORS = /[/\\]/;
 
-const lower = (value) => String(value ?? '').toLowerCase();
+// Group names are case-sensitive: "Alpha" and "ALPHA" are two groups, so path
+// keys never fold case (only the / and \ separators are treated alike). Sorting
+// stays case-insensitive for reading, with an exact tie-break so it is stable.
+const pathKey = (value) => String(value ?? '');
 const nameOf = (group) => String(group?.name ?? '');
-const compareLabels = (left, right) => String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-const canonicalPath = (path = '') => lower(path).split(PATH_SEPARATORS).join('\u0001');
+const compareLabels = (left, right) => {
+  const a = String(left);
+  const b = String(right);
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) || (a < b ? -1 : a > b ? 1 : 0);
+};
+const canonicalPath = (path = '') => pathKey(path).split(PATH_SEPARATORS).join('\u0001');
 
 /** Separator already used by a stored group name. Mixed names keep the backslash. */
 export const pathSeparatorOf = (path = '') => (
@@ -89,7 +96,7 @@ export const getGroupFolderRows = (groups, path = '') => {
     const parts = splitGroupPath(name);
     if (parts.length <= depth) continue;
     const childPath = parts.slice(0, depth + 1).join(pathSeparatorOf(name));
-    const key = lower(childPath);
+    const key = pathKey(childPath);
     const node = nodes.get(key) || { id: `folder:${childPath}`, type: 'folder', label: parts[depth], name: childPath, path: childPath, count: 0, group: null };
     if (parts.length === depth + 1) Object.assign(node, { id: `group:${name}`, type: 'group', name, group });
     else node.count += 1;
@@ -114,7 +121,7 @@ export const listGroupContainerPaths = (groups) => {
     for (let depth = 1; depth <= parts.length; depth += 1) {
       const candidate = parts.slice(0, depth).join(separator);
       // A real group's spelling wins over a folder merely implied by a nested name.
-      if (depth === parts.length || !paths.has(lower(candidate))) paths.set(lower(candidate), candidate);
+      if (depth === parts.length || !paths.has(pathKey(candidate))) paths.set(pathKey(candidate), candidate);
     }
   }
   return [...paths.values()].sort(compareLabels);
@@ -135,7 +142,7 @@ export const buildGroupNavigatorTree = (groups) => {
     let node = root;
     for (let depth = 0; depth < parts.length; depth += 1) {
       const childPath = parts.slice(0, depth + 1).join(separator);
-      const key = lower(childPath);
+      const key = pathKey(childPath);
       let child = node.children.get(key);
       if (!child) {
         child = { id: `tree:${childPath}`, label: parts[depth], path: childPath, count: 0, group: null, children: new Map() };

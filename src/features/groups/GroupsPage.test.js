@@ -38,3 +38,12 @@ test('folder/selection/intent sync uses render-phase adjustments, not setState i
   const navFx = src.slice(src.indexOf('navigate(`${location.pathname}${location.search}`, { replace: true, state: null });'));
   assert.ok(navFx.includes('return undefined;'), 'intent effect must navigate then end without setState');
 });
+
+// Enter on a multi-segment path opens only a fully resolved route. The decision is the pure
+// resolveGroupEnterTarget (behaviour is tested in groupSearchRouter.test.js); this pins that Enter routes
+// through it with the typed query and the groups (the helper reads the path segments from them).
+test('Enter decides its target through resolveGroupEnterTarget with the typed query and groups', () => {
+  assert.ok(src.includes('const target = resolveGroupEnterTarget({'), 'Enter must use the pure target helper');
+  assert.ok(src.includes('query: queryText,\n        groups,\n      });'), 'the helper must receive the typed query and the groups for the path check');
+  assert.ok(!src.includes('if (!openedGroup && visibleRows.length === 1) {'), 'the visible-row fallback must not be inlined in the page');
+});

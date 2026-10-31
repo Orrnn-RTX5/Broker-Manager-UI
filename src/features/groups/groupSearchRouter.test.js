@@ -7,6 +7,7 @@ import {
   getGroupSearchSuggestions,
   matchAccountField,
   parseGroupSearchRoute,
+  resolveGroupEnterTarget,
   resolveGroupSearchRoute,
   scoreSegmentMatch,
 } from './groupSearchRouter.js';
@@ -287,4 +288,174 @@ test('filterGroupRowsBySearch and filterAccountRowsBySearch keep relevant rows v
   const filteredAccounts = filterAccountRowsBySearch(dipannitaAccounts, 'dipanwita / 200029 / lavaerage', GROUP_ACCOUNT_COLUMNS);
   assert.equal(filteredAccounts.length, 1);
   assert.equal(filteredAccounts[0].login, '200029');
+});
+
+const CASE_SAMPLE_GROUPS = [
+  { name: 'ALPHA', currency: 'USD', leverage: 100 },
+  { name: 'Beta', currency: 'USD', leverage: 100 },
+];
+
+// Owner rule: search may fold case, group identity may not. An account keeps its stored group
+// however the query spells or places the segment, and never takes the typed group's name.
+test('group identity is exact: an account stored under "Alpha" always routes with group "Alpha", never the typed group', () => {
+  for (const query of ['Beta / 500001', 'ALPHA / 500001', 'alpha / 500001']) {
+    const route = resolveGroupSearchRoute({
+      query,
+      groups: CASE_SAMPLE_GROUPS,
+      accountRows: [{ login: '500001', Name: 'Case Variant', group: 'Alpha', balance: 10, equity: 10, leverage: 100 }],
+    });
+    assert.ok(route, query);
+    assert.equal(route.type, 'account', query);
+    assert.equal(route.login, '500001', query);
+    assert.equal(route.group.name, 'Alpha', query);
+  }
+});
+
+test('an exact group name still owns the account route', () => {
+  const route = resolveGroupSearchRoute({
+    query: 'Beta / 500002',
+    groups: CASE_SAMPLE_GROUPS,
+    accountRows: [{ login: '500002', Name: 'Exact Owner', group: 'ALPHA', balance: 10, equity: 10, leverage: 100 }],
+  });
+  assert.ok(route);
+  assert.equal(route.type, 'account');
+  assert.equal(route.login, '500002');
+  assert.equal(route.group.name, 'ALPHA');
+});
+
+// An account with a BLANK stored group has no owner. No query spelling, case or fuzzy
+// typo may route it to any group, including the group the typed segment matches.
+test('an account with an empty stored group never routes to any group, whatever the typed group', () => {
+  const blankRows = [
+    [{ login: '500003', Name: 'Blank Owner', group: '', balance: 10, equity: 10, leverage: 100 }],
+    [{ login: '500003', Name: 'Blank Owner', group: '   ', balance: 10, equity: 10, leverage: 100 }],
+  ];
+  for (const accountRows of blankRows) {
+    for (const query of ['ALPHA / 500003', 'alpha / 500003', 'Beta / 500003', 'Alph / 500003', 'Bet / 500003', 'ALPHA /500003']) {
+      const route = resolveGroupSearchRoute({ query, groups: CASE_SAMPLE_GROUPS, accountRows });
+      assert.equal(route, null, `${query} must not route (blank group: ${JSON.stringify(accountRows[0].group)})`);
+      const suggestions = getGroupSearchSuggestions({ query, groups: CASE_SAMPLE_GROUPS, accountRows });
+      assert.ok(
+        suggestions.every((item) => item.type !== 'account' && item.type !== 'account-field' && item.type !== 'group' && item.type !== 'folder'),
+        `${query} must not suggest any group or account route`,
+      );
+    }
+  }
+});
+
+// The blank-group account may sit in any segment after the group. The fixture is shared
+// by every Enter test below. The Enter decision is made as GroupsPage makes it, on the root folder.
+const BLANK_OWNER_ROWS = [
+  { login: '500003', Name: 'Blank Owner', group: '', balance: 10, equity: 10, leverage: 100 },
+  { login: '500002', Name: 'Beta Acc', group: 'Beta', balance: 10, equity: 10, leverage: 100 },
+  { login: '500001', Name: 'Alpha Acc', group: 'ALPHA', balance: 10, equity: 10, leverage: 100 },
+];
+
+const enterTargetFor = (query, { accountRows = BLANK_OWNER_ROWS, groups = CASE_SAMPLE_GROUPS, openedGroup = null, visibleAccounts = [] } = {}) => {
+  const visibleRows = filterGroupRowsBySearch(getGroupFolderRows(groups, ''), query, '');
+  const route = resolveGroupSearchRoute({ query, groups, accountRows, currentFolder: '', openedGroup });
+  const suggestions = getGroupSearchSuggestions({ query, groups, accountRows, currentFolder: '', openedGroup });
+  return resolveGroupEnterTarget({ route, suggestions, openedGroup, visibleRows, visibleAccounts, query, groups });
+};
+
+test('Enter opens nothing for a blank-group account, in every path and field-suffix form', () => {
+  for (const query of [
+    'Beta / 500003', 'Beta / 500003 /', 'Beta / 500003 / email', 'Beta / 500003 / balance',
+    'Be / 500003', 'Be / 500003 / email', 'Be / 500003 / balance', 'beta / 500003 / email',
+    'ALPHA / 500003 / email', 'Beta /500003/email', '/ 500003 / email', '/ 500003 / balance',
+  ]) {
+    assert.equal(enterTargetFor(query), null, `Enter on "${query}" must open nothing`);
+  }
+});
+
+// A multi-segment path opens only a route the router fully resolved. This case has no group named Beta/Blank,
+// so the name forms of a blank-group account open nothing. The Beta/Blank case has its own test below.
+test('Enter opens nothing for name forms of a blank-group account when no group of that path exists', () => {
+  for (const query of [
+    'Beta / Blank Owner', 'Beta / Blank O', 'Beta / Blank Owner / email',
+    'Beta / 500002 / Blank Owner', 'Beta / Blank Owner / 500002',
+  ]) {
+    assert.equal(enterTargetFor(query), null, `Enter on "${query}" must open nothing`);
+    assert.equal(resolveGroupSearchRoute({ query, groups: CASE_SAMPLE_GROUPS, accountRows: BLANK_OWNER_ROWS }), null, `"${query}" must not route`);
+  }
+});
+
+// When a group exists at the typed path, Enter opens that group, never the blank-group account it would hide.
+test('Enter opens the group Beta/Blank for "Beta / Blank O", never the blank-group account', () => {
+  const groups = [...CASE_SAMPLE_GROUPS, { name: 'Beta/Blank', currency: 'USD', leverage: 100 }];
+  const route = resolveGroupSearchRoute({ query: 'Beta / Blank O', groups, accountRows: BLANK_OWNER_ROWS });
+  assert.equal(route?.type, 'group', 'the typed path resolves to the group route');
+  assert.equal(route.group.name, 'Beta/Blank');
+  assert.equal(route.login, undefined, 'the blank-group account 500003 is never routed');
+
+  const target = enterTargetFor('Beta / Blank O', { groups });
+  assert.equal(target?.kind, 'route');
+  assert.equal(target.route.type, 'group', 'Enter opens the group route');
+  assert.equal(target.route.group.name, 'Beta/Blank');
+  assert.equal(target.route.login, undefined, 'Enter never opens the blank-group account 500003');
+});
+
+// An account stored only through accountGroup (group '') is a member of that group, so its path routes there.
+test('Enter opens the account route under Beta for an account stored only by accountGroup', () => {
+  const accountRows = [...BLANK_OWNER_ROWS, { login: '500004', Name: 'Accgroup Acc', group: '', accountGroup: 'Beta', balance: 10, equity: 10, leverage: 100 }];
+  const target = enterTargetFor('Beta / 500004', { accountRows });
+  assert.equal(target?.kind, 'route');
+  assert.equal(target.route.type, 'account');
+  assert.equal(target.route.login, '500004');
+  assert.equal(target.route.group.name, 'Beta');
+});
+
+// The name of an account in another group is not a match under the typed group.
+test('Enter opens nothing when the typed account name belongs to another group', () => {
+  assert.equal(enterTargetFor('Beta / Alpha Acc'), null, 'Alpha Acc is in ALPHA, not Beta');
+  assert.equal(enterTargetFor('ALPHA / Beta Acc'), null, 'Beta Acc is in Beta, not ALPHA');
+});
+
+// Single-segment queries and resolved path routes keep opening.
+test('Enter still opens a plain group name, a resolved account path, and a resolved subgroup path', () => {
+  const beta = enterTargetFor('Beta');
+  assert.equal(beta?.kind, 'route');
+  assert.equal(beta.route.group.name, 'Beta');
+
+  const ownAccount = enterTargetFor('Beta / 500002');
+  assert.equal(ownAccount?.kind, 'route');
+  assert.equal(ownAccount.route.type, 'account');
+  assert.equal(ownAccount.route.login, '500002');
+  assert.equal(ownAccount.route.group.name, 'Beta');
+
+  const aliasAccount = enterTargetFor('ALPHA / 500002');
+  assert.equal(aliasAccount?.kind, 'route');
+  assert.equal(aliasAccount.route.login, '500002', 'an account in Beta still opens under Beta from an ALPHA path');
+  assert.equal(aliasAccount.route.group.name, 'Beta');
+
+  const subgroupGroups = [{ name: 'Beta', currency: 'USD', leverage: 100 }, { name: 'Beta/Sub', currency: 'USD', leverage: 100 }];
+  const sub = enterTargetFor('Beta / Sub', { groups: subgroupGroups });
+  assert.equal(sub?.kind, 'route');
+  assert.equal(sub.route.group.name, 'Beta/Sub');
+});
+
+test('Enter still activates the single visible group when no route or suggestion applies (no regression)', () => {
+  const beta = getGroupFolderRows(CASE_SAMPLE_GROUPS, '').find((row) => row.name === 'Beta');
+  const target = resolveGroupEnterTarget({ visibleRows: [beta], query: 'Bet', groups: CASE_SAMPLE_GROUPS });
+  assert.equal(target?.kind, 'row');
+  assert.equal(target.row.name, 'Beta');
+  assert.equal(enterTargetFor('Beta')?.kind, 'route', 'a plain group name still resolves to its group route first');
+});
+
+test('Enter still routes a valid account path and field path', () => {
+  const account = enterTargetFor('ALPHA / 500001');
+  assert.equal(account?.kind, 'route');
+  assert.equal(account.route.type, 'account');
+  assert.equal(account.route.login, '500001');
+  const field = enterTargetFor('ALPHA / 500001 / email');
+  assert.equal(field?.kind, 'route');
+  assert.equal(field.route.type, 'account-field');
+});
+
+test('Enter activates the single visible account of the opened group (no regression)', () => {
+  const beta = CASE_SAMPLE_GROUPS[1];
+  const onlyAccount = { login: '500002', account: BLANK_OWNER_ROWS[1] };
+  const target = resolveGroupEnterTarget({ openedGroup: beta, visibleRows: [], visibleAccounts: [onlyAccount], query: '500002' });
+  assert.equal(target?.kind, 'account');
+  assert.equal(target.account.login, '500002');
 });

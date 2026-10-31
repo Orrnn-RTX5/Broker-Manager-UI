@@ -11,7 +11,9 @@ import { JSDOM } from 'jsdom';
 // Only the network edges and unrelated providers are replaced: the
 // GroupCreate transport (400 with a mapper-derived server body), the
 // permission gate (granted), the parent-group list (empty), and the symbol
-// picker (unrelated to the policy path).
+// picker, which selects one synthetic symbol through its onChange prop so the
+// modal's fail-closed allowed-symbol rule is satisfied (otherwise unrelated to
+// the policy path).
 //
 // Generic fixtures only: synthetic group names. No tenant, broker, host, or
 // account identifiers. Server text, field choice, and expectations derive
@@ -25,6 +27,7 @@ import {
   mapGroupPolicyError,
 } from '../groupPolicyErrors.js';
 import { LEVERAGE_PRESETS } from '../groupFinancialPresets.js';
+import { EMPTY_ALLOWED_SYMBOLS_ERROR } from '../groupSymbolAvailability.js';
 
 // The REAL leverage gate module; guarded so a missing module reports each
 // test by name instead of failing the whole file.
@@ -54,7 +57,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 // Every manager request is recorded. GET answers the broker group-defaults
 // read (host.defaultsResponse); POST answers GroupCreate with a 400 carrying
 // host.serverText, or a 200 when serverText is empty.
-const host = { serverText: '', calls: [], defaultsResponse: null };
+// allowedSymbol: the one synthetic symbol the SymbolSelector stub picks for the
+// Allowed symbols field through its onChange prop ('' picks none).
+const FIXTURE_SYMBOL = 'FIXTURE_SYMBOL';
+const host = { serverText: '', calls: [], defaultsResponse: null, allowedSymbol: FIXTURE_SYMBOL };
 globalThis.__newGroupModalHost = host;
 
 const STUBS = {
@@ -78,7 +84,15 @@ const STUBS = {
     export const useGroupList = () => ({ groups: [], total: null, hasMore: false, loading: false, error: null });
   `,
   symbols: `
-    export default function SymbolSelector() { return null; }
+    import { useEffect } from 'react';
+    const host = globalThis.__newGroupModalHost;
+    export default function SymbolSelector({ label, value, onChange }) {
+      useEffect(() => {
+        if (label !== 'Allowed symbols' || String(value ?? '').trim() !== '' || !host.allowedSymbol) return;
+        onChange(host.allowedSymbol);
+      }, [label, value]);
+      return null;
+    }
   `,
 };
 
@@ -185,6 +199,7 @@ beforeEach(() => {
   host.serverText = '';
   host.calls = [];
   host.defaultsResponse = defaultsOf(PRESET_DEFAULT.value);
+  host.allowedSymbol = FIXTURE_SYMBOL;
   calls.close = 0;
 });
 
@@ -448,4 +463,20 @@ test('server leverage refusals render inline on the Leverage field', async () =>
     assert.doesNotMatch(container.textContent, /GROUP_POLICY_DEFAULT_MISSING|GROUP_LEVERAGE_INVALID/);
     await unmountModal();
   }
+});
+
+test('no allowed symbol and allow-all unticked: refused client-side, no GroupCreate is sent', async () => {
+  host.allowedSymbol = '';
+  const container = await renderModal();
+  const allowAll = [...container.querySelectorAll('label.group-create-check')].find((el) => el.textContent === 'Allow all symbols');
+  assert.ok(allowAll, 'the Allow all symbols control must render');
+  assert.equal(allowAll.querySelector('input').checked, false, 'allow-all starts unticked');
+  await fillInput(container, 'Group name', 'Fixture/Standard');
+  await submitModal(container);
+
+  const formAlert = container.querySelector('.group-create-body > .group-create-error');
+  assert.ok(formAlert, 'the fail-closed refusal renders at form level');
+  assert.equal(formAlert.textContent, EMPTY_ALLOWED_SYMBOLS_ERROR);
+  assert.equal(postCalls().length, 0, 'no GroupCreate request may be sent');
+  assert.equal(calls.close, 0, 'the modal stays open');
 });

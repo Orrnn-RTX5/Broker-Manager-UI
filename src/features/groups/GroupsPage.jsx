@@ -13,6 +13,7 @@ import {
   filterGroupRowsBySearch,
   getGroupSearchSuggestions,
   parseGroupSearchRoute,
+  resolveGroupEnterTarget,
   resolveGroupSearchRoute,
 } from './groupSearchRouter.js';
 import { loadAccountDetails, peekAccountDetails, subscribeToAccountDetails } from '../../services/accountDetails.js';
@@ -40,7 +41,7 @@ import {
   separatorForContainer,
   splitGroupPath,
 } from './groupTree.js';
-import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup } from './groupAccountRows.js';
+import { GROUP_ACCOUNT_COLUMNS, accountsInGroup, countAccountsByGroup, groupNameKey } from './groupAccountRows.js';
 import { describeGroupSave } from './groupAccountRows.js';
 import { AccountMark, GroupFolderIcon } from './groupMarks.jsx';
 import './GroupsExplorer.css';
@@ -445,30 +446,38 @@ const GroupsPage = () => {
         return;
       }
 
-      const resolved = resolveGroupSearchRoute({
+      const target = resolveGroupEnterTarget({
+        route: resolveGroupSearchRoute({
+          query: queryText,
+          groups,
+          accountRows: enrichedRawAccountRows,
+          currentFolder: activeFolder,
+          openedGroup,
+          selectedLogin,
+        }),
+        suggestions: searchSuggestions,
+        openedGroup,
+        visibleRows,
+        visibleAccounts,
         query: queryText,
         groups,
-        accountRows: enrichedRawAccountRows,
-        currentFolder: activeFolder,
-        openedGroup,
-        selectedLogin,
-      }) || searchSuggestions[0];
-
-      if (resolved && executeSearchRoute(resolved)) {
+      });
+      if (!target) return;
+      if (target.kind === 'route') {
+        executeSearchRoute(target.route);
         return;
       }
-
-      if (!openedGroup && visibleRows.length === 1) {
-        activate(visibleRows[0]);
+      if (target.kind === 'row') {
+        activate(target.row);
         setSearch('');
         setSearchFocused(false);
-      } else if (openedGroup && visibleAccounts.length === 1) {
-        const onlyAccount = visibleAccounts[0];
-        setSelectedLogin(onlyAccount.login);
-        openAccountDetails(onlyAccount.account || onlyAccount.login, 'Overview');
-        setSearch('');
-        setSearchFocused(false);
+        return;
       }
+      const onlyAccount = target.account;
+      setSelectedLogin(onlyAccount.login);
+      openAccountDetails(onlyAccount.account || onlyAccount.login, 'Overview');
+      setSearch('');
+      setSearchFocused(false);
     }
   };
 
@@ -998,7 +1007,7 @@ const GroupsPage = () => {
                 const asFolder = !allGroups;
                 const values = rowValues(node, !branch);
                 const selected = node.id === selectedId;
-                const nestedCount = branch ? node.count : (accountCounts.get(String(node.name || '').trim().toLowerCase()) || 0);
+                const nestedCount = branch ? node.count : (accountCounts.get(groupNameKey(node.name)) || 0);
                 return (
                   <tr
                     key={node.id}

@@ -49,25 +49,15 @@ export default {
       key: 'forceClose',
       label: 'Force Close',
       tone: 'danger',
-      title: 'Force close at a custom price',
-      prompt: [
-        { key: 'price',   label: 'Close Price', type: 'number', required: true },
-        { key: 'comment', label: 'Comment',     type: 'text' },
-      ],
-      run: ({ ticket }, { price, comment }) =>
-        positionForceClose({ ticket, price, comment }),
+      title: 'Close at the current market price',
+      run: ({ ticket }) => positionForceClose({ ticket }),
     },
     {
       key: 'forceCloseAll',
       label: 'Force Close All',
       tone: 'danger-outline',
-      title: 'Force close every position for this login',
-      prompt: [
-        { key: 'symbol',  label: 'Symbol (blank = all)', type: 'text' },
-        { key: 'comment', label: 'Comment',              type: 'text' },
-      ],
-      run: ({ login }, { symbol, comment }) =>
-        positionForceCloseAll({ login, symbol, comment }),
+      title: 'Close every open position on this login at the current market price',
+      run: ({ login }) => positionForceCloseAll({ login }),
     },
   ],
 };

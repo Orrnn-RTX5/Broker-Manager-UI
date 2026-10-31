@@ -48,7 +48,10 @@ export const useDealerMenu = (onRefresh) => {
       // catch path: show the error with no refresh and no close. Only a
       // success closes the prompt and refreshes.
       const result = await fn();
-      if (normalizeResult(result).type === 'error') {
+      // A close the server answered (reachedServer) may have changed positions,
+      // so it refreshes and closes the prompt even when the outcome is an error.
+      const reachedServer = result?.reachedServer === true;
+      if (normalizeResult(result).type === 'error' && !reachedServer) {
         showResult(result);
         return;
       }
@@ -72,10 +75,20 @@ export const useDealerMenu = (onRefresh) => {
       // dialog's code field survives (normalizeResult reads code/status off
       // an object payload).
       showResult.error({
-        message: `Error: ${detail}`,
+        // Our own close messages are already actionable sentences; only other errors get the prefix.
+        message: err?.actionable === true ? detail : `Error: ${detail}`,
         code: err?.code,
         status: err?.status,
       });
+      // The server answered with a refusal or an unknown outcome: refresh the
+      // list, but keep the prompt open so the dealer can correct or retry.
+      if (err?.reachedServer === true) {
+        try {
+          await onRefresh?.();
+        } catch {
+          // Best-effort refresh; the grid self-corrects via polling.
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -156,21 +169,9 @@ export const useDealerMenu = (onRefresh) => {
         onClick: () => setDialog({
           title: `Force Close - #${ticket}`,
           fields: [
-            {
-              key: 'price',
-              label: 'Close Price',
-              type: 'number',
-              step: '0.00001',
-              required: true,
-              defaultValue: pos?.priceCurrent || '',
-            },
-            { key: 'comment', label: 'Comment', type: 'text' },
+            { key: 'market', type: 'note', text: 'Closes at the current market price.' },
           ],
-          onSubmit: (values) => exec(() => positionForceClose({
-            ticket,
-            price: values.price,
-            comment: values.comment || undefined,
-          })),
+          onSubmit: () => exec(() => positionForceClose({ ticket })),
         }),
       },
       {
@@ -180,16 +181,11 @@ export const useDealerMenu = (onRefresh) => {
         onClick: () => setDialog({
           title: `Force Close All - Login ${login}`,
           fields: [
-            { key: 'symbol', label: 'Symbol (blank = all)', type: 'text', defaultValue: pos?.symbol || '' },
-            { key: 'comment', label: 'Comment', type: 'text' },
+            { key: 'market', type: 'note', text: `Closes every open position on login ${login} at the current market price.` },
           ],
-          onSubmit: (values) => {
+          onSubmit: () => {
             if (window.confirm(`Force close ALL positions for login ${login}?`)) {
-              exec(() => positionForceCloseAll({
-                login,
-                symbol: values.symbol || undefined,
-                comment: values.comment || undefined,
-              }));
+              exec(() => positionForceCloseAll({ login }));
             }
           },
         }),

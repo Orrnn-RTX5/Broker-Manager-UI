@@ -49,8 +49,9 @@ test('opening a folder shows its direct subfolders, then its leaf groups with fu
   assert.ok(leaves.every((row) => row.type === 'group' && row.group && !isGroupBranch(row)));
 });
 
-test('folder paths compare case-insensitively and count every group underneath', () => {
-  assert.equal(countGroupsUnder(SERVER_GROUPS, 'prep'), 4);
+test('folder paths compare exactly (case-sensitive) and count every group underneath', () => {
+  assert.equal(countGroupsUnder(SERVER_GROUPS, 'PREP'), 4);
+  assert.equal(countGroupsUnder(SERVER_GROUPS, 'prep'), 0, 'another spelling is another path');
   assert.equal(countGroupsUnder(SERVER_GROUPS, 'PREP\\contest'), 2);
   assert.equal(countGroupsUnder(SERVER_GROUPS, ''), SERVER_GROUPS.length);
   assert.deepEqual(listGroupsUnder(SERVER_GROUPS, 'Nexa').map((group) => group.name), ['Nexa', 'Nexa\\real\\Client01']);
@@ -78,7 +79,8 @@ test('the navigator tree lists folders with their group counts, then the groups'
 
 test('container paths include groups and implied folders, parents before children', () => {
   const containers = listGroupContainerPaths([{ name: 'A\\b\\c' }, { name: 'a' }, { name: 'B' }]);
-  assert.deepEqual(containers, ['a', 'A\\b', 'A\\b\\c', 'B']);
+  // 'a' is its own group; 'A' is the folder implied by A\b\c (case-sensitive).
+  assert.deepEqual(containers, ['A', 'a', 'A\\b', 'A\\b\\c', 'B']);
 });
 
 test('slash-separated names become folders and keep the slash', () => {
@@ -131,4 +133,14 @@ test('row text mirrors the MT5 columns', () => {
     leverage: '1:25',
     currency: 'USD',
   });
+});
+
+test('groups differing only by case get separate tree nodes and folder rows', () => {
+  const groups = [{ name: 'Grp' }, { name: 'GRP' }, { name: 'Team\\Desk' }, { name: 'TEAM\\Desk' }];
+  const tree = buildGroupNavigatorTree(groups);
+  assert.deepEqual(tree.map((node) => [node.label, node.type]), [['TEAM', 'folder'], ['Team', 'folder'], ['GRP', 'group'], ['Grp', 'group']]);
+  const rows = getGroupFolderRows(groups, '');
+  assert.equal(rows.filter((row) => row.label.toLowerCase() === 'grp').length, 2);
+  assert.equal(countGroupsUnder(groups, 'Team'), 1);
+  assert.equal(countGroupsUnder(groups, 'TEAM'), 1);
 });

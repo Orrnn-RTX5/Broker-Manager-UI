@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { buildAccountPatchFromGroup, describeGroupSave, readLeverageRatio } from './groupAccountRows.js';
+import { normalizeSidebarAccountPage } from '../../utils/sidebarAccountRows.js';
 
 // Exercise the real save workflow with controlled transports, including the
 // account-update path; no browser session or real backend is needed.
@@ -13,15 +14,16 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('./groupPayload.js', import.meta.url))],
   bundle: true, write: false, format: 'esm', platform: 'browser',
   plugins: [{ name: 'group-save-transport', setup(builder) {
-    builder.onResolve({ filter: /\/(managerFetch|managerAccountApi|sidebarAccounts)\.js$/ }, ({ path }) => ({ path, namespace: 'group-test' }));
+    builder.onResolve({ filter: /\/(managerFetch|managerAccountApi|sidebarAccounts|realtimeCacheRevision)\.js$/ }, ({ path }) => ({ path, namespace: 'group-test' }));
     builder.onLoad({ filter: /.*/, namespace: 'group-test' }, ({ path }) => ({ loader: 'js', contents:
       path.includes('managerFetch') ? 'export const fetchManagerApi = (...args) => globalThis.__groupPayloadTest.request(...args);' :
       path.includes('managerAccountApi') ? 'export const updateManagerAccount = (...args) => globalThis.__groupPayloadTest.updateAccount(...args);' :
+      path.includes('realtimeCacheRevision') ? 'export const advanceRealtimeCacheRevision = () => globalThis.__groupPayloadTest.advanceRevision();' :
       'export const fetchAllSidebarAccounts = (...args) => globalThis.__groupPayloadTest.loadAccounts(...args);',
     }));
   } }],
 });
-const { GROUP_DEFAULT_PAYLOAD, GROUP_ALLOWED_FIELDS, ROUTING_TO_BOOK_TYPE, EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, isCanonicalBookType, buildNewGroupPayload, validateNewGroupFields, buildGroupSavePayload, parentTradeAllowedOf, resolveNewGroupTradeAllowed, pickGroupPayloadFields, submitGroup } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const { GROUP_DEFAULT_PAYLOAD, GROUP_ALLOWED_FIELDS, GROUP_RENAME_UNSUPPORTED, ROUTING_TO_BOOK_TYPE, EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, isCanonicalBookType, buildNewGroupPayload, validateNewGroupFields, buildGroupSavePayload, parentTradeAllowedOf, resolveNewGroupTradeAllowed, pickGroupPayloadFields, submitGroup, applyGroupSettingsToAccounts } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 import { buildGroupSymbolsSavePayload, isCanonicalGroupSymbolsSavePayload, NEW_GROUP_SYMBOL_TERMS_GAP } from './groupSymbolTerms.js';
 
 beforeEach(() => {
@@ -35,6 +37,7 @@ beforeEach(() => {
   };
   runtime.loadAccounts = async () => { throw new Error('Unexpected account load'); };
   runtime.updateAccount = async () => { throw new Error('Unexpected account update'); };
+  runtime.advanceRevision = () => {};
 });
 after(() => { delete globalThis.__groupPayloadTest; });
 
@@ -89,7 +92,7 @@ test('changing leverage updates accounts with only the changed setting', async (
   const saved = await submitGroup({ originalName: initial.name, payload });
 
   assert.deepEqual(payload, { leverage: 200 });
-  assert.deepEqual(accountUpdates, [{ login: 1001, patch: { Leverage: 200 } }]);
+  assert.deepEqual(accountUpdates, [{ login: 1001, patch: { Leverage: 200, ExpectedGroup: initial.name } }]);
   assert.equal(saved.accountsUpdated, 1);
   assert.deepEqual(saved.accountErrors, []);
 });
@@ -220,9 +223,9 @@ test('untouched tradeAllowed inherits the exact parent match; an explicit touch 
     { ...GROUP_DEFAULT_PAYLOAD, name: 'Main/other', tradeAllowed: true },
   ];
 
-  // Parent-match inheritance: exact, case-insensitive, trimmed.
+  // Parent-match inheritance: exact, case-sensitive, trimmed.
   assert.equal(parentTradeAllowedOf(groups, 'Main/parent'), false);
-  assert.equal(parentTradeAllowedOf(groups, 'main/PARENT'), false);
+  assert.equal(parentTradeAllowedOf(groups, 'main/PARENT'), null, 'another spelling is another (unknown) group');
   assert.equal(parentTradeAllowedOf(groups, '  Main/parent  '), false);
   assert.equal(parentTradeAllowedOf(groups, 'Main/other'), true);
   assert.equal(
@@ -231,7 +234,8 @@ test('untouched tradeAllowed inherits the exact parent match; an explicit touch 
   );
   assert.equal(
     resolveNewGroupTradeAllowed({ groups, parentGroup: 'MAIN/PARENT', tradeTouched: false, currentValue: true }),
-    false,
+    true,
+    'no exact parent match: nothing is inherited',
   );
   assert.equal(
     resolveNewGroupTradeAllowed({ groups, parentGroup: 'Main/other', tradeTouched: false, currentValue: true }),
@@ -342,14 +346,14 @@ test('new-group create never carries per-symbol financial terms; the canonical c
   assert.throws(() => buildGroupSymbolsSavePayload('Main/alpha', [{ symbol: 'bad symbol!' }]), /Invalid symbol/);
 });
 
-test('a group edit copies leverage, margin, and a renamed group onto each account', () => {
+test('a group edit copies leverage and margin onto each account, never a Group move', () => {
+  // The backend cannot rename a group, so a changed name never moves accounts.
   assert.deepEqual(buildAccountPatchFromGroup({
     name: 'Yopips/real',
     leverage: 200,
     marginCallLevel: 120,
     stopOutLevel: 50,
   }, 'Yopips/demo'), {
-    Group: 'Yopips/real',
     Leverage: 200,
     MarginCallLevel: 120,
     StopOutLevel: 50,
@@ -408,7 +412,7 @@ test('create with a parent group: untouched leverage is omitted so the parent go
   ).leverage, 250);
 });
 
-test('edit path still sends the full picked payload including leverage', () => {
+test('pickGroupPayloadFields keeps leverage and only allowed keys', () => {
   const form = { ...existingGroup(), leverage: 100 };
   const picked = pickGroupPayloadFields(form, GROUP_ALLOWED_FIELDS);
 
@@ -417,4 +421,186 @@ test('edit path still sends the full picked payload including leverage', () => {
     Object.keys(picked).every((key) => GROUP_ALLOWED_FIELDS.includes(key)),
     'payload keys must stay within GROUP_ALLOWED_FIELDS',
   );
+});
+
+// Owner rule 2026-10-28: group names are case-sensitive. Saving one group never
+// patches the accounts of another group whose name differs only by case.
+test('a group edit never patches the accounts of a group that differs only by case', async () => {
+  const initial = { ...existingGroup(), name: 'Grp' };
+  const payload = buildGroupSavePayload(initial, { ...initial, leverage: 200, stopOutLevel: 30 });
+  const accountUpdates = [];
+  runtime.loadAccounts = async () => ({ rows: [
+    { login: 1001, group: 'Grp' },
+    { login: 1002, group: 'GRP' },
+    { login: 1003, group: 'grp' },
+    { login: 1004, group: ' Grp ' },
+  ] });
+  runtime.updateAccount = async (login, patch) => { accountUpdates.push({ login, patch }); };
+
+  const saved = await submitGroup({ originalName: 'Grp', payload });
+
+  assert.deepEqual(accountUpdates.map((update) => update.login).sort(), [1001, 1004], 'only the exact (trimmed) group');
+  assert.ok(accountUpdates.every((update) => update.patch.Leverage === 200 && update.patch.StopOutLevel === 30));
+  // ExpectedGroup is the account's stored group, byte-exact (no trim).
+  assert.deepEqual(
+    Object.fromEntries(accountUpdates.map((update) => [update.login, update.patch.ExpectedGroup])),
+    { 1001: 'Grp', 1004: ' Grp ' },
+    'every PATCH carries the stored group, byte-exact, as ExpectedGroup',
+  );
+  assert.ok(accountUpdates.every((update) => !('Group' in update.patch)), 'a group save never moves accounts');
+  assert.equal(saved.accountsUpdated, 2);
+});
+
+test('a group edit never sends name: same name is dropped, a rename is refused before any request', async () => {
+  const initial = { ...existingGroup(), name: 'Grp' };
+  runtime.loadAccounts = async () => ({ rows: [] });
+  runtime.updateAccount = async () => {};
+
+  // Unchanged form: the edit diff is empty, nothing is sent.
+  assert.deepEqual(buildGroupSavePayload(initial, { ...initial }), {});
+
+  // A payload that still carries the same (trimmed) name: name is stripped.
+  await submitGroup({ originalName: 'Grp', payload: { name: ' Grp ', leverage: 200 } });
+  assert.equal(runtime.calls.length, 1);
+  assert.ok(!('name' in runtime.calls[0].payload), 'GroupUpdate never carries name');
+  assert.equal(runtime.calls[0].payload.leverage, 200);
+
+  // A real rename (including one that differs only by case) is refused.
+  runtime.calls = [];
+  for (const name of ['Other', 'GRP']) {
+    await assert.rejects(submitGroup({ originalName: 'Grp', payload: { name, leverage: 200 } }), { message: GROUP_RENAME_UNSUPPORTED });
+  }
+  assert.deepEqual(runtime.calls, [], 'a refused rename makes no request');
+});
+
+test('ExpectedGroup is the stored group of a NORMALIZED sidebar row, not its trimmed display value', async () => {
+  const initial = { ...existingGroup(), name: 'Grp' };
+  const payload = buildGroupSavePayload(initial, { ...initial, leverage: 200 });
+  const accountUpdates = [];
+  // Rows as the real loader returns them (normalizeSidebarAccountPage trims `group`).
+  runtime.loadAccounts = async () => normalizeSidebarAccountPage({ rows: [
+    { login: 1001, group: ' Grp ' },
+    { login: 1002, Group: 'Grp' },
+    { login: 1003, group: 'GRP' },
+  ] });
+  runtime.updateAccount = async (login, patch) => { accountUpdates.push([login, patch.ExpectedGroup]); };
+
+  await submitGroup({ originalName: 'Grp', payload });
+
+  assert.deepEqual(accountUpdates.sort(), [['1001', ' Grp '], ['1002', 'Grp']]);
+});
+
+test('a blank group name never patches any account', async () => {
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001 }, { login: 1002, group: '' }] });
+  runtime.updateAccount = async () => { throw new Error('must not patch'); };
+  for (const name of ['', '   ']) {
+    assert.deepEqual(await applyGroupSettingsToAccounts(name, { leverage: 200 }), { accountsUpdated: 0, accountErrors: [] });
+  }
+});
+
+// Group-wide writes read membership from the server, and the query cache
+// is written only for the logins the server accepted.
+const cacheClient = (cachedRows) => {
+  const writes = [];
+  return {
+    writes,
+    getQueriesData: () => [[['sidebar-accounts'], { rows: cachedRows }]],
+    setQueriesData: (_filter, updater) => {
+      const next = updater({ rows: cachedRows });
+      writes.push(next);
+      return next;
+    },
+  };
+};
+
+test('a stale cache never decides membership: an account the server moved out of the group is not patched', async () => {
+  const accountUpdates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Other' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { accountUpdates.push(login); };
+  const queryClient = cacheClient([{ login: 1001, group: 'Grp', leverage: 100 }]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.deepEqual(accountUpdates, [1002], 'no PATCH for 1001, which the server says is in Other');
+  assert.equal(result.accountsUpdated, 1);
+});
+
+test('a server row missing from the cache IS patched', async () => {
+  const accountUpdates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { accountUpdates.push(login); };
+  const queryClient = cacheClient([{ login: 1001, group: 'Grp', leverage: 100 }]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.deepEqual(accountUpdates, [1001, 1002]);
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(result.accountErrors, []);
+});
+
+test('a 409-refused account keeps its cached leverage; only accepted logins are written to the cache', async () => {
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => {
+    if (login === 1002) throw Object.assign(new Error('ACCOUNT_GROUP_MISMATCH'), { status: 409 });
+  };
+  const queryClient = cacheClient([
+    { login: 1001, group: 'Grp', leverage: 100, Leverage: 100 },
+    { login: 1002, group: 'Grp', leverage: 100, Leverage: 100 },
+  ]);
+
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, queryClient);
+
+  assert.equal(queryClient.writes.length, 1);
+  const [cached] = queryClient.writes;
+  assert.equal(cached.rows.find((row) => row.login === 1001).leverage, 200, 'accepted account shows the new leverage');
+  assert.equal(cached.rows.find((row) => row.login === 1002).leverage, 100, '409-refused account keeps the leverage the server still holds');
+  assert.equal(result.accountsUpdated, 1);
+  assert.equal(result.accountErrors.length, 1);
+});
+
+// The group-wide write path asks for a fresh membership read, never a shared in-flight one.
+test('the group-wide write path asks the server for a fresh membership read', async () => {
+  const requests = [];
+  runtime.loadAccounts = async (options) => { requests.push(options); return { rows: [] }; };
+  runtime.updateAccount = async () => { throw new Error('no members, must not patch'); };
+  await applyGroupSettingsToAccounts('Grp', { leverage: 200 });
+  assert.deepEqual(requests, [{ fresh: true }]);
+});
+
+// A member listed under Grp through accountGroup alone (group '') is patched on the group save path, with
+// the stored group as ExpectedGroup. The save path used to skip it silently while the list showed it.
+test('the group save path patches an accountGroup-only member with ExpectedGroup Grp, like the list', async () => {
+  const updates = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: '', accountGroup: 'Grp' }] });
+  runtime.updateAccount = async (login, payload) => { updates.push([login, payload.ExpectedGroup]); };
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, cacheClient([]));
+
+  assert.deepEqual(updates, [[1001, 'Grp'], [1002, 'Grp']]);
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(result.accountErrors, []);
+});
+
+// The group save path advances the realtime cache revision after its last account PATCH, so a read that
+// started before that PATCH is never reused or cached. The list is invalidated only after this returns.
+test('the group save path advances the cache revision after the last account PATCH', async () => {
+  const events = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }, { login: 1002, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { events.push(`patch:${login}`); };
+  runtime.advanceRevision = () => { events.push('bump'); };
+  const result = await applyGroupSettingsToAccounts('Grp', { leverage: 200 }, cacheClient([]));
+
+  assert.equal(result.accountsUpdated, 2);
+  assert.deepEqual(events, ['patch:1001', 'patch:1002', 'bump']);
+});
+
+test('submitGroup advances the cache revision after the last account PATCH of an edit', async () => {
+  const events = [];
+  runtime.loadAccounts = async () => ({ rows: [{ login: 1001, group: 'Grp' }] });
+  runtime.updateAccount = async (login) => { events.push(`patch:${login}`); };
+  runtime.advanceRevision = () => { events.push('bump'); };
+  const saved = await submitGroup({ originalName: 'Grp', payload: { leverage: 200 }, queryClient: cacheClient([]) });
+
+  assert.equal(saved.accountsUpdated, 1);
+  assert.deepEqual(saved.accountErrors, []);
+  assert.deepEqual(events, ['patch:1001', 'bump']);
 });

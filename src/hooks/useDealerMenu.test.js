@@ -185,6 +185,94 @@ test('an application-level rejection surfaced to the operator reads as failure',
   assert.equal(hookState.refreshed, 0);
 });
 
+test('Force Close All is note-only: no symbol or comment input, and it names the login', () => {
+  const menu = renderMenu();
+  const action = menu.getPositionActions({ position: 101, login: '1001', symbol: 'EURUSD' }).find((a) => a.text === 'Force Close All (Login)');
+  action.onClick();
+  const fields = hookState.slots[0].fields;
+  assert.deepEqual(fields.map((field) => field.type), ['note']);
+  assert.deepEqual(fields.map((field) => field.text), ['Closes every open position on login 1001 at the current market price.']);
+});
+
+test('a Force Close All success sends the account-scoped close, then refreshes and closes the prompt', async () => {
+  stubs.positionForceCloseAll = async (params) => {
+    assert.deepEqual(params, { login: '1001' });
+    return { success: true, reachedServer: true, message: 'Close All finished' };
+  };
+  submitPositionDialog('Force Close All (Login)', {});
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(hookState.refreshed, 1);
+  assert.equal(hookState.slots[0], null);
+});
+
+test('a mixed Close All refreshes the grid, closes the prompt, and shows the actionable message', async () => {
+  const message = 'Close All finished with some positions still open (3 closed, 1 open) - check the list and run Close All again.';
+  stubs.positionForceCloseAll = async () => ({ success: false, reachedServer: true, message });
+  submitPositionDialog('Force Close All (Login)', {});
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'result');
+  assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'error');
+  assert.equal(resultCalls[0].args[0].message, message);
+  assert.equal(hookState.refreshed, 1);
+  assert.equal(hookState.slots[0], null);
+});
+
+test('a Close All refusal the server answered refreshes the grid but keeps the prompt open to retry', async () => {
+  stubs.positionForceCloseAll = async () => {
+    throw Object.assign(new Error('Another Close All is already running for this account.'), { status: 409, code: 'BULK_CLOSE_ACCOUNT_BUSY', reachedServer: true });
+  };
+  submitPositionDialog('Force Close All (Login)', {});
+  await flush();
+  assert.equal(resultCalls.length, 1);
+  assert.equal(resultCalls[0].kind, 'error');
+  assert.equal(hookState.refreshed, 1);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open');
+});
+
+test('a network failure shows the no-answer message, refreshes the list, and keeps the prompt open', async () => {
+  const message = 'No answer from the server - the close may or may not have happened. Check the positions list, then retry (a retry within 2 minutes is safe).';
+  stubs.positionForceClose = async () => { throw Object.assign(new Error(message), { reachedServer: true, actionable: true }); };
+  submitPositionDialog('Force Close', {});
+  await flush();
+  assert.equal(resultCalls[0].kind, 'error');
+  // Our own actionable message is shown as written, without the "Error: " prefix.
+  assert.equal(resultCalls[0].args[0].message, message);
+  assert.equal(hookState.refreshed, 1);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open');
+});
+
+test('a 5xx unconfirmed close refreshes the list and keeps the prompt open to retry within the window', async () => {
+  stubs.positionForceClose = async () => {
+    throw Object.assign(new Error('Trading service did not confirm the close - check the positions list, then retry within 2 minutes (safe).'), { status: 503, reachedServer: true });
+  };
+  submitPositionDialog('Force Close', {});
+  await flush();
+  assert.equal(resultCalls[0].kind, 'error');
+  assert.equal(hookState.refreshed, 1);
+  assert.ok(hookState.slots[0] && typeof hookState.slots[0].onSubmit === 'function', 'prompt must stay open');
+});
+
+test('a Close All 202 refreshes the list and closes the prompt with the accepted message', async () => {
+  stubs.positionForceCloseAll = async () => ({ success: true, reachedServer: true, message: 'Close All accepted for login 1001. Closing is in progress; the positions list will update.' });
+  submitPositionDialog('Force Close All (Login)', {});
+  await flush();
+  assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'success');
+  assert.equal(hookState.refreshed, 1);
+  assert.equal(hookState.slots[0], null);
+});
+
+test('a single close the server accepted (202) refreshes and closes the prompt with the accepted message', async () => {
+  stubs.positionForceClose = async () => ({ success: true, reachedServer: true, message: 'Close accepted - the list will update.' });
+  submitPositionDialog('Force Close', {});
+  await flush();
+  assert.equal(normalizeResult(resultCalls[0].args[0]).type, 'success');
+  assert.equal(resultCalls[0].args[0].message, 'Close accepted - the list will update.');
+  assert.equal(hookState.refreshed, 1);
+  assert.equal(hookState.slots[0], null);
+});
+
 test('a Change Price success surfaces the server result to the operator', async () => {
   stubs.positionPriceChange = async (ticket, newPrice) => {
     assert.equal(ticket, 101);
@@ -210,13 +298,21 @@ test('a Change Price failure surfaces an error to the operator', async () => {
   assert.equal(hookState.refreshed, 0);
 });
 
+test('Force Close is market-only: the dialog has no price input and says so', () => {
+  const menu = renderMenu();
+  const action = menu.getPositionActions({ position: 101, login: '1001', priceCurrent: 1.2 }).find((a) => a.text === 'Force Close');
+  action.onClick();
+  const fields = hookState.slots[0].fields;
+  assert.equal(fields.some((field) => field.type === 'number' || field.key === 'price'), false);
+  assert.deepEqual(fields.map((field) => field.text), ['Closes at the current market price.']);
+});
+
 test('a Force Close success surfaces the server result to the operator', async () => {
   stubs.positionForceClose = async (params) => {
-    assert.equal(params.ticket, 101);
-    assert.equal(params.price, 1.2);
+    assert.deepEqual(params, { ticket: 101 });
     return { success: true, message: 'Position closed' };
   };
-  submitPositionDialog('Force Close', { price: 1.2 });
+  submitPositionDialog('Force Close', {});
   await flush();
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'result');
@@ -227,7 +323,7 @@ test('a Force Close success surfaces the server result to the operator', async (
 
 test('a Force Close application-level rejection reads as failure', async () => {
   stubs.positionForceClose = async () => ({ success: false, message: 'Force close failed' });
-  submitPositionDialog('Force Close', { price: 1.2 });
+  submitPositionDialog('Force Close', {});
   await flush();
   assert.equal(resultCalls.length, 1);
   assert.equal(resultCalls[0].kind, 'result');
