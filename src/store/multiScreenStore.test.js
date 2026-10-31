@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  MAX_ACCOUNT_DETAIL_WINDOWS,
   MAX_MULTI_SCREENS,
   buildScreenGridRows,
   useMultiScreenStore,
@@ -238,5 +239,58 @@ test('Movable New Account and New Group screens hold their grid slot, stack abov
   assert.match(cssSource, /\.multi-screen-pane\.is-movable,\s*\.multi-screen-pane\.is-pane-docked\s*\{[\s\S]*?z-index:\s*520;/);
   assert.match(cssSource, /\.multi-screen-pane\.is-dragging\s*\{[\s\S]*?z-index:\s*600 !important;/);
 });
+
+test('Accounts sidebar double-click opens portaled AccountDetailsModal on Overview tab above docked zones', () => {
+  const sidebarSource = readFileSync(new URL('../components/MarginCallsSidebar.jsx', import.meta.url), 'utf8');
+  const modalSource = readFileSync(new URL('../components/Popups/AccountDetailsModal.jsx', import.meta.url), 'utf8');
+  const contextMenuSource = readFileSync(new URL('../components/menus/SidebarContextMenu.jsx', import.meta.url), 'utf8');
+
+  assert.match(sidebarSource, /onDoubleClick=\{\(event\)\s*=>\s*\{[\s\S]*?handleMenuAction\('details',\s*acc\)/);
+  assert.match(sidebarSource, /<AccountDetailsModal[\s\S]*?key=\{typeof selectedAccountDetails === 'object' \? selectedAccountDetails\.login : selectedAccountDetails\}[\s\S]*?initialTab="Overview"/);
+  assert.match(modalSource, /document\.querySelector\('\.rtx5-command-shell'\)/);
+  assert.match(modalSource, /createPortal\(modalNode,\s*portalTarget\)/);
+  assert.match(contextMenuSource, /createPortal\(menuNode,\s*portalTarget\)/);
+});
+
+test('Double-clicking in Show account panel or Trading Accounts opens up to 4 different accounts at a time', () => {
+  useMultiScreenStore.getState().resetMultiScreens();
+  assert.equal(MAX_ACCOUNT_DETAIL_WINDOWS, 4);
+
+  const first = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200001, name: 'Acct 1' }, { source: 'sidebar' });
+  const second = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200002, name: 'Acct 2' }, { source: 'trading-accounts' });
+  const third = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200003, name: 'Acct 3' }, { source: 'sidebar' });
+  const fourth = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200004, name: 'Acct 4' }, { source: 'trading-accounts' });
+
+  assert.equal(first.status, 'added');
+  assert.equal(second.status, 'added');
+  assert.equal(third.status, 'added');
+  assert.equal(fourth.status, 'added');
+  assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 4);
+  assert.deepEqual(
+    useMultiScreenStore.getState().openAccountWindows.map((w) => [w.login, w.slotIndex]),
+    [['200001', 0], ['200002', 1], ['200003', 2], ['200004', 3]]
+  );
+
+  // Re-opening an already-open account focuses it without exceeding 4 windows
+  const refocusSecond = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200002, name: 'Acct 2' });
+  assert.equal(refocusSecond.status, 'focused');
+  assert.equal(useMultiScreenStore.getState().activeAccountWindowLogin, '200002');
+  assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 4);
+
+  // 5th different account is capped at 4
+  const fifth = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200005, name: 'Acct 5' });
+  assert.equal(fifth.status, 'limit-reached');
+  assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 4);
+
+  // Closing slot 1 (login 200002) frees slotIndex 1 for the next account
+  useMultiScreenStore.getState().closeAccountDetailWindow(200002);
+  assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 3);
+  const replacement = useMultiScreenStore.getState().openAccountDetailWindow({ login: 200005, name: 'Acct 5' });
+  assert.equal(replacement.status, 'added');
+  assert.equal(replacement.slotIndex, 1);
+  assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 4);
+});
+
+
 
 

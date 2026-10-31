@@ -4230,16 +4230,93 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .trading-accounts-grid .trading-accounts-table {
   width: 100%;
-  min-width: 780px;
+  min-width: 860px;
   table-layout: fixed;
+  border-collapse: collapse;
 }
 
 #root .trading-accounts-grid .trading-accounts-table :is(th, td):not(.trading-accounts-grid-empty) {
-  padding: 9px 10px;
-  text-align: left !important;
+  padding: 4px 8px;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border-right: 1px solid var(--border-2, var(--border));
+}
+
+#root .trading-accounts-grid .trading-accounts-table :is(th, td):last-child:not(.trading-accounts-grid-empty) {
+  border-right: 0;
+}
+
+#root .trading-accounts-grid .trading-accounts-table.no-gridlines tbody td:not(.trading-accounts-grid-empty) {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+#root .trading-accounts-grid .trading-accounts-table :is(th, td).is-right:not(.trading-accounts-grid-empty) {
+  text-align: right !important;
+}
+
+#root .trading-accounts-grid .trading-accounts-table :is(th, td).is-left:not(.trading-accounts-grid-empty) {
+  text-align: left !important;
+}
+
+#root .trading-accounts-grid .trading-accounts-th-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+#root .trading-accounts-grid .trading-accounts-th-content.is-right {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+#root .trading-accounts-grid .trading-accounts-sort-arrow {
+  font-size: 9px !important;
+  line-height: 1;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+#root .trading-accounts-grid .trading-accounts-login-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#root .trading-accounts-grid .trading-accounts-login-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#root .trading-accounts-grid .trading-accounts-login-icon.is-real {
+  color: #d9822b;
+}
+
+#root .trading-accounts-grid .trading-accounts-login-icon.is-demo {
+  color: #22c55e;
+}
+
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected td {
+  background: #0060c0 !important;
+  color: #ffffff !important;
+}
+
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-demo {
+  color: #4ade80 !important;
+}
+
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-real {
+  color: #fbbf24 !important;
 }
 
 /* Keep the compact desktop header intact until the remaining workspace

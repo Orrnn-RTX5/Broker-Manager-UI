@@ -1,7 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
+import { X, Minus, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
@@ -20,6 +20,7 @@ import { closeManagerPosition } from '../../services/managerTradeApi';
 import { submitManagerTransaction } from '../../services/managerFinanceApi';
 import { updateManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
 import { normalizeResult } from '../../utils/resultMessage';
@@ -48,7 +49,7 @@ import {
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
 
 const TABS = [
-  'Overview', 'Personal', 'Account', 'Limits', 'Balance', 'Trade', 'History', 'Security'
+  'Overview', 'Exposure', 'Personal', 'Account', 'Limits', 'Profile', 'Balance', 'Trade', 'History', 'Security', 'Credentials'
 ];
 
 const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
@@ -56,6 +57,66 @@ const ACCOUNT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 const ACCOUNT_POSITION_LIVE_REFRESH_MIN_MS = 50;
+
+const formatSpaceNumber = (val, decimals = 2) => {
+  const n = Number(val);
+  if (val === null || val === undefined || val === '' || !Number.isFinite(n)) return (0).toFixed(decimals);
+  const fixed = Math.abs(n).toFixed(decimals);
+  const [intPart, decPart] = fixed.split('.');
+  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${n < 0 ? '-' : ''}${withSpaces}${decPart !== undefined ? `.${decPart}` : ''}`;
+};
+
+const AccountTitleIcon = ({ group }) => {
+  const g = String(group || '').toLowerCase();
+  const isReal = g.includes('real') && !g.includes('demo') && !g.includes('contest');
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={`account-details-title-user-icon ${isReal ? 'is-real' : 'is-demo'}`}
+    >
+      <circle cx="8" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M3.2 13.5c0-2.4 2.15-4.1 4.8-4.1s4.8 1.7 4.8 4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M2.5 13.5h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const PositionSymbolIcon = ({ type }) => {
+  const isBuy = String(type || '').toLowerCase() === 'buy';
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden="true"
+      className={`account-overview-pos-icon ${isBuy ? 'is-buy' : 'is-sell'}`}
+    >
+      <rect x="1.5" y="1" width="9" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="3.5" y1="4.2" x2="8.5" y2="4.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <line x1="3.5" y1="7.2" x2="7.2" y2="7.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const SummaryBalanceIcon = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 14 14"
+    fill="none"
+    aria-hidden="true"
+    className="account-overview-balance-icon"
+  >
+    <circle cx="7" cy="7" r="5.6" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M7 4.2v5.6M4.2 7h5.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+  </svg>
+);
 
 
 const TradeContextMenuItem = ({ icon: Icon, text, color, onClick, submenu, isHeader, disabled = false }) => (
@@ -359,7 +420,19 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
   );
 };
 
-const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Overview', entity = 'position', onAccountUpdated }) => {
+const AccountDetailsModal = ({
+  account,
+  targetTicket,
+  onClose,
+  initialTab = 'Overview',
+  entity = 'position',
+  onAccountUpdated,
+  windowIndex = 0,
+  totalWindows = 1,
+  zOrder = 1,
+  isActiveWindow = true,
+  onFocusWindow,
+}) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
   const loginId = account && typeof account === 'object' ? account.login : account;
   const { canAct, resolved, hasPermission } = usePermissions();
@@ -370,6 +443,10 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
   const canManipulateTrades = canMutateAccountTrades(canAct);
   const canCloseTrades = canCloseAccountTrades(canAct);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
+  const multiScreenCount = useMultiScreenStore(
+    (state) => state.accountScreens.length + state.groupScreens.length
+  );
   const [activeTab, setActiveTab] = useState(initialTab);
   const [positionsDeniedLogin, setPositionsDeniedLogin] = useState(null);
   const showPositions = canViewPositions && positionsDeniedLogin !== String(loginId);
@@ -417,7 +494,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
   const positions = useLivePositions(showPositions ? snapshotPositions : [], loginId, showPositions, positionsSnapshotRevision);
   const liveMetrics = useLiveAccountMetrics(loginId);
-  const [positionsLoading, setPositionsLoading] = useState(() => initialPositions === undefined);
+  const [, setPositionsLoading] = useState(() => initialPositions === undefined);
   const [positionsError, setPositionsError] = useState('');
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -431,6 +508,31 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [pendingTradeClose, setPendingTradeClose] = useState(null);
   const tradeConfirmationRef = useRef(null);
   const isOrderCancellation = entity === 'order';
+  const previousLoginIdRef = useRef(loginId);
+
+  useEffect(() => {
+    if (String(previousLoginIdRef.current ?? '') === String(loginId ?? '')) return;
+    previousLoginIdRef.current = loginId;
+    setActiveTab(initialTab);
+    setFocusedTicket(targetTicket);
+    setFormData({});
+    setUpdateFeedback(null);
+    setPasswords({ master: '', investor: '', api: '', phone: '', otp: '' });
+    setShowPasswords({ master: false, investor: false, api: false, phone: false, otp: false });
+    setDepositAmount('');
+    setDepositComment('');
+    setDepositDestination('');
+    setDepositError(null);
+    setDepositSuccess(null);
+    finishDepositConfirmation(false);
+    setPositions(canViewPositions ? (peekAccountPositions(loginId) || []) : []);
+    setPositionsError('');
+    setHistoryRows([]);
+    setHistoryError('');
+    setSelectedTicketRow(null);
+    setPendingTradeClose(null);
+    setCtxMenu({ x: 0, y: 0, isOpen: false, data: null });
+  }, [loginId, initialTab, targetTicket, canViewPositions]);
 
   useEffect(() => {
     if (!pendingTradeClose) return;
@@ -471,26 +573,118 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     return () => window.removeEventListener('click', closeMenu);
   }, []);
 
-  const initialWidth = Math.min(880, window.innerWidth - 40);
-  const initialHeight = Math.min(630, window.innerHeight - 40);
+  const initialWidth = Math.min(760, window.innerWidth - 40);
+  const initialHeight = Math.min(545, window.innerHeight - 40);
+  const hasUserMovedRef = useRef(false);
 
-  const [position, setPosition] = useState({
-    x: Math.max(0, (window.innerWidth - initialWidth) / 2),
-    y: Math.max(0, (window.innerHeight - initialHeight) / 2)
+  const computeMultiScreenSafeBounds = useCallback((slotIdx = windowIndex, totalCount = totalWindows) => {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 720;
+    const safeSlot = Math.max(0, Number(slotIdx) || 0) % 4;
+    const safeTotal = Math.max(1, Math.min(4, Number(totalCount) || 1));
+
+    let availLeft = 8;
+    let availTop = 40;
+    let maxRight = vw - 8;
+    let maxBottom = vh - 28;
+
+    if (typeof document !== 'undefined') {
+      const shellEl = document.querySelector('.cc-shell-workspace');
+      const shellRect = shellEl?.getBoundingClientRect();
+      if (shellRect && shellRect.height > 200) {
+        availTop = Math.max(36, Math.round(shellRect.top) + 4);
+        maxBottom = Math.min(vh - 8, Math.round(shellRect.bottom) - 4);
+      }
+
+      const multiEl = document.querySelector('.multi-screen-workspace');
+      const multiRect = multiEl?.getBoundingClientRect();
+      if (multiRect && multiRect.width > 120 && multiRect.left > 320) {
+        maxRight = Math.min(maxRight, Math.max(320, Math.round(multiRect.left) - 10));
+      }
+
+      const accountsPanelEl = document.querySelector('[data-panel-id="accounts"]');
+      const accountsRect = accountsPanelEl?.getBoundingClientRect();
+      if (accountsRect && accountsRect.width > 80 && accountsRect.left > 480) {
+        maxRight = Math.min(maxRight, Math.max(420, Math.round(accountsRect.left) - 8));
+      }
+    }
+
+    const availWidth = Math.max(420, maxRight - availLeft);
+    const availHeight = Math.max(280, maxBottom - availTop);
+
+    if (safeTotal === 1) {
+      const width = Math.min(initialWidth, availWidth);
+      const height = Math.min(initialHeight, availHeight);
+      const x = availLeft + Math.max(0, Math.round((availWidth - width) / 2));
+      const y = availTop + Math.max(0, Math.round((availHeight - height) / 2));
+      return { x, y, width, height };
+    }
+
+    const gap = 10;
+    const col = safeSlot % 2;
+    const row = Math.floor(safeSlot / 2);
+
+    if (safeTotal === 2) {
+      const width = Math.max(440, Math.min(initialWidth, Math.floor((availWidth - gap) / 2)));
+      const height = Math.max(340, Math.min(initialHeight, availHeight - 16));
+      const x = col === 0 ? availLeft : Math.max(availLeft + 28, maxRight - width);
+      const y = availTop + Math.max(0, Math.round((availHeight - height) / 2));
+      return { x, y, width, height };
+    }
+
+    const width = Math.max(440, Math.min(680, Math.floor((availWidth - gap) / 2)));
+    const height = Math.max(280, Math.min(460, Math.floor((availHeight - gap) / 2)));
+    const x = col === 0 ? availLeft : Math.max(availLeft + 28, maxRight - width);
+    const y = row === 0 ? availTop : Math.max(availTop + 28, maxBottom - height);
+    return { x, y, width, height };
+  }, [initialWidth, initialHeight, windowIndex, totalWindows]);
+
+  const [position, setPosition] = useState(() => {
+    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    return { x: b.x, y: b.y };
   });
-  const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
+  const [size, setSize] = useState(() => {
+    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    return { width: b.width, height: b.height };
+  });
   const [isMaximized, setIsMaximized] = useState(false);
   const [dockZone, setDockZone] = useState(null);
   const [isDraggingWindow, setIsDraggingWindow] = useState(false);
   const [hoveredDockZone, setHoveredDockZone] = useState(null);
   const [dockRects, setDockRects] = useState(() => readPopupDockZones());
   const hoveredDockZoneRef = useRef(null);
-  const [preMaxState, setPreMaxState] = useState({
-    x: Math.max(0, (window.innerWidth - initialWidth) / 2),
-    y: Math.max(0, (window.innerHeight - initialHeight) / 2),
-    w: initialWidth,
-    h: initialHeight,
+  const [preMaxState, setPreMaxState] = useState(() => {
+    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
   });
+
+  useEffect(() => {
+    if (isMaximized || dockZone) return undefined;
+    const rafId = window.requestAnimationFrame(() => {
+      if (!hasUserMovedRef.current) {
+        const nextBounds = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+        setSize({ width: nextBounds.width, height: nextBounds.height });
+        setPosition({ x: nextBounds.x, y: nextBounds.y });
+        setPreMaxState({ x: nextBounds.x, y: nextBounds.y, w: nextBounds.width, h: nextBounds.height });
+        return;
+      }
+      if (multiScreenCount <= 0) return;
+      const multiEl = document.querySelector('.multi-screen-workspace');
+      const multiRect = multiEl?.getBoundingClientRect();
+      if (!multiRect || multiRect.width <= 120 || multiRect.left <= 320) return;
+      const maxRight = Math.max(320, Math.round(multiRect.left) - 10);
+      setSize((currSize) => {
+        const nextWidth = Math.min(currSize.width, Math.max(420, maxRight - 16));
+        setPosition((currPos) => {
+          if (currPos.x + nextWidth <= maxRight) return currPos;
+          const nextX = Math.max(8, maxRight - nextWidth);
+          return clampPopupPosition({ x: nextX, y: currPos.y }, { width: nextWidth, height: currSize.height });
+        });
+        return nextWidth === currSize.width ? currSize : { ...currSize, width: nextWidth };
+      });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [multiScreenCount, isMaximized, dockZone, windowIndex, totalWindows, computeMultiScreenSafeBounds]);
 
   const applyDockZone = (targetZone, options = {}) => {
     const { toggleIfSame = true } = options;
@@ -538,6 +732,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
 
       if (!moved && Math.hypot(dx, dy) >= 5) {
         moved = true;
+        hasUserMovedRef.current = true;
         currentRects = readPopupDockZones();
         setDockRects(currentRects);
         setIsDraggingWindow(true);
@@ -600,6 +795,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     if (isMaximized) return;
     e.preventDefault();
     e.stopPropagation();
+    hasUserMovedRef.current = true;
     let startX = e.clientX;
     let startY = e.clientY;
     let startWidth = size.width;
@@ -1271,64 +1467,77 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   // inventing 'USD'. Render sites already treat '' as unknown ('—'/blank).
   const currencyValue = getFieldValue('Currency', '');
   const rawLeverageValue = getFieldValue('Leverage');
+  const rawLeverageNumber = String(rawLeverageValue || '100').replace(/^1\s*:\s*/, '');
   const leverageValue = rawLeverageValue ? `1:${String(rawLeverageValue).replace(/^1:/, '')}` : '';
+  const leverageHeaderLabel = leverageValue || `1:${rawLeverageNumber}`;
   const modeRaw = String(getFieldValue('AccountMode', 'hedge'));
   const modeVal = modeRaw.charAt(0).toUpperCase() + modeRaw.slice(1);
+  const modeHeaderLabel = modeRaw.toLowerCase().startsWith('hedg')
+    ? 'Hedge'
+    : modeRaw.toLowerCase().startsWith('net')
+      ? 'Netting'
+      : (modeVal || 'Hedge');
   const statusValue = String(getFieldValue('Status', 'active')).toLowerCase();
   const statusLabel = statusValue.charAt(0).toUpperCase() + statusValue.slice(1);
   const languageValue = normalizeLanguageOption(getValue('Language', LANGUAGE_OPTIONS[0]));
   const registrationValue = getFieldValue('Registration');
   const lastAccessValue = getFieldValue('LastAccess');
   const lastIpValue = getFieldValue('LastIP');
-  const countryCityValue = [getFieldValue('Country'), getFieldValue('City')].filter(Boolean).join(', ');
+  const emailValue = getFieldValue('Email');
+  const mqidValue = getFieldValue('MQID');
 
   const formatNumber = (val) => {
     if (val === null || val === undefined || isNaN(Number(val))) return '0.00';
     return ACCOUNT_NUMBER_FORMATTER.format(Number(val));
   };
 
-  const balanceVal = formatNumber(getFieldValue('Balance'));
-  const equityVal = formatNumber(getFieldValue('Equity'));
-  const marginVal = formatNumber(getFieldValue('Margin'));
-  const freeMarginVal = formatNumber(getFieldValue('MarginFree'));
+  const rawBalanceVal = getFieldValue('Balance', 0);
+  const rawEquityVal = getFieldValue('Equity', rawBalanceVal);
+  const rawMarginVal = getFieldValue('Margin', 0);
+  const rawFreeMarginVal = getFieldValue('MarginFree', Number(rawEquityVal || 0) - Number(rawMarginVal || 0));
+  const balanceVal = formatNumber(rawBalanceVal);
+  const equityVal = formatNumber(rawEquityVal);
+  const marginVal = formatNumber(rawMarginVal);
+  const freeMarginVal = formatNumber(rawFreeMarginVal);
   const rawMarginLevel = getFieldValue('MarginLevel', null);
   const hasMarginLevel = rawMarginLevel !== null && rawMarginLevel !== undefined && rawMarginLevel !== '' && Number.isFinite(Number(rawMarginLevel));
+  const computedMarginLevel = hasMarginLevel
+    ? Number(rawMarginLevel)
+    : (Number(rawMarginVal) > 0 ? (Number(rawEquityVal) / Number(rawMarginVal)) * 100 : null);
   const marginLevelVal = hasMarginLevel ? formatNumber(rawMarginLevel) : '—';
-  const creditVal = formatNumber(getFieldValue('Credit', 0));
   const profitVal = getFieldValue('Profit', 0);
   const swapVal = formatNumber(getFieldValue('Swap', 0));
-  const profitNumber = Number(profitVal || 0);
-  const marginLevelNumber = Number(rawMarginLevel);
-  const financialSnapshot = [
-    { label: 'Balance', value: balanceVal, tone: 'primary' },
-    { label: 'Equity', value: equityVal, tone: 'primary' },
-    { label: 'Used margin', value: marginVal },
-    { label: 'Free margin', value: freeMarginVal },
-    { label: 'Credit', value: creditVal },
-    {
-      label: 'Margin level',
-      value: `${marginLevelVal}${hasMarginLevel ? '%' : ''}`,
-      tone: hasMarginLevel ? (marginLevelNumber < 100 ? 'negative' : 'positive') : '',
-    },
-    { label: 'Swap', value: swapVal },
-    {
-      label: 'Floating P/L',
-      value: formatNumber(profitVal),
-      tone: profitNumber > 0 ? 'positive' : profitNumber < 0 ? 'negative' : '',
-    },
-  ];
+  const balanceSpaceVal = formatSpaceNumber(rawBalanceVal);
+  const equitySpaceVal = formatSpaceNumber(rawEquityVal);
+  const marginSpaceVal = formatSpaceNumber(rawMarginVal);
+  const freeMarginSpaceVal = formatSpaceNumber(rawFreeMarginVal);
+  const marginLevelSpaceVal = computedMarginLevel !== null && Number.isFinite(computedMarginLevel)
+    ? formatSpaceNumber(computedMarginLevel)
+    : '0.00';
 
   const formatDate = (value) => {
     if (!hasDisplayValue(value)) return '';
     const raw = String(value).trim();
-    if (!/^-?\d+(\.\d+)?$/.test(raw)) return raw;
-    const numericValue = Number(raw);
-    const d = new Date(numericValue > 100000000000 ? numericValue : numericValue * 1000);
-    if (Number.isNaN(d.getTime())) return '';
+    if (/^\d{4}\.\d{2}\.\d{2}/.test(raw)) return raw;
+    const isNumeric = /^-?\d+(\.\d+)?$/.test(raw);
+    const d = isNumeric
+      ? new Date(Number(raw) > 100000000000 ? Number(raw) : Number(raw) * 1000)
+      : new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw;
     return d.toISOString().replace('T', ' ').slice(0, 19).replace(/-/g, '.');
   };
 
-  const titleText = `Account ${loginId}${name ? ` · ${name}` : ''}`;
+  const formatOverviewDate = (value) => {
+    const formatted = formatDate(value);
+    return formatted ? formatted.slice(0, 10) : '';
+  };
+
+  const formatOverviewDateTime = (value) => {
+    const formatted = formatDate(value);
+    return formatted ? formatted.slice(0, 16) : '';
+  };
+
+  const titleText = `Account: ${[loginId, name, currencyValue, leverageHeaderLabel, modeHeaderLabel].filter(Boolean).join(', ')}`;
 
   const dockOverlay =
     isDraggingWindow && typeof document !== 'undefined'
@@ -1362,12 +1571,14 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         )
       : null;
 
-  return (
+  const modalNode = (
     <>
     {dockOverlay}
     <div className="account-details-backdrop" aria-hidden="true" />
     <div
       ref={windowRef}
+      onMouseDownCapture={() => onFocusWindow?.()}
+      onFocusCapture={() => onFocusWindow?.()}
       onKeyDown={event => {
         if (pendingTradeClose || isDepositing || depositConfirmation || updateFeedback) return;
         if (event.key === 'Escape') {
@@ -1387,11 +1598,12 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         top: isMaximized ? 0 : position.y,
         width: isMaximized ? '100vw' : size.width,
         height: isMaximized ? '100vh' : size.height,
-        zIndex: 100000
+        zIndex: 100000 + (Number(zOrder) || 1)
       }}
-      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone ? ` is-docked is-docked--${dockZone}` : ''}`}
+      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone ? ` is-docked is-docked--${dockZone}` : ''}${isActiveWindow ? ' is-active-window' : ''}`}
       data-maximized={isMaximized}
       data-dock-zone={dockZone || 'floating'}
+      data-account-window-login={loginId}
       role="dialog"
       aria-modal="true"
       aria-label={`Account details for ${loginId}`}
@@ -1412,6 +1624,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
         className="account-details-titlebar flex items-center justify-between cursor-move flex-shrink-0"
       >
         <div className="flex items-center gap-2 min-w-0">
+          <AccountTitleIcon group={groupValue} />
           <span className="account-details-title truncate">{titleText}</span>
         </div>
         <div className="account-details-window-controls ml-2 shrink-0">
@@ -1451,8 +1664,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             </button>
           </div>
           <span className="account-details-controls-sep" aria-hidden="true" />
-          <button type="button" onClick={toggleMaximize} aria-label={isMaximized ? 'Restore account details' : 'Maximize account details'}><Square size={13} /></button>
-          <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Minimize account details"><Minus size={13} /></button>
+          <button type="button" onClick={toggleMaximize} aria-label={isMaximized ? 'Restore account details' : 'Maximize account details'}><Square size={12} /></button>
+          <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={15} /></button>
         </div>
       </div>
 
@@ -1491,7 +1705,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             aria-labelledby={`account-tab-${visibleTab.toLowerCase()}`}
             className={`account-details-content flex-1 overflow-auto flex flex-col ${visibleTab === 'Overview' ? 'is-overview' : ''} ${visibleTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
           >
-            {activeTab !== 'Trade' && (detailsLoading || detailsError) && (
+            {activeTab !== 'Trade' && activeTab !== 'Overview' && (detailsLoading || detailsError) && (
               <div className={`account-details-status ${detailsError ? 'is-error' : 'is-loading'}`} role={detailsError ? 'alert' : 'status'}>
                 {detailsLoading && <Loader size={12} className="animate-spin" />}
                 <span>{detailsError ? `Live account details unavailable: ${detailsError}` : 'Refreshing account details…'}</span>
@@ -1499,198 +1713,171 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             )}
 
             {visibleTab === 'Overview' ? (
-              <>
+              <div className="account-overview-mt5">
                 {/* Top Info Section */}
                 <section className="account-overview-summary">
-                  <div className="account-overview-heading">
-                    <div className="min-w-0">
-                      <p className="account-overview-eyebrow">Trading account</p>
-                      <div className="flex gap-2 items-baseline flex-wrap">
-                        <h2>{name}</h2>
-                        <span className="account-overview-login">#{loginId}</span>
-                      </div>
+                  <div className="account-overview-headline">
+                    <span>{name}, {loginId}, </span>
+                    <a
+                      href="#account"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setActiveTab('Account');
+                      }}
+                      className="account-overview-link is-underlined"
+                    >
+                      {groupValue || '—'}
+                    </a>
+                    <span>, 1 : {rawLeverageNumber}</span>
+                  </div>
+
+                  <div className="account-overview-meta-block">
+                    <div className="account-overview-meta-line">
+                      MetaQuotes ID: {mqidValue || '—'}
                     </div>
-                    <div className="account-overview-badges">
-                      <a href="#" className="account-overview-group">{groupValue}</a>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                      statusValue === 'active' 
-                      ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' 
-                      : 'bg-red-500/20 text-red-500 border border-red-500/30'
-                    }`}>
-                      {statusLabel}
-                    </span>
-                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-[10px] font-bold">
-                      {leverageValue}
-                    </span>
-                  </div>
-                  </div>
-
-                  <div className="account-overview-details">
-                    <div><span>Location</span><strong>{countryCityValue || '-'}</strong></div>
-                    <div><span>MQID</span><strong className="tabular">{getFieldValue('MQID') || '-'}</strong></div>
-                    <div><span>Phone</span><strong>{getFieldValue('Phone') || '-'}</strong></div>
-                    <div><span>Email</span><a href="#">{getFieldValue('Email') || '-'}</a></div>
-                  </div>
-
-                  <div className="account-overview-timestamps">
-                    <span>Registered: {formatDate(registrationValue) || '-'}</span>
-                    <span>Last access: {formatDate(lastAccessValue) || '-'}</span>
-                    <span>Last IP: {lastIpValue || '-'}</span>
+                    <div className="account-overview-meta-line">
+                      {emailValue ? (
+                        <a href={`mailto:${emailValue}`} className="account-overview-link">
+                          {emailValue}
+                        </a>
+                      ) : (
+                        <span className="account-overview-link">—</span>
+                      )}
+                    </div>
+                    <div className="account-overview-meta-line account-overview-timestamps">
+                      <span>Registered: {formatOverviewDate(registrationValue) || '—'}</span>
+                      <span>Last access: {formatOverviewDateTime(lastAccessValue) || '—'}</span>
+                      <span>Last Address: {lastIpValue || '—'}</span>
+                    </div>
                   </div>
                 </section>
 
-                {/* Data Grid Section Modernized */}
-                <div className="account-positions-card flex-1 flex flex-col overflow-hidden">
-                  {showPositions && <div className="account-positions-table-shell custom-scrollbar">
+                {/* Bordered Positions & Summary Box */}
+                <div className="account-overview-positions-box flex-1 flex flex-col overflow-hidden">
+                  <div className="account-overview-table-scroll custom-scrollbar">
                     {/* Header */}
-                    <div className="account-positions-grid account-positions-header">
-                      <div className="p-3 border-r border-[var(--border)]">Symbol</div>
-                      <div className="p-3 border-r border-[var(--border)]">Type</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">Volume</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">Open</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">S / L</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">T / P</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">Current</div>
-                      <div className="p-3 border-r border-[var(--border)] text-right">Swap</div>
-                      <div className="p-3 text-right border-r border-[var(--border)]">Profit</div>
-                      <div className="p-3 text-center">Action</div>
+                    <div className="account-overview-pos-grid account-overview-pos-header">
+                      <div className="is-left">Symbol</div>
+                      <div className="is-right">Type</div>
+                      <div className="is-right">Volume</div>
+                      <div className="is-right">Price</div>
+                      <div className="is-right">S / L</div>
+                      <div className="is-right">T / P</div>
+                      <div className="is-right">Price</div>
+                      <div className="is-right">Swap</div>
+                      <div className="is-right is-last">Profit</div>
                     </div>
 
-                    {/* Header and rows share one scroll area to keep columns aligned. */}
-                    <div className="account-positions-body custom-scrollbar">
-                    {(() => {
-                      const displayPositions = focusedTicket ? positions.filter(p => String(p.position) === String(focusedTicket)) : positions;
-                      if (positionsLoading && displayPositions.length === 0) {
-                        return (
-                          <div className="account-positions-state is-loading" role="status" aria-live="polite">
-                            <span className="account-positions-state-content">
-                              <Loader size={14} className="animate-spin" aria-hidden="true" />
-                              <span>Loading open positions...</span>
-                            </span>
-                          </div>
-                        );
-                      }
-                      if (positionsError && displayPositions.length === 0) {
-                        return (
-                          <div className="account-positions-state is-error" role="alert">
-                            <span>Open positions could not be loaded.</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                invalidatePositionsCache(loginId);
-                                setPositionSyncRevision((revision) => revision + 1);
-                              }}
-                            >
-                              Retry
-                            </button>
-                          </div>
-                        );
-                      }
-                      return displayPositions.length > 0 ? (
-                        <>
-                          {positionsError && (
-                            <div className="account-positions-partial-error" role="alert">
-                              <span>Some open positions could not be loaded.</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  invalidatePositionsCache(loginId);
-                                  setPositionSyncRevision((revision) => revision + 1);
-                                }}
-                              >
-                                Retry
-                              </button>
-                            </div>
-                          )}
-                          {displayPositions.map((pos) => {
-                        const isPos = pos.profit > 0;
-                        const isNeg = pos.profit < 0;
-                        return (
-                          <div
-                            key={pos.position}
-                            onContextMenu={(e) => {
-                              e.preventDefault();
-                              setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
-                            }}
-                            className="account-positions-grid account-positions-row cursor-pointer transition-colors group"
-                          >
-                            <div className="p-2 px-3 border-r border-[var(--border)] flex items-center gap-2 text-[var(--text)] font-medium">
-                              {pos.symbol}
-                            </div>
-                            <div className={`p-2 px-3 border-r border-[var(--border)] text-[11px] uppercase font-bold ${pos.type === 'buy' ? 'text-[var(--ok-text)]' : 'text-[var(--danger-text)]'}`}>
-                              {pos.type}
-                            </div>
-                            <div className="p-2 px-3 border-r border-[var(--border)] text-right text-[var(--text-2)]">{pos.volume}</div>
-                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{Number(pos.priceOpen).toFixed(5)}</div>
+                    {/* Position Rows + Summary Strip */}
+                    <div className="account-overview-pos-body">
+                      {(() => {
+                        const displayPositions = showPositions
+                          ? (focusedTicket ? positions.filter(p => String(p.position) === String(focusedTicket)) : positions)
+                          : [];
+                        const totalSwapNum = displayPositions.length > 0
+                          ? displayPositions.reduce((acc, p) => acc + Number(p.swap || 0), 0)
+                          : Number(getFieldValue('Swap', 0) || 0);
+                        const totalProfitNum = displayPositions.length > 0 && (profitVal === null || profitVal === undefined || Number(profitVal) === 0)
+                          ? displayPositions.reduce((acc, p) => acc + Number(p.profit || 0), 0)
+                          : Number(profitVal || 0);
+                        const summarySwapDisplay = formatSpaceNumber(totalSwapNum);
+                        const summaryProfitDisplay = formatSpaceNumber(totalProfitNum);
 
-                            {/* S/L */}
+                        return (
+                          <>
+                            {positionsError && displayPositions.length > 0 && (
+                              <div className="account-positions-partial-error" role="alert">
+                                <span>Some open positions could not be loaded.</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    invalidatePositionsCache(loginId);
+                                    setPositionSyncRevision((revision) => revision + 1);
+                                  }}
+                                >
+                                  Retry
+                                </button>
+                              </div>
+                            )}
+
+                            {displayPositions.map((pos) => {
+                              const sideText = String(pos.type || '').toLowerCase();
+                              const volNum = Number(pos.volume ?? pos.lots ?? 0);
+                              return (
+                                <div
+                                  key={pos.position}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
+                                  }}
+                                  className="account-overview-pos-grid account-overview-pos-row cursor-pointer"
+                                >
+                                  <div className="is-left account-overview-pos-symbol">
+                                    <PositionSymbolIcon type={sideText} />
+                                    <span className="truncate">{pos.symbol}</span>
+                                  </div>
+                                  <div className="is-right">{sideText}</div>
+                                  <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : pos.volume}</div>
+                                  <div className="is-right tabular">{Number(pos.priceOpen || 0).toFixed(5)}</div>
+                                  <div
+                                    onDoubleClick={() => handleModifySLTP(pos)}
+                                    className="is-right tabular cursor-pointer"
+                                    title="Double-click to modify S/L"
+                                  >
+                                    {Number(pos.priceSl || 0).toFixed(5)}
+                                  </div>
+                                  <div
+                                    onDoubleClick={() => handleModifySLTP(pos)}
+                                    className="is-right tabular cursor-pointer"
+                                    title="Double-click to modify T/P"
+                                  >
+                                    {Number(pos.priceTp || 0).toFixed(5)}
+                                  </div>
+                                  <div className="is-right tabular">
+                                    {pos.priceCurrent == null ? '—' : Number(pos.priceCurrent).toFixed(5)}
+                                  </div>
+                                  <div className="is-right tabular">{formatSpaceNumber(pos.swap || 0)}</div>
+                                  <div className="is-right is-last tabular">
+                                    {pos.profit == null ? '—' : formatSpaceNumber(pos.profit)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Grey Financial Summary Strip */}
                             <div
-                              onDoubleClick={() => handleModifySLTP(pos)}
-                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-amber-500/80 cursor-pointer hover:bg-amber-500/10 transition-colors"
-                              title="Double-click to modify S/L"
+                              className="account-overview-summary-strip"
+                              role="group"
+                              aria-label="Account financial snapshot"
                             >
-                              {Number(pos.priceSl || 0).toFixed(5)}
+                              <div className="account-overview-pos-grid account-overview-summary-main">
+                                <div className="account-overview-summary-metrics">
+                                  <SummaryBalanceIcon />
+                                  <span>
+                                    Balance: {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
+                                    {'  '}Equity: {equitySpaceVal}
+                                    {'  '}Margin: {marginSpaceVal}
+                                    {'  '}Free Margin: {freeMarginSpaceVal}
+                                  </span>
+                                </div>
+                                <div className="is-right tabular account-overview-summary-swap">
+                                  {summarySwapDisplay}
+                                </div>
+                                <div className="is-right is-last tabular account-overview-summary-profit">
+                                  {summaryProfitDisplay}
+                                </div>
+                              </div>
+                              <div className="account-overview-summary-sub">
+                                Margin Level: {marginLevelSpaceVal} %
+                              </div>
                             </div>
-
-                            {/* T/P */}
-                            <div
-                              onDoubleClick={() => handleModifySLTP(pos)}
-                              className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-blue-500/80 cursor-pointer hover:bg-blue-500/10 transition-colors"
-                              title="Double-click to modify T/P"
-                            >
-                              {Number(pos.priceTp || 0).toFixed(5)}
-                            </div>
-
-                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-2)]">{pos.priceCurrent == null ? '—' : pos.priceCurrent}</div>
-                            <div className="p-2 px-3 border-r border-[var(--border)] text-right font-mono text-[var(--text-3)]">{Number(pos.swap || 0).toFixed(2)}</div>
-                            <div className={`p-2 px-3 text-right border-r border-[var(--border)] font-bold font-mono ${isPos ? 'text-[var(--ok-text)]' : isNeg ? 'text-[var(--danger-text)]' : 'text-[var(--text-3)]'}`}>
-                              {pos.profit == null ? '—' : Number(pos.profit).toFixed(2)}
-                            </div>
-                            <div className="p-2 flex items-center justify-center">
-                              <button
-                                type="button"
-                                onClick={() => requestTradeClose(pos)}
-                                disabled={isDeleting || !canCloseTrades || (entity === 'position' && !String(pos.symbol ?? '').trim())}
-                                title={!canCloseTrades ? TRADE_CLOSE_DENIED_MESSAGE : (entity === 'position' && !String(pos.symbol ?? '').trim() ? 'Cannot close position: the symbol is unknown' : undefined)}
-                                className="account-position-close-button"
-                              >
-                                Close
-                              </button>
-                            </div>
-                          </div>
+                          </>
                         );
-                          })}
-                        </>
-                      ) : (
-                        <div className="account-positions-empty">No open positions matching this account.</div>
-                      );
-                    })()}
+                      })()}
                     </div>
-                  </div>}
-
-                  {/* Account financial snapshot */}
-                  <div className="account-balance-summary mt-auto" role="group" aria-label="Account financial snapshot">
-                    <div className="account-balance-summary-header">
-                      <div className="account-balance-summary-title">
-                        <span>Financial snapshot</span>
-                      </div>
-                    </div>
-                    <dl className="account-balance-metrics">
-                      {financialSnapshot.map(({ label, value, tone }) => (
-                        <div className={`account-balance-stat${tone ? ` is-${tone}` : ''}`} key={label}>
-                          <dt>{label}</dt>
-                          <dd className="tabular" title={`${label}: ${value}`}>{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    {hasMarginLevel && Number(rawMarginLevel) > 0 && Number(rawMarginLevel) < 100 && (
-                      <div className="p-1 px-4 text-[10px] font-bold bg-red-500/10 text-red-500 border-b border-red-500/20 animate-pulse text-center uppercase tracking-widest">
-                        MARGIN CALL WARNING
-                      </div>
-                    )}
                   </div>
                 </div>
-              </>
+              </div>
             ) : activeTab === 'Exposure' ? (
               <div className="flex flex-1 gap-2">
                 <div className="border border-[#333] rounded-sm flex flex-col flex-1 bg-[#1e1e1e]">
@@ -2075,18 +2262,65 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
           </div>
 
           {/* Footer */}
-          {visibleTab !== 'Overview' && (
-          <div className="account-details-footer flex items-center justify-end flex-shrink-0">
-            <div className="flex gap-2">
-              {['Personal', 'Account', 'Limits', 'Trade'].includes(visibleTab) && <button type={activeTab === 'Trade' ? 'submit' : 'button'} form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined} onClick={activeTab === 'Trade' ? undefined : handleUpdate} disabled={activeTab === 'Trade' ? !tradeUpdateState.canUpdate : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts} title={activeTab === 'Trade' ? 'Select an existing position and change its volume, SL or TP to update' : !canManageAccounts ? 'You do not have permission to update accounts' : undefined} className="account-details-update px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors disabled:opacity-50">
+          <div className="account-details-footer flex items-center justify-between flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => openAccountScreen?.()}
+              className="account-details-btn account-details-new-client"
+            >
+              New Client
+            </button>
+            <div className="account-details-footer-right flex items-center gap-2">
+              <button
+                type={activeTab === 'Trade' ? 'submit' : 'button'}
+                form={activeTab === 'Trade' ? 'account-trade-update-form' : undefined}
+                onClick={
+                  activeTab === 'Trade'
+                    ? undefined
+                    : () => {
+                        if (Object.keys(formData).length > 0) {
+                          void handleUpdate();
+                        } else {
+                          void loadAccountDetails(loginId, { force: true });
+                          invalidatePositionsCache(loginId);
+                          setPositionSyncRevision((revision) => revision + 1);
+                        }
+                      }
+                }
+                disabled={
+                  activeTab === 'Trade'
+                    ? !tradeUpdateState.canUpdate
+                    : visibleTab === 'Overview'
+                      ? updateLoading
+                      : updateLoading || Object.keys(formData).length === 0 || !canManageAccounts
+                }
+                title={
+                  activeTab === 'Trade'
+                    ? 'Select an existing position and change its volume, SL or TP to update'
+                    : !canManageAccounts && visibleTab !== 'Overview'
+                      ? 'You do not have permission to update accounts'
+                      : undefined
+                }
+                className="account-details-btn account-details-update"
+              >
                 {(activeTab === 'Trade' ? tradeUpdateState.busy : updateLoading) ? 'Wait...' : 'Update'}
-              </button>}
-              <button type="button" onClick={onClose} className="account-details-close px-5 py-1.5 min-w-[80px] bg-[#3a3a3c] hover:bg-[#4a4a4c] border border-[#555] rounded-[3px] text-[12px] text-gray-800 dark:text-gray-200 transition-colors">
-                Close
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="account-details-btn account-details-close"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {}}
+                className="account-details-btn account-details-help"
+              >
+                Help
               </button>
             </div>
           </div>
-          )}
         </>
 
       {ctxMenu.isOpen && (
@@ -2159,6 +2393,15 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
     )}
     </>
   );
+
+  if (typeof document !== 'undefined') {
+    const portalTarget =
+      document.querySelector('.rtx5-command-shell') ||
+      document.getElementById('root') ||
+      document.body;
+    return createPortal(modalNode, portalTarget);
+  }
+  return modalNode;
 };
 
 export default AccountDetailsModal;

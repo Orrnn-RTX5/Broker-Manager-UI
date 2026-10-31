@@ -1,4 +1,5 @@
-﻿import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import '../Popups/AccountPanel.css';
 
 const SidebarContextMenu = ({ x, y, account, onClose, onAction, onIntent, isBlocked, canManageAccounts = true, canManageRestrictions = true }) => {
@@ -6,6 +7,7 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, onIntent, isBloc
   const login = typeof account === 'object' ? account.login : account;
   useLayoutEffect(() => {
     const menu = menuRef.current;
+    if (!menu) return;
     const box = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - box.width - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
@@ -29,7 +31,7 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, onIntent, isBloc
   const item = (action, label, disabled = false, title) => <button key={action} type="button" role="menuitem" className={`ui-ctxmenu-item${disabled ? ' is-disabled' : ''}${action === 'delete' ? ' is-danger' : ''}`} disabled={disabled} title={title}
     onPointerEnter={() => !disabled && onIntent?.(action, account)} onFocus={() => !disabled && onIntent?.(action, account)}
     onClick={() => { onAction(action, account); onClose(); }}>{label}</button>;
-  return <div ref={menuRef} className="ui-ctxmenu account-panel-context-menu" role="menu" aria-label={`Account ${login} actions`} style={{ top: y, left: x }} onKeyDown={keyboard} onClick={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
+  const menuNode = <div ref={menuRef} className="ui-ctxmenu account-panel-context-menu" role="menu" aria-label={`Account ${login} actions`} style={{ top: y, left: x }} onKeyDown={keyboard} onClick={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
     <div className="account-panel-menu-title">Account {login}</div>
     {item('details', 'Details')}
     {item('summary', 'Summary')}
@@ -40,6 +42,14 @@ const SidebarContextMenu = ({ x, y, account, onClose, onAction, onIntent, isBloc
     <div className="ui-ctxmenu-sep" role="separator" />
     {item('delete', 'Delete', !canManageAccounts, !canManageAccounts ? 'No permission to delete accounts' : undefined)}
   </div>;
+  if (typeof document !== 'undefined') {
+    const portalTarget =
+      document.querySelector('.rtx5-command-shell') ||
+      document.getElementById('root') ||
+      document.body;
+    return createPortal(menuNode, portalTarget);
+  }
+  return menuNode;
 };
 
 export default SidebarContextMenu;

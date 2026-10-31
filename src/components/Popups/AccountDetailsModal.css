@@ -8,12 +8,38 @@
   z-index: 100001 !important;
   pointer-events: none;
 }
-#root .account-details-window { border: 1px solid var(--border); border-radius: 3px !important; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / .3); }
+#root .account-details-window {
+  border: 1px solid #48484d;
+  border-radius: 6px !important;
+  background: #1f1f22 !important;
+  box-shadow: 0 16px 40px rgb(0 0 0 / .55);
+}
+#root .account-details-window.is-active-window {
+  border-color: color-mix(in srgb, #3b82f6 55%, #48484d);
+}
 #root .account-details-window.is-docked {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 14px 36px rgb(0 0 0 / .42);
 }
-#root .account-details-titlebar { min-height: 34px; padding: 0 10px; }
+#root .account-details-titlebar {
+  min-height: 32px;
+  padding: 0 10px;
+  background: #1f1f22 !important;
+  border-bottom: none !important;
+}
+#root .account-details-title-user-icon {
+  flex-shrink: 0;
+}
+#root .account-details-title-user-icon.is-demo {
+  color: #22c55e !important;
+}
+#root .account-details-title-user-icon.is-real {
+  color: #d9822b !important;
+}
+#root#root#root#root#root#root .account-details-window .account-details-title {
+  color: #a1a1aa !important;
+  font-weight: 400 !important;
+}
 #root .account-details-dock-controls {
   display: inline-flex;
   align-items: center;
@@ -31,13 +57,252 @@
   background: var(--border);
   flex-shrink: 0;
 }
-#root .account-details-tabs { flex: 0 0 auto; min-height: 34px; padding: 3px 6px; gap: 3px; overflow-x: auto; }
-#root .account-details-tab { flex: 0 0 auto; height: 28px; padding: 0 10px; }
-#root .account-details-content { min-height: 0; gap: 10px; padding: 10px 12px; }
-#root .account-details-content.is-overview { padding: 12px; }
-#root .account-details-footer { min-height: 36px; padding: 5px 12px; background: var(--surface-2); }
-#root .account-details-footer button { min-height: 26px; min-width: 70px; padding: 3px 10px; border-radius: 3px !important; }
-#root .account-details-footer .account-details-close { background: var(--surface) !important; border-color: var(--border-3) !important; color: var(--text) !important; }
+#root .account-details-tabs {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  gap: 2px;
+  overflow-x: auto;
+  background: #1f1f22 !important;
+  border-bottom: none !important;
+}
+#root .account-details-window .account-details-tab {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 7px;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #e4e4e7 !important;
+  box-shadow: none !important;
+}
+#root .account-details-window .account-details-tab:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+#root .account-details-window .account-details-tab.is-active,
+#root .account-details-window .account-details-tab:focus-visible {
+  border: 0 !important;
+  border-bottom: 2px solid #3b82f6 !important;
+  background: transparent !important;
+  color: #ffffff !important;
+  outline: none !important;
+}
+#root .account-details-content {
+  min-height: 0;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1f1f22 !important;
+}
+#root .account-details-content.is-overview {
+  padding: 10px 14px 6px;
+  background: #1f1f22 !important;
+}
+
+/* MT5 Overview Layout */
+#root .account-overview-mt5 {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+#root .account-overview-mt5 .account-overview-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 2px 4px;
+  border-bottom: none !important;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-headline,
+#root#root#root#root#root#root .account-details-window .account-overview-headline * {
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.3;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-headline {
+  color: #f4f4f5 !important;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-link {
+  color: #3b82f6 !important;
+  text-decoration: none;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-link.is-underlined,
+#root#root#root#root#root#root .account-details-window .account-overview-link:hover {
+  text-decoration: underline !important;
+}
+#root .account-overview-meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+#root .account-overview-meta-line {
+  color: #e4e4e7 !important;
+  line-height: 1.35;
+}
+#root .account-overview-meta-line.account-overview-timestamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0 !important;
+  color: #e4e4e7 !important;
+}
+
+/* Bordered Positions & Summary Box */
+#root .account-overview-positions-box {
+  border: 1px solid #9ca3af;
+  background: #141416;
+  min-height: 110px;
+}
+#root .account-overview-table-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+#root .account-overview-pos-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(90px, 1.25fr)
+    minmax(50px, 0.72fr)
+    minmax(60px, 0.85fr)
+    repeat(4, minmax(68px, 1fr))
+    minmax(56px, 0.78fr)
+    minmax(70px, 0.95fr);
+  align-items: center;
+}
+#root .account-overview-pos-grid .is-left {
+  text-align: left;
+}
+#root .account-overview-pos-grid .is-right {
+  text-align: right;
+}
+#root .account-overview-pos-header {
+  background: #1c1c1f;
+  border-bottom: 1px solid #323236;
+  color: #e4e4e7;
+}
+#root .account-overview-pos-header > div {
+  min-height: 22px;
+  padding: 2px 6px;
+  border-right: 1px solid #323236;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#root .account-overview-pos-header > div.is-last {
+  border-right: none;
+}
+#root .account-overview-pos-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: #141416;
+}
+#root .account-overview-pos-row {
+  background: #141416;
+  color: #e4e4e7;
+}
+#root .account-overview-pos-row:hover {
+  background: #1e2430;
+}
+#root .account-overview-pos-row > div {
+  min-height: 21px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#root .account-overview-pos-symbol {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+#root .account-overview-pos-icon {
+  flex-shrink: 0;
+}
+#root .account-overview-pos-icon.is-sell {
+  color: #ef4444 !important;
+}
+#root .account-overview-pos-icon.is-buy {
+  color: #3b82f6 !important;
+}
+
+/* Grey Summary Strip inside Positions Box */
+#root .account-overview-summary-strip {
+  background: #3e3e42;
+  padding: 2px 0 3px;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-summary-strip,
+#root#root#root#root#root#root .account-details-window .account-overview-summary-strip * {
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+#root .account-overview-summary-metrics {
+  grid-column: 1 / 8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#root .account-overview-balance-icon {
+  flex-shrink: 0;
+  color: #d4d4d8 !important;
+}
+#root .account-overview-summary-swap {
+  grid-column: 8 / 9;
+  padding: 1px 6px;
+}
+#root .account-overview-summary-profit {
+  grid-column: 9 / 10;
+  padding: 1px 6px;
+}
+#root .account-overview-summary-sub {
+  padding: 1px 6px 1px 24px;
+  white-space: nowrap;
+}
+
+/* Footer Bar */
+#root .account-details-footer {
+  min-height: 40px !important;
+  padding: 6px 14px 10px !important;
+  background: #1f1f22 !important;
+  border-top: none !important;
+}
+#root .account-details-footer .account-details-btn {
+  min-height: 24px !important;
+  height: 24px;
+  padding: 2px 14px !important;
+  border-radius: 3px !important;
+  border: 1px solid #6b6b70 !important;
+  background: #2b2b2e !important;
+  color: #e4e4e7 !important;
+  cursor: pointer;
+}
+#root .account-details-footer .account-details-new-client {
+  min-width: 156px !important;
+}
+#root .account-details-footer .account-details-footer-right .account-details-btn {
+  min-width: 78px !important;
+}
+#root .account-details-footer .account-details-btn:hover:not(:disabled) {
+  background: #3a3a3f !important;
+  border-color: #8a8a90 !important;
+  color: #ffffff !important;
+}
+#root .account-details-footer .account-details-btn:disabled {
+  background: #252528 !important;
+  border-color: #48484d !important;
+  color: #71717a !important;
+  cursor: not-allowed;
+}
+
 #root .account-details-window :is(.account-personal-tab, .account-settings-tab, .account-security-tab) { gap: 12px; }
 #root .account-details-window .account-history-tab { gap: 6px; }
 #root .account-details-window .account-history-tab > .account-section-heading { min-height: 22px; }
@@ -67,6 +332,17 @@
 #root .account-details-window .account-details-status { flex: 0 0 auto; min-height: 26px; padding: 4px 8px; border-radius: 3px; }
 #root .account-details-window :is(input, select, textarea, button):focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 #root#root#root#root#root :is(.account-details-window, .account-details-window *) { font-size: 11px !important; font-weight: 400 !important; }
+#root#root#root#root#root#root .account-details-window .account-overview-headline,
+#root#root#root#root#root#root .account-details-window .account-overview-headline * {
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.3;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-summary-strip,
+#root#root#root#root#root#root .account-details-window .account-overview-summary-strip * {
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
 @media (max-width: 700px) {
   #root .account-details-window .account-personal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #root .account-details-window .account-security-card { grid-template-columns: minmax(0, 1fr); }

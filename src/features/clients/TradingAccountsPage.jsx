@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import FilterDropdown from '../../components/FilterDropdown';
 import TradingAccountsDataGrid from './components/TradingAccountsDataGrid';
@@ -13,15 +13,16 @@ import { ALL_COUNTRIES } from '../../utils/countries';
 import { PERMISSIONS } from '../../utils/permissions';
 
 const ACCOUNT_COLUMNS = [
-  { key: 'login',    label: 'Login' },
-  { key: 'name',     label: 'Name' },
-  { key: 'group',    label: 'Group' },
-  { key: 'country',  label: 'Country' },
-  { key: 'client',   label: 'Client' },
-  { key: 'balance',  label: 'Balance' },
-  { key: 'equity',   label: 'Equity' },
-  { key: 'profit',   label: 'Profit / Credit' },
-  { key: 'currency', label: 'Currency' },
+  { key: 'login',          label: 'Login' },
+  { key: 'name',           label: 'Name' },
+  { key: 'group',          label: 'Group' },
+  { key: 'country',        label: 'Country' },
+  { key: 'client',         label: 'Client' },
+  { key: 'balance',        label: 'Balance' },
+  { key: 'balanceChecked', label: 'Balance / Checked' },
+  { key: 'equity',         label: 'Equity' },
+  { key: 'profit',         label: 'Profit' },
+  { key: 'currency',       label: 'Currency' },
 ];
 
 const TradingAccountsPage = () => {
@@ -31,9 +32,32 @@ const TradingAccountsPage = () => {
   const [sortCol, setSortCol] = useState('login');
   const [sortDir, setSortDir] = useState('asc');
   const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
+  const openAccountWindows = useMultiScreenStore((state) => state.openAccountWindows);
+  const activeAccountWindowLogin = useMultiScreenStore((state) => state.activeAccountWindowLogin);
+  const sidebarMounted = useMultiScreenStore((state) => Boolean(state.mountedAccountWindowHosts?.sidebar));
+  const openAccountDetailWindow = useMultiScreenStore((state) => state.openAccountDetailWindow);
+  const closeAccountDetailWindow = useMultiScreenStore((state) => state.closeAccountDetailWindow);
+  const focusAccountDetailWindow = useMultiScreenStore((state) => state.focusAccountDetailWindow);
+  const registerAccountWindowHost = useMultiScreenStore((state) => state.registerAccountWindowHost);
   const [restrictLogin, setRestrictLogin] = useState(null);
-  const [editAccount, setEditAccount] = useState(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
+
+  useEffect(() => {
+    registerAccountWindowHost('tradingAccounts', true);
+    return () => registerAccountWindowHost('tradingAccounts', false);
+  }, [registerAccountWindowHost]);
+
+  const handleOpenAccountDetail = useCallback((acc) => {
+    openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+      source: 'trading-accounts',
+      initialTab: 'Overview',
+    });
+  }, [openAccountDetailWindow]);
+
+  const tradingAccountWindows = useMemo(
+    () => (sidebarMounted ? openAccountWindows.filter((item) => item.source !== 'sidebar') : openAccountWindows),
+    [openAccountWindows, sidebarMounted]
+  );
   const { groups, loading: groupsLoading } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
   const { canAct } = usePermissions();
   const canEditAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
@@ -68,12 +92,12 @@ const TradingAccountsPage = () => {
 
   return (
     <div className="trading-accounts-page p-3 w-full h-full min-h-0 flex flex-col gap-2 overflow-hidden" {...ctl.pageProps}>
-      <div className="trading-accounts-header flex flex-col md:flex-row items-start md:items-center justify-between pb-0 gap-2 shrink-0">
+      <div className="trading-accounts-header flex flex-wrap items-center justify-between pb-0 gap-2 shrink-0">
         <div className="trading-accounts-heading flex items-center gap-2 min-w-0">
           <h1 className="trading-accounts-title" style={{ color: 'var(--text)' }}>Trading Accounts</h1>
         </div>
-        <div className="trading-accounts-filters flex items-center gap-2 mt-2 md:mt-0 flex-nowrap shrink-0">
-          <div className="trading-accounts-search relative w-[220px] shrink-0">
+        <div className="trading-accounts-filters flex items-center gap-2 flex-wrap shrink-0 max-w-full">
+          <div className="trading-accounts-search relative w-[200px] max-w-full shrink-0">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
             <input
               type="text"
@@ -86,7 +110,7 @@ const TradingAccountsPage = () => {
           </div>
           <FilterDropdown
             value={groupFilter}
-            className="w-[150px]"
+            className="w-[140px]"
             options={groupOptions}
             loading={groupsLoading}
             loadingLabel="Loading groups…"
@@ -94,7 +118,7 @@ const TradingAccountsPage = () => {
           />
           <FilterDropdown
             value={countryFilter}
-            className="w-[150px]"
+            className="w-[140px]"
             options={countryOptions}
             onChange={setCountryFilter}
           />
@@ -105,11 +129,13 @@ const TradingAccountsPage = () => {
         search={search}
         groupFilter={groupFilter}
         countryFilter={countryFilter}
+        groups={groups}
+        grid={ctl.grid}
         sortCol={sortCol}
         sortDir={sortDir}
         onSort={handleSort}
         showGridlines={ctl.grid.showGridlines}
-        onEditAccount={setEditAccount}
+        onEditAccount={handleOpenAccountDetail}
         canEditAccounts={canEditAccounts}
         refreshVersion={refreshVersion}
         {...ctl.gridProps}
@@ -130,14 +156,23 @@ const TradingAccountsPage = () => {
         <AccountRestrictionsModal login={restrictLogin} onClose={() => setRestrictLogin(null)} />
       )}
 
-      {editAccount && (
-        <AccountDetailsModal
-          account={editAccount}
-          initialTab="Personal"
-          onClose={() => setEditAccount(null)}
-          onAccountUpdated={() => setRefreshVersion((version) => version + 1)}
-        />
-      )}
+      {tradingAccountWindows.map((win) => {
+        const editAccount = win.account ?? win.login;
+        return (
+          <AccountDetailsModal
+            key={typeof editAccount === 'object' ? editAccount.login : editAccount}
+            account={editAccount}
+            initialTab="Overview"
+            windowIndex={win.slotIndex}
+            totalWindows={openAccountWindows.length}
+            zOrder={win.zOrder}
+            isActiveWindow={String(activeAccountWindowLogin) === String(win.login)}
+            onFocusWindow={() => focusAccountDetailWindow(win.login)}
+            onClose={() => closeAccountDetailWindow(win.login)}
+            onAccountUpdated={() => setRefreshVersion((version) => version + 1)}
+          />
+        );
+      })}
     </div>
   );
 };

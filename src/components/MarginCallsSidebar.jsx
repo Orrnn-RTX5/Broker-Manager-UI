@@ -18,6 +18,7 @@ import {
   normalizeSidebarAccountPage,
 } from '../services/sidebarAccounts';
 import { usePermissions } from '../hooks/usePermissions';
+import { useMultiScreenStore } from '../store/multiScreenStore';
 import { PERMISSIONS } from '../utils/permissions';
 import { TRADING_ACCOUNTS_INITIAL_PARAMS } from '../utils/workspaceQueryOptions';
 import { getSidebarAccountType } from '../utils/sidebarAccountRows';
@@ -50,7 +51,13 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const queryClient = useQueryClient();
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
-  const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
+  const openAccountWindows = useMultiScreenStore((state) => state.openAccountWindows);
+  const activeAccountWindowLogin = useMultiScreenStore((state) => state.activeAccountWindowLogin);
+  const tradingAccountsMounted = useMultiScreenStore((state) => Boolean(state.mountedAccountWindowHosts?.tradingAccounts));
+  const openAccountDetailWindow = useMultiScreenStore((state) => state.openAccountDetailWindow);
+  const closeAccountDetailWindow = useMultiScreenStore((state) => state.closeAccountDetailWindow);
+  const focusAccountDetailWindow = useMultiScreenStore((state) => state.focusAccountDetailWindow);
+  const registerAccountWindowHost = useMultiScreenStore((state) => state.registerAccountWindowHost);
   const [summaryAccount, setSummaryAccount] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [blockedUsers, setBlockedUsers] = useState({});
@@ -58,6 +65,17 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const [pendingAction, setPendingAction] = useState(null);
   const [selectedLogin, setSelectedLogin] = useState(null);
   const prefetchTimerRef = useRef(null);
+  const lastTapRef = useRef({ login: null, time: 0 });
+
+  useEffect(() => {
+    registerAccountWindowHost('sidebar', true);
+    return () => registerAccountWindowHost('sidebar', false);
+  }, [registerAccountWindowHost]);
+
+  const sidebarAccountWindows = useMemo(
+    () => (tradingAccountsMounted ? openAccountWindows.filter((item) => item.source === 'sidebar') : openAccountWindows),
+    [openAccountWindows, tradingAccountsMounted]
+  );
 
   const { canAct } = usePermissions();
   const { groups } = useGroupList({ enabled: isAuthenticated });
@@ -162,13 +180,34 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
     meta: { suppressGlobalLoader: true },
   });
 
+  const groupCurrencyMap = useMemo(() => {
+    const map = new Map();
+    for (const grp of Array.isArray(groups) ? groups : []) {
+      const grpName = String(grp?.name ?? grp?.Name ?? '').trim();
+      const grpCurrency = String(grp?.currency ?? grp?.Currency ?? grp?.depositCurrency ?? '').trim();
+      if (grpName && grpCurrency) map.set(grpName, grpCurrency);
+    }
+    return map;
+  }, [groups]);
+
   const accounts = useMemo(() => {
     const detailsByLogin = new Map(balanceDetails.map((account) => [String(account.login), account]));
     return baseAccounts.map((account) => {
       const details = detailsByLogin.get(String(account.login));
-      return details ? { ...account, ...details, login: account.login } : account;
+      const merged = details ? { ...account, ...details, login: account.login } : account;
+      if (!merged || typeof merged !== 'object') return merged;
+      const grpName = String(merged.group ?? merged.Group ?? '').trim();
+      const currency = String(
+        merged.currency
+        || merged.Currency
+        || merged.raw?.Currency
+        || merged.raw?.currency
+        || (grpName ? groupCurrencyMap.get(grpName) : '')
+        || 'USD'
+      ).trim();
+      return currency && !merged.currency ? { ...merged, currency } : merged;
     }).filter((account) => accountType === 'all' || getSidebarAccountType(account) === accountType);
-  }, [balanceDetails, baseAccounts, accountType]);
+  }, [balanceDetails, baseAccounts, accountType, groupCurrencyMap]);
 
   const urgentLogins = useMemo(() => new Set(
     buildMarginAlerts(accounts, buildGroupMarginLevels(groups)).map((alert) => alert.login),
@@ -207,7 +246,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const warmAccount = (acc) => {
     clearTimeout(prefetchTimerRef.current);
     const login = typeof acc === 'object' ? acc.login : acc;
-    if (typeof acc === 'object' && (hasBalance(acc) || acc.Name || acc.FirstName || acc.Email)) seedAccountDetails(login, acc);
+    if (typeof acc === 'object' && (hasBalance(acc) || acc.Name || acc.FirstName || acc.Email || acc.currency)) seedAccountDetails(login, acc);
     void prefetchAccountDetails(login);
     if (canViewPositions) void preloadAccountPositions(login);
   };
@@ -223,8 +262,12 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
     if (action === 'summary') {
       setSummaryAccount({ login, row: typeof acc === 'object' ? acc : undefined });
     } else if (action === 'details') {
+      setSelectedLogin(String(login));
       warmAccount(acc);
-      setSelectedAccountDetails(acc);
+      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+        source: 'sidebar',
+        initialTab: 'Overview',
+      });
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
         showResult.error('Your role does not have permission to change account restrictions or trade overrides.');
@@ -351,7 +394,20 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
                         if (event.pointerType === 'mouse' && event.button !== 0) return;
                         warmAccount(acc);
                       }}
-                      onDoubleClick={() => handleMenuAction('details', acc)}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation();
+                        handleMenuAction('details', acc);
+                      }}
+                      onTouchEnd={(event) => {
+                        const now = Number(event.timeStamp);
+                        const lastTap = lastTapRef.current;
+                        if (lastTap.login === String(login) && now - lastTap.time < 350) {
+                          lastTapRef.current = { login: null, time: 0 };
+                          handleMenuAction('details', acc);
+                          return;
+                        }
+                        lastTapRef.current = { login: String(login), time: now };
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') { event.preventDefault(); handleMenuAction('details', acc); }
                         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) handleContextMenu(event, acc);
@@ -382,12 +438,23 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
       </div>
 
       {/* Popups */}
-      {selectedAccountDetails && (
-        <AccountDetailsModal
-          account={selectedAccountDetails}
-          onClose={() => setSelectedAccountDetails(null)}
-        />
-      )}
+      {sidebarAccountWindows.map((win) => {
+        const selectedAccountDetails = win.account ?? win.login;
+        return (
+          <AccountDetailsModal
+            key={typeof selectedAccountDetails === 'object' ? selectedAccountDetails.login : selectedAccountDetails}
+            account={selectedAccountDetails}
+            initialTab="Overview"
+            windowIndex={win.slotIndex}
+            totalWindows={openAccountWindows.length}
+            zOrder={win.zOrder}
+            isActiveWindow={String(activeAccountWindowLogin) === String(win.login)}
+            onFocusWindow={() => focusAccountDetailWindow(win.login)}
+            onClose={() => closeAccountDetailWindow(win.login)}
+            onAccountUpdated={handleRefresh}
+          />
+        );
+      })}
 
       {summaryAccount && (
         <AccountsSummaryModal

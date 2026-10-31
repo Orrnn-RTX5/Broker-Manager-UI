@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, ExternalLink, Folder, FolderOpen, FolderPlus, Info, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
@@ -1146,7 +1147,7 @@ const GroupsPage = () => {
           setParentMenuOpen(false);
           setSubgroupDraft(null);
         };
-        return (
+        return createPortal(
           <div
             className="ui-modal-backdrop groups-subgroup-backdrop"
             onMouseDown={(event) => { if (event.target === event.currentTarget) closeSubgroupModal(); }}
@@ -1319,22 +1320,29 @@ const GroupsPage = () => {
                 <button type="submit" className="ui-btn ui-btn-primary ui-btn-sm" disabled={!trimmedSubgroupName}>Continue</button>
               </div>
             </form>
-          </div>
+          </div>,
+          document.getElementById('root') || document.body
         );
       })()}
 
-      {permissionAction && <GroupPermissionNotice action={permissionAction} onClose={() => setPermissionAction(null)} />}
-      {deleteSelection && <GroupOperationModal
-        selection={deleteSelection}
-        onClose={() => setDeleteSelection(null)}
-        onComplete={() => {
-          setSelectedId(null);
-          invalidateGroups();
-          queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
-        }}
-      />}
+      {permissionAction && createPortal(
+        <GroupPermissionNotice action={permissionAction} onClose={() => setPermissionAction(null)} />,
+        document.getElementById('root') || document.body
+      )}
+      {deleteSelection && createPortal(
+        <GroupOperationModal
+          selection={deleteSelection}
+          onClose={() => setDeleteSelection(null)}
+          onComplete={() => {
+            setSelectedId(null);
+            invalidateGroups();
+            queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
+          }}
+        />,
+        document.getElementById('root') || document.body
+      )}
 
-      {propertiesGroup && (
+      {propertiesGroup && createPortal(
         <GroupPropertiesModal
           group={propertiesGroup}
           onClose={() => setPropertiesGroup(null)}
@@ -1344,7 +1352,8 @@ const GroupsPage = () => {
             invalidateGroups();
             queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
           }}
-        />
+        />,
+        document.getElementById('root') || document.body
       )}
 
       {openedAccount && (
