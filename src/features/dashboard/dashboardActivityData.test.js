@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+  ACTIVITY_CHART_TYPES,
   appendEquityObservation,
+  buildActivityChartModel,
   buildActivitySeries,
   buildSymbolActivity,
   parseActivityTimestamp,
 } from './dashboardActivityData.js';
+
+const dashboardJsxSrc = readFileSync(new URL('./Dashboard.jsx', import.meta.url), 'utf8');
 
 test('activity timestamps accept seconds, milliseconds, and ISO UTC strings', () => {
   const timestamp = Date.UTC(2026, 8, 28, 11, 30);
@@ -127,3 +132,58 @@ test('equal-volume rankings sort by execution count and then symbol', () => {
   assert.deepEqual(buildSymbolActivity({ now, deals }).rows.map(row => row.symbol), ['EURUSD', 'AUDUSD', 'XAUUSD']);
 });
 
+test('buildActivityChartModel computes buy/sell order flow, candlestick OHLC, diverging delta, bubble radius, and summary telemetry', () => {
+  assert.deepEqual(ACTIVITY_CHART_TYPES.map((t) => t.id), ['combo', 'candlestick', 'flow', 'profile', 'bubble', 'cumulative']);
+
+  const now = Date.UTC(2026, 9, 12, 12);
+  const deals = [
+    { ticket: 1, login: '100', symbol: 'EURUSD', action: 'buy', volume: 1.5, time: Date.UTC(2026, 9, 12, 8, 15) / 1000 },
+    { ticket: 2, login: '100', symbol: 'EURUSD', action: 'sell', volume: 0.5, time: Date.UTC(2026, 9, 12, 8, 30) / 1000 },
+    { ticket: 3, login: '100', symbol: 'XAUUSD', action: 'buy', volume: 4.0, time: Date.UTC(2026, 9, 12, 10, 10) / 1000 },
+  ];
+  const series = buildActivitySeries({
+    range: '24H',
+    now,
+    deals,
+    equityHistory: [
+      { timestamp: Date.UTC(2026, 9, 12, 8, 45), equity: 500000 },
+      { timestamp: Date.UTC(2026, 9, 12, 10, 45), equity: 510000 },
+    ],
+    volumeCoverageFrom: 0,
+    realLogins: new Set(['100']),
+  });
+
+  const model = buildActivityChartModel({
+    series,
+    range: '24H',
+    volumeAsOf: now,
+    currentEquity: 510000,
+  });
+
+  assert.equal(model.summary.totalVolume, 6);
+  assert.equal(model.summary.totalBuyVolume, 5.5);
+  assert.equal(model.summary.totalSellVolume, 0.5);
+  assert.equal(model.summary.netVolumeDelta, 5);
+  assert.equal(model.summary.totalDeals, 3);
+  assert.equal(model.summary.peakVolume, 4);
+  assert.equal(model.summary.firstEquity, 500000);
+  assert.equal(model.summary.latestEquity, 510000);
+  assert.equal(model.summary.equityDelta, 10000);
+  assert.equal(model.summary.equityDeltaPct, 2);
+
+  const bucket8 = model.points.find((p) => p.timestamp === Date.UTC(2026, 9, 12, 8));
+  const bucket10 = model.points.find((p) => p.timestamp === Date.UTC(2026, 9, 12, 10));
+  assert.equal(bucket8.buyVolume, 1.5);
+  assert.equal(bucket8.sellVolume, 0.5);
+  assert.equal(bucket8.sellVolumeNeg, -0.5);
+  assert.equal(bucket8.buyPct, 75);
+  assert.equal(bucket8.sellPct, 25);
+  assert.equal(bucket10.isPeakVolume, true);
+  assert.equal(bucket10.volumeImpulse, 'up');
+  assert.equal(bucket10.cumulativeVolume, 6);
+  assert.ok(bucket10.candleHigh >= bucket10.candleLow);
+  assert.ok(bucket10.bubbleRadius > 0);
+
+  assert.ok(dashboardJsxSrc.includes('cc-chart-type-switcher'), 'Dashboard must render chart type switcher');
+  assert.ok(dashboardJsxSrc.includes('cc-chart-kpi-strip'), 'Dashboard must render executive KPI telemetry strip');
+});

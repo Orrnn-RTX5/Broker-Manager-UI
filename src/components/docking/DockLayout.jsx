@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useLayoutEffect, useRef } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronsLeftRight } from 'lucide-react';
 import { useDockingContext } from './DockingContext';
-import { DOCK_POSITIONS } from './useDocking';
+import { DOCK_POSITIONS, LEFT_STACK_MODES } from './useDocking';
 import DockPanel from './DockPanel';
 import GlobalDockOverlay from './GlobalDockOverlay';
 import styles from './DockLayout.module.css';
@@ -14,6 +14,7 @@ const MIN_CENTER_WIDTH = 360;
 const MIN_USABLE_CENTER_CONTENT_WIDTH = 720;
 const MIN_BOTTOM_PANEL_HEIGHT = 96;
 const MIN_MIDDLE_AREA_HEIGHT = 260;
+const MIN_STACKED_PANEL_HEIGHT = 96;
 const CENTER_OVERFLOW_TOLERANCE = 2;
 
 const getMinimumPanelWidth = (panel) => {
@@ -177,7 +178,64 @@ const DockedPaneResizer = ({ panel, centerAreaRef, onResize }) => {
   );
 };
 
-const DockedBottomResizer = ({ panel, middleAreaRef, onResize }) => {
+const DockedStackResizer = ({ topPanel, columnRef, topRatio, onRatioChange }) => {
+  const handlePointerDown = (event) => {
+    if (event.button !== 0 && event.pointerType !== 'touch') return;
+    event.preventDefault();
+    const resizer = event.currentTarget;
+    const columnHeight = columnRef.current?.getBoundingClientRect().height || 480;
+    const startY = event.clientY;
+    const startTopHeight = Math.round(columnHeight * topRatio);
+    const pointerId = event.pointerId;
+    let isResizing = true;
+
+    const handlePointerMove = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const nextTopHeight = Math.min(
+        Math.max(MIN_STACKED_PANEL_HEIGHT, columnHeight - MIN_STACKED_PANEL_HEIGHT),
+        Math.max(MIN_STACKED_PANEL_HEIGHT, startTopHeight + (moveEvent.clientY - startY))
+      );
+      const nextRatio = Math.min(0.82, Math.max(0.18, nextTopHeight / Math.max(1, columnHeight)));
+      onRatioChange(nextRatio);
+    };
+
+    const cleanup = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      resizer.removeEventListener('pointermove', handlePointerMove);
+      resizer.removeEventListener('pointerup', handlePointerEnd);
+      resizer.removeEventListener('pointercancel', handlePointerEnd);
+      resizer.removeEventListener('lostpointercapture', cleanup);
+      if (resizer.hasPointerCapture?.(pointerId)) resizer.releasePointerCapture(pointerId);
+    };
+
+    const handlePointerEnd = (endEvent) => {
+      if (endEvent.pointerId === pointerId) cleanup();
+    };
+
+    resizer.addEventListener('pointermove', handlePointerMove);
+    resizer.addEventListener('pointerup', handlePointerEnd);
+    resizer.addEventListener('pointercancel', handlePointerEnd);
+    resizer.addEventListener('lostpointercapture', cleanup);
+    resizer.setPointerCapture?.(pointerId);
+  };
+
+  return (
+    <div
+      className={styles.bottomResizer}
+      role="separator"
+      aria-label={`Resize ${topPanel.title} height`}
+      aria-orientation="horizontal"
+      tabIndex={0}
+      title="Drag to resize stacked panels"
+      onPointerDown={handlePointerDown}
+    >
+      <span aria-hidden="true" />
+    </div>
+  );
+};
+
+const DockedBottomResizer = ({ panel, middleAreaRef, isFullWidth = false, onResize }) => {
   const getCurrentHeight = (panelElement) => {
     const renderedHeight = panelElement?.getBoundingClientRect().height;
     if (Number.isFinite(renderedHeight) && renderedHeight > 0) return renderedHeight;
@@ -189,7 +247,9 @@ const DockedBottomResizer = ({ panel, middleAreaRef, onResize }) => {
   const getMaximumHeight = (currentHeight) => {
     const middleHeight = middleAreaRef.current?.getBoundingClientRect().height;
     const availableMiddleHeight = Number.isFinite(middleHeight) ? middleHeight : MIN_MIDDLE_AREA_HEIGHT;
-    return currentHeight + Math.max(0, availableMiddleHeight - MIN_MIDDLE_AREA_HEIGHT);
+    return isFullWidth
+      ? currentHeight + Math.max(0, availableMiddleHeight - MIN_MIDDLE_AREA_HEIGHT)
+      : Math.max(MIN_BOTTOM_PANEL_HEIGHT, availableMiddleHeight - MIN_MIDDLE_AREA_HEIGHT);
   };
 
   const handlePointerDown = (event) => {
@@ -272,16 +332,28 @@ const DockedBottomResizer = ({ panel, middleAreaRef, onResize }) => {
  *   bottom-bar  ← panels docked to bottom
  *
  * Float panels render in a fixed overlay (handled by DockPanel itself).
- *
- * Usage:
- *   <DockLayout panelContents={{ myPanel: <MyContent /> }}>
- *     <MainStaticWorkspace />
- *   </DockLayout>
  */
 export default function DockLayout({ panelContents = {}, children }) {
-  const { panels, draggingId, dockPanel, updatePanel } = useDockingContext();
+  const {
+    panels,
+    draggingId,
+    activeDockGuideId,
+    setActiveDockGuideId,
+    leftStackMode,
+    terminalFullWidth,
+    dockPanel,
+    updatePanel,
+  } = useDockingContext();
   const centerAreaRef = useRef(null);
   const middleAreaRef = useRef(null);
+  const stackedColumnRef = useRef(null);
+  const [stackedTopRatio, setStackedTopRatio] = useState(0.5);
+
+  useEffect(() => {
+    const handleReset = () => setStackedTopRatio(0.5);
+    window.addEventListener('manager:reset-layout', handleReset);
+    return () => window.removeEventListener('manager:reset-layout', handleReset);
+  }, []);
 
   const visiblePanels = Object.values(panels).filter(p => p.visible);
   const maximizedPanel = visiblePanels.find(panel => panel.maximized);
@@ -291,21 +363,20 @@ export default function DockLayout({ panelContents = {}, children }) {
 
   const get = (pos) => layoutPanels
     .filter(p => p.position === pos)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const topPanels    = get(DOCK_POSITIONS.TOP);
   const bottomPanels = get(DOCK_POSITIONS.BOTTOM);
-  const leftPanels   = get(DOCK_POSITIONS.LEFT).sort((a, b) => {
-    // The terminal workspace always reserves the far-left rail for quotes,
-    // then keeps navigation beside it. Other left-docked panels follow.
-    const terminalOrder = { market_data: 0, navigator: 1 };
-    return (terminalOrder[a.id] ?? a.order ?? 99) - (terminalOrder[b.id] ?? b.order ?? 99);
-  });
+  const leftPanels   = get(DOCK_POSITIONS.LEFT);
   const rightPanels  = get(DOCK_POSITIONS.RIGHT);
   const centerPanels = get(DOCK_POSITIONS.CENTER);
   const floatPanels  = get(DOCK_POSITIONS.FLOAT);
+  const isLeftStacked = leftStackMode === LEFT_STACK_MODES.COLUMN && leftPanels.length > 1;
+  const activeGuidePanelId = draggingId || activeDockGuideId;
+
   const rightPanelStateKey = rightPanels.map((panel) => `${panel.id}:${panel.userPinned ? 'pinned' : 'auto'}`).join('|');
   useRightPanelOverflowGuard(centerAreaRef, rightPanelStateKey, updatePanel);
+
   const resizeLeftPanel = useCallback((id, width) => {
     const panel = panels[id];
     if (!panel) return;
@@ -317,6 +388,24 @@ export default function DockLayout({ panelContents = {}, children }) {
       },
     });
   }, [panels, updatePanel]);
+
+  const resizeStackedLeftColumn = useCallback((_id, width) => {
+    const dockedLeft = Object.values(panels).filter(
+      (p) => p.visible && !p.maximized && p.position === DOCK_POSITIONS.LEFT
+    );
+    if (!dockedLeft.length) return;
+    const minRequired = Math.max(...dockedLeft.map(getMinimumPanelWidth));
+    const normalizedWidth = Math.max(minRequired, width);
+    dockedLeft.forEach((p) => {
+      updatePanel(p.id, {
+        size: {
+          ...p.size,
+          width: normalizedWidth,
+        },
+      });
+    });
+  }, [panels, updatePanel]);
+
   const resizeBottomPanel = useCallback((id, height) => {
     const panel = panels[id];
     if (!panel) return;
@@ -347,6 +436,10 @@ export default function DockLayout({ panelContents = {}, children }) {
     };
   };
 
+  const stackedColumnWidth = leftPanels.length > 0
+    ? Math.max(...leftPanels.map(getLeftPanelWidth))
+    : 346;
+
   return (
     <div className={styles.root}>
       {/* Top strip */}
@@ -356,44 +449,86 @@ export default function DockLayout({ panelContents = {}, children }) {
         </DockPanel>
       ))}
 
-      {/* Middle row */}
-      <div ref={middleAreaRef} className={styles.middle}>
-        {leftPanels.length > 1 && (
-          <div className={styles.leftSideRow}>
-            {leftPanels.map((p, index) => (
-              <Fragment key={p.id}>
-                <DockPanel
-                  id={p.id}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < leftPanels.length - 1}
-                  layoutStyle={getLeftPanelLayoutStyle(p)}
-                >
-                  {panelContents[p.id]}
-                </DockPanel>
-                <DockedPaneResizer
-                  panel={p}
-                  centerAreaRef={centerAreaRef}
-                  onResize={resizeLeftPanel}
-                />
-              </Fragment>
-            ))}
-          </div>
-        )}
-
-        {leftPanels.length === 1 && (
-          <>
-            <div className={styles.sideColumn}>
-              <DockPanel id={leftPanels[0].id} layoutStyle={getSingleLeftPanelLayoutStyle(leftPanels[0])}>
-                {panelContents[leftPanels[0].id]}
-              </DockPanel>
+      {/* Main grid workspace: switches bottom terminal between full-width and center-bottom purely via CSS Grid areas */}
+      <div
+        ref={middleAreaRef}
+        className={`${styles.middle} ${terminalFullWidth ? styles.middleFullBottom : styles.middleCenterBottom}`}
+      >
+        <div className={styles.leftZone}>
+          {leftPanels.length > 0 && (
+            /* Supports data-left-stack-mode="row" and data-left-stack-mode="column" without unmounting panels */
+            <div
+              ref={stackedColumnRef}
+              className={
+                isLeftStacked
+                  ? styles.leftSideStackColumn
+                  : leftPanels.length > 1
+                    ? styles.leftSideRow
+                    : styles.sideColumn
+              }
+              data-left-stack-mode={isLeftStacked ? 'column' : 'row'}
+              style={
+                isLeftStacked
+                  ? {
+                      width: `${stackedColumnWidth}px`,
+                      minWidth: `${stackedColumnWidth}px`,
+                      flex: `0 0 ${stackedColumnWidth}px`,
+                    }
+                  : undefined
+              }
+            >
+              {leftPanels.map((p, index) => {
+                const isTop = index === 0;
+                const pct = isTop ? Math.round(stackedTopRatio * 100) : Math.round((1 - stackedTopRatio) * 100);
+                const panelLayoutStyle = isLeftStacked
+                  ? {
+                      width: '100%',
+                      minWidth: 0,
+                      height: `${pct}%`,
+                      minHeight: `${MIN_STACKED_PANEL_HEIGHT}px`,
+                      flex: `${pct} 1 0%`,
+                    }
+                  : leftPanels.length === 1
+                    ? getSingleLeftPanelLayoutStyle(p)
+                    : getLeftPanelLayoutStyle(p);
+                return (
+                  <Fragment key={p.id}>
+                    {isLeftStacked && index > 0 && (
+                      <DockedStackResizer
+                        topPanel={leftPanels[index - 1]}
+                        columnRef={stackedColumnRef}
+                        topRatio={stackedTopRatio}
+                        onRatioChange={setStackedTopRatio}
+                      />
+                    )}
+                    <DockPanel
+                      id={p.id}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < leftPanels.length - 1}
+                      layoutStyle={panelLayoutStyle}
+                    >
+                      {panelContents[p.id]}
+                    </DockPanel>
+                    {!isLeftStacked && (
+                      <DockedPaneResizer
+                        panel={p}
+                        centerAreaRef={centerAreaRef}
+                        onResize={resizeLeftPanel}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
+          )}
+          {isLeftStacked && leftPanels.length > 1 && (
             <DockedPaneResizer
-              panel={leftPanels[0]}
+              panel={{ ...leftPanels[0], size: { width: stackedColumnWidth } }}
               centerAreaRef={centerAreaRef}
-              onResize={resizeLeftPanel}
+              onResize={resizeStackedLeftColumn}
             />
-          </>
-        )}
+          )}
+        </div>
 
         <div ref={centerAreaRef} className={styles.centerArea}>
           {children}
@@ -404,31 +539,34 @@ export default function DockLayout({ panelContents = {}, children }) {
           ))}
         </div>
 
-        {rightPanels.length > 0 && (
-          <div className={styles.sideColumn}>
-            {rightPanels.map((p, index) => (
-              <DockPanel 
-                key={p.id} 
-                id={p.id}
-                canMoveUp={index > 0}
-                canMoveDown={index < rightPanels.length - 1}
-              >
+        <div className={styles.rightZone}>
+          {rightPanels.length > 0 && (
+            <div className={styles.sideColumn}>
+              {rightPanels.map((p, index) => (
+                <DockPanel 
+                  key={p.id} 
+                  id={p.id}
+                  canMoveUp={index > 0}
+                  canMoveDown={index < rightPanels.length - 1}
+                >
+                  {panelContents[p.id]}
+                </DockPanel>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.bottomZone}>
+          {bottomPanels.map(p => (
+            <Fragment key={p.id}>
+              <DockedBottomResizer panel={p} middleAreaRef={middleAreaRef} isFullWidth={false} onResize={resizeBottomPanel} />
+              <DockPanel id={p.id}>
                 {panelContents[p.id]}
               </DockPanel>
-            ))}
-          </div>
-        )}
+            </Fragment>
+          ))}
+        </div>
       </div>
-
-      {/* Bottom strip */}
-      {bottomPanels.map(p => (
-        <Fragment key={p.id}>
-          <DockedBottomResizer panel={p} middleAreaRef={middleAreaRef} onResize={resizeBottomPanel} />
-          <DockPanel id={p.id}>
-            {panelContents[p.id]}
-          </DockPanel>
-        </Fragment>
-      ))}
 
       {/* Floating panels (fixed position, handled by DockPanel) */}
       {maximizedPanel && (
@@ -448,12 +586,16 @@ export default function DockLayout({ panelContents = {}, children }) {
         </DockPanel>
       ))}
 
-      {/* Global drop overlay for dock zones when a panel is being dragged */}
+      {/* MT5 Smart Docking guide overlay when moving a panel */}
       <GlobalDockOverlay
-        visible={!!draggingId}
+        visible={Boolean(activeGuidePanelId)}
+        activePanelId={activeGuidePanelId}
+        panels={panels}
+        isDragging={Boolean(draggingId)}
         onDock={(zone) => {
-          if (draggingId) dockPanel(draggingId, zone);
+          if (activeGuidePanelId) dockPanel(activeGuidePanelId, zone);
         }}
+        onDismiss={() => setActiveDockGuideId?.(null)}
       />
     </div>
   );

@@ -3972,6 +3972,61 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   min-height: 0;
 }
 
+#root .position-history-grid .position-history-table {
+  width: 100%;
+  min-width: 1200px;
+  table-layout: fixed;
+}
+
+#root .position-history-grid .position-history-table col.position-history-col-data {
+  width: calc(100% / 15);
+}
+
+#root .position-history-grid .position-history-table :is(th, td) {
+  height: 28px;
+  padding: 5px 8px;
+  text-align: left !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  border-right: 1px solid var(--border-2);
+}
+
+#root .position-history-grid .position-history-table :is(th, td):last-child {
+  border-right: 0;
+}
+
+#root .position-history-grid .position-history-table thead th {
+  background: var(--surface-2);
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+#root .position-history-grid .position-history-table thead th:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-3) 65%, var(--surface-2));
+}
+
+#root .position-history-grid .position-history-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface-2) 38%, transparent);
+}
+
+#root .position-history-grid .position-history-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--surface-2));
+}
+
+#root .position-history-grid .position-history-table tbody tr.is-selected td {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+}
+
+#root .position-history-grid .position-history-grid-footer {
+  min-height: 24px;
+  padding: 3px 10px;
+}
+
 #root .position-history-grid-scroll {
   min-height: 0;
   overflow: auto;
@@ -5894,6 +5949,11 @@ body:has(.account-details-window[data-maximized="true"]) :is(.cc-status-connecti
 .account-trade-workspace .account-trade-order { min-width: 0; min-height: 0; overflow-y: auto; padding: 8px 12px; border: 0; border-radius: 0; box-shadow: none; }
 .account-trade-chart-quotes { order: 1; }
 .account-trade-plot { order: 2; min-height: 280px; margin: 8px 0 0 8px; }
+.account-trade-chart .account-trade-price-badge, .legacy-popup .account-trade-chart .account-trade-price-badge { color: #ffffff !important; }
+.account-trade-chart .account-trade-price-badge[data-side="ask"], .legacy-popup .account-trade-chart .account-trade-price-badge[data-side="ask"] { background-color: var(--danger) !important; border: 1px solid color-mix(in srgb, var(--danger) 70%, #ffffff); }
+.account-trade-chart .account-trade-price-badge[data-side="bid"], .legacy-popup .account-trade-chart .account-trade-price-badge[data-side="bid"] { background-color: var(--color-quote-up, var(--accent)) !important; border: 1px solid color-mix(in srgb, var(--color-quote-up, var(--accent)) 70%, #ffffff); }
+.account-trade-chart-quotes > div:nth-child(1) > span:first-child { background-color: var(--danger) !important; }
+.account-trade-chart-quotes > div:nth-child(2) > span:first-child { background-color: var(--color-quote-up, var(--accent)) !important; }
 .account-trade-form { gap: 6px; flex-shrink: 0; }
 .account-trade-field-row { grid-template-columns: 52px minmax(0, 1fr); }
 .account-trade-field-row > span:first-child { text-align: left; }
@@ -6322,6 +6382,8 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
   flex: 1 1 42%;
   min-width: 280px;
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .cc-center-workspace.has-multi-screens:has(.multi-screen-workspace.is-workspace-docked) .cc-route-viewport {
@@ -6338,13 +6400,14 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
 .cc-center-workspace.has-multi-screens .multi-screen-workspace.is-workspace-docked {
   flex: 0 0 auto;
   min-width: 240px;
-  overflow: hidden !important;
+  overflow: visible !important;
+  z-index: 520;
 }
 
 .multi-screen-dock-overlay {
   position: fixed;
   inset: 0;
-  z-index: 99990;
+  z-index: 480;
   pointer-events: none;
 }
 
@@ -6415,31 +6478,52 @@ html.dark:not(#ink-a):not(#ink-b):not(#ink-c):not(#ink-d) #root .opened-orders-p
   background: var(--bg);
   overflow: hidden;
   position: relative;
+  z-index: 10;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 150ms ease,
+    border-color 150ms ease;
 }
 
-.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane),
-.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane) > div,
-.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane) > div > div,
-div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane)),
-.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane),
-.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane) .cc-center-split {
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging),
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging) > div,
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging) > div > div,
+.cc-shell-workspace:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging) > div > div > div,
+.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging),
+.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging) .cc-center-split {
   overflow: visible !important;
 }
 
-div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane)) {
-  z-index: 80;
+.cc-shell-workspace > div > div > div:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging),
+.cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has-movable-pane, .is-workspace-docked, .is-pane-docked, .is-dragging) {
+  z-index: 500 !important;
 }
 
 .multi-screen-workspace.is-workspace-movable,
-.multi-screen-workspace.has-movable-pane {
+.multi-screen-workspace.has-movable-pane,
+.multi-screen-workspace.is-workspace-docked {
   overflow: visible !important;
-  z-index: 40;
+  z-index: 500;
+}
+
+.multi-screen-workspace.is-all-panes-movable:not(.is-workspace-movable) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+.multi-screen-workspace.is-all-panes-movable .multi-screen-toolbar,
+.multi-screen-workspace.is-all-panes-movable .multi-screen-pane {
+  pointer-events: auto;
 }
 
 .multi-screen-workspace.is-workspace-movable {
-  z-index: 50;
+  z-index: 520;
   cursor: grab;
   user-select: none;
+  will-change: transform;
+  backface-visibility: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border));
   border-radius: 6px;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48);
@@ -6447,7 +6531,7 @@ div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has
 
 .multi-screen-workspace.is-Dragging,
 .multi-screen-workspace.is-dragging {
-  z-index: 120;
+  z-index: 600 !important;
   cursor: grabbing !important;
   transition: none !important;
 }
@@ -6463,7 +6547,13 @@ div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has
   border-radius: 4px;
   background: var(--surface-2);
   flex-shrink: 0;
+  cursor: grab;
   user-select: none;
+  touch-action: none;
+}
+
+.multi-screen-toolbar:active {
+  cursor: grabbing;
 }
 
 .multi-screen-toolbar.is-movable {
@@ -6531,19 +6621,24 @@ div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has
   border-color: color-mix(in srgb, var(--accent) 65%, var(--border)) !important;
 }
 
+.new-account-modal-header,
+.group-create-header,
 .new-account-modal-header.is-movable,
 .group-create-header.is-movable {
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 
+.new-account-modal-header:active,
+.group-create-header:active,
 .new-account-modal-header.is-movable:active,
 .group-create-header.is-movable:active {
   cursor: grabbing;
 }
 
 .multi-screen-row {
-  position: relative;
+  position: static;
   display: flex;
   flex: 1 1 0%;
   min-width: 0;
@@ -6551,21 +6646,17 @@ div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has
   gap: 6px;
 }
 
-.multi-screen-row:has(.multi-screen-pane.is-movable) {
-  z-index: 60;
-}
-
-.multi-screen-row:has(.multi-screen-pane.is-movable.is-active) {
-  z-index: 90;
-}
-
-.multi-screen-row:has(.multi-screen-pane.is-dragging) {
-  z-index: 120;
+.multi-screen-row.is-row-floating-only {
+  flex: 0 0 0px;
+  height: 0;
+  min-height: 0;
+  gap: 0;
 }
 
 .multi-screen-pane {
   container-type: inline-size;
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
@@ -6576,27 +6667,32 @@ div:has(> .cc-center-workspace.has-multi-screens:has(.is-workspace-movable, .has
   border: 1px solid var(--border-2);
   border-radius: 4px;
   transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
     border-radius 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;
 }
 
-.multi-screen-pane.is-movable {
-  z-index: 60;
+.multi-screen-pane.is-movable,
+.multi-screen-pane.is-pane-docked {
+  z-index: 520;
   cursor: grab;
   user-select: none;
+  will-change: transform;
+  backface-visibility: hidden;
   border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
     0 14px 34px rgba(0, 0, 0, 0.48);
 }
 
-.multi-screen-pane.is-movable.is-active {
-  z-index: 90;
+.multi-screen-pane.is-movable.is-active,
+.multi-screen-pane.is-pane-docked.is-active {
+  z-index: 560;
 }
 
 .multi-screen-pane.is-dragging {
-  z-index: 120;
+  z-index: 600 !important;
   cursor: grabbing !important;
   transition: none !important;
 }

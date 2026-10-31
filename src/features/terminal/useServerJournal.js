@@ -125,5 +125,5 @@ export default function useServerJournal(enabled, accessKey = '') {
     }
   }, [cursor, filter, loadingOlder, clearRows]);
 
-  return { filter, setFilter, entries, cursor, scope, loading: loading || (enabled && !loaded), loadingOlder, error, live, setLive, refresh, loadOlder };
+  return { filter, setFilter, entries, cursor, scope, loading: loading || (enabled && !loaded), loadingOlder, error, live, setLive, refresh, loadOlder, clear: clearRows };
 }

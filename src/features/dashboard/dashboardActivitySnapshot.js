@@ -35,6 +35,21 @@ const isValidSnapshot = (snapshot) => snapshot?.version === SNAPSHOT_VERSION &&
       points.every((point) => isValidPoint(point, snapshot.asOf));
   });
 
+const compactPoint = (point) => ({
+  timestamp: point.timestamp,
+  equity: point.equity,
+  equityAsOf: point.equityAsOf,
+  volumePartial: point.volumePartial,
+  volume: point.volume,
+  ...(point.volume > 0
+    ? {
+        buyVolume: point.buyVolume ?? 0,
+        sellVolume: point.sellVolume ?? 0,
+        tradeCount: point.deals ?? 0,
+      }
+    : {}),
+});
+
 // Cache only derived chart points. Deal rows, account logins and other PII never enter storage.
 export const createActivitySnapshot = ({
   scope,
@@ -59,7 +74,7 @@ export const createActivitySnapshot = ({
       equityHistory,
       volumeCoverageFrom,
       volumeCoverageTo,
-    }),
+    }).map(compactPoint),
   ]));
   const snapshot = { version: SNAPSHOT_VERSION, scope, asOf, partial, seriesByRange };
   return isValidSnapshot(snapshot) ? snapshot : null;

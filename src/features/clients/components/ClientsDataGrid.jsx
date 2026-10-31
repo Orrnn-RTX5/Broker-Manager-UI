@@ -275,7 +275,7 @@ const ClientsDataGrid = ({
                   {isVisible('type') && <td style={{ color: 'var(--text-2)' }} title={row.type || ''}>{row.type || '-'}</td>}
                   {isVisible('status') && (
                     <td>
-                      <span className={`ui-status ${STATUS_BADGE[row.status] || 'ui-status-neutral'}`}>
+                      <span className={`ui-status ${STATUS_BADGE[row.status] || STATUS_BADGE[String(row.status || '').charAt(0).toUpperCase() + String(row.status || '').slice(1).toLowerCase()] || 'ui-status-neutral'}`}>
                         {row.status}
                       </span>
                     </td>

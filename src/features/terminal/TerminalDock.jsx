@@ -1,6 +1,17 @@
-import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, ListFilter, RefreshCw, Search } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FileSearch,
+  FolderOpen,
+  ListFilter,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react';
 import './TerminalJournal.css';
 import { DockTitleSlotContext } from '../../components/docking/DockTitleSlotContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,8 +71,7 @@ const sideRowClass = (side, isSelected) => [
   isSelected ? 'is-selected' : '',
 ].filter(Boolean).join(' ') || undefined;
 
-// Summary owns the default open-trades grid. Selecting a tab is idempotent:
-// repeated clicks keep its content and selection together.
+// Journal opens by default when Broker Manager starts or when Layout is reset.
 const TERMINAL_TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'exposure', label: 'Exposure' },
@@ -74,7 +84,7 @@ const TERMINAL_TABS = [
 ];
 
 const TAB_STATUS = {
-  summary: 'Account summary',
+  summary: 'Symbol summary · auto-refresh',
   exposure: 'Symbol exposure',
   news: 'News',
   calendar: 'Economic calendar',
@@ -97,6 +107,37 @@ const journalDetailText = (entry) => {
   return parts.length ? parts.join(' · ') : 'No additional request details.';
 };
 
+const formatServerEntryCopyText = (entry) => {
+  if (!entry) return '';
+  const time = formatServerJournalTime(entry.time);
+  const severity = entry.severity ? entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1) : 'Info';
+  const login = serverJournalLogin(entry);
+  const detail = serverJournalDetail(entry);
+  return [
+    time,
+    severity,
+    entry.source || '',
+    entry.action || '',
+    String(login ?? ''),
+    entry.group || '—',
+    entry.message || '',
+    detail && detail !== 'No additional details.' ? `(${detail})` : '',
+  ].filter(Boolean).join('\t');
+};
+
+const formatTradeRequestCopyText = (entry) => {
+  if (!entry) return '';
+  const detail = journalDetailText(entry);
+  return [
+    entry.time || '',
+    String(entry.dealer ?? ''),
+    String(entry.login ?? ''),
+    entry.request || '',
+    entry.answer || '',
+    detail && detail !== 'No additional request details.' ? `(${detail})` : '',
+  ].filter(Boolean).join('\t');
+};
+
 function TerminalDock({ isAuthenticated = false }) {
   const { slot: titleSlot } = useContext(DockTitleSlotContext) || {};
   const queryClient = useQueryClient();
@@ -111,7 +152,7 @@ function TerminalDock({ isAuthenticated = false }) {
     () => canViewPositions ? readStoredTerminalPage(terminalScope) : undefined,
     [terminalScope, canViewPositions]
   );
-  const [activeTab, setActiveTab] = useState('summary');
+  const [activeTab, setActiveTab] = useState('journal');
   const [journalEntries, setJournalEntries] = useState(() => getTradeJournalEntries());
   const [selectedTradeKey, setSelectedTradeKey] = useState(null);
   const [selectedJournalId, setSelectedJournalId] = useState(null);
@@ -122,6 +163,14 @@ function TerminalDock({ isAuthenticated = false }) {
   const [journalMode, setJournalMode] = useState('server');
   const [expandedServerIds, setExpandedServerIds] = useState(() => new Set());
   const [selectedServerId, setSelectedServerId] = useState(null);
+  const [journalAutoScroll, setJournalAutoScroll] = useState(true);
+  const [journalAutoArrange, setJournalAutoArrange] = useState(true);
+  const [journalShowGrid, setJournalShowGrid] = useState(true);
+  const [hiddenServerCols, setHiddenServerCols] = useState(() => new Set());
+  const [hiddenRequestCols, setHiddenRequestCols] = useState(() => new Set());
+  const [journalContextMenu, setJournalContextMenu] = useState(null);
+  const [viewerModalState, setViewerModalState] = useState(null);
+
   const journalAccessKey = serverJournalAccessKey({ isAdmin, role, permissions, revision: accessRevision });
   const serverJournal = useServerJournal(
     isAuthenticated && activeTab === 'journal' && journalMode === 'server',
@@ -129,7 +178,23 @@ function TerminalDock({ isAuthenticated = false }) {
   );
   const { alerts: marginAlerts } = useMarginAlerts(isAuthenticated);
   const journalWrapRef = useRef(null);
+  const serverJournalWrapRef = useRef(null);
   const terminalRef = useRef(null);
+
+  useEffect(() => {
+    const handleResetLayout = () => {
+      setActiveTab('journal');
+      setJournalMode('server');
+      setTerminalSearch('');
+      setSelectedTradeKey(null);
+      setSelectedJournalId(null);
+      setSelectedServerId(null);
+      setViewerModalState(null);
+      setJournalContextMenu(null);
+    };
+    window.addEventListener('manager:reset-layout', handleResetLayout);
+    return () => window.removeEventListener('manager:reset-layout', handleResetLayout);
+  }, []);
 
   useEffect(() => {
     if (selectedTradeKey === null) return undefined;
@@ -141,6 +206,7 @@ function TerminalDock({ isAuthenticated = false }) {
     document.addEventListener('pointerdown', clearSelectionOutsideTerminal, true);
     return () => document.removeEventListener('pointerdown', clearSelectionOutsideTerminal, true);
   }, [selectedTradeKey]);
+
   const { rows: snapshotRows, data, dataUpdatedAt, isFetchedAfterMount, page, offset, hasMore, total, isLoading, isFetching, isError, error, refetch, nextPage, prevPage } = usePagedData({
     queryKey: [...TERMINAL_POSITIONS_QUERY_KEY, terminalScope],
     queryFn: fetchTrades,
@@ -192,22 +258,29 @@ function TerminalDock({ isAuthenticated = false }) {
 
   useEffect(() => subscribeToTradeJournal((next) => setJournalEntries(next)), []);
 
-  // Keep the journal pinned to the newest entry, but never yank the view while
-  // the user is reading older rows.
+  // Keep the journal pinned to the newest entry when Auto Scroll is enabled,
+  // but never yank the view while the user is reading older rows.
   useEffect(() => {
-    if (activeTab !== 'journal' || journalMode !== 'requests') return;
-    const el = journalWrapRef.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 60) el.scrollTop = el.scrollHeight;
-  }, [journalEntries, activeTab, journalMode]);
+    if (!journalAutoScroll || activeTab !== 'journal') return;
+    if (journalMode === 'requests') {
+      const el = journalWrapRef.current;
+      if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 60) el.scrollTop = el.scrollHeight;
+    } else if (journalMode === 'server') {
+      const el = serverJournalWrapRef.current;
+      if (el && el.scrollTop < 60) el.scrollTop = 0;
+    }
+  }, [journalEntries, serverJournal.entries, activeTab, journalMode, journalAutoScroll]);
 
   useEffect(() => {
-    if (activeTab === 'journal' && journalMode === 'requests' && journalWrapRef.current) {
+    if (journalAutoScroll && activeTab === 'journal' && journalMode === 'requests' && journalWrapRef.current) {
       journalWrapRef.current.scrollTop = journalWrapRef.current.scrollHeight;
     }
-  }, [activeTab, journalMode]);
+  }, [activeTab, journalMode, journalAutoScroll]);
 
   const handleManualRefresh = () => {
     invalidateGlobalPositionsCache();
+    queryClient.invalidateQueries({ queryKey: ['terminal-positions-book'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-exposure-api'] });
     refetch();
   };
 
@@ -223,28 +296,28 @@ function TerminalDock({ isAuthenticated = false }) {
     queryClient.invalidateQueries({ queryKey: TERMINAL_POSITIONS_QUERY_KEY });
   };
 
-  const toggleJournalExpand = (id) => {
+  const toggleJournalExpand = useCallback((id) => {
     setExpandedJournalIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
-  const toggleServerExpand = (id) => {
+  const toggleServerExpand = useCallback((id) => {
     setExpandedServerIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
   const searchNeedle = terminalSearch.trim().toLowerCase();
   const visibleTab = !showPositionViews && ['exposure', 'search'].includes(activeTab)
     ? 'summary' : activeTab;
-  const showingTrades = visibleTab === 'summary' && showPositionViews;
+  const showingTrades = visibleTab === 'trades' && showPositionViews;
   const showingServerJournal = visibleTab === 'journal' && journalMode === 'server';
   const visibleServerJournal = searchNeedle
     ? serverJournal.entries.filter((entry) => matchesServerJournalSearch(entry, searchNeedle))
@@ -261,6 +334,170 @@ function TerminalDock({ isAuthenticated = false }) {
         entry.time, entry.dealer, entry.login, entry.request, entry.answer, entry.detail?.symbol,
       ].join(' ').toLowerCase().includes(searchNeedle))
     : journalEntries;
+
+  const visibleServerColumns = useMemo(
+    () => SERVER_JOURNAL_COLUMNS.filter((col) => !hiddenServerCols.has(col)),
+    [hiddenServerCols]
+  );
+
+  const visibleRequestColumns = useMemo(
+    () => JOURNAL_COLUMNS.filter((col) => !hiddenRequestCols.has(col)),
+    [hiddenRequestCols]
+  );
+
+  const handleToggleColumn = useCallback((column) => {
+    if (showingServerJournal) {
+      setHiddenServerCols((prev) => {
+        const next = new Set(prev);
+        if (next.has(column)) {
+          next.delete(column);
+        } else if (SERVER_JOURNAL_COLUMNS.length - next.size > 1) {
+          next.add(column);
+        }
+        return next;
+      });
+    } else {
+      setHiddenRequestCols((prev) => {
+        const next = new Set(prev);
+        if (next.has(column)) {
+          next.delete(column);
+        } else if (JOURNAL_COLUMNS.length - next.size > 1) {
+          next.add(column);
+        }
+        return next;
+      });
+    }
+  }, [showingServerJournal]);
+
+  const handleCopyJournalEntry = useCallback(async (targetEntry) => {
+    let text = '';
+    if (showingServerJournal) {
+      const entry = targetEntry || visibleServerJournal.find((item) => item.id === selectedServerId) || visibleServerJournal[0];
+      text = entry ? formatServerEntryCopyText(entry) : visibleServerJournal.map(formatServerEntryCopyText).join('\n');
+    } else {
+      const entry = targetEntry || visibleJournal.find((item) => item.id === selectedJournalId) || visibleJournal[0];
+      text = entry ? formatTradeRequestCopyText(entry) : visibleJournal.map(formatTradeRequestCopyText).join('\n');
+    }
+    if (!text) return;
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard write may be restricted in non-secure contexts.
+    }
+  }, [showingServerJournal, visibleServerJournal, selectedServerId, visibleJournal, selectedJournalId]);
+
+  const handleOpenJournalEntry = useCallback((targetEntry) => {
+    if (showingServerJournal) {
+      const entry = targetEntry || visibleServerJournal.find((item) => item.id === selectedServerId) || visibleServerJournal[0];
+      if (entry) {
+        setSelectedServerId(entry.id);
+        setExpandedServerIds((prev) => {
+          const next = new Set(prev);
+          next.add(entry.id);
+          return next;
+        });
+      }
+      setViewerModalState({
+        dialogType: 'entry',
+        mode: 'server',
+        entry: entry || null,
+      });
+    } else {
+      const entry = targetEntry || visibleJournal.find((item) => item.id === selectedJournalId) || visibleJournal[0];
+      if (entry) {
+        setSelectedJournalId(entry.id);
+        setExpandedJournalIds((prev) => {
+          const next = new Set(prev);
+          next.add(entry.id);
+          return next;
+        });
+      }
+      setViewerModalState({
+        dialogType: 'entry',
+        mode: 'requests',
+        entry: entry || null,
+      });
+    }
+  }, [showingServerJournal, visibleServerJournal, selectedServerId, visibleJournal, selectedJournalId]);
+
+  const handleOpenJournalViewer = useCallback((targetEntry) => {
+    if (showingServerJournal) {
+      const entry = targetEntry || visibleServerJournal.find((item) => item.id === selectedServerId) || visibleServerJournal[0] || null;
+      setViewerModalState({ dialogType: 'viewer', mode: 'server', entry });
+    } else {
+      const entry = targetEntry || visibleJournal.find((item) => item.id === selectedJournalId) || visibleJournal[0] || null;
+      setViewerModalState({ dialogType: 'viewer', mode: 'requests', entry });
+    }
+  }, [showingServerJournal, visibleServerJournal, selectedServerId, visibleJournal, selectedJournalId]);
+
+  const handleClearJournal = useCallback(() => {
+    if (showingServerJournal) {
+      serverJournal.clear?.();
+      setSelectedServerId(null);
+      setExpandedServerIds(new Set());
+    } else {
+      clearTradeJournal();
+      setSelectedJournalId(null);
+      setExpandedJournalIds(new Set());
+    }
+  }, [showingServerJournal, serverJournal]);
+
+  const handleJournalContextMenu = useCallback((event, entry = null) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (showingServerJournal && entry) {
+      setSelectedServerId(entry.id);
+    } else if (!showingServerJournal && entry) {
+      setSelectedJournalId(entry.id);
+    }
+    setJournalContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      entry,
+    });
+  }, [showingServerJournal]);
+
+  useEffect(() => {
+    if (visibleTab !== 'journal') return undefined;
+    const handleKeyDown = (event) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+      if (isInput) return;
+
+      const terminal = terminalRef.current?.closest('[data-panel-id]') || terminalRef.current;
+      const hasSelection = showingServerJournal ? selectedServerId !== null : selectedJournalId !== null;
+      const insideTerminal = Boolean(terminal && terminal.contains(activeEl));
+      if (!hasSelection && !insideTerminal) return;
+
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'c') {
+        const selectionText = typeof window !== 'undefined' ? String(window.getSelection?.() || '') : '';
+        if (!selectionText) {
+          event.preventDefault();
+          void handleCopyJournalEntry(null);
+        }
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        const key = event.key.toLowerCase();
+        if (key === 'a') {
+          event.preventDefault();
+          setJournalAutoArrange((prev) => !prev);
+        } else if (key === 'g') {
+          event.preventDefault();
+          setJournalShowGrid((prev) => !prev);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visibleTab, showingServerJournal, selectedServerId, selectedJournalId, handleCopyJournalEntry]);
 
   const controls = (
       <div className={`cc-terminal-tabs cc-terminal-title-controls${showingServerJournal ? ' cc-server-journal-controls' : ''}`} role="group" aria-label="Terminal controls">
@@ -288,6 +525,8 @@ function TerminalDock({ isAuthenticated = false }) {
             <span className="cc-trade-page">{presentedRows.length ? `${offset + 1}–${offset + presentedRows.length}` : `Page ${page + 1}`}</span>
             <button type="button" aria-label="Next trades" onClick={nextPage} disabled={!isAuthenticated || positionsAccessDenied || !hasMore || isFetching}>Next</button>
           </>
+        ) : (visibleTab === 'summary' || visibleTab === 'exposure') && showPositionViews ? (
+          <button type="button" onClick={handleManualRefresh} disabled={!isAuthenticated || isFetching}>Refresh</button>
         ) : visibleTab === 'journal' ? (
           <>
             {!showingServerJournal && <button type="button" aria-pressed={journalMode === 'server'} className={journalMode === 'server' ? 'is-active' : undefined}
@@ -326,16 +565,29 @@ function TerminalDock({ isAuthenticated = false }) {
       </div>
   );
 
+  const journalTableModifierClasses = [
+    !journalShowGrid ? 'is-no-grid' : '',
+    !journalAutoArrange ? 'is-manual-arrange' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={`cc-terminal${showingServerJournal ? ' cc-terminal-journal' : ''}`} ref={terminalRef}>
-      {titleSlot ? createPortal(controls, titleSlot) : controls}
+    <div className={`cc-terminal${showingServerJournal ? ' cc-terminal-journal' : ''}`} ref={terminalRef} tabIndex={-1}>
+      {titleSlot ? createPortal(controls, titleSlot) : null}
       {showingServerJournal ? (
-        <div className="cc-terminal-table-wrap">
-          <table className="cc-terminal-table cc-journal-table cc-server-journal-table" aria-label="Server journal" aria-busy={serverJournal.loading}>
+        <div
+          className="cc-terminal-table-wrap"
+          ref={serverJournalWrapRef}
+          onContextMenu={(event) => handleJournalContextMenu(event, null)}
+        >
+          <table
+            className={`cc-terminal-table cc-journal-table cc-server-journal-table ${journalTableModifierClasses}`.trim()}
+            aria-label="Server journal"
+            aria-busy={serverJournal.loading}
+          >
             <thead>
               <tr>
                 <th scope="col" className="cc-journal-expander-col"></th>
-                {SERVER_JOURNAL_COLUMNS.map((label) => <th key={label} scope="col">{label}</th>)}
+                {visibleServerColumns.map((label) => <th key={label} scope="col">{label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -343,14 +595,16 @@ function TerminalDock({ isAuthenticated = false }) {
                 <ServerJournalRow
                   key={entry.id}
                   entry={entry}
+                  visibleColumns={visibleServerColumns}
                   alternate={index % 2 === 1}
                   expanded={expandedServerIds.has(entry.id)}
                   selected={selectedServerId === entry.id}
                   onToggleExpand={() => toggleServerExpand(entry.id)}
                   onSelect={() => setSelectedServerId((prev) => (prev === entry.id ? null : entry.id))}
+                  onContextMenu={(event) => handleJournalContextMenu(event, entry)}
                 />
               ))}
-              {!visibleServerJournal.length && <tr><td colSpan={SERVER_JOURNAL_COLUMNS.length + 1}>
+              {!visibleServerJournal.length && <tr><td colSpan={visibleServerColumns.length + 1}>
                 {!isAuthenticated
                   ? 'Sign in to view the journal.'
                   : serverJournal.loading
@@ -362,7 +616,7 @@ function TerminalDock({ isAuthenticated = false }) {
                         : 'No journal events for this filter.'}
               </td></tr>}
               {serverJournal.cursor && !searchNeedle && (
-                <tr className="cc-server-journal-more"><td colSpan={SERVER_JOURNAL_COLUMNS.length + 1}>
+                <tr className="cc-server-journal-more"><td colSpan={visibleServerColumns.length + 1}>
                   <button type="button" onClick={serverJournal.loadOlder} disabled={serverJournal.loadingOlder}>
                     {serverJournal.loadingOlder ? 'Loading…' : 'Load older events'}
                   </button>
@@ -372,8 +626,15 @@ function TerminalDock({ isAuthenticated = false }) {
           </table>
         </div>
       ) : visibleTab === 'journal' ? (
-        <div className="cc-terminal-table-wrap" ref={journalWrapRef}>
-          <table className="cc-terminal-table cc-journal-table" aria-label="Trade request journal">
+        <div
+          className="cc-terminal-table-wrap"
+          ref={journalWrapRef}
+          onContextMenu={(event) => handleJournalContextMenu(event, null)}
+        >
+          <table
+            className={`cc-terminal-table cc-journal-table ${journalTableModifierClasses}`.trim()}
+            aria-label="Trade request journal"
+          >
             <thead>
               <tr>
                 <th scope="col" className="cc-journal-expander-col">
@@ -386,7 +647,7 @@ function TerminalDock({ isAuthenticated = false }) {
                     disabled={!journalEntries.length}
                   >×</button>
                 </th>
-                {JOURNAL_COLUMNS.map((label) => <th key={label} scope="col">{label}</th>)}
+                {visibleRequestColumns.map((label) => <th key={label} scope="col">{label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -394,13 +655,15 @@ function TerminalDock({ isAuthenticated = false }) {
                 <JournalRow
                   key={entry.id}
                   entry={entry}
+                  visibleColumns={visibleRequestColumns}
                   expanded={expandedJournalIds.has(entry.id)}
                   selected={selectedJournalId === entry.id}
                   onToggleExpand={() => toggleJournalExpand(entry.id)}
                   onSelect={() => setSelectedJournalId((prev) => (prev === entry.id ? null : entry.id))}
+                  onContextMenu={(event) => handleJournalContextMenu(event, entry)}
                 />
               ))}
-              {!visibleJournal.length && <tr><td colSpan={JOURNAL_COLUMNS.length + 1}>
+              {!visibleJournal.length && <tr><td colSpan={visibleRequestColumns.length + 1}>
                 {!isAuthenticated
                   ? 'Sign in to view trade requests.'
                   : journalEntries.length
@@ -484,6 +747,11 @@ function TerminalDock({ isAuthenticated = false }) {
             )}
           </button>
         ))}
+        {!titleSlot && (
+          <div className="cc-terminal-bottom-controls">
+            {controls}
+          </div>
+        )}
         {showingServerJournal ? (
           <span className="cc-server-journal-count">
             {searchNeedle ? `${visibleServerJournal.length} of ${serverJournal.entries.length}` : visibleServerJournal.length}
@@ -498,16 +766,679 @@ function TerminalDock({ isAuthenticated = false }) {
           onChange={(event) => setTerminalSearch(event.target.value)}
         />}
       </div>
+
+      {journalContextMenu && (
+        <JournalContextMenu
+          x={journalContextMenu.x}
+          y={journalContextMenu.y}
+          entry={journalContextMenu.entry}
+          autoScroll={journalAutoScroll}
+          autoArrange={journalAutoArrange}
+          showGrid={journalShowGrid}
+          allColumns={showingServerJournal ? ['Time', 'Source'] : JOURNAL_COLUMNS}
+          hiddenColumns={showingServerJournal ? hiddenServerCols : hiddenRequestCols}
+          onOpen={() => handleOpenJournalEntry(journalContextMenu.entry)}
+          onCopy={() => void handleCopyJournalEntry(journalContextMenu.entry)}
+          onViewer={() => handleOpenJournalViewer(journalContextMenu.entry)}
+          onClear={handleClearJournal}
+          onToggleAutoScroll={() => setJournalAutoScroll((prev) => !prev)}
+          onToggleAutoArrange={() => setJournalAutoArrange((prev) => !prev)}
+          onToggleGrid={() => setJournalShowGrid((prev) => !prev)}
+          onToggleColumn={handleToggleColumn}
+          onClose={() => setJournalContextMenu(null)}
+        />
+      )}
+
+      {viewerModalState && (
+        <JournalViewerModal
+          dialogType={viewerModalState.dialogType}
+          mode={viewerModalState.mode}
+          initialEntry={viewerModalState.entry}
+          serverEntries={serverJournal.entries}
+          requestEntries={journalEntries}
+          onCopyEntry={(entry) => void handleCopyJournalEntry(entry)}
+          onClose={() => setViewerModalState(null)}
+        />
+      )}
     </div>
   );
 }
 
-function JournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
+function JournalContextMenu({
+  x,
+  y,
+  autoScroll,
+  autoArrange,
+  showGrid,
+  allColumns,
+  hiddenColumns,
+  onOpen,
+  onCopy,
+  onViewer,
+  onClear,
+  onToggleAutoScroll,
+  onToggleAutoArrange,
+  onToggleGrid,
+  onToggleColumn,
+  onClose,
+}) {
+  const menuRef = useRef(null);
+  const [columnsSubmenuOpen, setColumnsSubmenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', onClose);
+    window.addEventListener('blur', onClose);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', onClose);
+      window.removeEventListener('blur', onClose);
+    };
+  }, [onClose]);
+
+  const menuWidth = 184;
+  const menuHeight = 236;
+  const safeLeft = typeof window !== 'undefined'
+    ? Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8))
+    : x;
+  const safeTop = typeof window !== 'undefined'
+    ? Math.max(8, Math.min(y, window.innerHeight - menuHeight - 8))
+    : y;
+  const flipSubmenuLeft = typeof window !== 'undefined' && safeLeft + menuWidth + 160 > window.innerWidth;
+
+  const portalRoot = (typeof document !== 'undefined' && document.querySelector('.rtx5-command-shell')) || document.body;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={`cc-journal-context-menu${flipSubmenuLeft ? ' flip-submenu-left' : ''}`}
+      role="menu"
+      aria-label="Journal context menu"
+      style={{ left: safeLeft, top: safeTop }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onOpen();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-open" aria-hidden="true">
+          <FolderOpen size={13} strokeWidth={1.8} />
+        </span>
+        <span className="cc-journal-ctx-label">Open</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onCopy();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-copy" aria-hidden="true">
+          <Copy size={13} strokeWidth={1.8} />
+        </span>
+        <span className="cc-journal-ctx-label">Copy</span>
+        <span className="cc-journal-ctx-shortcut">Ctrl+C</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onViewer();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-viewer" aria-hidden="true">
+          <FileSearch size={13} strokeWidth={1.8} />
+        </span>
+        <span className="cc-journal-ctx-label">Viewer</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onClear();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-clear" aria-hidden="true">
+          <X size={13} strokeWidth={2} />
+        </span>
+        <span className="cc-journal-ctx-label">Clear</span>
+      </button>
+
+      <div className="cc-journal-context-menu-separator" role="separator" />
+
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={autoScroll}
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onToggleAutoScroll();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-check" aria-hidden="true">
+          {autoScroll ? <Check size={12} strokeWidth={2.4} /> : null}
+        </span>
+        <span className="cc-journal-ctx-label">Auto Scroll</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={autoArrange}
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onToggleAutoArrange();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-check" aria-hidden="true">
+          {autoArrange ? <Check size={12} strokeWidth={2.4} /> : null}
+        </span>
+        <span className="cc-journal-ctx-label">Auto Arrange</span>
+        <span className="cc-journal-ctx-shortcut">A</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={showGrid}
+        className="cc-journal-context-menu-item"
+        onMouseEnter={() => setColumnsSubmenuOpen(false)}
+        onClick={() => {
+          onToggleGrid();
+          onClose();
+        }}
+      >
+        <span className="cc-journal-ctx-icon is-check" aria-hidden="true">
+          {showGrid ? <Check size={12} strokeWidth={2.4} /> : null}
+        </span>
+        <span className="cc-journal-ctx-label">Grid</span>
+        <span className="cc-journal-ctx-shortcut">G</span>
+      </button>
+
+      <div className="cc-journal-context-menu-separator" role="separator" />
+
+      <div
+        className="cc-journal-context-menu-submenu-wrap"
+        onMouseEnter={() => setColumnsSubmenuOpen(true)}
+        onMouseLeave={() => setColumnsSubmenuOpen(false)}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={columnsSubmenuOpen}
+          className={`cc-journal-context-menu-item${columnsSubmenuOpen ? ' is-open' : ''}`}
+          onClick={() => setColumnsSubmenuOpen((prev) => !prev)}
+        >
+          <span className="cc-journal-ctx-icon" aria-hidden="true" />
+          <span className="cc-journal-ctx-label">Columns</span>
+          <span className="cc-journal-ctx-arrow" aria-hidden="true">▸</span>
+        </button>
+
+        {columnsSubmenuOpen && (
+          <div className="cc-journal-context-submenu" role="menu" aria-label="Journal columns">
+            {allColumns.map((column) => {
+              const checked = !hiddenColumns.has(column);
+              return (
+                <button
+                  key={column}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={checked}
+                  className="cc-journal-context-menu-item"
+                  onClick={() => onToggleColumn(column)}
+                >
+                  <span className="cc-journal-ctx-icon is-check" aria-hidden="true">
+                    {checked ? <Check size={12} strokeWidth={2.4} /> : null}
+                  </span>
+                  <span className="cc-journal-ctx-label">{column}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>,
+    portalRoot,
+  );
+}
+
+function JournalViewerModal({
+  dialogType = 'viewer',
+  mode,
+  initialEntry,
+  serverEntries = [],
+  requestEntries = [],
+  onCopyEntry,
+  onClose,
+}) {
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState(() => initialEntry?.id ?? null);
+  const [copied, setCopied] = useState(false);
+
+  const isServer = mode === 'server';
+  const isEntryDialog = dialogType === 'entry';
+  const entries = isServer ? serverEntries : requestEntries;
+  const needle = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!needle) return entries;
+    return entries.filter((entry) =>
+      isServer
+        ? matchesServerJournalSearch(entry, needle)
+        : [entry.time, entry.dealer, entry.login, entry.request, entry.answer, entry.detail?.symbol]
+            .join(' ')
+            .toLowerCase()
+            .includes(needle)
+    );
+  }, [entries, isServer, needle]);
+
+  const activeEntry = useMemo(
+    () => (isEntryDialog ? (initialEntry || entries[0] || null) : (filtered.find((entry) => entry.id === selectedId) || filtered[0] || initialEntry || null)),
+    [isEntryDialog, filtered, selectedId, initialEntry, entries]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const portalRoot = (typeof document !== 'undefined' && document.querySelector('.rtx5-command-shell')) || document.body;
+
+  const handleCopy = () => {
+    if (!activeEntry) return;
+    onCopyEntry(activeEntry);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const activeSeverity = String(activeEntry?.severity || 'info').toLowerCase();
+  const activeTone = isServer
+    ? severityClass(activeSeverity)
+    : (/reject|error|fail|denied/i.test(String(activeEntry?.answer || ''))
+      ? 'is-error'
+      : /done|ok/i.test(String(activeEntry?.answer || ''))
+        ? 'is-success'
+        : 'is-info');
+  const activeSeverityLabel = isServer
+    ? (activeEntry?.severity ? activeEntry.severity.charAt(0).toUpperCase() + activeEntry.severity.slice(1) : 'Info')
+    : (activeEntry?.answer || 'Event');
+
+  const diagnosticChips = useMemo(() => {
+    if (!isServer || !activeEntry) return [];
+    const chips = [];
+    if (activeEntry.actor_id) {
+      chips.push({
+        key: 'actor',
+        label: 'Actor',
+        value: [activeEntry.actor_type, activeEntry.actor_id].filter(Boolean).join(' '),
+      });
+    }
+    if (activeEntry.actor_ip) {
+      chips.push({ key: 'ip', label: 'IP', value: activeEntry.actor_ip, mono: true });
+    }
+    if (activeEntry.result) {
+      const isDenied = /denied|fail|error|reject/i.test(String(activeEntry.result));
+      chips.push({
+        key: 'result',
+        label: 'Result',
+        value: activeEntry.result,
+        tone: isDenied ? 'is-error' : 'is-success',
+      });
+    }
+    if (activeEntry.error_code) {
+      chips.push({ key: 'code', label: 'Code', value: activeEntry.error_code, mono: true, tone: 'is-warn' });
+    }
+    if (activeEntry.metadata?.method && activeEntry.metadata?.path) {
+      chips.push({
+        key: 'endpoint',
+        label: 'Endpoint',
+        value: `${activeEntry.metadata.method} ${activeEntry.metadata.path}`,
+        mono: true,
+      });
+    }
+    if (activeEntry.request_id) {
+      chips.push({ key: 'req', label: 'Request ID', value: activeEntry.request_id, mono: true });
+    }
+    return chips;
+  }, [isServer, activeEntry]);
+
+  return createPortal(
+    <div className="cc-journal-viewer-backdrop" onClick={onClose}>
+      <div
+        className={`cc-journal-viewer-dialog${isEntryDialog ? ' is-entry-dialog' : ''} ${activeTone}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={isEntryDialog ? 'Journal Entry' : 'Journal Viewer'}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="cc-journal-viewer-header">
+          <div className="cc-journal-viewer-title">
+            <span className={`cc-journal-viewer-icon ${activeTone}`} aria-hidden="true">
+              {isEntryDialog ? <FolderOpen size={14} /> : <FileSearch size={14} />}
+            </span>
+            <div className="cc-journal-viewer-title-group">
+              <span className="cc-journal-viewer-heading-text">
+                {isEntryDialog ? 'Journal Entry' : 'Journal Viewer'}
+              </span>
+              <span className="cc-journal-viewer-subtitle">
+                {isEntryDialog
+                  ? (isServer ? 'Server Audit Record' : 'Execution Audit Record')
+                  : `${filtered.length} ${filtered.length === 1 ? 'event' : 'events'}`}
+              </span>
+            </div>
+          </div>
+          <div className="cc-journal-viewer-actions">
+            {isEntryDialog && activeEntry && (
+              <div className="cc-journal-viewer-header-badges">
+                {activeEntry.category && (
+                  <span className="cc-journal-category-badge">{activeEntry.category}</span>
+                )}
+                <span className={`cc-journal-status-pill ${activeTone}`}>
+                  <span className="cc-journal-status-dot" aria-hidden="true" />
+                  {activeSeverityLabel}
+                </span>
+              </div>
+            )}
+            {!isEntryDialog && (
+              <>
+                <label className="cc-journal-viewer-search">
+                  <Search size={12} aria-hidden="true" />
+                  <input
+                    type="search"
+                    placeholder="Filter journal entries…"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+                <button type="button" className="cc-journal-viewer-btn" onClick={handleCopy} disabled={!activeEntry}>
+                  {copied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </>
+            )}
+            <button type="button" className="cc-journal-viewer-close" onClick={onClose} aria-label="Close dialog">
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <div className="cc-journal-viewer-body">
+          {!isEntryDialog && (
+            <div className="cc-journal-viewer-table-wrap">
+              <table className="cc-terminal-table cc-journal-table cc-server-journal-table">
+                <thead>
+                  <tr>
+                    {isServer
+                      ? SERVER_JOURNAL_COLUMNS.map((col) => <th key={col}>{col}</th>)
+                      : JOURNAL_COLUMNS.map((col) => <th key={col}>{col}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((entry) => {
+                    const isSelected = activeEntry?.id === entry.id;
+                    if (isServer) {
+                      const loginVal = serverJournalLogin(entry);
+                      const sevLabel = entry.severity ? entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1) : 'Info';
+                      return (
+                        <tr
+                          key={entry.id}
+                          className={`cc-server-journal-row${isSelected ? ' is-selected' : ''}`}
+                          onClick={() => setSelectedId(entry.id)}
+                        >
+                          <td className="cc-server-journal-time">{formatServerJournalTime(entry.time)}</td>
+                          <td><span className={`cc-server-journal-severity ${severityClass(entry.severity)}`}>{sevLabel}</span></td>
+                          <td>{entry.source}</td>
+                          <td>{entry.action}</td>
+                          <td>{loginVal}</td>
+                          <td>{entry.group || '—'}</td>
+                          <td>{entry.message}</td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={`cc-server-journal-row${isSelected ? ' is-selected' : ''}`}
+                        onClick={() => setSelectedId(entry.id)}
+                      >
+                        <td>{entry.time}</td>
+                        <td>{entry.dealer}</td>
+                        <td>{entry.login}</td>
+                        <td>{entry.request}</td>
+                        <td>{entry.answer}</td>
+                      </tr>
+                    );
+                  })}
+                  {!filtered.length && (
+                    <tr>
+                      <td colSpan={isServer ? SERVER_JOURNAL_COLUMNS.length : JOURNAL_COLUMNS.length}>
+                        No journal entries match the current filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeEntry ? (
+            <div className="cc-journal-viewer-detail">
+              <div className="cc-journal-viewer-detail-header">
+                <div className="cc-journal-viewer-detail-label">Entry Details</div>
+                {(activeEntry.request_id || activeEntry.id) && (
+                  <span className="cc-journal-viewer-ref" title="Audit reference ID">
+                    {activeEntry.request_id ? `REQ · ${activeEntry.request_id}` : `ID · ${activeEntry.id}`}
+                  </span>
+                )}
+              </div>
+
+              {isServer ? (
+                <div className="cc-journal-entry-fields">
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Time</span>
+                    <strong className="cc-journal-field-value is-mono">{formatServerJournalTime(activeEntry.time) || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Severity</span>
+                    <strong className="cc-journal-field-value">
+                      <span className={`cc-journal-status-pill is-compact ${activeTone}`}>
+                        <span className="cc-journal-status-dot" aria-hidden="true" />
+                        {activeSeverityLabel}
+                      </span>
+                    </strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Source</span>
+                    <strong className="cc-journal-field-value">{activeEntry.source || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Action</span>
+                    <strong className="cc-journal-field-value is-mono is-accent">{activeEntry.action || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Login</span>
+                    <strong className="cc-journal-field-value is-mono">{serverJournalLogin(activeEntry)}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Group</span>
+                    <strong className="cc-journal-field-value is-mono">{activeEntry.group || '—'}</strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="cc-journal-entry-fields is-four-cols">
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Time</span>
+                    <strong className="cc-journal-field-value is-mono">{activeEntry.time || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Dealer</span>
+                    <strong className="cc-journal-field-value">{activeEntry.dealer || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Login</span>
+                    <strong className="cc-journal-field-value is-mono">{activeEntry.login || '—'}</strong>
+                  </div>
+                  <div className="cc-journal-field-cell">
+                    <span className="cc-journal-field-label">Answer</span>
+                    <strong className="cc-journal-field-value">
+                      <span className={`cc-journal-status-pill is-compact ${activeTone}`}>
+                        <span className="cc-journal-status-dot" aria-hidden="true" />
+                        {activeEntry.answer || '—'}
+                      </span>
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="cc-journal-viewer-detail-content">
+                {isServer ? (
+                  <>
+                    <div className={`cc-journal-detail-panel is-message ${activeTone}`}>
+                      <div className="cc-journal-detail-panel-header">
+                        <span className="cc-journal-detail-panel-title">Message</span>
+                      </div>
+                      <div className="cc-journal-detail-panel-body is-primary-text">
+                        {activeEntry.message || '—'}
+                      </div>
+                    </div>
+
+                    <div className="cc-journal-detail-panel is-diagnostics">
+                      <div className="cc-journal-detail-panel-header">
+                        <span className="cc-journal-detail-panel-title">Details &amp; Telemetry</span>
+                        {diagnosticChips.length > 0 && (
+                          <div className="cc-journal-telemetry-chips">
+                            {diagnosticChips.map((chip) => (
+                              <span
+                                key={chip.key}
+                                className={`cc-journal-telemetry-chip${chip.mono ? ' is-mono' : ''}${chip.tone ? ` ${chip.tone}` : ''}`}
+                              >
+                                <span className="cc-journal-telemetry-chip-key">{chip.label}:</span>
+                                <strong className="cc-journal-telemetry-chip-val">{chip.value}</strong>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="cc-journal-detail-panel-code">
+                        {serverJournalDetail(activeEntry)}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={`cc-journal-detail-panel is-message ${activeTone}`}>
+                      <div className="cc-journal-detail-panel-header">
+                        <span className="cc-journal-detail-panel-title">Request</span>
+                      </div>
+                      <div className="cc-journal-detail-panel-body is-primary-text">
+                        {activeEntry.request || '—'} ({activeEntry.answer || '—'})
+                      </div>
+                    </div>
+
+                    <div className="cc-journal-detail-panel is-diagnostics">
+                      <div className="cc-journal-detail-panel-header">
+                        <span className="cc-journal-detail-panel-title">Details</span>
+                      </div>
+                      <div className="cc-journal-detail-panel-code">
+                        {journalDetailText(activeEntry)}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="cc-journal-viewer-detail">
+              <div className="cc-journal-viewer-detail-content">No journal entry selected.</div>
+            </div>
+          )}
+        </div>
+
+        <footer className="cc-journal-viewer-footer">
+          <div className="cc-journal-viewer-footer-meta">
+            <span className="cc-journal-kbd-hint">
+              <kbd>Esc</kbd> to close
+            </span>
+          </div>
+          <div className="cc-journal-viewer-footer-actions">
+            <button
+              type="button"
+              className={`cc-journal-viewer-btn${copied ? ' is-copied' : ''}`}
+              onClick={handleCopy}
+              disabled={!activeEntry}
+            >
+              {copied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+              {copied ? 'Copied' : 'Copy entry'}
+            </button>
+            <button type="button" className="cc-journal-viewer-btn is-primary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>,
+    portalRoot,
+  );
+}
+
+function JournalRow({ entry, visibleColumns = JOURNAL_COLUMNS, expanded, selected, onToggleExpand, onSelect, onContextMenu }) {
+  const cellByColumn = {
+    Time: <td key="Time">{entry.time}</td>,
+    Dealer: <td key="Dealer" title={String(entry.dealer)}>{entry.dealer}</td>,
+    Login: <td key="Login" title={String(entry.login)}>{entry.login}</td>,
+    Request: <td key="Request" title={entry.request}>{entry.request}</td>,
+    Answer: <td key="Answer" title={entry.answer}>{entry.answer}</td>,
+  };
   return (
     <>
       <tr
         className={sideRowClass(entry.side, selected)}
         onClick={onSelect}
+        onContextMenu={onContextMenu}
       >
         <td className="cc-journal-expander-col">
           <button
@@ -518,28 +1449,37 @@ function JournalRow({ entry, expanded, selected, onToggleExpand, onSelect }) {
             onClick={(event) => { event.stopPropagation(); onToggleExpand(); }}
           >{expanded ? '−' : '+'}</button>
         </td>
-        <td>{entry.time}</td>
-        <td title={String(entry.dealer)}>{entry.dealer}</td>
-        <td title={String(entry.login)}>{entry.login}</td>
-        <td title={entry.request}>{entry.request}</td>
-        <td title={entry.answer}>{entry.answer}</td>
+        {visibleColumns.map((col) => cellByColumn[col])}
       </tr>
       {expanded && (
-        <tr className="cc-journal-detail">
+        <tr className="cc-journal-detail" onContextMenu={onContextMenu}>
           <td className="cc-journal-expander-col"></td>
-          <td colSpan={JOURNAL_COLUMNS.length}>{journalDetailText(entry)}</td>
+          <td colSpan={visibleColumns.length}>{journalDetailText(entry)}</td>
         </tr>
       )}
     </>
   );
 }
 
-function ServerJournalRow({ entry, alternate, expanded, selected, onToggleExpand, onSelect }) {
+function ServerJournalRow({ entry, visibleColumns = SERVER_JOURNAL_COLUMNS, alternate, expanded, selected, onToggleExpand, onSelect, onContextMenu }) {
   const login = serverJournalLogin(entry);
   const severityLabel = entry.severity ? entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1) : 'Info';
+  const cellByColumn = {
+    Time: <td key="Time" className="cc-server-journal-time">{formatServerJournalTime(entry.time)}</td>,
+    Type: <td key="Type"><span className={`cc-server-journal-severity ${severityClass(entry.severity)}`}>{severityLabel}</span></td>,
+    Source: <td key="Source" title={entry.category}>{entry.source}</td>,
+    Action: <td key="Action" title={entry.action}>{entry.action}</td>,
+    Login: <td key="Login" title={String(login)}>{login}</td>,
+    Group: <td key="Group" className="cc-server-journal-group" title={entry.group || ''}>{entry.group || '—'}</td>,
+    Message: <td key="Message" title={entry.message}>{entry.message}</td>,
+  };
   return (
     <>
-      <tr className={`cc-server-journal-row${alternate ? ' is-alternate' : ''}${selected ? ' is-selected' : ''}`} onClick={onSelect}>
+      <tr
+        className={`cc-server-journal-row${alternate ? ' is-alternate' : ''}${selected ? ' is-selected' : ''}`}
+        onClick={onSelect}
+        onContextMenu={onContextMenu}
+      >
         <td className="cc-journal-expander-col">
           <button
             type="button"
@@ -549,18 +1489,12 @@ function ServerJournalRow({ entry, alternate, expanded, selected, onToggleExpand
             onClick={(event) => { event.stopPropagation(); onToggleExpand(); }}
           >{expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}</button>
         </td>
-        <td className="cc-server-journal-time">{formatServerJournalTime(entry.time)}</td>
-        <td><span className={`cc-server-journal-severity ${severityClass(entry.severity)}`}>{severityLabel}</span></td>
-        <td title={entry.category}>{entry.source}</td>
-        <td title={entry.action}>{entry.action}</td>
-        <td title={String(login)}>{login}</td>
-        <td className="cc-server-journal-group" title={entry.group || ''}>{entry.group || '—'}</td>
-        <td title={entry.message}>{entry.message}</td>
+        {visibleColumns.map((col) => cellByColumn[col])}
       </tr>
       {expanded && (
-        <tr className="cc-journal-detail">
+        <tr className="cc-journal-detail" onContextMenu={onContextMenu}>
           <td className="cc-journal-expander-col"></td>
-          <td colSpan={SERVER_JOURNAL_COLUMNS.length}>{serverJournalDetail(entry)}</td>
+          <td colSpan={visibleColumns.length}>{serverJournalDetail(entry)}</td>
         </tr>
       )}
     </>

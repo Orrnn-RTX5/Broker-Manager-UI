@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Bug, Check, Copy, Info, Plus, Search, SearchX } from 'lucide-react';
+import { Bug, Check, Copy, Plus, Search, SearchX } from 'lucide-react';
 import { CATEGORY_LABELS } from '../../services/bugReportService';
 import {
   BUG_REPORT_HISTORY_EVENT,
@@ -62,7 +62,7 @@ export default function BugReportsView({ onReportBug }) {
       await navigator.clipboard.writeText(id);
       setCopyState({ id, message: 'Report reference copied.' });
     } catch {
-      setCopyState({ id: null, message: 'Select the report reference to copy it manually.' });
+      setCopyState({ id, message: 'Select the report reference to copy it manually.' });
     }
   };
 
@@ -88,10 +88,6 @@ export default function BugReportsView({ onReportBug }) {
         </select>
         <button className="bug-reports-primary" type="button" onClick={handleOpenBugReport}><Plus size={13} aria-hidden="true" />Report a Bug</button>
       </header>
-      <div className="bug-reports-context">
-        <div><strong>Recent submissions</strong><span>Reports submitted in this browser session</span></div>
-        <p><Info size={13} aria-hidden="true" />For review updates, contact platform support and include your report reference.</p>
-      </div>
       <div className="bug-reports-scroll" tabIndex={0} role="region" aria-label="Bug report submissions">
         <table className="bug-reports-table">
           <caption className="sr-only">Confirmed bug report submissions from this browser session</caption>
@@ -114,7 +110,6 @@ export default function BugReportsView({ onReportBug }) {
           {rows.length ? <button type="button" onClick={() => { setSearchQuery(''); setCategory('all'); setSeverity('all'); }}>Clear filters</button> : <button className="bug-reports-primary" type="button" onClick={handleOpenBugReport}><Plus size={13} aria-hidden="true" />Report a Bug</button>}
         </div>}
       </div>
-      <footer className="bug-reports-footer"><span>Showing {filtered.length} of {rows.length} {rows.length === 1 ? 'report' : 'reports'}</span><span>Submitted confirms receipt by the platform team.</span></footer>
       <span className="sr-only" role="status">{copyState?.message || ''}</span>
     </section>
   );

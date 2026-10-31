@@ -1,7 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, RefreshCw, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
+import { X, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
 import { completeAccountPositions, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
@@ -422,7 +422,6 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
-  const [historyRefreshRevision, setHistoryRefreshRevision] = useState(0);
   const [positionSyncRevision, setPositionSyncRevision] = useState(0);
   const lastPositionsRequestAtRef = useRef(0);
   const pendingPositionsRefreshTimerRef = useRef(null);
@@ -1040,7 +1039,7 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
       });
 
     return () => { active = false; };
-  }, [activeTab, loginId, historyRefreshRevision, showPositions]);
+  }, [activeTab, loginId, showPositions]);
 
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
@@ -1891,20 +1890,9 @@ const AccountDetailsModal = ({ account, targetTicket, onClose, initialTab = 'Ove
             ) : activeTab === 'History' && showPositions ? (
               <div className="account-history-tab">
                 <div className="account-section-heading">
-                  <div className="account-section-heading-icon"><FileText size={16} /></div>
                   <div>
                     <h2>Position history</h2>
-                    <p>Closed trades and realized account activity for login {loginId}.</p>
                   </div>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm account-history-refresh"
-                    onClick={() => setHistoryRefreshRevision((revision) => revision + 1)}
-                    disabled={historyLoading}
-                  >
-                    <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} />
-                    Refresh
-                  </button>
                 </div>
                 <PositionHistoryGrid
                   data={historyRows}

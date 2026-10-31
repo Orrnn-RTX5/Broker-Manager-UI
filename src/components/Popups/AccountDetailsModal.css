@@ -33,12 +33,14 @@
 }
 #root .account-details-tabs { flex: 0 0 auto; min-height: 34px; padding: 3px 6px; gap: 3px; overflow-x: auto; }
 #root .account-details-tab { flex: 0 0 auto; height: 28px; padding: 0 10px; }
-#root .account-details-content { min-height: 0; gap: 12px; padding: 12px; }
+#root .account-details-content { min-height: 0; gap: 10px; padding: 10px 12px; }
 #root .account-details-content.is-overview { padding: 12px; }
-#root .account-details-footer { min-height: 42px; padding: 6px 12px; background: var(--surface-2); }
+#root .account-details-footer { min-height: 36px; padding: 5px 12px; background: var(--surface-2); }
 #root .account-details-footer button { min-height: 26px; min-width: 70px; padding: 3px 10px; border-radius: 3px !important; }
 #root .account-details-footer .account-details-close { background: var(--surface) !important; border-color: var(--border-3) !important; color: var(--text) !important; }
 #root .account-details-window :is(.account-personal-tab, .account-settings-tab, .account-security-tab) { gap: 12px; }
+#root .account-details-window .account-history-tab { gap: 6px; }
+#root .account-details-window .account-history-tab > .account-section-heading { min-height: 22px; }
 #root .account-details-window :is(.account-personal-section, .account-settings-card, .account-security-card, .account-transaction-card) { border-radius: 3px; box-shadow: none; }
 #root .account-details-window .account-section-heading { min-height: 28px; }
 #root .account-details-window .account-settings-card-title { min-height: 32px; padding: 0 12px; }

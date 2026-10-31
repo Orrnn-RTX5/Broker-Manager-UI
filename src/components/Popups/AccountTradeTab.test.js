@@ -583,4 +583,13 @@ test('HOLD-8 BUY/SELL disable on empty symbol with a reasoned title', () => {
   const evalGate = (symbol) => new Function('modalSymbol', 'return (' + initExpr + ');')(symbol);
   assert.equal(evalGate(''), false, 'empty symbol must disable BUY/SELL');
   assert.equal(evalGate('TESTSYM'), true, 'a real symbol must enable BUY/SELL (other gates permitting)');
+  const askAt = tabSource.indexOf('{/* Current Ask Badge (Red) */}');
+  const bidAt = tabSource.indexOf('{/* Current Bid Badge (Blue) */}');
+  assert.ok(askAt !== -1 && bidAt > askAt, 'Ask and Bid Y-axis badges must exist');
+  const askBlock = tabSource.slice(askAt, bidAt);
+  const bidBlock = tabSource.slice(bidAt, tabSource.indexOf('{/* Bottom Legend Bar */}', bidAt));
+  assert.ok(askBlock.includes('account-trade-price-badge') && askBlock.includes('data-side="ask"') && askBlock.includes('var(--danger)'), 'Ask badge must be highlighted in red');
+  assert.ok(!askBlock.includes('bg-[var(--surface-2)]'), 'Ask badge must not fall back to neutral surface-2 background');
+  assert.ok(bidBlock.includes('account-trade-price-badge') && bidBlock.includes('data-side="bid"') && bidBlock.includes('var(--color-quote-up, var(--accent))'), 'Bid badge must be highlighted in blue');
+  assert.ok(!bidBlock.includes('bg-[var(--surface-2)]'), 'Bid badge must not fall back to neutral surface-2 background');
 });

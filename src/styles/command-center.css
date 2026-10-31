@@ -183,14 +183,14 @@
 .rtx5-command-shell ::-webkit-scrollbar-thumb { background: var(--cc-scrollbar-thumb); border: 2px solid var(--bg-panel); border-radius: 5px; }
 
 /* Application chrome */
-.rtx5-command-shell .manager-menu-bar {
+.rtx5-command-shell .manager-menu-bar { height: 36px !important; min-height: 36px !important;
   min-height: 52px;
   height: 52px;
   padding: 0 8px;
   background: var(--cc-chrome) !important;
   border-bottom-color: var(--border) !important;
 }
-.rtx5-command-shell .manager-menu-brand {
+.rtx5-command-shell .manager-menu-brand { width: auto !important; min-width: 0 !important; flex: 0 0 auto !important; justify-content: center; padding: 0 9px 0 2px !important; margin-right: 2px;
   width: 80px;
   min-width: 80px;
   flex: 0 0 80px;
@@ -198,7 +198,7 @@
   padding: 0 8px !important;
 }
 .rtx5-command-shell .manager-menu-logo { width: 47px; height: 25px; object-fit: contain; filter: none; opacity: .95; }
-.manager-brand-stacked {
+.manager-brand-stacked { display: inline-flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; gap: 7px !important; width: auto !important; height: 28px !important;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -207,8 +207,9 @@
   width: 56px;
   height: 36px;
 }
-.rtx5-command-shell .manager-brand-symbol { display:block; flex:0 0 24px; width:36px; height:24px; object-fit:contain; }
-.rtx5-command-shell .manager-brand-caption {
+.rtx5-command-shell .manager-brand-symbol { display:block; flex:0 0 25px; width:25px; height:18px; object-fit:contain; }
+.dark .rtx5-command-shell .manager-brand-symbol { mix-blend-mode: lighten; }
+.rtx5-command-shell .manager-brand-caption { display: inline-block !important; width: auto !important; text-align: left !important; line-height: 1 !important; letter-spacing: 0 !important; white-space: nowrap;
   display: block;
   width: 100%;
   text-align: center;
@@ -330,7 +331,7 @@
 .cc-center-workspace { display: flex; flex-direction: column; }
 .cc-route-viewport { flex: 1; min-height: 0; overflow: auto; container-type: inline-size; }
 .rtx5-command-shell [data-panel-id] { border-color: var(--border) !important; }
-.rtx5-command-shell [data-panel-id] > div:first-child { min-height: 32px; height: 32px; padding: 0 8px; background: var(--cc-titlebar); border-color: var(--border); }
+.rtx5-command-shell [data-panel-id] > [data-dock-titlebar="true"] { min-height: 32px; height: 32px; padding: 0 8px; background: var(--cc-titlebar); border-color: var(--border); } .rtx5-command-shell :is([data-panel-id="market_data"], [data-panel-id="navigator"]) > [data-dock-titlebar="true"] { min-height: 22px !important; height: 22px !important; padding: 0 6px !important; }
 .rtx5-command-shell [data-panel-id] > div:first-child button { border-radius: 3px; }
 .rtx5-command-shell [data-panel-id="owner_console"],
 .rtx5-command-shell [data-panel-id="accounts"] { min-width: 280px; }
@@ -617,7 +618,7 @@
 .cc-terminal-trades .cc-trade-profit.is-positive { color: var(--trade-profit-text); }
 .cc-terminal-trades .cc-trade-profit.is-negative { color: var(--trade-loss-text); }
 .cc-terminal .cc-terminal-table.cc-terminal-trades tbody tr.is-selected .cc-trade-side { color: inherit; }
-.cc-terminal-bottom { flex:0 0 26px; border-top:1px solid var(--border); border-bottom:0; }
+.cc-terminal-bottom { flex:0 0 22px; min-height:22px; height:22px; border-top:1px solid var(--border); border-bottom:0; } .cc-terminal-bottom-controls { margin-left:auto; display:flex; align-items:center; min-width:0; overflow-x:auto; } .cc-terminal-bottom-controls .cc-terminal-title-controls { height:20px; min-height:20px; flex:0 0 auto; border-bottom:0; background:transparent; white-space:nowrap; }
 .cc-terminal-bottom button.is-active::after { top:-1px; bottom:auto; }
 .cc-terminal-search { align-self:center; width:120px; height:18px; margin-left:auto; margin-right:6px; padding:0 7px; border:1px solid var(--border); border-radius:3px; background:var(--bg-elevated); color:var(--text-primary); font-size: 11px; outline:0; }
 .cc-terminal-search:focus { border-color:var(--accent); }
@@ -636,7 +637,7 @@
 /* Existing panes inherit the command-center language. */
 .rtx5-command-shell .market-data,
 .rtx5-command-shell .navigator-type { background:var(--bg-panel) !important; }.rtx5-command-shell .market-watch-type { --market-watch-font-size: 11px !important; }.rtx5-command-shell .navigator-type,.rtx5-command-shell .navigator-type * { font-size: 11px !important; font-weight: 400 !important; }.rtx5-command-shell .navigator-type .tree-node--branch > div:first-child > span { font-size: 11px !important; font-weight: 400 !important; }.rtx5-command-shell .ui-grid thead th { background:var(--bg-elevated); color:var(--text-tertiary); }.rtx5-command-shell .ui-card { border-radius:var(--radius-md); box-shadow:none; }
-.cc-navigator { height:100%; overflow:hidden; background:var(--bg-panel); }.cc-navigator-scroll { height:100%; overflow:auto; padding:4px 3px 8px; }.cc-tree-node { color:var(--text-secondary); font-size: 11px; }.cc-tree-node > div:first-child { position:relative; display:grid; min-height:23px; grid-template-columns:14px 18px minmax(0,1fr) auto; align-items:center; gap:1px; padding:0 5px 0 1px; border-radius:2px; cursor:pointer; }.cc-tree-node > div:first-child:hover { background:var(--bg-hover); color:var(--text-primary); }.cc-tree-node.is-active > div:first-child { background:var(--accent-soft); color:var(--text-primary); font-weight: 400; }.cc-tree-node.is-disabled { opacity:.52; }.cc-tree-node.is-disabled > div:first-child { cursor:default; }.cc-tree-node.is-branch > div:first-child { color:var(--text-primary); font-weight: 400; }.cc-tree-chevron,.cc-tree-icon { display:grid; place-items:center; color:var(--text-tertiary); }.cc-tree-node.is-active .cc-tree-icon { color:var(--accent-text); }.cc-tree-node b { color:var(--text-tertiary); font-size: 11px; font-weight: 400; }.cc-tree-children { position:relative; margin-left:8px; padding-left:5px; }.cc-tree-children::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:var(--border); }
+.cc-navigator { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg-panel); }.cc-navigator-scroll { flex:1; min-height:0; height:auto; overflow:auto; padding:4px 3px 8px; }.cc-tree-node { color:var(--text-secondary); font-size: 11px; }.cc-tree-node > div:first-child { position:relative; display:grid; min-height:23px; grid-template-columns:14px 18px minmax(0,1fr) auto; align-items:center; gap:1px; padding:0 5px 0 1px; border-radius:2px; cursor:pointer; }.cc-tree-node > div:first-child:hover { background:var(--bg-hover); color:var(--text-primary); }.cc-tree-node.is-active > div:first-child { background:var(--accent-soft); color:var(--text-primary); font-weight: 400; }.cc-tree-node.is-disabled { opacity:.52; }.cc-tree-node.is-disabled > div:first-child { cursor:default; }.cc-tree-node.is-branch > div:first-child { color:var(--text-primary); font-weight: 400; }.cc-tree-chevron,.cc-tree-icon { display:grid; place-items:center; color:var(--text-tertiary); }.cc-tree-node.is-active .cc-tree-icon { color:var(--accent-text); }.cc-tree-node b { color:var(--text-tertiary); font-size: 11px; font-weight: 400; }.cc-tree-children { position:relative; margin-left:8px; padding-left:5px; }.cc-tree-children::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:var(--border); }
 .rtx5-command-shell [data-panel-id="navigator"] .cc-tree-node.is-active > [role="treeitem"] {
   background: var(--navigation-selected-bg) !important;
 }
@@ -977,7 +978,7 @@
    and the account actions share one compact line, like a desktop trading
    terminal. The toolbar stays its own component; the layout renders it
    inside the menu bar between the menus and the status cluster. */
-.rtx5-command-shell .manager-menu-bar {
+.rtx5-command-shell .manager-menu-bar { height: 36px !important; min-height: 36px !important;
   height: 48px;
   min-height: 48px;
   padding: 0 8px 0 6px;

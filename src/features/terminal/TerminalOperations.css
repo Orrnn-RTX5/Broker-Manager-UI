@@ -37,7 +37,7 @@
 .cc-operations-view .cc-terminal-table-wrap { flex: 1; min-height: 0; overflow: auto; }
 .cc-operations-view .cc-terminal-table { min-width: 960px; width: 100%; border-collapse: collapse; table-layout: auto; }
 .cc-operations-view .cc-terminal-table :is(th, td) {
-  height: 27px; padding: 4px 9px; border-right: 1px solid var(--operations-border);
+  height: 22px; padding: 2px 8px; border-right: 1px solid var(--operations-border);
   border-bottom: 1px solid var(--operations-border); color: var(--operations-text);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
@@ -50,6 +50,63 @@
 .cc-operations-view .cc-terminal-table tr:hover td.operations-positive { color: var(--operations-positive); }
 .cc-operations-view .cc-terminal-table td.operations-negative,
 .cc-operations-view .cc-terminal-table tr:hover td.operations-negative { color: var(--operations-negative); }
+
+/* MT5 Symbol Summary Table — equal 9-column widths and uniform cell alignment */
+#root .cc-operations-view .cc-terminal-table.cc-summary-table {
+  width: 100%;
+  min-width: 960px;
+  table-layout: fixed;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table col.cc-terminal-col {
+  width: calc(100% / 9);
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table :is(th, td),
+#root .cc-operations-view .cc-terminal-table.cc-summary-table :is(th, td):nth-child(n) {
+  width: calc(100% / 9) !important;
+  text-align: left !important;
+  padding: 2px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table :is(th, td):last-child {
+  border-right: 0;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table th {
+  cursor: pointer;
+  user-select: none;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table th:hover {
+  color: var(--operations-text);
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table.is-no-grid tbody td {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table.is-manual-arrange {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table.is-manual-arrange col.cc-terminal-col,
+#root .cc-operations-view .cc-terminal-table.cc-summary-table.is-manual-arrange :is(th, td),
+#root .cc-operations-view .cc-terminal-table.cc-summary-table.is-manual-arrange :is(th, td):nth-child(n) {
+  width: auto !important;
+  padding-right: 18px;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr {
+  cursor: default;
+  user-select: none;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr.is-selected,
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr.is-selected:hover {
+  background: #0068b8 !important;
+}
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr.is-selected td,
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr.is-selected:hover td,
+#root .cc-operations-view .cc-terminal-table.cc-summary-table tbody tr.is-selected .cc-summary-symbol-name {
+  color: #ffffff !important;
+}
+
 .operations-pagination { border-top: 1px solid var(--operations-border); border-bottom: 0; }
 .operations-pagination > span:first-child { flex: 1; }
 .operations-notice { padding: 5px 8px; border-bottom: 1px solid var(--operations-border); color: var(--operations-warning); background: var(--operations-row); }
@@ -61,6 +118,304 @@
 .operations-severity.unavailable { color: var(--operations-muted); }
 #root#root#root#root#root .cc-operations-view,
 #root#root#root#root#root .cc-operations-view :is(button, input, select, span, th, td, p, strong, b) { font-size: 11px !important; font-weight: 400 !important; }
+
+/* MT5 Exposure Split Layout (Table + Pie Chart) */
+.cc-exposure-operations-view {
+  overflow: hidden;
+}
+.cc-exposure-split-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--operations-row);
+}
+.cc-exposure-table-pane {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--operations-border);
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table {
+  width: 100%;
+  min-width: 820px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table col.cc-exposure-col {
+  width: calc(100% / 8);
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table :is(th, td),
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table :is(th, td):nth-child(n) {
+  width: calc(100% / 8) !important;
+  text-align: left !important;
+  padding: 2px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table :is(th, td):last-child {
+  border-right: 0;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table th {
+  cursor: pointer;
+  user-select: none;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table th:hover {
+  color: var(--operations-text);
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table td {
+  height: 21px;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table td.cc-exposure-cell-graph {
+  padding: 0 8px !important;
+  vertical-align: middle;
+}
+.cc-exposure-graph-cell-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-no-grid tbody td,
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-no-grid tfoot td {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-manual-arrange {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-manual-arrange col.cc-exposure-col,
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-manual-arrange :is(th, td),
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table.is-manual-arrange :is(th, td):nth-child(n) {
+  width: auto !important;
+  padding-right: 18px;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr {
+  cursor: default;
+  user-select: none;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr.is-selected,
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr.is-selected:hover {
+  background: #0068b8 !important;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr.is-selected td,
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr.is-selected:hover td,
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tbody tr.is-selected .cc-exposure-asset-name {
+  color: #ffffff !important;
+}
+#root .cc-operations-view .cc-terminal-table.cc-exposure-table tfoot tr.cc-exposure-total-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--operations-row);
+  border-top: 1px solid var(--operations-border);
+}
+#root#root#root#root#root .cc-operations-view .cc-exposure-total-row strong {
+  font-weight: 700 !important;
+  color: var(--operations-text);
+}
+
+/* MT5 Dual Green/Blue Bidirectional Graph Bar */
+.cc-exposure-graph-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 56px;
+  height: 15px;
+  display: block;
+  background: rgba(148, 163, 184, 0.06);
+  border-radius: 2px;
+}
+.cc-exposure-graph-axis {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.32);
+  pointer-events: none;
+  z-index: 1;
+}
+.cc-exposure-bar-green {
+  position: absolute;
+  top: 2px;
+  height: 4.5px;
+  border-radius: 1.5px;
+  background: linear-gradient(90deg, #059669 0%, #10b981 50%, #34d399 100%);
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.28);
+  transition: width 140ms ease-out;
+}
+.cc-exposure-bar-blue {
+  position: absolute;
+  bottom: 2px;
+  height: 4.5px;
+  border-radius: 1.5px;
+  background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #38bdf8 100%);
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.28);
+  transition: width 140ms ease-out;
+}
+
+/* Color Swatch Square */
+.cc-exposure-color-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  vertical-align: middle;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+}
+
+/* Right-hand Pie Chart Pane */
+.cc-exposure-chart-pane {
+  width: 280px;
+  min-width: 230px;
+  max-width: 340px;
+  flex: 0 0 26%;
+  display: flex;
+  flex-direction: column;
+  background: var(--operations-row);
+  overflow: hidden;
+  user-select: none;
+}
+.cc-exposure-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--operations-border);
+  background: var(--operations-header);
+}
+.cc-exposure-chart-title-btn {
+  border: 0;
+  background: transparent;
+  color: var(--operations-text);
+  cursor: pointer;
+  padding: 1px 8px;
+  border-radius: 2px;
+}
+.cc-exposure-chart-title-btn:hover {
+  background: var(--operations-hover);
+}
+.cc-exposure-chart-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px 6px;
+  gap: 4px;
+}
+.cc-exposure-pie-svg {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 260px;
+  max-height: 185px;
+  overflow: visible;
+}
+.cc-exposure-pie-slice {
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+.cc-exposure-pie-slice:hover {
+  opacity: 0.92;
+}
+.cc-exposure-pie-label {
+  fill: var(--operations-text);
+  font-size: 10px;
+  font-family: Tahoma, Arial, sans-serif;
+  pointer-events: none;
+}
+.cc-exposure-pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 2px 4px 0;
+  flex-shrink: 0;
+}
+.cc-exposure-pie-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--operations-muted);
+  cursor: default;
+}
+.cc-exposure-pie-legend-item.is-active,
+.cc-exposure-pie-legend-item:hover {
+  background: var(--operations-hover);
+  color: var(--operations-text);
+}
+.cc-exposure-pie-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.cc-exposure-pie-legend-asset {
+  color: var(--operations-text);
+}
+.cc-exposure-pie-legend-pct {
+  color: var(--operations-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cc-exposure-pie-tooltip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--operations-header);
+  border: 1px solid var(--operations-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  color: var(--operations-text);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.cc-exposure-pie-tooltip-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+.cc-exposure-chart-empty {
+  color: var(--operations-muted);
+  text-align: center;
+  padding: 12px;
+}
+@media (max-width: 860px) {
+  .cc-exposure-split-layout {
+    flex-direction: column;
+  }
+  .cc-exposure-chart-pane {
+    width: 100%;
+    max-width: none;
+    flex: 0 0 200px;
+    border-top: 1px solid var(--operations-border);
+  }
+}
 @media (max-width: 640px) {
   .operations-toolbar { gap: 6px; flex-wrap: wrap; }
   .operations-caption { flex: 1; }

@@ -210,8 +210,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', flushSymbolCache);
 }
 
-const MAX_SYMBOL_TICK_BUFFER = 500;
-const DEFAULT_SEEDED_TICK_COUNT = 140;
+const MAX_SYMBOL_TICK_BUFFER = 2_000;
+const DEFAULT_SEEDED_TICK_COUNT = 220;
 const symbolTickBuffers = new Map();
 const symbolTickListeners = new Map();
 
@@ -243,16 +243,23 @@ export const subscribeSymbolTicks = (symbol, listener) => {
   };
 };
 
-const inferSymbolDigits = (quote = {}, fallbackPrice = 0) => {
-  const explicit = Number(quote?.digits ?? quote?.Digits);
+const inferSymbolDigits = (quote = {}, fallbackPrice = 0, symbol = '') => {
+  const explicit = Number(
+    quote?.digits
+    ?? quote?.Digits
+    ?? quote?.specification?.digits
+    ?? quote?.brokerSpecification?.digits
+  );
   if (Number.isInteger(explicit) && explicit >= 0 && explicit <= 8) return explicit;
-  const rawText = String(quote?.bid ?? quote?.ask ?? fallbackPrice ?? '');
-  const numeric = Number(rawText);
+  const sym = String(symbol || quote?.symbol || '').toUpperCase();
+  const numeric = Number(quote?.bid ?? quote?.ask ?? fallbackPrice ?? 0);
+  if (sym.includes('JPY')) return 3;
+  if (/(XAU|XAG|XPT|XPD|GOLD|SILVER|BTC|ETH|US30|NAS100|SPX500|GER30|UK100|DAX)/.test(sym)) return 2;
+  if (/^[A-Z]{6}$/.test(sym) && numeric > 0 && numeric < 25) return 5;
   if (!Number.isFinite(numeric) || numeric <= 0) return 2;
-  const trimmed = numeric.toFixed(5).replace(/0+$/, '');
-  const dotIdx = trimmed.indexOf('.');
-  if (dotIdx === -1) return 2;
-  return Math.max(2, Math.min(5, trimmed.length - dotIdx - 1));
+  if (numeric < 25) return 5;
+  if (numeric < 500) return 3;
+  return 2;
 };
 
 const hashSymbolSeed = (symbol = '') => {
@@ -290,7 +297,14 @@ export const recordSymbolTick = (symbol, entry, fallbackTime = Date.now()) => {
   const buffer = symbolTickBuffers.get(symbol) || [];
   const last = buffer[buffer.length - 1];
   if (last && last.bid === bid && last.ask === ask && Math.abs(timestamp - last.timestamp) < 1000) return;
-  const point = { timestamp: last && timestamp <= last.timestamp ? last.timestamp + 1 : timestamp, bid, ask, seeded: false };
+  const lastPrice = Number(entry.last ?? entry.Last ?? entry.price_last ?? entry.priceLast);
+  const point = {
+    timestamp: last && timestamp <= last.timestamp ? last.timestamp + 1 : timestamp,
+    bid,
+    ask,
+    ...(Number.isFinite(lastPrice) && lastPrice > 0 ? { last: lastPrice } : {}),
+    seeded: false,
+  };
   const next = buffer.length >= MAX_SYMBOL_TICK_BUFFER
     ? [...buffer.slice(-(MAX_SYMBOL_TICK_BUFFER - 1)), point]
     : [...buffer, point];
@@ -301,28 +315,60 @@ export const recordSymbolTick = (symbol, entry, fallbackTime = Date.now()) => {
 export const ensureSymbolTickSeries = (symbol, quote = null, targetCount = DEFAULT_SEEDED_TICK_COUNT) => {
   if (!symbol) return [];
   const existing = symbolTickBuffers.get(symbol) || [];
-  if (existing.length >= targetCount) return existing;
-
   const storeQuote = quote || useSymbolStore.getState().symbols?.[symbol];
   const liveTicks = existing.filter((point) => !point.seeded);
-  const anchor = liveTicks[0] || (storeQuote ? {
+  const latestLive = liveTicks[liveTicks.length - 1] || (storeQuote ? {
     timestamp: normalizeTickTimestampMs(storeQuote, Date.now()),
     bid: Number(storeQuote.bid),
     ask: Number(storeQuote.ask),
     seeded: false,
   } : null);
 
-  if (!anchor || !Number.isFinite(anchor.bid) || !Number.isFinite(anchor.ask) || anchor.bid <= 0 || anchor.ask <= 0) {
+  if (!latestLive || !Number.isFinite(latestLive.bid) || !Number.isFinite(latestLive.ask) || latestLive.bid <= 0 || latestLive.ask <= 0) {
     return existing;
   }
 
-  const digits = inferSymbolDigits(storeQuote, anchor.bid);
+  const digits = inferSymbolDigits(storeQuote, latestLive.bid, symbol);
   const tickUnit = 10 ** -digits;
-  const baseSpread = Math.max(anchor.ask - anchor.bid, tickUnit);
-  const stepScale = Math.max(tickUnit, baseSpread * 0.35, anchor.bid * 0.00008);
-  const baseTicks = liveTicks.length > 0 ? liveTicks : [anchor];
-  const missingCount = Math.max(0, targetCount - baseTicks.length);
-  if (missingCount === 0) return baseTicks;
+  const baseSpread = Math.max(latestLive.ask - latestLive.bid, tickUnit);
+  const stepScale = Math.max(tickUnit, Math.min(baseSpread * 0.14, latestLive.bid * 0.000015));
+
+  // Keep only recent contiguous live ticks that are not separated from the latest
+  // quote by a stale rehydration cliff.
+  const contiguousLive = [latestLive];
+  for (let i = liveTicks.length - 2; i >= 0; i -= 1) {
+    const prev = liveTicks[i];
+    const next = contiguousLive[contiguousLive.length - 1];
+    if (
+      Math.abs(next.bid - prev.bid) > stepScale * 25
+      || Math.abs(next.timestamp - prev.timestamp) > 120_000
+    ) {
+      break;
+    }
+    contiguousLive.push(prev);
+  }
+  contiguousLive.reverse();
+
+  // Check if existing buffer already has valid seeded ticks anchored to contiguousLive[0].
+  if (existing.length >= targetCount) {
+    const firstLiveIdx = existing.findIndex((p) => !p.seeded);
+    const joinPrev = firstLiveIdx > 0 ? existing[firstLiveIdx - 1] : null;
+    const joinNext = firstLiveIdx >= 0 ? existing[firstLiveIdx] : null;
+    if (
+      joinPrev
+      && joinNext
+      && Math.abs(joinNext.bid - joinPrev.bid) <= stepScale * 10
+    ) {
+      return existing;
+    }
+  }
+
+  const anchor = contiguousLive[0];
+  const missingCount = Math.max(0, targetCount - contiguousLive.length);
+  if (missingCount === 0) {
+    symbolTickBuffers.set(symbol, contiguousLive.slice(-MAX_SYMBOL_TICK_BUFFER));
+    return symbolTickBuffers.get(symbol);
+  }
 
   let prng = hashSymbolSeed(symbol);
   const nextRand = () => {
@@ -332,24 +378,37 @@ export const ensureSymbolTickSeries = (symbol, quote = null, targetCount = DEFAU
     return (prng >>> 0) / 4294967296;
   };
 
-  const backwards = [];
-  let cursorBid = anchor.bid;
-  let cursorTime = anchor.timestamp;
-  const stepWeights = [-3, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 3];
+  // Build a realistic MT5 intraday tick profile (like NZDCAD in MT5 Manager)
+  // that smoothly connects into `anchor.bid` at index 0.
+  const phase = (hashSymbolSeed(`${symbol}:phase`) % 628) / 100;
+  const profileAt = (k) => {
+    const t = k / Math.max(1, missingCount);
+    return (
+      Math.sin(t * Math.PI * 1.35 + phase) * 18
+      + Math.sin(t * Math.PI * 3.8 + phase * 1.7) * 5.5
+      + Math.cos(t * Math.PI * 8.5 - phase) * 2.2
+    ) * tickUnit;
+  };
+  const baseProfile0 = profileAt(0);
 
-  for (let i = 0; i < missingCount; i += 1) {
+  const backwards = [];
+  let noiseWalk = 0;
+  let cursorTime = anchor.timestamp;
+  const microSteps = [-2, -1, -1, 0, 1, 1, 2];
+
+  for (let i = 1; i <= missingCount; i += 1) {
     const r1 = nextRand();
     const r2 = nextRand();
     const r3 = nextRand();
-    const weight = stepWeights[Math.floor(r1 * stepWeights.length)];
-    const impulse = (i % 17 === 5) ? (r2 > 0.5 ? 4.5 : -4.5) : 0;
-    const delta = (weight + impulse) * stepScale;
-    cursorBid = Math.max(tickUnit * 2, cursorBid - delta);
-    const spreadJitter = (r3 - 0.5) * Math.min(baseSpread * 0.25, tickUnit * 2);
+    const step = microSteps[Math.floor(r1 * microSteps.length)] * tickUnit;
+    noiseWalk = noiseWalk * 0.92 + step;
+    const offset = (profileAt(i) - baseProfile0) + noiseWalk;
+    const rawBid = Math.max(tickUnit * 2, anchor.bid + offset);
+    const spreadJitter = Math.round((r3 - 0.5) * 2) * tickUnit;
     const pointSpread = Math.max(tickUnit, baseSpread + spreadJitter);
-    const bidVal = Number(cursorBid.toFixed(digits));
-    const askVal = Number(Math.max(bidVal + tickUnit, cursorBid + pointSpread).toFixed(digits));
-    cursorTime -= 450 + Math.floor(r2 * 550);
+    const bidVal = Number(rawBid.toFixed(digits));
+    const askVal = Number(Math.max(bidVal + tickUnit, rawBid + pointSpread).toFixed(digits));
+    cursorTime -= 1200 + Math.floor(r2 * 1600);
     backwards.push({
       timestamp: cursorTime,
       bid: bidVal,
@@ -358,7 +417,7 @@ export const ensureSymbolTickSeries = (symbol, quote = null, targetCount = DEFAU
     });
   }
 
-  const seededSeries = [...backwards.reverse(), ...baseTicks].slice(-MAX_SYMBOL_TICK_BUFFER);
+  const seededSeries = [...backwards.reverse(), ...contiguousLive].slice(-MAX_SYMBOL_TICK_BUFFER);
   symbolTickBuffers.set(symbol, seededSeries);
   return seededSeries;
 };
@@ -379,9 +438,10 @@ export const mergeRemoteSymbolTickHistory = (symbol, remotePoints = []) => {
   return merged;
 };
 
-export const getSymbolTickBuffer = (symbol) => (
-  symbol ? (symbolTickBuffers.get(symbol) || []) : []
-);
+export const getSymbolTickBuffer = (symbol) => {
+  if (!symbol) return [];
+  return ensureSymbolTickSeries(symbol);
+};
 
 // Feeds can deliver many messages in the same frame. Coalesce them by symbol
 // so React renders the latest price at a controlled cadence instead of once per
@@ -475,7 +535,26 @@ const useSymbolStore = create(
 
             // Identical live ticks do not affect anything the user can see, so
             // avoid cloning the entire map and triggering a React update.
-            const detailFields = ['session', 'daily_open', 'previous_close'];
+            const detailFields = [
+              'session',
+              'daily_open', 'dailyOpen', 'open', 'open_price', 'openPrice',
+              'previous_close', 'previousClose', 'close', 'close_price', 'closePrice',
+              'settlement_price', 'settlementPrice',
+              'daily_change_price', 'dailyChangePrice',
+              'daily_change_pct', 'dailyChangePct', 'dailyChange',
+              'high', 'low',
+              'bidHigh', 'bidLow', 'askHigh', 'askLow',
+              'high_bid', 'low_bid', 'high_ask', 'low_ask',
+              'last', 'rawBid', 'rawAsk', 'raw_bid', 'raw_ask',
+              'digits', 'Digits',
+              'tick_size', 'tickSize', 'trade_tick_size', 'tradeTickSize',
+              'point_size', 'pointSize', 'point',
+              'tick_value', 'tickValue', 'trade_tick_value', 'tradeTickValue',
+              'description', 'Description',
+              'specification', 'spec', 'contract', 'brokerSpecification',
+              'trading_conditions', 'tradingConditions',
+              'server_time', 'serverTime',
+            ];
             const detailsChanged = detailFields.some((key) => data[key] !== undefined
               && JSON.stringify(data[key]) !== JSON.stringify(current?.[key]));
             if (current && current.bid === nextBid && current.ask === nextAsk && !feedStateChanged && !detailsChanged) return;
@@ -502,6 +581,12 @@ const useSymbolStore = create(
               lastUpdate: now,
               category,
               dir,
+              bidDir: Number.isFinite(previousBid) && Number.isFinite(nextBidNumber) && nextBidNumber !== previousBid
+                ? (nextBidNumber > previousBid ? 'up' : 'down')
+                : (current?.bidDir || dir),
+              askDir: Number.isFinite(Number(current?.ask)) && Number.isFinite(Number(nextAsk)) && Number(nextAsk) !== Number(current?.ask)
+                ? (Number(nextAsk) > Number(current?.ask) ? 'up' : 'down')
+                : (current?.askDir || dir),
               ...feedFields,
             };
           });

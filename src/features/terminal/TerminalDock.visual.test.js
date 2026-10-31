@@ -56,3 +56,17 @@ test('Operations Terminal matches Open Positions value and semantic colors', () 
   assert.match(styles, /\.cc-trade-profit\.is-positive\s*\{\s*color:\s*var\(--trade-profit-text\)/);
   assert.match(styles, /\.cc-trade-profit\.is-negative\s*\{\s*color:\s*var\(--trade-loss-text\)/);
 });
+
+test('Journal Entry and Journal Viewer modals render enterprise key-value grid, severity badges, and telemetry panels', () => {
+  const journalStyles = readFileSync(new URL('./TerminalJournal.css', import.meta.url), 'utf8');
+  assert.ok(source.includes('cc-journal-field-cell'), 'Journal Entry must render structured field cells');
+  assert.ok(source.includes('cc-journal-status-pill'), 'Journal Entry must render semantic severity status pills');
+  assert.ok(source.includes('cc-journal-detail-panel is-message'), 'Journal Entry must render a dedicated Message panel');
+  assert.ok(source.includes('cc-journal-detail-panel is-diagnostics'), 'Journal Entry must render a dedicated Diagnostics & Telemetry panel');
+  assert.ok(source.includes('cc-journal-telemetry-chip'), 'Journal Entry must render structured diagnostic telemetry chips');
+  assert.ok(
+    !journalStyles.includes('.cc-journal-viewer-backdrop) *'),
+    'Journal modal must not have its typographic hierarchy flattened by the dock table !important rule',
+  );
+});
+

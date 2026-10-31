@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import MenuBar from '../components/MenuBar';
 import ToolBar from '../components/ToolBar';
 import NavigatorPanel from '../components/NavigatorPanel';
@@ -98,14 +98,22 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
             ? 'group'
             : null;
   const hasMultiScreens = Boolean(effectiveMultiMode);
+  const isMultiFloating = useMultiScreenStore((state) =>
+    Boolean(
+      state.isWorkspaceMovable ||
+      state.workspaceDockZone ||
+      state.accountScreens.some((screen) => screen.movable || screen.dockZone) ||
+      state.groupScreens.some((screen) => screen.movable || screen.dockZone)
+    )
+  );
   const [isToolBarVisible, setIsToolBarVisible] = useState(true);
-  const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const resetLayout = useCallback(() => {
     resetDockLayout();
     useMultiScreenStore.getState().resetMultiScreens();
     setIsToolBarVisible(true);
-    // Restore tab selections and scroll positions along with the panel geometry.
-    setWorkspaceRevision((revision) => revision + 1);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('manager:reset-layout'));
+    }
   }, [resetDockLayout]);
   const [connectionTelemetry, setConnectionTelemetry] = useState({
     connectionData: null,
@@ -304,13 +312,14 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
   }, [canViewPositions, handleViewAction, navigate]);
 
   // ── panel content map ──────────────────────────────────────────────────────
-  const panelContents = {
+  const accountsType = panels[PANEL_ACCOUNTS]?.accountType || 'all';
+  const panelContents = useMemo(() => ({
     [PANEL_NAVIGATOR]: <NavigatorPanel />,
-    [PANEL_ACCOUNTS]:  <MarginCallsSidebar key={panels[PANEL_ACCOUNTS]?.accountType || 'all'} isAuthenticated={isAuthenticated} accountType={panels[PANEL_ACCOUNTS]?.accountType || 'all'} />,
+    [PANEL_ACCOUNTS]:  <MarginCallsSidebar key={accountsType} isAuthenticated={isAuthenticated} accountType={accountsType} />,
     [PANEL_MARKET_DATA]: <MarketData compact />,
     [PANEL_OWNER]: <OwnerConsole />,
     [PANEL_TERMINAL]: <TerminalDock isAuthenticated={isAuthenticated} />,
-  };
+  }), [accountsType, isAuthenticated]);
 
 
   return (
@@ -343,11 +352,21 @@ function WorkspaceInner({ children, isAuthenticated, onLogin, onLogout }) {
       />
 
       {/* ── Main dockable workspace ── */}
-      <div className="cc-shell-workspace flex-1 overflow-hidden" style={{ borderTop: '1px solid var(--border)' }}>
-        <DockLayout key={workspaceRevision} panelContents={panelContents}>
+      <div
+        className="cc-shell-workspace flex-1 overflow-hidden"
+        style={{
+          borderTop: '1px solid var(--border)',
+          overflow: hasMultiScreens && isMultiFloating ? 'visible' : undefined,
+        }}
+      >
+        <DockLayout panelContents={panelContents}>
           <div
             className={`cc-center-workspace flex-1 min-h-0 w-full overflow-hidden relative${hasMultiScreens ? ' has-multi-screens' : ''}`}
-            style={{ background: 'var(--bg)' }}
+            style={{
+              background: 'var(--bg)',
+              overflow: hasMultiScreens && isMultiFloating ? 'visible' : undefined,
+              zIndex: hasMultiScreens && isMultiFloating ? 500 : undefined,
+            }}
             data-export-current-view
           >
             <div className="cc-center-split">

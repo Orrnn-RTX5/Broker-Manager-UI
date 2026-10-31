@@ -599,8 +599,8 @@ const AccountTradeTab = ({
             {/* Current Ask Badge (Red) */}
             {currentAsk > 0 && (
               <div
-                className="absolute right-1 px-1.5 py-0.5 bg-[var(--surface-2)] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
-                style={{ top: `${askBadgeY}%`, transform: 'translateY(-50%)' }}
+                className="account-trade-price-badge absolute right-1 px-1.5 py-0.5 text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
+                data-side="ask" style={{ top: `${askBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--danger)', color: '#ffffff' }}
               >
                 {currentAsk.toFixed(digits)}
               </div>
@@ -609,8 +609,8 @@ const AccountTradeTab = ({
             {/* Current Bid Badge (Blue) */}
             {currentBid > 0 && (
               <div
-                className="absolute right-1 px-1.5 py-0.5 bg-[var(--surface-2)] text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
-                style={{ top: `${bidBadgeY}%`, transform: 'translateY(-50%)' }}
+                className="account-trade-price-badge absolute right-1 px-1.5 py-0.5 text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
+                data-side="bid" style={{ top: `${bidBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--color-quote-up, var(--accent))', color: '#ffffff' }}
               >
                 {currentBid.toFixed(digits)}
               </div>

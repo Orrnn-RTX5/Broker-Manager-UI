@@ -135,6 +135,17 @@ export default function useDashboardActivity(range, metricsData) {
     });
   }, [currentEquity, metricsAsOf, scope]);
 
+  const effectiveEquityHistory = useMemo(() => {
+    if (currentEquity === null || currentEquity === undefined || !Number.isFinite(Number(currentEquity)) ||
+        !Number.isFinite(Number(metricsAsOf))) {
+      return equityHistory;
+    }
+    return appendEquityObservation(equityHistory, {
+      timestamp: metricsAsOf,
+      equity: currentEquity,
+    });
+  }, [equityHistory, currentEquity, metricsAsOf]);
+
   const dealsQuery = useQuery({
     queryKey: ['dashboard', 'activity', 'deals', scope],
     queryFn: ({ signal }) => loadDashboardDealHistory({ signal, queryClient }),
@@ -165,6 +176,7 @@ export default function useDashboardActivity(range, metricsData) {
       realLogins: fresh.realLogins,
       equityHistory: readEquityHistory(scope),
       volumeCoverageFrom: fresh.volumeCoverageFrom,
+      volumeCoverageTo: fresh.asOf,
       partial: false,
     });
     if (!snapshot) return;
@@ -181,13 +193,13 @@ export default function useDashboardActivity(range, metricsData) {
       range,
       now: chartNow,
       deals: liveDeals.deals,
-      equityHistory,
+      equityHistory: effectiveEquityHistory,
       volumeCoverageFrom: liveDeals.volumeCoverageFrom,
       volumeCoverageTo: liveDeals.asOf,
       realLogins: liveDeals.realLogins,
     });
 
-    const current = buildActivitySeries({ range, now: chartNow, equityHistory });
+    const current = buildActivitySeries({ range, now: chartNow, equityHistory: effectiveEquityHistory });
     if (!usingCached) return current;
     const saved = new Map(cachedSnapshot.seriesByRange[range].map((point) => [point.timestamp, point]));
     return current.map((point) => {
@@ -195,12 +207,15 @@ export default function useDashboardActivity(range, metricsData) {
       return previous ? {
         ...point,
         volume: previous.volume,
+        buyVolume: previous.buyVolume ?? (previous.volume === 0 ? 0 : null),
+        sellVolume: previous.sellVolume ?? (previous.volume === 0 ? 0 : null),
+        deals: previous.tradeCount ?? previous.deals ?? (previous.volume === 0 ? 0 : null),
         volumePartial: previous.volumePartial,
         equity: point.equity ?? previous.equity,
         equityAsOf: point.equityAsOf ?? previous.equityAsOf,
       } : point;
     });
-  }, [range, now, metricsAsOf, liveDeals, equityHistory, usingCached, cachedSnapshot]);
+  }, [range, now, metricsAsOf, liveDeals, effectiveEquityHistory, usingCached, cachedSnapshot]);
 
   const symbolActivity = useMemo(() => canViewAccounts && liveDeals
     ? buildSymbolActivity({
@@ -227,7 +242,7 @@ export default function useDashboardActivity(range, metricsData) {
     refreshing: usingCached && dealsQuery.isFetching,
     refreshIncomplete: usingCached && Boolean(dealsQuery.data?.partial),
     asOf: usingCached ? cachedSnapshot.asOf : liveDeals?.asOf ?? null,
-    firstEquityAt: equityHistory[0]?.timestamp ?? null,
+    firstEquityAt: effectiveEquityHistory[0]?.timestamp ?? null,
     hasEquity: series.some((point) => point.equity !== null),
     hasVolume: series.some((point) => point.volume !== null),
     hasTradeActivity: series.some((point) => point.volume > 0),

@@ -1,4 +1,4 @@
-import { Children, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Children, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
@@ -403,7 +403,7 @@ const TreeNode = ({
   );
 };
 
-export default function NavigatorPanel() {
+function NavigatorPanel() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useWorkspaceNavigation();
@@ -964,6 +964,10 @@ export default function NavigatorPanel() {
           <TreeNode label="Audit Logs" icon={FileClock} disabled />
         </TreeNode>
       </div>
+      <div className="rtx-market-watch-view-tabs" role="tablist" aria-label="Navigator views" style={{ display: "flex", alignItems: "stretch", minHeight: "22px", borderTop: "1px solid var(--border, #28282e)", background: "var(--surface-2, #131316)", padding: "0 4px", gap: "2px", flexShrink: 0 }}>
+        <button type="button" role="tab" aria-selected="true" className="rtx-market-watch-view-tabs__btn is-active" style={{ padding: "0 10px", fontSize: "11px", fontWeight: 400, border: "1px solid transparent", borderTopColor: "var(--text-secondary, var(--border-3, #a0a0ab))", borderInlineColor: "var(--text-secondary, var(--border-3, #a0a0ab))", background: "var(--surface, #18181b)", color: "var(--text-primary, #f4f4f6)" }}>Common</button>
+        <button type="button" role="tab" aria-selected="false" className="rtx-market-watch-view-tabs__btn" style={{ padding: "0 10px", fontSize: "11px", fontWeight: 400, border: "1px solid transparent", background: "transparent", color: "var(--text-secondary, #a0a0ab)" }}>Chats</button>
+      </div>
       {navigatorContextMenu && (
         <NavigatorContextMenu
           x={navigatorContextMenu.x}
@@ -1005,3 +1009,6 @@ export default function NavigatorPanel() {
     </div>
   );
 }
+
+export default memo(NavigatorPanel);
+

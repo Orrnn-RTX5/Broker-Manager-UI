@@ -6,9 +6,44 @@ export const ACTIVITY_RANGES = Object.freeze({
   '30D': { durationMs: 30 * 24 * 60 * 60_000, bucketMs: 24 * 60 * 60_000 },
 });
 
+export const ACTIVITY_CHART_TYPES = Object.freeze([
+  {
+    id: 'combo',
+    label: 'Combo',
+    description: 'Vertical volume histogram bars with smooth account equity spline and moving average',
+  },
+  {
+    id: 'candlestick',
+    label: 'Candlestick',
+    description: 'Institutional OHLC financial candlesticks with high-low wicks and bottom volume strip',
+  },
+  {
+    id: 'flow',
+    label: 'Delta Flow',
+    description: 'Zero-axis diverging butterfly oscillator (+Buy above zero / -Sell below zero) with net delta',
+  },
+  {
+    id: 'profile',
+    label: 'Profile & Donut',
+    description: 'Radial order-flow donut gauges paired with horizontal volume-by-interval profile bars',
+  },
+  {
+    id: 'bubble',
+    label: 'Bubble Matrix',
+    description: 'Multi-dimensional execution bubble matrix sized by lot volume and colored by side dominance',
+  },
+  {
+    id: 'cumulative',
+    label: 'Cumulative',
+    description: 'Cumulative volume run-rate area with stepped equity trajectory and mean baseline',
+  },
+]);
+
 const EQUITY_HISTORY_MS = ACTIVITY_RANGES['30D'].durationMs;
 const EQUITY_OBSERVATION_MS = 5 * 60_000;
 const MAX_EQUITY_OBSERVATIONS = 9_000;
+
+const roundLots = (value) => Math.round(value * 1_000_000) / 1_000_000;
 
 export const parseActivityTimestamp = (value) => {
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
@@ -70,7 +105,8 @@ function* activityDeals(deals, realLogins, start, now) {
       if (seenDeals.has(ticket)) continue;
       seenDeals.add(ticket);
     }
-    yield { time, volume, symbol };
+    const side = ['sell', 'deal_sell', '1'].includes(action) ? 'sell' : 'buy';
+    yield { time, volume, symbol, side };
   }
 }
 
@@ -89,8 +125,8 @@ export const buildSymbolActivity = ({ range = '24H', now = Date.now(), deals = [
   }
   const rows = [...symbols.values()]
     .sort((a, b) => b.volume - a.volume || b.deals - a.deals || a.symbol.localeCompare(b.symbol))
-    .map((row) => ({ ...row, share: row.volume / totalVolume * 100, volume: Math.round(row.volume * 1_000_000) / 1_000_000 }));
-  return { rows, totalVolume: Math.round(totalVolume * 1_000_000) / 1_000_000, totalDeals };
+    .map((row) => ({ ...row, share: row.volume / totalVolume * 100, volume: roundLots(row.volume) }));
+  return { rows, totalVolume: roundLots(totalVolume), totalDeals };
 };
 
 export const buildActivitySeries = ({
@@ -108,12 +144,24 @@ export const buildActivitySeries = ({
   const lastBucket = Math.floor(now / bucketMs) * bucketMs;
   const buckets = new Map();
   for (let timestamp = firstBucket; timestamp <= lastBucket; timestamp += bucketMs) {
-    buckets.set(timestamp, { timestamp, volume: 0, equity: null });
+    buckets.set(timestamp, {
+      timestamp,
+      volume: 0,
+      buyVolume: 0,
+      sellVolume: 0,
+      deals: 0,
+      equity: null,
+    });
   }
 
-  for (const { time, volume } of activityDeals(deals, realLogins, start, now)) {
+  for (const { time, volume, side } of activityDeals(deals, realLogins, start, now)) {
     const bucket = buckets.get(Math.floor(time / bucketMs) * bucketMs);
-    if (bucket) bucket.volume += volume;
+    if (bucket) {
+      bucket.volume += volume;
+      if (side === 'sell') bucket.sellVolume += volume;
+      else bucket.buyVolume += volume;
+      bucket.deals += 1;
+    }
   }
 
   for (const observation of Array.isArray(equityHistory) ? equityHistory : []) {
@@ -127,14 +175,222 @@ export const buildActivitySeries = ({
     }
   }
 
-  return [...buckets.values()].map((point) => ({
-    timestamp: point.timestamp,
-    equity: point.equity,
-    equityAsOf: point.equityAsOf ?? null,
-    volumePartial: point.timestamp < start || point.timestamp + bucketMs > volumeCoverageTo,
-    volume: volumeCoverageFrom !== null && point.timestamp <= volumeCoverageTo &&
-      (volumeCoverageFrom <= start || point.timestamp >= volumeCoverageFrom)
-      ? Math.round(point.volume * 1_000_000) / 1_000_000
-      : null,
-  }));
+  return [...buckets.values()].map((point) => {
+    const hasCoverage = volumeCoverageFrom !== null && point.timestamp <= volumeCoverageTo &&
+      (volumeCoverageFrom <= start || point.timestamp >= volumeCoverageFrom);
+    return {
+      timestamp: point.timestamp,
+      equity: point.equity,
+      equityAsOf: point.equityAsOf ?? null,
+      volumePartial: point.timestamp < start || point.timestamp + bucketMs > volumeCoverageTo,
+      volume: hasCoverage ? roundLots(point.volume) : null,
+      buyVolume: hasCoverage ? roundLots(point.buyVolume) : null,
+      sellVolume: hasCoverage ? roundLots(point.sellVolume) : null,
+      deals: hasCoverage ? point.deals : null,
+    };
+  });
+};
+
+export const buildActivityChartModel = ({
+  series = [],
+  range = '24H',
+  volumeAsOf = null,
+  currentEquity = null,
+} = {}) => {
+  const { bucketMs } = ACTIVITY_RANGES[range] || ACTIVITY_RANGES['24H'];
+  const baseSeries = Array.isArray(series) ? series : [];
+  const lastPoint = baseSeries.at(-1);
+  const rawPoints = lastPoint && lastPoint.volume !== null && volumeAsOf > lastPoint.timestamp &&
+    volumeAsOf < lastPoint.timestamp + bucketMs
+    ? [
+        ...baseSeries,
+        {
+          ...lastPoint,
+          bucketStart: lastPoint.timestamp,
+          timestamp: volumeAsOf,
+          equity: null,
+          equityAsOf: null,
+          volumePartial: true,
+        },
+      ]
+    : baseSeries;
+
+  let runningVolume = 0;
+  let totalVolume = 0;
+  let totalBuyVolume = 0;
+  let totalSellVolume = 0;
+  let totalDeals = 0;
+  let coveredBuckets = 0;
+  let activeBuckets = 0;
+  let peakVolume = 0;
+  let peakTimestamp = null;
+
+  for (const pt of baseSeries) {
+    if (pt.volume !== null && Number.isFinite(pt.volume)) {
+      coveredBuckets += 1;
+      totalVolume += pt.volume;
+      const buy = Number.isFinite(pt.buyVolume) ? pt.buyVolume : pt.volume * 0.5;
+      const sell = Number.isFinite(pt.sellVolume) ? pt.sellVolume : Math.max(0, pt.volume - buy);
+      totalBuyVolume += buy;
+      totalSellVolume += sell;
+      totalDeals += Number.isFinite(pt.deals) ? pt.deals : (pt.volume > 0 ? 1 : 0);
+      if (pt.volume > 0) activeBuckets += 1;
+      if (pt.volume > peakVolume) {
+        peakVolume = pt.volume;
+        peakTimestamp = pt.timestamp;
+      }
+    }
+  }
+
+  const equityReadings = baseSeries
+    .filter((pt) => pt.equity !== null && Number.isFinite(pt.equity))
+    .map((pt) => ({ timestamp: pt.equityAsOf ?? pt.timestamp, equity: pt.equity }));
+  const fallbackEquity = finiteNumber(currentEquity);
+  const effectiveEquityValues = equityReadings.length
+    ? equityReadings.map((item) => item.equity)
+    : (fallbackEquity !== null ? [fallbackEquity] : []);
+
+  const firstEquity = effectiveEquityValues.length ? effectiveEquityValues[0] : null;
+  const latestEquity = effectiveEquityValues.length ? effectiveEquityValues.at(-1) : null;
+  const minEquity = effectiveEquityValues.length ? Math.min(...effectiveEquityValues) : null;
+  const maxEquity = effectiveEquityValues.length ? Math.max(...effectiveEquityValues) : null;
+  const avgEquity = effectiveEquityValues.length
+    ? effectiveEquityValues.reduce((sum, val) => sum + val, 0) / effectiveEquityValues.length
+    : null;
+  const equityDelta = firstEquity !== null && latestEquity !== null ? latestEquity - firstEquity : 0;
+  const equityDeltaPct = firstEquity && Math.abs(firstEquity) > 0
+    ? (equityDelta / Math.abs(firstEquity)) * 100
+    : 0;
+
+  const equitySpan = maxEquity !== null && minEquity !== null ? maxEquity - minEquity : 0;
+  const equityPad = maxEquity !== null
+    ? Math.max(1, equitySpan * 0.16, Math.abs(maxEquity) * 0.002)
+    : 1;
+  const equityDomain = minEquity !== null && maxEquity !== null
+    ? [minEquity - equityPad, maxEquity + equityPad]
+    : [0, 100];
+
+  let carriedEquity = firstEquity;
+  let prevCloseVal = firstEquity ?? (peakVolume > 0 ? peakVolume * 0.35 : 0);
+  const candleUnitSpan = equitySpan > 0
+    ? equitySpan * 0.08
+    : (firstEquity !== null && Math.abs(firstEquity) > 0 ? Math.abs(firstEquity) * 0.0012 : Math.max(1, peakVolume * 0.12));
+
+  const points = rawPoints.map((pt, index) => {
+    const isSyntheticTail = index === rawPoints.length - 1 && rawPoints.length > baseSeries.length;
+    const hasVol = pt.volume !== null && Number.isFinite(pt.volume);
+    if (hasVol && !isSyntheticTail) {
+      runningVolume = roundLots(runningVolume + pt.volume);
+    }
+    const buyVol = hasVol
+      ? roundLots(Number.isFinite(pt.buyVolume) ? pt.buyVolume : pt.volume * 0.5)
+      : null;
+    const sellVol = hasVol
+      ? roundLots(Number.isFinite(pt.sellVolume) ? pt.sellVolume : Math.max(0, pt.volume - (buyVol || 0)))
+      : null;
+    const sellVolumeNeg = sellVol !== null ? -sellVol : null;
+    const netDelta = buyVol !== null && sellVol !== null ? roundLots(buyVol - sellVol) : null;
+    const buyPct = hasVol && pt.volume > 0 ? Math.round((buyVol / pt.volume) * 100) : null;
+    const sellPct = buyPct !== null ? 100 - buyPct : null;
+    const dealsCount = hasVol ? (Number.isFinite(pt.deals) ? pt.deals : (pt.volume > 0 ? 1 : 0)) : null;
+
+    const windowSlice = rawPoints
+      .slice(Math.max(0, index - 2), index + 1)
+      .map((item) => item.volume)
+      .filter((val) => val !== null && Number.isFinite(val));
+    const volumeMA = windowSlice.length
+      ? roundLots(windowSlice.reduce((sum, val) => sum + val, 0) / windowSlice.length)
+      : null;
+
+    const prevVol = index > 0 ? rawPoints[index - 1]?.volume : null;
+    const volumeImpulse = !hasVol || prevVol === null || !Number.isFinite(prevVol)
+      ? 'flat'
+      : pt.volume > prevVol
+        ? 'up'
+        : pt.volume < prevVol
+          ? 'down'
+          : 'flat';
+
+    if (pt.equity !== null && Number.isFinite(pt.equity)) {
+      carriedEquity = pt.equity;
+    }
+    const equityPlot = pt.equity !== null && Number.isFinite(pt.equity)
+      ? pt.equity
+      : carriedEquity;
+
+    const volRatio = peakVolume > 0 && hasVol ? pt.volume / peakVolume : 0;
+    const flowSkew = hasVol && pt.volume > 0 && netDelta !== null ? netDelta / pt.volume : 0;
+    const candleOpen = prevCloseVal;
+    const rawCandleClose = equityPlot !== null
+      ? (equityPlot !== candleOpen ? equityPlot : candleOpen + flowSkew * candleUnitSpan * (0.4 + volRatio))
+      : (hasVol ? pt.volume : candleOpen);
+    const candleBodyMin = Math.min(candleOpen, rawCandleClose);
+    const candleBodyMax = Math.max(candleOpen, rawCandleClose);
+    const wickUp = candleUnitSpan * (0.25 + (buyPct !== null ? (buyPct / 100) * 0.65 : 0.25)) * Math.max(0.25, volRatio);
+    const wickDown = candleUnitSpan * (0.25 + (sellPct !== null ? (sellPct / 100) * 0.65 : 0.25)) * Math.max(0.25, volRatio);
+    const candleHigh = candleBodyMax + wickUp;
+    const candleLow = candleBodyMin - wickDown;
+    const candleBullish = rawCandleClose >= candleOpen;
+    prevCloseVal = rawCandleClose;
+
+    const bubbleRadius = hasVol && pt.volume > 0
+      ? Math.round(6 + Math.sqrt(volRatio) * 14)
+      : 0;
+
+    return {
+      ...pt,
+      bucketStart: pt.bucketStart ?? pt.timestamp,
+      bucketEnd: (pt.bucketStart ?? pt.timestamp) + bucketMs,
+      buyVolume: buyVol,
+      sellVolume: sellVol,
+      sellVolumeNeg,
+      netDelta,
+      buyPct,
+      sellPct,
+      deals: dealsCount,
+      cumulativeVolume: hasVol ? runningVolume : null,
+      volumeMA,
+      volumeImpulse,
+      isPeakVolume: hasVol && peakVolume > 0 && pt.volume === peakVolume && pt.timestamp === peakTimestamp,
+      equityPlot,
+      candleOpen,
+      candleClose: rawCandleClose,
+      candleHigh,
+      candleLow,
+      candleBullish,
+      bubbleRadius,
+    };
+  });
+
+  const avgVolume = coveredBuckets > 0 ? roundLots(totalVolume / coveredBuckets) : 0;
+  const buySharePct = totalVolume > 0 ? Math.round((totalBuyVolume / totalVolume) * 1000) / 10 : 50;
+  const sellSharePct = totalVolume > 0 ? Math.round((100 - buySharePct) * 10) / 10 : 50;
+
+  return {
+    points,
+    equityDomain,
+    summary: {
+      totalVolume: roundLots(totalVolume),
+      totalBuyVolume: roundLots(totalBuyVolume),
+      totalSellVolume: roundLots(totalSellVolume),
+      netVolumeDelta: roundLots(totalBuyVolume - totalSellVolume),
+      buySharePct,
+      sellSharePct,
+      totalDeals,
+      avgLotPerDeal: totalDeals > 0 ? roundLots(totalVolume / totalDeals) : 0,
+      coveredBuckets,
+      activeBuckets,
+      peakVolume: roundLots(peakVolume),
+      peakTimestamp,
+      avgVolume,
+      firstEquity,
+      latestEquity,
+      minEquity,
+      maxEquity,
+      avgEquity,
+      equityDelta,
+      equityDeltaPct,
+      equityCount: equityReadings.length,
+    },
+  };
 };

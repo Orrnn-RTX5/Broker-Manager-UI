@@ -220,3 +220,23 @@ test('AccountDetailsModal supports movable drag and 3-place docking (left, botto
   assert.match(modalCss, /#root \.account-details-backdrop\s*\{[\s\S]*?pointer-events:\s*none;/);
 });
 
+test('Movable New Account and New Group screens hold their grid slot, stack above panels, and snap back into their slot when returned', () => {
+  const workspaceSource = readFileSync(new URL('../components/MultiScreenWorkspace.jsx', import.meta.url), 'utf8');
+  const adminLayoutSource = readFileSync(new URL('../layouts/AdminLayout.jsx', import.meta.url), 'utf8');
+  const dockCssSource = readFileSync(new URL('../components/docking/DockLayout.module.css', import.meta.url), 'utf8');
+  const cssSource = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+
+  assert.match(workspaceSource, /const MultiScreenPaneBody = memo\(/);
+  assert.match(workspaceSource, /const isRectCenterInsideWorkspace = useCallback\(/);
+  assert.match(workspaceSource, /const dockPaneBackToGrid = useCallback\(/);
+  assert.match(workspaceSource, /style\.transform = `translate3d\(\$\{latestX\}px, \$\{latestY\}px, 0\)`/);
+  assert.match(adminLayoutSource, /const isMultiFloating = useMultiScreenStore/);
+  assert.match(dockCssSource, /\.centerArea:has\(:global\(\.is-workspace-movable/);
+  assert.doesNotMatch(cssSource, /:has\([^)]*:has\(/);
+  assert.match(cssSource, /\.multi-screen-row\s*\{[\s\S]*?position:\s*static;/);
+  assert.match(cssSource, /\.multi-screen-pane\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(cssSource, /\.multi-screen-pane\.is-movable,\s*\.multi-screen-pane\.is-pane-docked\s*\{[\s\S]*?z-index:\s*520;/);
+  assert.match(cssSource, /\.multi-screen-pane\.is-dragging\s*\{[\s\S]*?z-index:\s*600 !important;/);
+});
+
+

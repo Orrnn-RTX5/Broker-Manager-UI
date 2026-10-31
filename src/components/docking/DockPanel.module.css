@@ -18,6 +18,12 @@
   min-height: 120px;
 }
 
+.mt5PanelFloat {
+  border-radius: 6px !important;
+  border: 1px solid #383a42 !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.62) !important;
+}
+
 .panelFloat:hover {
   box-shadow: 0 24px 56px -12px rgba(16, 24, 40, 0.32), 0 12px 20px -4px rgba(16, 24, 40, 0.10);
 }
@@ -75,8 +81,8 @@
 
 /* ─── Dragging state ─────────────────────────────────────────────────────── */
 .dragging {
-  opacity: 0.95;
-  box-shadow: 0 0 0 2px var(--accent, #7f56d9), 0 20px 48px -8px rgba(16, 24, 40, 0.35) !important;
+  opacity: 0.98;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55) !important;
   cursor: grabbing !important;
 }
 
@@ -92,6 +98,23 @@
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
+}
+
+.mt5PaneTitleBar {
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 6px !important;
+  gap: 4px;
+  background: var(--surface-2, #131316) !important;
+  border-bottom: 1px solid var(--border, #28282e) !important;
+}
+
+.mt5CloseBtn {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 2px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
 }
 
 .titleBar:active {
@@ -162,7 +185,63 @@
   flex: 1;
   overflow: auto;
   min-height: 0;
+  min-width: 0;
   position: relative;
+}
+
+.terminalBodyRow {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.mt5ToolboxStrip {
+  width: 18px;
+  flex: 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 6px;
+  background: var(--surface-2, #1b1b1f);
+  border-right: 1px solid var(--border, #2e2e36);
+  color: var(--muted, #9da1ab);
+  user-select: none;
+  cursor: grab;
+}
+
+.mt5ToolboxClose {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mt5ToolboxClose:hover {
+  color: var(--text, #ffffff);
+}
+
+.mt5ToolboxLabel {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* ─── Resize handles ─────────────────────────────────────────────────────── */

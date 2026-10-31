@@ -117,10 +117,10 @@ const MenuBar = ({ isAuthenticated, onLogin, onLogout, onViewAction, onStatusCha
   const brandLogoCandidates = buildBrokerLogoCandidates(brokerInfo, {
     appFallbackUrl: '/manager-symbol-dark.png',
   });
-  const brandLogoSrc = brandLogoCandidates[Math.min(logoErrorIndex, brandLogoCandidates.length - 1)] || '/manager-symbol-dark.png';
+  const brandLogoSrc = logoErrorIndex >= 0 ? '/manager-symbol-dark.png' : (brandLogoCandidates[0] || '/manager-symbol-dark.png');
   const brandCaption = (() => {
     const raw = String(brokerInfo?.broker_name || brokerInfo?.name || '').trim();
-    return raw && !/^broker$/i.test(raw) ? raw : 'Manager';
+    return raw ? 'Manager' : 'Manager';
   })();
 
   useEffect(() => {

@@ -321,8 +321,12 @@ const NewGroupModal = ({
       onHeaderPointerDown(event);
       return;
     }
-    if (!isMovable || event.button !== 0) return;
+    if (event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest('button, input, select, textarea, a, label, [role="listbox"], [role="option"], [role="combobox"]')) return;
+    if (!isMovable) {
+      handleLocalMoveButtonPointerDown(event);
+      return;
+    }
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useI18nStore } from '../../../i18n/index.js';
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, Loader, History } from 'lucide-react';
+import { AlertTriangle, Loader, History } from 'lucide-react';
 
 const fmt = (n, d = 2) => {
   if (n === undefined || n === null) return '0.00';
@@ -14,21 +14,16 @@ const formatDate = (ts, language) => {
   });
 };
 
-const SortIcon = ({ col, sortCol, sortDir }) => {
-  if (sortCol !== col) return <ChevronsUpDown size={11} className="inline ml-1" style={{ color: 'var(--muted)' }} />;
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />
-    : <ChevronDown size={11} className="inline ml-1" style={{ color: 'var(--accent)' }} />;
-};
-
-const HeaderCell = ({ col, label, align = 'left', sortCol, sortDir, onSort }) => (
+const HeaderCell = ({ col, label, sortCol, sortDir, onSort }) => (
   <th
     scope="col"
     onClick={() => onSort(col)}
-    style={{ textAlign: align }}
+    aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    title={`Sort by ${label}`}
+    style={{ textAlign: 'left' }}
     className="cursor-pointer select-none whitespace-nowrap transition-colors"
   >
-    {label}<SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    {label}
   </th>
 );
 
@@ -113,23 +108,40 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
         </div>
       ) : (
       <div className="position-history-grid-scroll w-full min-h-0 overflow-auto flex-1">
-        <table className="ui-grid min-w-max">
-          <thead>
+        <table className="ui-grid position-history-table">
+          <colgroup>
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+            <col className="position-history-col-data" />
+          </colgroup>
+          <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               <HeaderCell col="order" label="Order ID" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="login" label="Login" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="symbol" label="Symbol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="type" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="volume" label="Volume" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="openPrice" label="Open Price" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="closePrice" label="Close Price" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="volume" label="Volume" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="openPrice" label="Open Price" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="closePrice" label="Close Price" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="openTime" label="Open Time" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="closeTime" label="Close Time" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="sl" label="S/L" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="tp" label="T/P" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="profit" label="Profit" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="swap" label="Swap" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <HeaderCell col="commission" label="Comm." align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="sl" label="S/L" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="tp" label="T/P" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="profit" label="Profit" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="swap" label="Swap" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+              <HeaderCell col="commission" label="Comm." sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <HeaderCell col="comment" label="Comment" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
@@ -138,7 +150,16 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
               const rowKey = `${row.order}-${idx}`;
               const isBuy = row.type === 'buy';
               const profitTone = row.profit < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
-              
+              const openPriceFormatted = fmt(row.openPrice, 5);
+              const closePriceFormatted = fmt(row.closePrice, 5);
+              const openTimeFormatted = formatDate(row.openTime, language);
+              const closeTimeFormatted = formatDate(row.closeTime, language);
+              const slFormatted = fmt(row.sl);
+              const tpFormatted = fmt(row.tp);
+              const profitFormatted = fmt(row.profit);
+              const swapFormatted = fmt(row.swap);
+              const commFormatted = fmt(row.commission);
+
               return (
                 <tr
                   key={rowKey}
@@ -146,27 +167,27 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
                   className={selectedRow === rowKey ? 'is-selected' : ''}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="tabular font-mono text-[11px]">{row.order}</td>
-                  <td className="tabular" style={{ color: 'var(--text-3)' }}>{row.login}</td>
-                  <td style={{ fontWeight: 600 }}>{row.symbol}</td>
-                  <td>
-                    <span className={`ui-status ${isBuy ? 'ui-status-ok' : 'ui-status-danger'}`}>
+                  <td className="tabular font-mono text-[11px]" title={String(row.order ?? '')}>{row.order}</td>
+                  <td className="tabular" style={{ color: 'var(--text-3)' }} title={String(row.login ?? '')}>{row.login}</td>
+                  <td style={{ fontWeight: 600 }} title={row.symbol || ''}>{row.symbol}</td>
+                  <td title={String(row.type || '').toUpperCase()}>
+                    <span className="ui-status" style={{ color: isBuy ? 'var(--ok-text)' : 'var(--danger-text)' }}>
                       {row.type.toUpperCase()}
                     </span>
                   </td>
-                  <td className="tabular" style={{ textAlign: 'right' }}>{row.volume}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.openPrice, 5)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right' }}>{fmt(row.closePrice, 5)}</td>
-                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.openTime, language)}</td>
-                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(row.closeTime, language)}</td>
-                  <td className="tabular font-mono text-xs opacity-70" style={{ textAlign: 'right' }}>{fmt(row.sl)}</td>
-                  <td className="tabular font-mono text-xs opacity-70" style={{ textAlign: 'right' }}>{fmt(row.tp)}</td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right', color: profitTone, fontWeight: 600 }}>
-                    {fmt(row.profit)}
+                  <td className="tabular" title={String(row.volume ?? '')}>{row.volume}</td>
+                  <td className="tabular font-mono" title={openPriceFormatted}>{openPriceFormatted}</td>
+                  <td className="tabular font-mono" title={closePriceFormatted}>{closePriceFormatted}</td>
+                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }} title={openTimeFormatted}>{openTimeFormatted}</td>
+                  <td className="tabular text-[11px]" style={{ color: 'var(--text-3)' }} title={closeTimeFormatted}>{closeTimeFormatted}</td>
+                  <td className="tabular font-mono text-xs opacity-70" title={slFormatted}>{slFormatted}</td>
+                  <td className="tabular font-mono text-xs opacity-70" title={tpFormatted}>{tpFormatted}</td>
+                  <td className="tabular font-mono" style={{ color: profitTone, fontWeight: 600 }} title={profitFormatted}>
+                    {profitFormatted}
                   </td>
-                  <td className="tabular font-mono" style={{ textAlign: 'right', color: row.swap < 0 ? 'var(--danger-text)' : 'var(--text-2)' }}>{fmt(row.swap)}</td>
-                  <td className="tabular font-mono text-xs opacity-60" style={{ textAlign: 'right' }}>{fmt(row.commission)}</td>
-                  <td style={{ color: 'var(--text-3)', fontSize: '11px' }}>{row.comment}</td>
+                  <td className="tabular font-mono" style={{ color: row.swap < 0 ? 'var(--danger-text)' : 'var(--text-2)' }} title={swapFormatted}>{swapFormatted}</td>
+                  <td className="tabular font-mono text-xs opacity-60" title={commFormatted}>{commFormatted}</td>
+                  <td style={{ color: 'var(--text-3)', fontSize: '11px' }} title={row.comment || ''}>{row.comment || '—'}</td>
                 </tr>
               );
             })}
@@ -176,7 +197,10 @@ const PositionHistoryGrid = ({ data = [], isLoading, error, login }) => {
       )}
       
       {!isLoading && data.length > 0 && (
-        <div className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--muted)' }}>
+        <div
+          className="position-history-grid-footer px-3 py-1 text-[10px] uppercase tracking-wider shrink-0 flex items-center"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--muted)' }}
+        >
           TOTAL RECORDS: {data.length}
         </div>
       )}

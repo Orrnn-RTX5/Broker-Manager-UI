@@ -118,7 +118,7 @@ const AccountsOnlineGrid = ({ search = '', searchControl, onRowsChange, onRowCon
         title={`Sort by ${label}: ${sortCol === col && sortDir === 'asc' ? 'descending' : 'ascending'}`}
       >
         {label}
-        {sortCol === col && <span className="active-sessions-sort-direction" aria-hidden="true">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+
       </button>
     </th>
   );

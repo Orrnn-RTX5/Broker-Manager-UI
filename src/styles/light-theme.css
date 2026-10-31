@@ -498,7 +498,7 @@ html:not(.dark) .trade-close-confirmation-card {
   --trade-confirm-border: var(--rtx-light-border);
 }
 
-html:not(.dark) .rtx5-command-shell .manager-menu-brand {
+html:not(.dark) .rtx5-command-shell .manager-menu-brand { width: auto !important; min-width: 0 !important; flex: 0 0 auto !important; padding: 0 9px 0 2px !important;
   width: 80px;
   min-width: 80px;
   flex: 0 0 80px;

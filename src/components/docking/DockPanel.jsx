@@ -8,12 +8,14 @@ import styles from './DockPanel.module.css';
 const RESIZE_HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // Minimum drag distance (px) before a drag is considered intentional
-const DRAG_THRESHOLD = 8;
+const DRAG_THRESHOLD = 4;
 
 export default function DockPanel({ id, children, canMoveUp, canMoveDown, layoutStyle }) {
   const {
     panels, updatePanel, bringToFront,
-    closePanel, floatPanel, togglePanelMaximized, draggingId, setDraggingId,
+    closePanel, floatPanel, togglePanelMaximized,
+    draggingId, setDraggingId, setActiveDockGuideId,
+    terminalFullWidth,
     movePanelInZone,
   } = useDockingContext();
   const panel = panels[id];
@@ -26,73 +28,110 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   const pos     = panel?.position;
   const isFloat = pos === DOCK_POSITIONS.FLOAT;
   const isMaximized = Boolean(panel?.maximized);
-  const showReorderButtons = id !== 'market_data' && id !== 'navigator';
+  const isMt5DockPane = id === 'market_data' || id === 'navigator';
+  const isCompactToolboxTerminal = id === 'terminal' && !isFloat && !isMaximized && !terminalFullWidth;
+  const hideTopTitleBar = isCompactToolboxTerminal;
+  const showReorderButtons = !isMt5DockPane;
   const panelIcons = { users: Users, navigator: FolderTree, market: BarChart3, owner: BriefcaseBusiness, terminal: TerminalSquare };
   const PanelIcon = panelIcons[panel?.icon] || null;
 
-  // ─── Drag to float ──────────────────────────────────────────────────────────
+  const getMt5DefaultFloatPos = useCallback(() => {
+    const shell = typeof document !== 'undefined' ? document.querySelector('.cc-shell-workspace') : null;
+    const shellRect = shell?.getBoundingClientRect();
+    return {
+      x: Math.max(6, Math.round((shellRect?.left ?? 0) + 6)),
+      y: Math.max(88, Math.round((shellRect?.top ?? 64) + 122)),
+    };
+  }, []);
+
+  // ─── Drag to float / show MT5 docking guide ─────────────────────────────────
   const onTitleMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
     if (isMaximized) return;
+    if (e.target?.closest?.('button')) return;
     e.preventDefault();
     bringToFront(id);
+
+    if (isMt5DockPane && !isFloat) {
+      setActiveDockGuideId?.(id);
+      setDraggingId(id);
+      const onUp = () => {
+        setDraggingId(null);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mouseup', onUp);
+      return;
+    }
+
+    const rect = panelRef.current?.getBoundingClientRect();
+    const initialOffsetX = rect
+      ? Math.min(Math.max(24, e.clientX - rect.left), Math.max(40, rect.width - 28))
+      : 96;
+    const initialOffsetY = rect
+      ? Math.min(Math.max(8, e.clientY - rect.top), 28)
+      : 16;
 
     if (!isFloat) {
       dragState.current = {
         startX: e.clientX,
         startY: e.clientY,
-        offsetX: 0,
-        offsetY: 0,
+        offsetX: initialOffsetX,
+        offsetY: initialOffsetY,
         didMove: false,
         wasDockedAt: pos,
       };
     } else {
-      const rect = panelRef.current.getBoundingClientRect();
       dragState.current = {
         startX: e.clientX,
         startY: e.clientY,
-        offsetX: e.clientX - rect.left,
-        offsetY: e.clientY - rect.top,
+        offsetX: rect ? e.clientX - rect.left : 96,
+        offsetY: rect ? e.clientY - rect.top : 16,
         didMove: false,
         wasDockedAt: null,
       };
     }
 
     const onMove = (ev) => {
+      if (!dragState.current) return;
       const dx = ev.clientX - dragState.current.startX;
       const dy = ev.clientY - dragState.current.startY;
+      const dist = Math.hypot(dx, dy);
 
       // Only start a real drag after DRAG_THRESHOLD pixels
-      if (!dragState.current.didMove && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      if (!dragState.current.didMove && dist < DRAG_THRESHOLD) return;
 
       if (!dragState.current.didMove) {
         dragState.current.didMove = true;
 
-        if (dragState.current.wasDockedAt) {
-          // undock → float at cursor
+        if (dragState.current.wasDockedAt && !isMt5DockPane) {
           const floatPos = {
-            x: ev.clientX - 120,
-            y: ev.clientY - 16,
+            x: Math.max(8, ev.clientX - dragState.current.offsetX),
+            y: Math.max(48, ev.clientY - dragState.current.offsetY),
           };
           floatPanel(id, floatPos);
-          dragState.current.offsetX = 120;
-          dragState.current.offsetY = 16;
         }
 
-        // Show global drop overlay
+        // Show global MT5 drop overlay
         setDraggingId(id);
+        setActiveDockGuideId?.(id);
+      }
+
+      // For MT5 left dock panes (Market Watch / Navigator), keep the floating window
+      // anchored under the MT5 Smart Docking Guide unless dragged far away.
+      if (isMt5DockPane && dist < 96) {
+        return;
       }
 
       updatePanel(id, {
         floatPos: {
-          x: ev.clientX - dragState.current.offsetX,
-          y: ev.clientY - dragState.current.offsetY,
+          x: Math.max(8, ev.clientX - dragState.current.offsetX),
+          y: Math.max(48, ev.clientY - dragState.current.offsetY),
         },
       });
     };
 
     const onUp = () => {
-      // Hide global overlay (if no zone was hit, panel stays floating)
+      // Stop active drag tracking; keep activeDockGuideId so the user can also click a guide button
       setDraggingId(null);
       dragState.current = null;
       window.removeEventListener('mousemove', onMove);
@@ -101,7 +140,7 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [id, pos, isFloat, isMaximized, bringToFront, floatPanel, updatePanel, setDraggingId]);
+  }, [id, pos, isFloat, isMaximized, isMt5DockPane, getMt5DefaultFloatPos, bringToFront, floatPanel, updatePanel, setDraggingId, setActiveDockGuideId]);
 
   // ─── Resize ─────────────────────────────────────────────────────────────────
   const onResizeMouseDown = useCallback((e, handle) => {
@@ -159,13 +198,13 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
   if (pos === DOCK_POSITIONS.FLOAT) {
     containerStyle = {
       position: 'fixed',
-      left: panel.floatPos?.x ?? 100,
-      top: panel.floatPos?.y ?? 100,
-      width: panel.size?.width ?? 320,
-      height: panel.size?.height ?? 400,
+      left: panel.floatPos?.x ?? 12,
+      top: panel.floatPos?.y ?? 184,
+      width: isMt5DockPane ? 228 : (panel.size?.width ?? 248),
+      height: isMt5DockPane ? 380 : (panel.size?.height ?? 360),
       zIndex: panel.zIndex ?? 100,
     };
-    containerClass += ' ' + styles.panelFloat;
+    containerClass += ' ' + styles.panelFloat + (isMt5DockPane ? ' ' + styles.mt5PanelFloat : '');
   } else if (pos === DOCK_POSITIONS.LEFT) {
     containerClass += ' ' + styles.panelLeft;
     const width = Number(panel.size?.width);
@@ -198,68 +237,107 @@ export default function DockPanel({ id, children, canMoveUp, canMoveDown, layout
     <div
       ref={panelRef}
       data-panel-id={id}
+      data-panel-position={pos}
       className={containerClass}
       style={{ ...containerStyle, ...layoutStyle }}
       onMouseDown={() => isFloat && bringToFront(id)}
     >
       {/* Title Bar */}
-      <div
-        className={`${styles.titleBar}${isMaximized ? ` ${styles.titleBarStatic}` : ''}`}
-        onMouseDown={onTitleMouseDown}
-      >
-        <span className={styles.panelIcon}>{PanelIcon ? <PanelIcon size={15} strokeWidth={1.9} /> : panel.icon}</span>
-        <span className={styles.titleText}>{panel.title}</span>
-        {id === 'terminal' && <div ref={setTitleSlot} className="cc-terminal-title-slot" onMouseDown={event => event.stopPropagation()} />}
-        <div className={styles.titleActions}>
-          {showReorderButtons && canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
-            <button
-              className={styles.titleBtn}
-              title="Move Up"
-              onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, -1); }}
-            >
-              <ChevronUp size={14} />
-            </button>
+      {!hideTopTitleBar && (
+        <div
+          data-dock-titlebar="true"
+          className={`${styles.titleBar}${isMt5DockPane ? ` ${styles.mt5PaneTitleBar}` : ''}${isMaximized ? ` ${styles.titleBarStatic}` : ''}`}
+          onMouseDown={onTitleMouseDown}
+        >
+          {!isMt5DockPane && (
+            <span className={styles.panelIcon}>{PanelIcon ? <PanelIcon size={15} strokeWidth={1.9} /> : panel.icon}</span>
           )}
-          {showReorderButtons && canMoveDown && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+          <span
+            ref={id === 'market_data' ? setTitleSlot : undefined}
+            className={styles.titleText}
+          >
+            {id === 'market_data' && titleSlot ? null : panel.title}
+          </span>
+          {id === 'terminal' && <div ref={setTitleSlot} className="cc-terminal-title-slot" onMouseDown={event => event.stopPropagation()} />}
+          <div className={styles.titleActions}>
+            {showReorderButtons && canMoveUp && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+              <button
+                className={styles.titleBtn}
+                title="Move Up"
+                onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, -1); }}
+              >
+                <ChevronUp size={14} />
+              </button>
+            )}
+            {showReorderButtons && canMoveDown && pos !== DOCK_POSITIONS.FLOAT && pos !== DOCK_POSITIONS.CENTER && (
+              <button
+                className={styles.titleBtn}
+                title="Move Down"
+                onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, 1); }}
+              >
+                <ChevronDown size={14} />
+              </button>
+            )}
+            {!isMt5DockPane && panel.canMaximize && !isFloat && (
+              <button
+                type="button"
+                className={styles.titleBtn}
+                title={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
+                aria-label={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
+                aria-pressed={isMaximized}
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => togglePanelMaximized(id)}
+              >
+                {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+            )}
+            {!isMt5DockPane && !isFloat && !isMaximized && (
+              <button
+                className={styles.titleBtn}
+                title="Move / Pop out to floating window"
+                onMouseDown={e => {
+                  e.stopPropagation();
+                  if (!isMt5DockPane) {
+                    floatPanel(id);
+                  }
+                  setActiveDockGuideId?.(id);
+                }}
+              >⧉</button>
+            )}
             <button
-              className={styles.titleBtn}
-              title="Move Down"
-              onMouseDown={e => { e.stopPropagation(); movePanelInZone(id, 1); }}
-            >
-              <ChevronDown size={14} />
-            </button>
-          )}
-          {panel.canMaximize && !isFloat && (
-            <button
-              type="button"
-              className={styles.titleBtn}
-              title={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
-              aria-label={isMaximized ? `Restore ${panel.title}` : `Maximize ${panel.title}`}
-              aria-pressed={isMaximized}
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => togglePanelMaximized(id)}
-            >
-              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </button>
-          )}
-          {!isFloat && !isMaximized && (
-            <button
-              className={styles.titleBtn}
-              title="Pop out to floating window"
-              onMouseDown={e => { e.stopPropagation(); floatPanel(id); }}
-            >⧉</button>
-          )}
-          <button
-            className={styles.titleBtn + ' ' + styles.closeBtn}
-            title="Close"
-            onMouseDown={e => { e.stopPropagation(); closePanel(id); }}
-          >✕</button>
+              className={`${styles.titleBtn} ${styles.closeBtn}${isMt5DockPane ? ` ${styles.mt5CloseBtn}` : ''}`}
+              title="Close"
+              onMouseDown={e => { e.stopPropagation(); closePanel(id); }}
+            >{isMt5DockPane ? '×' : '✕'}</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
-      <div className={styles.content}>
-        <DockTitleSlotContext.Provider value={terminalTitle}>{children}</DockTitleSlotContext.Provider>
+      <div className={isCompactToolboxTerminal ? styles.terminalBodyRow : styles.content}>
+        {isCompactToolboxTerminal && (
+          <div
+            className={styles.mt5ToolboxStrip}
+            data-dock-titlebar="true"
+            onMouseDown={onTitleMouseDown}
+            title="Toolbox / Operations Terminal"
+          >
+            <button
+              type="button"
+              className={styles.mt5ToolboxClose}
+              title="Close Toolbox"
+              aria-label="Close Toolbox"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => closePanel(id)}
+            >
+              ×
+            </button>
+            <span className={styles.mt5ToolboxLabel}>Toolbox</span>
+          </div>
+        )}
+        <div className={isCompactToolboxTerminal ? styles.content : undefined} style={isCompactToolboxTerminal ? undefined : { display: 'contents' }}>
+          <DockTitleSlotContext.Provider value={terminalTitle}>{children}</DockTitleSlotContext.Provider>
+        </div>
       </div>
 
       {/* Resize Handles (float only) */}
