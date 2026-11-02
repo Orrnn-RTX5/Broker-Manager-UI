@@ -97,6 +97,7 @@ export const useMultiScreenStore = create((set, get) => ({
           ...item,
           account: nextAccount,
           initialTab: options.initialTab || item.initialTab || 'Overview',
+          minimized: false,
           zOrder: nextAccountWindowZOrder,
         };
       });
@@ -138,6 +139,7 @@ export const useMultiScreenStore = create((set, get) => ({
       account: normalizedAccount,
       source: options.source || 'sidebar',
       initialTab: options.initialTab || 'Overview',
+      minimized: false,
       slotIndex,
       zOrder: nextAccountWindowZOrder,
       openedAt: Date.now(),
@@ -185,6 +187,39 @@ export const useMultiScreenStore = create((set, get) => ({
       openAccountWindows: state.openAccountWindows.map((item) => (
         String(item.login) === login ? { ...item, zOrder: nextAccountWindowZOrder } : item
       )),
+    });
+  },
+
+  setAccountWindowMinimized: (loginOrAccount, minimized) => {
+    const login = extractAccountLogin(loginOrAccount);
+    if (!login) return;
+    const state = get();
+    if (!state.openAccountWindows.some((item) => String(item.login) === login)) return;
+    const nextMinimized = Boolean(minimized);
+    if (!nextMinimized) {
+      nextAccountWindowZOrder += 1;
+    }
+    const nextWindows = state.openAccountWindows.map((item) => (
+      String(item.login) === login
+        ? {
+          ...item,
+          minimized: nextMinimized,
+          zOrder: nextMinimized ? item.zOrder : nextAccountWindowZOrder,
+        }
+        : item
+    ));
+    let nextActiveLogin = state.activeAccountWindowLogin;
+    if (nextMinimized && String(nextActiveLogin) === login) {
+      const topRemaining = [...nextWindows]
+        .filter((item) => !item.minimized)
+        .sort((a, b) => (b.zOrder || 0) - (a.zOrder || 0))[0];
+      nextActiveLogin = topRemaining?.login ?? null;
+    } else if (!nextMinimized) {
+      nextActiveLogin = login;
+    }
+    set({
+      openAccountWindows: nextWindows,
+      activeAccountWindowLogin: nextActiveLogin,
     });
   },
 

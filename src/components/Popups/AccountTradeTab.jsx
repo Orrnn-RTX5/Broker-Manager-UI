@@ -1,25 +1,32 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  AlertCircle,
-  ArrowDown,
-  ArrowUp,
-  Activity,
   CheckCircle2,
-  Edit3,
-  FileText,
-  Minus,
   Plus,
   Trash2,
-  ChevronDown,
 } from 'lucide-react';
 
-
-import useSymbolStore from '../../store/symbolStore';
-import { placeManagerOrder } from '../../services/managerTradeApi';
+import useSymbolStore, { ensureSymbolTickSeries } from '../../store/symbolStore';
+import { placeManagerOrder, placePendingOrder } from '../../services/managerTradeApi';
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 import DepositDialog from './DepositDialog';
 import { COMMENT_PRESETS, normalizeCommentForDefault, detectCommentLanguage } from '../../utils/commentTranslation';
 import { resolveTradeSymbol, buildTradeSymbolList } from '../../utils/accountTradeSymbols';
+import {
+  PENDING_ORDER_TYPE_OPTIONS,
+  alignOrderTypeToSide,
+  formatDialogPrice,
+  isLimitOrderType,
+  isPendingSideValid,
+  isStopLimitOrderType,
+  isStopOrderType,
+  normalizePendingOrderWireType,
+  resolveDialogExpirationTimestamp,
+  resolveSideForOrderType,
+  resolveSymbolDigits,
+  resolveSymbolPriceStep,
+  resolveSymbolStopsLevel,
+  stepPriceFieldValue,
+} from '../../utils/pendingOrderValidation';
 
 const readTradeQuote = (symbol) => {
   const quote = useSymbolStore.getState().symbols[symbol];
@@ -27,7 +34,27 @@ const readTradeQuote = (symbol) => {
   if (!Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) return null;
   return { symbol, bid, ask, time: quote.lastUpdate || Date.now() };
 };
+
+const readSeededTradeTicks = (symbol) => {
+  if (!symbol) return [];
+  const tick = readTradeQuote(symbol);
+  if (!tick) return [];
+  const series = ensureSymbolTickSeries(symbol, useSymbolStore.getState().symbols[symbol], 90);
+  if (Array.isArray(series) && series.length > 0) {
+    return series.map((pt) => ({
+      symbol,
+      bid: Number(pt.bid),
+      ask: Number(pt.ask),
+      time: pt.timestamp || tick.time,
+    }));
+  }
+  return [tick];
+};
+
 const getSymbolDigits = (sym) => {
+  const quote = useSymbolStore.getState().symbols?.[sym];
+  const resolved = resolveSymbolDigits({ quote, fallbackPrice: quote?.bid ?? quote?.ask });
+  if (resolved !== null && Number.isInteger(resolved)) return resolved;
   const s = String(sym || '').toUpperCase();
   if (s.includes('JPY')) return 3;
   if (/(BTC|ETH|LTC|XAU|GOLD|US30|NAS100|SPX500|GER30|UK100|OIL|WTI|BRENT)/.test(s)) return 2;
@@ -45,25 +72,116 @@ const formatPipDiff = (diff, digits) => {
   return pips.toFixed(1);
 };
 
-const PricePipsDisplay = ({ price, digits = 5, colorClass = 'text-white' }) => {
-  const num = Number(price);
-  if (!Number.isFinite(num) || num <= 0) {
-    return <span className={`font-mono font-bold text-[12px] ${colorClass}`}>--</span>;
+const CURRENCY_NAMES = {
+  EUR: 'Euro',
+  USD: 'US Dollar',
+  GBP: 'Great Britain Pound',
+  JPY: 'Japanese Yen',
+  AUD: 'Australian Dollar',
+  CAD: 'Canadian Dollar',
+  CHF: 'Swiss Franc',
+  NZD: 'New Zealand Dollar',
+  SGD: 'Singapore Dollar',
+  HKD: 'Hong Kong Dollar',
+  NOK: 'Norwegian Krone',
+  SEK: 'Swedish Krona',
+  PLN: 'Polish Zloty',
+  TRY: 'Turkish Lira',
+  ZAR: 'South African Rand',
+  MXN: 'Mexican Peso',
+  CNH: 'Chinese Yuan',
+  XAU: 'Gold',
+  XAG: 'Silver',
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  LTC: 'Litecoin',
+  XRP: 'Ripple',
+  ADA: 'Cardano',
+  SOL: 'Solana',
+  DOT: 'Polkadot',
+  BNB: 'Binance Coin',
+};
+
+const getSymbolDisplayLabel = (sym) => {
+  if (!sym) return '';
+  const quote = useSymbolStore.getState().symbols?.[sym];
+  const explicitDesc = quote?.description || quote?.Description || quote?.specification?.description;
+  if (explicitDesc && typeof explicitDesc === 'string' && explicitDesc.trim()) {
+    return `${sym}, ${explicitDesc.trim()}`;
   }
-  const str = num.toFixed(digits);
-  if (digits >= 5 && str.length >= 2) {
-    const main = str.slice(0, -2);
-    const pips = str.slice(-2, -1);
+  const clean = String(sym).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length === 6) {
+    const base = clean.slice(0, 3);
+    const counter = clean.slice(3, 6);
+    if (CURRENCY_NAMES[base] && CURRENCY_NAMES[counter]) {
+      return `${sym}, ${CURRENCY_NAMES[base]} vs ${CURRENCY_NAMES[counter]}`;
+    }
+  }
+  return sym;
+};
+
+const getContractVolumeSummary = (sym, volumeStr) => {
+  const lots = Number(volumeStr);
+  if (!sym || !Number.isFinite(lots) || lots <= 0) return '';
+  const quote = useSymbolStore.getState().symbols?.[sym];
+  const clean = String(sym).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const baseUnit = clean.length >= 6 ? clean.slice(0, 3) : clean;
+  const explicitContract = Number(
+    quote?.contract_size
+    ?? quote?.contractSize
+    ?? quote?.specification?.contract_size
+    ?? quote?.specification?.contractSize
+  );
+  let contractSize = explicitContract;
+  if (!Number.isFinite(contractSize) || contractSize <= 0) {
+    if (clean.startsWith('XAU')) contractSize = 100;
+    else if (clean.startsWith('XAG')) contractSize = 5000;
+    else if (/^(BTC|ETH|LTC|SOL|BNB)/.test(clean)) contractSize = 1;
+    else if (clean.length === 6 && CURRENCY_NAMES[clean.slice(0, 3)]) contractSize = 100000;
+    else contractSize = 100;
+  }
+  const units = lots * contractSize;
+  const formattedUnits = Number.isInteger(units)
+    ? String(units).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+    : units.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${formattedUnits} ${baseUnit}`;
+};
+
+const formatChartDate = (timestampMs) => {
+  const d = new Date(timestampMs || Date.now());
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}.${mm}.${dd}`;
+};
+
+const formatChartTime = (timestampMs, includeSeconds = false) => {
+  const d = new Date(timestampMs || Date.now());
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  if (!includeSeconds) return `${hh}:${mm}`;
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+};
+
+const Mt5DualPricePart = ({ price, digits = 5, side = 'bid' }) => {
+  const num = Number(price);
+  const str = Number.isFinite(num) && num > 0 ? num.toFixed(digits) : (0).toFixed(digits);
+  if (digits >= 3 && str.length >= 2) {
+    const main = str.slice(0, -1);
     const frac = str.slice(-1);
     return (
-      <span className={`font-mono ${colorClass} tracking-tight select-none inline-flex items-baseline`}>
-        <span className="text-[12px] font-bold opacity-90">{main}</span>
-        <span className="text-[13px] font-extrabold">{pips}</span>
-        <span className="text-[10px] font-semibold opacity-85 ml-0.5">{frac}</span>
+      <span className={`mt5-trade-quote-side is-${side}`}>
+        <span className="mt5-trade-quote-main">{main}</span>
+        <span className="mt5-trade-quote-frac">{frac}</span>
       </span>
     );
   }
-  return <span className={`font-mono font-bold text-[12px] ${colorClass} select-none`}>{str}</span>;
+  return (
+    <span className={`mt5-trade-quote-side is-${side}`}>
+      <span className="mt5-trade-quote-main">{str}</span>
+    </span>
+  );
 };
 
 const AccountTradeTab = ({
@@ -94,11 +212,19 @@ const AccountTradeTab = ({
   const [modalSymbol, setModalSymbol] = useState(
     resolveTradeSymbol({ selectedTicketRow, positions, catalog: symbols })
   );
+  const [orderCategory, setOrderCategory] = useState('Market Order');
+  const [pendingOrderType, setPendingOrderType] = useState('Buy Limit');
+  const [selectedSide, setSelectedSide] = useState('buy');
+  const [priceStr, setPriceStr] = useState('');
+  const [stopLimitPriceStr, setStopLimitPriceStr] = useState('');
+  const [expiration, setExpiration] = useState('GTC');
+  const [expirationDateStr, setExpirationDateStr] = useState('');
   const [tradeSL, setTradeSL] = useState('0.00000');
   const [tradeTP, setTradeTP] = useState('0.00000');
   const [tradeVolume, setTradeVolume] = useState('0.01');
   const [tradeComment, setTradeComment] = useState('');
-  const [isAutoPipTrack, setIsAutoPipTrack] = useState(false);
+  const [manualAtPrice, setManualAtPrice] = useState('');
+  const [isAutoPipTrack, setIsAutoPipTrack] = useState(true);
   const [isUpdatingTrade, setIsUpdatingTrade] = useState(false);
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
   const [tradeConfirmation, setTradeConfirmation] = useState(null);
@@ -123,12 +249,7 @@ const AccountTradeTab = ({
   useEffect(() => {
     onUpdateState?.({ canUpdate: canUpdateTrade, busy: isUpdatingTrade || isPlacingTrade });
   }, [canUpdateTrade, isUpdatingTrade, isPlacingTrade, onUpdateState]);
-  const [tickHistory, setTickHistory] = useState(() => { const tick = readTradeQuote(modalSymbol); return tick ? [tick] : []; });
-  const feedError = useSymbolStore((state) => state.feedError);
-  const isConnected = useSymbolStore((state) => state.isConnected);
-  const isQuoteStale = useSymbolStore((state) => state.symbols[modalSymbol]?.isStale !== false);
-
-
+  const [tickHistory, setTickHistory] = useState(() => readSeededTradeTicks(modalSymbol));
 
   const selectedTicketRowRef = useRef(selectedTicketRow);
   useEffect(() => {
@@ -144,6 +265,20 @@ const AccountTradeTab = ({
   const digits = getSymbolDigits(modalSymbol);
   const pipMultiplier = getPipMultiplier(digits);
   const pipSize = 1 / pipMultiplier;
+
+  const liveSymbolQuote = useSymbolStore((state) => state.symbols?.[modalSymbol]);
+  const specDigits = useMemo(
+    () => resolveSymbolDigits({ quote: liveSymbolQuote, fallbackPrice: liveSymbolQuote?.bid ?? liveSymbolQuote?.ask }) ?? digits,
+    [liveSymbolQuote, digits]
+  );
+  const priceStep = useMemo(
+    () => resolveSymbolPriceStep({ quote: liveSymbolQuote, specDigits }),
+    [liveSymbolQuote, specDigits]
+  );
+  const specStopsLevel = useMemo(
+    () => resolveSymbolStopsLevel({ quote: liveSymbolQuote }),
+    [liveSymbolQuote]
+  );
 
   // Sync state when selected position row changes.
   // Deps are stable primitives, never the row object: useLivePositions
@@ -232,6 +367,12 @@ const AccountTradeTab = ({
   // symbol, live feed) the order form is replaced by operator guidance below.
   const hasAnySymbol = availableSymbols.length > 0;
 
+  useEffect(() => {
+    if (!selectedTicketRow && !modalSymbol && availableSymbols.length > 0) {
+      setModalSymbol(availableSymbols[0]);
+    }
+  }, [selectedTicketRow, modalSymbol, availableSymbols]);
+
   // Reuse the shared feed; opening or switching this tab never creates a socket.
   useEffect(() => {
     let previousQuote;
@@ -240,8 +381,17 @@ const AccountTradeTab = ({
       if (!seed && quote === previousQuote) return;
       previousQuote = quote;
       const tick = readTradeQuote(modalSymbol);
-      if (seed) setTickHistory(tick ? [tick] : []);
-      else if (tick) setTickHistory((history) => [...history.filter((item) => item.symbol === modalSymbol).slice(-79), tick]);
+      if (seed) {
+        setTickHistory(readSeededTradeTicks(modalSymbol));
+      } else if (tick) {
+        setTickHistory((history) => {
+          const filtered = history.filter((item) => item.symbol === modalSymbol);
+          if (filtered.length < 15) {
+            return readSeededTradeTicks(modalSymbol);
+          }
+          return [...filtered.slice(-89), tick];
+        });
+      }
       if (!seed && tick && !quote.isStale && state.isConnected && isAutoPipTrackRef.current && selectedTicketRowRef.current) {
         const type = selectedTicketRowRef.current.type;
         const d = getSymbolDigits(modalSymbol);
@@ -260,6 +410,7 @@ const AccountTradeTab = ({
     useSymbolStore.getState().initWebSocket();
     return unsubscribe;
   }, [modalSymbol]);
+
   // Adjust SL / TP values
   const adjustValue = (setter, amount) => {
     isAutoPipTrackRef.current = false;
@@ -281,6 +432,266 @@ const AccountTradeTab = ({
       return v.toFixed(2);
     });
   };
+
+  // Reuse chart geometry while editing order fields.
+  const { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
+    askBadgeY, bidBadgeY, yAxisTicks, askPoints, bidPoints, xAxisTimes } = useMemo(() => {
+    const recentHistory = tickHistory.filter((tick) => tick.symbol === modalSymbol).slice(-85);
+    const latestTick = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
+    const currentAsk = latestTick ? latestTick.ask : 0;
+    const currentBid = latestTick ? latestTick.bid : 0;
+    const spread = Math.max(0.00002, (currentAsk - currentBid) || 0.00002);
+    const spreadPips = (currentAsk && currentBid)
+      ? formatPipDiff(currentAsk - currentBid, digits)
+      : '-';
+
+    const asks = recentHistory.map((t) => t.ask);
+    const bids = recentHistory.map((t) => t.bid);
+    const minVal = recentHistory.length > 0 ? Math.min(...bids) : 0;
+    const maxVal = recentHistory.length > 0 ? Math.max(...asks) : 0;
+
+    const rawRange = maxVal - minVal;
+    const effectiveRange = Math.max(rawRange, spread * 3.2, pipSize * 12);
+    const padding = effectiveRange * 0.14;
+    const minP = minVal - padding;
+    const maxP = maxVal + padding;
+    const finalRange = Math.max(maxP - minP, 0.00001);
+
+    // Stepped MT5 SVG polyline coordinates
+    const getPoints = (isAsk) => {
+      if (recentHistory.length === 0) return '';
+      if (recentHistory.length === 1) {
+        const val = isAsk ? recentHistory[0].ask : recentHistory[0].bid;
+        const y = Math.max(3, Math.min(97, 100 - (((val - minP) / finalRange) * 100)));
+        return `0,${y.toFixed(2)} 100,${y.toFixed(2)}`;
+      }
+      const pts = [];
+      for (let i = 0; i < recentHistory.length; i += 1) {
+        const t = recentHistory[i];
+        const x = (i / (recentHistory.length - 1)) * 100;
+        const val = isAsk ? t.ask : t.bid;
+        const y = Math.max(3, Math.min(97, 100 - (((val - minP) / finalRange) * 100)));
+        if (i > 0) {
+          const prevVal = isAsk ? recentHistory[i - 1].ask : recentHistory[i - 1].bid;
+          const prevY = Math.max(3, Math.min(97, 100 - (((prevVal - minP) / finalRange) * 100)));
+          pts.push(`${x.toFixed(2)},${prevY.toFixed(2)}`);
+        }
+        pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+      }
+      return pts.join(' ');
+    };
+
+    const rawAskY = 100 - (((currentAsk - minP) / finalRange) * 100);
+    const rawBidY = 100 - (((currentBid - minP) / finalRange) * 100);
+    const askY = Math.max(5, Math.min(95, rawAskY));
+    const bidY = Math.max(5, Math.min(95, rawBidY));
+
+    let askBadgeY = askY;
+    let bidBadgeY = bidY;
+    if (Math.abs(askY - bidY) < 8) {
+      askBadgeY = Math.max(4, askY - 4);
+      bidBadgeY = Math.min(96, bidY + 4);
+    }
+
+    const yAxisTicks = [0.84, 0.62, 0.40, 0.18].map((pct) => {
+      const y = 100 - (pct * 100);
+      const val = minP + (finalRange * pct);
+      return { y, val: val.toFixed(digits) };
+    });
+
+    const firstTime = recentHistory[0]?.time || Date.now();
+    const lastTime = latestTick?.time || Date.now();
+    const pickTime = (ratio) => {
+      if (recentHistory.length === 0) return Date.now();
+      const idx = Math.min(recentHistory.length - 1, Math.max(0, Math.floor(ratio * (recentHistory.length - 1))));
+      return recentHistory[idx]?.time || lastTime;
+    };
+    const xAxisTimes = {
+      date: formatChartDate(firstTime),
+      t1: formatChartTime(pickTime(0.32), false),
+      t2: formatChartTime(pickTime(0.56), false),
+      t3: formatChartTime(pickTime(0.78), false),
+      t4: formatChartTime(lastTime, true),
+    };
+
+    return { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
+      askBadgeY, bidBadgeY, yAxisTicks, askPoints: getPoints(true), bidPoints: getPoints(false), xAxisTimes };
+  }, [tickHistory, modalSymbol, digits, pipSize]);
+
+  const isPendingMode = !selectedTicketRow && orderCategory === 'Pending Order';
+
+  const computeValidSeedPriceForPending = (targetOrderType, bidVal = currentBid, askVal = currentAsk) => {
+    const numBid = Number(bidVal) || 0;
+    const numAsk = Number(askVal) || 0;
+    if (numBid <= 0 && numAsk <= 0) return null;
+
+    const impliedSide = resolveSideForOrderType(targetOrderType) ?? selectedSide ?? 'buy';
+    const minDist =
+      specStopsLevel !== null && specStopsLevel > 0 && priceStep !== null
+        ? specStopsLevel * priceStep
+        : 0;
+    const unit =
+      priceStep !== null && priceStep > 0
+        ? priceStep
+        : Math.pow(10, -(specDigits ?? 5));
+    const spread = numAsk > 0 && numBid > 0 && numAsk > numBid ? numAsk - numBid : 0;
+    const offset = Math.max(minDist + unit * 10, spread * 2, (pipSize || unit) * 10, unit * 10);
+
+    const isBelowMarket =
+      (isLimitOrderType(targetOrderType) && impliedSide === 'buy') ||
+      ((isStopOrderType(targetOrderType) || isStopLimitOrderType(targetOrderType)) && impliedSide === 'sell');
+
+    if (isBelowMarket) {
+      const base = numBid > 0 ? numBid : numAsk;
+      return Math.max(unit, base - offset);
+    }
+    const base = numAsk > 0 ? numAsk : numBid;
+    return base + offset;
+  };
+
+  useEffect(() => {
+    if (!isPendingMode) return;
+    if (priceStr.trim() !== '') return;
+    const seedPrice = computeValidSeedPriceForPending(pendingOrderType, currentBid, currentAsk);
+    if (seedPrice !== null && seedPrice > 0) {
+      const formatted = formatDialogPrice(seedPrice, specDigits);
+      setPriceStr(formatted);
+      if (isStopLimitOrderType(pendingOrderType) && stopLimitPriceStr.trim() === '') {
+        setStopLimitPriceStr(formatted);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPendingMode, currentBid, currentAsk, specDigits]);
+
+  const handleOrderCategoryChange = (value) => {
+    if (value.startsWith('pos:')) {
+      const ticketId = value.slice(4);
+      const pos = positions.find((p) => String(p.position || p.ticket) === ticketId);
+      if (pos) handleModifySLTP(pos);
+      return;
+    }
+    setSelectedTicketRow(null);
+    setOrderCategory(value);
+    if (value === 'Pending Order') {
+      const impliedSide = resolveSideForOrderType(pendingOrderType) ?? selectedSide ?? 'buy';
+      const currentValidForTarget = isPendingSideValid({
+        side: impliedSide,
+        orderType: alignOrderTypeToSide(pendingOrderType, impliedSide),
+        volume: tradeVolume || '0.01',
+        price: priceStr,
+        stopLimitPrice: stopLimitPriceStr,
+        stopLoss: tradeSL,
+        takeProfit: tradeTP,
+        bid: currentBid,
+        ask: currentAsk,
+        specDigits,
+        unitStep: priceStep,
+        specStopsLevel,
+        expiration,
+        expirationDateStr,
+      });
+      if (priceStr.trim() === '' || !currentValidForTarget) {
+        const seedPrice = computeValidSeedPriceForPending(pendingOrderType, currentBid, currentAsk);
+        if (seedPrice !== null && seedPrice > 0) {
+          const formatted = formatDialogPrice(seedPrice, specDigits);
+          setPriceStr(formatted);
+          if (isStopLimitOrderType(pendingOrderType) && stopLimitPriceStr.trim() === '') {
+            setStopLimitPriceStr(formatted);
+          }
+        }
+      }
+    }
+  };
+
+  const handlePendingOrderTypeChange = (nextType) => {
+    setPendingOrderType(nextType);
+    const impliedSide = resolveSideForOrderType(nextType);
+    if (impliedSide === 'buy' || impliedSide === 'sell') {
+      setSelectedSide(impliedSide);
+    }
+    const effectiveSide = impliedSide ?? selectedSide ?? 'buy';
+    const currentValidForNext = isPendingSideValid({
+      side: effectiveSide,
+      orderType: alignOrderTypeToSide(nextType, effectiveSide),
+      volume: tradeVolume || '0.01',
+      price: priceStr,
+      stopLimitPrice: stopLimitPriceStr,
+      stopLoss: tradeSL,
+      takeProfit: tradeTP,
+      bid: currentBid,
+      ask: currentAsk,
+      specDigits,
+      unitStep: priceStep,
+      specStopsLevel,
+      expiration,
+      expirationDateStr,
+    });
+    if (priceStr.trim() === '' || !currentValidForNext) {
+      const seedPrice = computeValidSeedPriceForPending(nextType, currentBid, currentAsk);
+      if (seedPrice !== null && seedPrice > 0) {
+        const formatted = formatDialogPrice(seedPrice, specDigits);
+        setPriceStr(formatted);
+        if (isStopLimitOrderType(nextType)) {
+          setStopLimitPriceStr(formatted);
+        }
+      }
+    } else if (isStopLimitOrderType(nextType) && stopLimitPriceStr.trim() === '') {
+      setStopLimitPriceStr(priceStr);
+    }
+  };
+
+  const stepPendingPriceField = (field, direction) => {
+    const anchorPrice = direction > 0 ? (currentAsk || currentBid) : (currentBid || currentAsk);
+    if (field === 'price') {
+      setPriceStr((prev) =>
+        stepPriceFieldValue({
+          currentValueStr: prev,
+          direction,
+          anchorPrice,
+          specDigits,
+          priceStep,
+        })
+      );
+    } else if (field === 'stopLimitPrice') {
+      setStopLimitPriceStr((prev) =>
+        stepPriceFieldValue({
+          currentValueStr: prev,
+          direction,
+          anchorPrice,
+          specDigits,
+          priceStep,
+        })
+      );
+    }
+  };
+
+  const handleBlurPendingPrice = (setter) => (e) => {
+    const raw = String(e.target.value ?? '').trim();
+    const num = Number(raw);
+    if (raw !== '' && Number.isFinite(num) && num >= 0) {
+      setter(formatDialogPrice(num, specDigits));
+    } else {
+      setter('');
+    }
+  };
+
+  const isPendingSideValidForSide = (side) =>
+    isPendingSideValid({
+      side,
+      orderType: alignOrderTypeToSide(pendingOrderType, side),
+      volume: tradeVolume,
+      price: priceStr,
+      stopLimitPrice: stopLimitPriceStr,
+      stopLoss: tradeSL,
+      takeProfit: tradeTP,
+      bid: currentBid,
+      ask: currentAsk,
+      specDigits,
+      unitStep: priceStep,
+      specStopsLevel,
+      expiration,
+      expirationDateStr,
+    });
 
   // Save only edited fields; preserve successful writes if a later request fails.
   const handleUpdateTrade = async () => {
@@ -379,6 +790,59 @@ const AccountTradeTab = ({
       showError('Place manager order', new Error('Stop loss and take profit must be zero or positive prices.'));
       return;
     }
+
+    if (isPendingMode) {
+      if (!isPendingSideValidForSide(operation)) {
+        showError('Place pending order', new Error('Invalid pending order price, SL/TP geometry, or expiration for the selected side.'));
+        return;
+      }
+      const alignedType = alignOrderTypeToSide(pendingOrderType, operation);
+      const wireType = normalizePendingOrderWireType(alignedType, operation);
+      const entryPrice = Number(priceStr);
+      const stopLimitPrice = isStopLimitOrderType(alignedType) ? Number(stopLimitPriceStr) : undefined;
+      const expiryResolved = resolveDialogExpirationTimestamp(expiration, expirationDateStr);
+      if (expiryResolved.invalid) {
+        showError('Place pending order', new Error('Specify a valid future expiration date/time.'));
+        return;
+      }
+
+      const confirmed = await new Promise((resolve) => {
+        tradeConfirmationRef.current = resolve;
+        setTradeConfirmation({
+          operation,
+          message: `Place a ${alignedType.toUpperCase()} pending order for ${lots} lots of ${symbol} at ${entryPrice.toFixed(specDigits)} on account #${login}?`,
+        });
+      });
+      if (!confirmed) return;
+
+      setIsPlacingTrade(true);
+      try {
+        const result = await placePendingOrder({
+          account_login: login,
+          symbol,
+          side: operation,
+          volume: lots,
+          type: wireType,
+          price: entryPrice,
+          ...(stopLimitPrice !== undefined && stopLimitPrice > 0 ? { price_limit: stopLimitPrice } : {}),
+          ...(stoploss > 0 ? { sl: stoploss } : {}),
+          ...(takeprofit > 0 ? { tp: takeprofit } : {}),
+          ...(expiryResolved.seconds !== undefined ? { expiry: expiryResolved.seconds } : {}),
+          comment: normalizeCommentForDefault(tradeComment.trim()),
+        });
+        showResult(`Place ${alignedType} order`, {
+          message: `${alignedType} ${lots} lots of ${symbol} at ${entryPrice.toFixed(specDigits)} submitted successfully for account #${login}. ${typeof result?.message === 'string' ? result.message : ''}`,
+        });
+        setTradeComment('');
+        onTradePlaced?.(result);
+      } catch (err) {
+        showError(`Place ${alignedType} order`, err);
+      } finally {
+        setIsPlacingTrade(false);
+      }
+      return;
+    }
+
     const confirmed = await new Promise((resolve) => {
       tradeConfirmationRef.current = resolve;
       setTradeConfirmation({ operation, message: `Place a ${operation.toUpperCase()} market order for ${lots} lots of ${symbol} on account #${login}?` });
@@ -406,201 +870,171 @@ const AccountTradeTab = ({
     }
   };
 
-  // Reuse chart geometry while editing order fields.
-  const { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
-    askBadgeY, bidBadgeY, yAxisTicks, askPoints, bidPoints } = useMemo(() => {
-    // Chart scaling calculations
-    const recentHistory = tickHistory.filter((tick) => tick.symbol === modalSymbol).slice(-80);
-    const latestTick = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
-    const currentAsk = latestTick ? latestTick.ask : 0;
-    const currentBid = latestTick ? latestTick.bid : 0;
-    const spread = Math.max(0.00002, (currentAsk - currentBid) || 0.00002);
-    const spreadPips = (currentAsk && currentBid)
-      ? formatPipDiff(currentAsk - currentBid, digits)
-      : '-';
+  const liveAtPrice = currentBid > 0
+    ? currentBid.toFixed(digits)
+    : (currentAsk > 0 ? currentAsk.toFixed(digits) : (0).toFixed(digits));
+  const displayedAtPrice = isAutoPipTrack || !manualAtPrice ? liveAtPrice : manualAtPrice;
+  const contractVolumeLabel = getContractVolumeSummary(modalSymbol, tradeVolume);
 
-    const asks = recentHistory.map((t) => t.ask);
-    const bids = recentHistory.map((t) => t.bid);
-    const minVal = recentHistory.length > 0 ? Math.min(...bids) : 0;
-    const maxVal = recentHistory.length > 0 ? Math.max(...asks) : 0;
+  const adjustAtPrice = (direction) => {
+    isAutoPipTrackRef.current = false;
+    setIsAutoPipTrack(false);
+    const base = parseFloat(displayedAtPrice);
+    const next = Number.isNaN(base) ? 0 : Math.max(0, base + direction * pipSize);
+    setManualAtPrice(next.toFixed(digits));
+  };
 
-    const rawRange = maxVal - minVal;
-    // Ensure lines have at least 20% margin from the top and bottom edges
-    const effectiveRange = Math.max(rawRange, spread * 3.5, pipSize * 15);
-    const padding = effectiveRange * 0.20;
-    const minP = minVal - padding;
-    const maxP = maxVal + padding;
-    const finalRange = Math.max(maxP - minP, 0.00001);
-
-    // SVG polyline coordinates
-    const getPoints = (isAsk) => {
-      if (recentHistory.length === 0) return '';
-      if (recentHistory.length === 1) {
-        const val = isAsk ? recentHistory[0].ask : recentHistory[0].bid;
-        const y = Math.max(4, Math.min(96, 100 - (((val - minP) / finalRange) * 100)));
-        return `0,${y.toFixed(1)} 100,${y.toFixed(1)}`;
-      }
-      return recentHistory
-        .map((t, i) => {
-          const x = (i / (recentHistory.length - 1)) * 100;
-          const val = isAsk ? t.ask : t.bid;
-          const y = Math.max(4, Math.min(96, 100 - (((val - minP) / finalRange) * 100)));
-          return `${x.toFixed(1)},${y.toFixed(1)}`;
-        })
-        .join(' ');
-    };
-
-    // Current price line Y coordinates
-    const rawAskY = 100 - (((currentAsk - minP) / finalRange) * 100);
-    const rawBidY = 100 - (((currentBid - minP) / finalRange) * 100);
-    const askY = Math.max(6, Math.min(94, rawAskY));
-    const bidY = Math.max(6, Math.min(94, rawBidY));
-
-    // Badge collision prevention: ensure badges don't overlap on Y-axis
-    let askBadgeY = askY;
-    let bidBadgeY = bidY;
-    if (Math.abs(askY - bidY) < 9) {
-      askBadgeY = Math.max(5, askY - 4.5);
-      bidBadgeY = Math.min(95, bidY + 4.5);
+  const adjustAtPriceByPoints = (pointsDelta) => {
+    const pointUnit = priceStep !== null && priceStep > 0 ? priceStep : Math.pow(10, -digits);
+    if (isPendingMode) {
+      const anchorPrice = pointsDelta >= 0 ? (currentAsk || currentBid) : (currentBid || currentAsk);
+      setPriceStr((prev) => {
+        const parsed = parseFloat(String(prev ?? '').trim());
+        const base = Number.isFinite(parsed) && parsed > 0 ? parsed : (anchorPrice || 0);
+        const next = Math.max(pointUnit, base + pointsDelta * pointUnit);
+        return formatDialogPrice(next, specDigits);
+      });
+      return;
     }
+    isAutoPipTrackRef.current = false;
+    setIsAutoPipTrack(false);
+    const base = parseFloat(displayedAtPrice);
+    const fallback = pointsDelta >= 0 ? (currentAsk || currentBid || 0) : (currentBid || currentAsk || 0);
+    const startVal = Number.isFinite(base) && base > 0 ? base : fallback;
+    const next = Math.max(0, startVal + pointsDelta * pointUnit);
+    setManualAtPrice(next.toFixed(digits));
+  };
+  // Manual point adjustments clear auto-track synchronously (mirror: isAutoPipTrackRef.current = e.target.checked).
 
-    // 5 distinct non-overlapping Y-axis price labels
-    const yAxisTicks = [0.85, 0.65, 0.50, 0.35, 0.15].map((pct) => {
-      const y = 100 - (pct * 100);
-      const val = minP + (finalRange * pct);
-      return { y, val: val.toFixed(digits) };
-    });
-
-    return { recentHistory, currentAsk, currentBid, spreadPips, askY, bidY,
-      askBadgeY, bidBadgeY, yAxisTicks, askPoints: getPoints(true), bidPoints: getPoints(false) };
-  }, [tickHistory, modalSymbol, digits, pipSize]);
+  const pendingHintText = useMemo(() => {
+    if (!isPendingMode) return '';
+    if (!priceStr.trim() || Number(priceStr) <= 0) {
+      return 'Enter a trigger price or use ▲/▼ to seed from live market.';
+    }
+    const explicitSide = resolveSideForOrderType(pendingOrderType);
+    const preferredSide = explicitSide || selectedSide || 'buy';
+    const fallbackSide = preferredSide === 'buy' ? 'sell' : 'buy';
+    const activeValidSide = isPendingSideValidForSide(preferredSide)
+      ? preferredSide
+      : isPendingSideValidForSide(fallbackSide)
+        ? fallbackSide
+        : null;
+    if (activeValidSide) {
+      return `Ready: ${alignOrderTypeToSide(pendingOrderType, activeValidSide)} ${tradeVolume} lots @ ${priceStr}`;
+    }
+    if (isLimitOrderType(pendingOrderType)) {
+      return preferredSide === 'buy'
+        ? `Buy Limit price must be below Ask (${currentAsk ? currentAsk.toFixed(digits) : '--'})`
+        : `Sell Limit price must be above Bid (${currentBid ? currentBid.toFixed(digits) : '--'})`;
+    }
+    if (isStopOrderType(pendingOrderType) || isStopLimitOrderType(pendingOrderType)) {
+      return preferredSide === 'buy'
+        ? `Buy Stop price must be above Ask (${currentAsk ? currentAsk.toFixed(digits) : '--'})`
+        : `Sell Stop price must be below Bid (${currentBid ? currentBid.toFixed(digits) : '--'})`;
+    }
+    return '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPendingMode, priceStr, stopLimitPriceStr, pendingOrderType, selectedSide, tradeVolume, tradeSL, tradeTP, currentBid, currentAsk, digits, expiration, expirationDateStr]);
 
   return (
-    <form id="account-trade-update-form" className="account-trade-workspace" onSubmit={(event) => { event.preventDefault(); handleUpdateTrade(); }}>
+    <form id="account-trade-update-form" className="account-trade-workspace mt5-trade-workspace" onSubmit={(event) => { event.preventDefault(); handleUpdateTrade(); }}>
       {/* ========================================================================= */}
-      {/* LEFT: Professional Tick Chart                                              */}
+      {/* LEFT: Native MT5 Tick Chart                                               */}
       {/* ========================================================================= */}
-      <div className="account-trade-chart w-[340px] shrink-0 border border-[var(--border)] bg-[var(--surface)] rounded-lg flex flex-col relative overflow-hidden shadow-md">
-        {/* Top Chart Header */}
-        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--surface-2)] border-b border-[var(--border)] z-10 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-[12px] text-white tracking-wide font-sans">{modalSymbol}</span>
-            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-blue-400 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded">
-              Tick
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {feedError ? (
-              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
-                <AlertCircle size={11} /> Offline
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] text-blue-400 font-mono font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> {recentHistory.length === 0 ? 'WAITING' : isConnected && !isQuoteStale ? 'LIVE' : 'CACHED'}
-              </span>
-            )}
-            <span className="text-[10px] font-mono font-medium text-gray-300 bg-[var(--surface-2)] border border-[var(--border)] px-1.5 py-0.5 rounded">
-              Spread: {spreadPips}
-            </span>
-          </div>
-        </div>
-
+      <div className="account-trade-chart mt5-trade-chart-box">
         {/* Chart Canvas & Y-Axis Container */}
-        <div className="account-trade-plot flex-1 flex relative overflow-hidden">
-          {/* Main SVG Area */}
-          <div className="flex-1 relative overflow-hidden bg-[var(--surface)]">
-            {/* Background Grid Lines */}
-            <div className="absolute inset-0 pointer-events-none">
+        <div className="account-trade-plot mt5-trade-plot-row">
+          {/* Main SVG Plot Frame */}
+          <div className="mt5-trade-plot-canvas">
+            <span className="mt5-trade-plot-symbol">{modalSymbol || '—'}</span>
+
+            {/* Background Dashed Grid Lines */}
+            <div className="mt5-trade-plot-grid" aria-hidden="true">
               {yAxisTicks.map((tick, i) => (
                 <div
                   key={i}
-                  className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]"
+                  className="mt5-trade-grid-h"
                   style={{ top: `${tick.y}%` }}
                 />
               ))}
-              <div className="absolute top-0 bottom-0 left-1/4 border-l border-dashed border-[var(--border)]" />
-              <div className="absolute top-0 bottom-0 left-2/4 border-l border-dashed border-[var(--border)]" />
-              <div className="absolute top-0 bottom-0 left-3/4 border-l border-dashed border-[var(--border)]" />
+              <div className="mt5-trade-grid-v" style={{ left: '22%' }} />
+              <div className="mt5-trade-grid-v" style={{ left: '46%' }} />
+              <div className="mt5-trade-grid-v" style={{ left: '70%' }} />
+              <div className="mt5-trade-grid-v" style={{ left: '92%' }} />
             </div>
 
-            {/* SVG Tick Curves */}
-            {recentHistory.length > 0 ? (
+            {/* SVG Stepped Tick Curves */}
+            {recentHistory.length > 0 && (
               <svg
-                className="w-full h-full absolute inset-0 pointer-events-none"
+                className="mt5-trade-svg"
                 preserveAspectRatio="none"
                 viewBox="0 0 100 100"
               >
-                {/* Horizontal price tracking lines */}
+                {/* Current Ask Line (Red) */}
                 <line
                   x1="0"
                   y1={askY}
                   x2="100"
                   y2={askY}
                   stroke="var(--danger)"
-                  strokeWidth="0.8"
-                  strokeDasharray="2,2"
-                  opacity="0.5"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.85"
                 />
+                {/* Current Bid Line (Blue) */}
                 <line
                   x1="0"
                   y1={bidY}
                   x2="100"
                   y2={bidY}
-                  stroke="var(--accent)"
-                  strokeWidth="0.8"
-                  strokeDasharray="2,2"
-                  opacity="0.5"
+                  stroke="var(--color-quote-up, var(--accent))"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.85"
                 />
 
                 {/* Polyline Ask (Red) */}
                 <polyline
                   fill="none"
                   stroke="var(--danger)"
-                  strokeWidth="1.5" vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
                   points={askPoints}
                 />
 
                 {/* Polyline Bid (Blue) */}
                 <polyline
                   fill="none"
-                  stroke="var(--accent)"
-                  strokeWidth="1.5" vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  stroke="var(--color-quote-up, var(--accent))"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
                   points={bidPoints}
                 />
               </svg>
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 text-[12px] gap-2">
-                <Activity size={20} className="text-blue-400 animate-pulse" />
-                <span className="font-mono text-[10px] text-gray-400 font-medium">
-                  Waiting for ticks on {modalSymbol}...
-                </span>
-              </div>
             )}
           </div>
 
-          {/* Right Y-Axis Column (Fixed width: 68px) */}
-          <div className="w-[68px] shrink-0 relative bg-[var(--surface)] border-l border-[var(--border)] select-none">
-            {/* 5 Distinct Price Levels */}
+          {/* Right Y-Axis Column */}
+          <div className="mt5-trade-yaxis">
             {yAxisTicks.map((tick, i) => (
               <div
                 key={i}
-                className="absolute right-1 text-[#6b7280] text-[10px] font-mono font-normal text-right pointer-events-none"
-                style={{ top: `${tick.y}%`, transform: 'translateY(-50%)' }}
+                className="mt5-trade-yaxis-tick"
+                style={{ top: `${tick.y}%` }}
               >
-                {tick.val}
+                <span className="mt5-trade-yaxis-mark" />
+                <span className="mt5-trade-yaxis-label">{tick.val}</span>
               </div>
             ))}
 
             {/* Current Ask Badge (Red) */}
             {currentAsk > 0 && (
               <div
-                className="account-trade-price-badge absolute right-1 px-1.5 py-0.5 text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
-                data-side="ask" style={{ top: `${askBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--danger)', color: '#ffffff' }}
+                className="account-trade-price-badge mt5-trade-price-badge"
+                data-side="ask"
+                style={{ top: `${askBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--danger)', color: '#ffffff' }}
               >
                 {currentAsk.toFixed(digits)}
               </div>
@@ -609,8 +1043,9 @@ const AccountTradeTab = ({
             {/* Current Bid Badge (Blue) */}
             {currentBid > 0 && (
               <div
-                className="account-trade-price-badge absolute right-1 px-1.5 py-0.5 text-white text-[10px] font-mono font-bold rounded shadow z-20 pointer-events-none"
-                data-side="bid" style={{ top: `${bidBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--color-quote-up, var(--accent))', color: '#ffffff' }}
+                className="account-trade-price-badge mt5-trade-price-badge"
+                data-side="bid"
+                style={{ top: `${bidBadgeY}%`, transform: 'translateY(-50%)', backgroundColor: 'var(--color-quote-up, var(--accent))', color: '#ffffff' }}
               >
                 {currentBid.toFixed(digits)}
               </div>
@@ -619,465 +1054,507 @@ const AccountTradeTab = ({
         </div>
 
         {/* Bottom Legend Bar */}
-        <div className="account-trade-chart-quotes px-2.5 py-1 bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between text-[10px] font-mono text-gray-400 z-10 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-1 bg-[var(--surface-2)] rounded-sm inline-block" />
-            <span className="font-normal text-[10px]">Ask:</span>
-            <strong className="text-red-400 font-bold text-[12px]">{currentAsk ? currentAsk.toFixed(digits) : '--'}</strong>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-1 bg-[var(--surface-2)] rounded-sm inline-block" />
-            <span className="font-normal text-[10px]">Bid:</span>
-            <strong className="text-blue-400 font-bold text-[12px]">{currentBid ? currentBid.toFixed(digits) : '--'}</strong>
-          </div>
+        <div className="account-trade-chart-quotes mt5-trade-xaxis" title={`Spread: ${spreadPips}`}>
+          <span className="mt5-trade-xaxis-date">{xAxisTimes.date}</span>
+          <span className="mt5-trade-xaxis-time">{xAxisTimes.t1}</span>
+          <span className="mt5-trade-xaxis-time">{xAxisTimes.t2}</span>
+          <span className="mt5-trade-xaxis-time">{xAxisTimes.t3}</span>
+          <span className="mt5-trade-xaxis-time is-last">{xAxisTimes.t4}</span>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* RIGHT: Professional MT5 Order / Position Modifier Panel                   */}
+      {/* RIGHT: Native MT5 Order Form Panel                                        */}
       {/* ========================================================================= */}
-      <div className="account-trade-order flex-1 flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-lg p-2.5 text-[12px] overflow-hidden shadow-md h-full">
+      <div className="account-trade-order mt5-trade-order-panel">
         {hasAnySymbol ? (
-        <>
-        {/* Header Bar */}
-        <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border)] mb-1.5 shrink-0">
-          {selectedTicketRow ? (
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                <Edit3 size={13} />
-              </span>
-              <div>
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block leading-none">
-                  Modify Position
-                </span>
-                <span className="font-mono font-bold text-[12px] text-blue-400 leading-tight">
-                  #{selectedTicketRow.position || selectedTicketRow.ticket}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded bg-gray-500/10 text-gray-300 border border-gray-500/20">
-                <FileText size={13} />
-              </span>
-              <div>
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block leading-none">
-                  Order Parameters
-                </span>
-                <span className="font-bold text-[12px] text-white leading-tight">
-                  Account #{loginId}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Right badges */}
-          <div className="flex items-center gap-1.5">
-            {selectedTicketRow && (
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  selectedTicketRow.type === 'buy'
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}
-              >
-                {selectedTicketRow.type} {selectedTicketRow.volume || selectedTicketRow.lots || ''} Lots
-              </span>
-            )}
-            {positions.length > 1 && (
-              <select
-                value={selectedTicketRow ? (selectedTicketRow.position || selectedTicketRow.ticket) : ''}
-                onChange={(e) => {
-                  const pos = positions.find((p) => String(p.position || p.ticket) === e.target.value);
-                  if (pos) handleModifySLTP(pos);
-                }}
-                className="text-[10px] font-mono font-medium bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 py-0.5 text-gray-300 focus:outline-none cursor-pointer"
-                title="Switch position"
-              >
-                <option value="" disabled>Switch Position</option>
-                {positions.map((p) => (
-                  <option key={p.position || p.ticket} value={p.position || p.ticket}>
-                    #{p.position || p.ticket} ({p.symbol} {p.type})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
-
-        {/* Middle Form: Compact, Clean 2-Column Grid */}
-        <div className="account-trade-form flex-1 flex flex-col py-0 min-h-0">
-          {/* Symbol */}
-          <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">Symbol:</span>
-            <div className="relative">
-              <select
-                value={modalSymbol}
-                onChange={(e) => {
-                  setModalSymbol(e.target.value);
-                  setTickHistory([]);
-                }}
-                className="w-full h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-white font-bold text-[12px] font-mono focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
-              >
-                {availableSymbols.length === 0 && (
-                  <option value="" disabled>
-                    Select symbol…
-                  </option>
-                )}
-                {availableSymbols.map((sym) => (
-                  <option key={sym} value={sym}>
-                    {sym}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={13}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-              />
-            </div>
-          </div>
-
-          {/* Type */}
-          <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">Type:</span>
-            <div className="h-6.5 flex items-center px-2 bg-[var(--surface-2)] border border-[var(--border)] rounded text-gray-200 font-semibold text-[12px] truncate">
-              {selectedTicketRow
-                ? `${selectedTicketRow.type === 'buy' ? 'Buy' : 'Sell'} Position S/L · T/P Modification`
-                : 'Market Order Execution'}
-            </div>
-          </div>
-
-          {/* Volume */}
-          <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">Volume:</span>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-[var(--surface-2)] border border-blue-500/40 rounded overflow-hidden h-6.5">
-                <button
-                  type="button"
-                  onClick={() => adjustVolume(-0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Decrease volume"
-                >
-                  <Minus size={11} />
-                </button>
-                <input
-                  type="text"
-                  value={tradeVolume}
-                  aria-label="Volume"
-                  onChange={(e) => setTradeVolume(e.target.value)}
-                  className="w-14 h-full text-center font-mono font-bold text-blue-400 bg-transparent text-[12px] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => adjustVolume(0.01)}
-                  className="w-6 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Increase volume"
-                >
-                  <Plus size={11} />
-                </button>
-              </div>
-
-              {/* Quick volume presets */}
-              <div className="flex items-center gap-1">
-                {['0.01', '0.05', '0.10', '1.00'].map((vol) => (
-                  <button
-                    key={vol}
-                    type="button"
-                    onClick={() => setTradeVolume(vol)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
-                      tradeVolume === vol
-                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 font-bold'
-                        : 'bg-[var(--surface-2)] text-gray-400 border-[var(--border)] hover:bg-[var(--surface-2)] font-medium'
-                    }`}
-                  >
-                    {vol}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* At Price */}
-          <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">At Price:</span>
-            <div className="flex items-center gap-2.5">
-              <div className="h-6.5 px-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded flex items-center font-mono font-bold text-[12px] text-white">
-                {currentAsk ? currentAsk.toFixed(digits) : 'Market Price'}
-              </div>
-              <label className="flex items-center gap-1.5 text-[10px] text-gray-300 font-normal cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={isAutoPipTrack}
-                  onChange={(e) => { isAutoPipTrackRef.current = e.target.checked; setIsAutoPipTrack(e.target.checked); }}
-                  className="rounded bg-[var(--surface-2)] border-[var(--border)] text-blue-500 focus:ring-0 w-3.5 h-3.5"
-                />
-                <span>Auto-track live ticks</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Stop Loss & Take Profit Cards */}
-          <div className="grid grid-cols-2 gap-2 my-1">
-            {/* Stop Loss Card */}
-            <div className="bg-[var(--surface-2)] border border-red-500/20 rounded-md p-1.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-1">
-                <span className="flex items-center gap-1 text-[10px] font-bold text-red-400">
-                  <ArrowDown size={11} /> Stop Loss
-                </span>
-                <span className="text-[10px] font-mono font-medium text-gray-400">SL</span>
-              </div>
-              <div className="flex items-center bg-[var(--surface-2)] border border-[var(--border)] rounded h-6.5 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeSL, -1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Decrease SL"
-                >
-                  <Minus size={10} />
-                </button>
-                <input
-                  type="text"
-                  value={tradeSL}
-                  aria-label="Stop loss"
-                  onChange={(e) => {
-                    setTradeSL(e.target.value);
-                    isAutoPipTrackRef.current = false;
-                    setIsAutoPipTrack(false);
-                  }}
-                  className="flex-1 h-full text-center font-mono text-[12px] font-bold text-white bg-transparent focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeSL, 1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Increase SL"
-                >
-                  <Plus size={10} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeSL, -5)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-red-400 hover:bg-[var(--surface-2)] transition-colors"
-                >
-                  -5 pips
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeSL, -10)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-red-400 hover:bg-[var(--surface-2)] transition-colors"
-                >
-                  -10 pips
-                </button>
-              </div>
-            </div>
-
-            {/* Take Profit Card */}
-            <div className="bg-[var(--surface-2)] border border-blue-500/20 rounded-md p-1.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-1">
-                <span className="flex items-center gap-1 text-[10px] font-bold text-blue-400">
-                  <ArrowUp size={11} /> Take Profit
-                </span>
-                <span className="text-[10px] font-mono font-medium text-gray-400">TP</span>
-              </div>
-              <div className="flex items-center bg-[var(--surface-2)] border border-[var(--border)] rounded h-6.5 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeTP, -1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Decrease TP"
-                >
-                  <Minus size={10} />
-                </button>
-                <input
-                  type="text"
-                  value={tradeTP}
-                  aria-label="Take profit"
-                  onChange={(e) => {
-                    setTradeTP(e.target.value);
-                    isAutoPipTrackRef.current = false;
-                    setIsAutoPipTrack(false);
-                  }}
-                  className="flex-1 h-full text-center font-mono text-[12px] font-bold text-white bg-transparent focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeTP, 1)}
-                  className="w-5.5 h-full flex items-center justify-center bg-[var(--surface-2)] hover:bg-[var(--surface-2)] text-gray-300 transition-colors"
-                  aria-label="Increase TP"
-                >
-                  <Plus size={10} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between mt-1 pt-1 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeTP, 5)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-blue-400 hover:bg-[var(--surface-2)] transition-colors"
-                >
-                  +5 pips
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustByPips(setTradeTP, 10)}
-                  className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-blue-400 hover:bg-[var(--surface-2)] transition-colors"
-                >
-                  +10 pips
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Comment */}
-          <div className="account-trade-field-row grid items-center gap-2 mb-1">
-            <span className="text-gray-400 text-right font-medium text-[10px]">Comment:</span>
-            <div className="flex flex-col gap-1 w-full">
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  value={tradeComment}
-                  onChange={(e) => setTradeComment(e.target.value)}
-                  placeholder="Order comment (optional)..."
-                  className="flex-1 min-w-0 h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 text-gray-200 text-[12px] font-normal focus:border-blue-500 focus:outline-none placeholder-gray-500"
-                />
+          <div className={`account-trade-form mt5-trade-form ${isPendingMode ? 'is-pending' : ''}`}>
+            {/* Symbol */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label">Symbol:</label>
+              <div className="mt5-trade-control-full">
                 <select
-                  aria-label="Comment presets"
-                  className="h-6.5 bg-[var(--surface-2)] border border-[var(--border)] rounded px-1.5 text-gray-300 text-[11px] focus:outline-none cursor-pointer shrink-0"
-                  value=""
+                  value={modalSymbol}
                   onChange={(e) => {
-                    if (e.target.value) setTradeComment(e.target.value);
+                    setModalSymbol(e.target.value);
+                    setTickHistory([]);
+                    setPriceStr('');
+                    setStopLimitPriceStr('');
                   }}
+                  className="mt5-trade-select"
+                  aria-label="Symbol"
                 >
-                  <option value="">Presets...</option>
-                  {COMMENT_PRESETS.map((p) => (
-                    <option key={p.id} value={p.en}>
-                      {p.en} ({p.zh})
+                  {availableSymbols.length === 0 && (
+                    <option value="" disabled>
+                      Select symbol…
+                    </option>
+                  )}
+                  {availableSymbols.map((sym) => (
+                    <option key={sym} value={sym}>
+                      {getSymbolDisplayLabel(sym)}
                     </option>
                   ))}
                 </select>
               </div>
-              {tradeComment && detectCommentLanguage(tradeComment) === 'zh' && (
-                <span className="text-[10px] text-blue-400 font-mono">
-                  Default EN display: {normalizeCommentForDefault(tradeComment)}
-                </span>
-              )}
             </div>
-          </div>
 
-          <div className="account-trade-prices">
-            <div><span className="text-[10px] text-gray-400">BID</span><PricePipsDisplay price={currentBid} digits={digits} colorClass="text-blue-300" /></div>
-            <div><span className="text-[10px] text-gray-400">ASK</span><PricePipsDisplay price={currentAsk} digits={digits} colorClass="text-red-300" /></div>
-            <span className="account-trade-spread text-[10px] text-gray-400">Spread: {spreadPips} pips</span>
-          </div>
-          {/* Market execution actions */}
-          <div className="grid grid-cols-2 items-center gap-2 my-1 select-none shrink-0">
-            {/* SELL Box */}
-            <button
-              type="button"
-              onClick={() => handlePlaceTrade('sell')}
-              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol}
-              title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : 'Place SELL market order')}
-              className="bg-blue-500/10 border border-blue-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-blue-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <div className="text-[10px] font-extrabold text-blue-400 uppercase tracking-wider mb-0.5">
-                <ArrowDown size={11} className="inline-block mr-1" /> Sell by Market
+            {/* Type (Market Order / Pending Order / Open Positions) */}
+            <div className={`mt5-trade-row ${isPendingMode ? '' : 'mt5-trade-row-spaced'}`}>
+              <label className="mt5-trade-label">Type:</label>
+              <div className="mt5-trade-control-full">
+                <select
+                  value={selectedTicketRow ? `pos:${selectedTicketRow.position || selectedTicketRow.ticket}` : orderCategory}
+                  onChange={(e) => handleOrderCategoryChange(e.target.value)}
+                  className="mt5-trade-select"
+                  aria-label="Order type"
+                >
+                  <option value="Market Order">Market Order</option>
+                  <option value="Pending Order">Pending Order</option>
+                  {positions.map((p) => {
+                    const ticketId = p.position || p.ticket;
+                    return (
+                      <option key={ticketId} value={`pos:${ticketId}`}>
+                        Position #{ticketId} ({String(p.type || '').toUpperCase()} {p.volume || p.lots} {p.symbol})
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
+            </div>
 
-            </button>
+            {/* Pending Order Subtype & Expiration when Pending Order is selected */}
+            {isPendingMode && (
+              <div className="mt5-trade-row">
+                <label className="mt5-trade-label">Order:</label>
+                <div className="mt5-trade-sltp-group">
+                  <select
+                    value={pendingOrderType}
+                    onChange={(e) => handlePendingOrderTypeChange(e.target.value)}
+                    className="mt5-trade-select mt5-trade-select-compact"
+                    aria-label="Pending order type"
+                  >
+                    {PENDING_ORDER_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
 
-            {/* BUY Box */}
-            <button
-              type="button"
-              onClick={() => handlePlaceTrade('buy')}
-              disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol}
-              title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : 'Place BUY market order')}
-              className="bg-red-500/10 border border-red-500/30 rounded-lg py-1 px-2 text-center transition-all hover:bg-red-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <div className="text-[10px] font-extrabold text-red-400 uppercase tracking-wider mb-0.5">
-                <ArrowUp size={11} className="inline-block mr-1" /> Buy by Market
+                  <label className="mt5-trade-label-inline">Expiration:</label>
+                  <select
+                    value={expiration}
+                    onChange={(e) => setExpiration(e.target.value)}
+                    className="mt5-trade-select mt5-trade-select-compact"
+                    aria-label="Expiration"
+                  >
+                    <option value="GTC">GTC</option>
+                    <option value="Today">Today</option>
+                    <option value="Specified">Specified</option>
+                    <option value="Specified day">Specified day</option>
+                  </select>
+                </div>
               </div>
+            )}
 
-            </button>
-          </div>
+            {/* Volume */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label">Volume:</label>
+              <div className="mt5-trade-inline-group">
+                <div className="mt5-trade-spinbox">
+                  <input
+                    type="text"
+                    value={tradeVolume}
+                    aria-label="Volume"
+                    onChange={(e) => setTradeVolume(e.target.value)}
+                    className="mt5-trade-spinbox-input"
+                  />
+                  <div className="mt5-trade-spinbox-btns">
+                    <button
+                      type="button"
+                      onClick={() => adjustVolume(0.01)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Increase volume"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustVolume(-0.01)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Decrease volume"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
+                {contractVolumeLabel && (
+                  <span className="mt5-trade-volume-units">{contractVolumeLabel}</span>
+                )}
+              </div>
+            </div>
 
-          {/* Action Button Section */}
-          {selectedTicketRow ? (
-            <div className="flex items-center gap-2 mt-0.5 shrink-0">
+            {/* Fill Policy (and Specified Date/Time when Pending Order Expiration is Specified) */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label is-disabled">Fill Policy:</label>
+              <div className="mt5-trade-sltp-group">
+                <select
+                  disabled
+                  value="fok"
+                  aria-label="Fill policy"
+                  className="mt5-trade-select mt5-trade-select-compact is-disabled"
+                >
+                  <option value="fok">{isPendingMode ? 'Return' : 'Fill or Kill'}</option>
+                </select>
+
+                {isPendingMode && (expiration === 'Specified' || expiration === 'Specified day') && (
+                  <>
+                    <label className="mt5-trade-label-inline">Expires:</label>
+                    <input
+                      type={expiration === 'Specified day' ? 'date' : 'datetime-local'}
+                      value={expirationDateStr}
+                      onChange={(e) => setExpirationDateStr(e.target.value)}
+                      aria-label="Expiration date"
+                      className="mt5-trade-date-input"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* At Price (Market vs Pending Order Price + Stop Limit Price) */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label">At Price:</label>
+              <div className="mt5-trade-inline-group">
+                {isPendingMode ? (
+                  <>
+                    <div className="mt5-trade-spinbox">
+                      <input
+                        type="text"
+                        value={priceStr}
+                        placeholder={currentAsk ? currentAsk.toFixed(specDigits) : '0.00000'}
+                        aria-label="Pending price"
+                        onChange={(e) => setPriceStr(e.target.value)}
+                        onBlur={handleBlurPendingPrice(setPriceStr)}
+                        className="mt5-trade-spinbox-input"
+                      />
+                      <div className="mt5-trade-spinbox-btns">
+                        <button
+                          type="button"
+                          onClick={() => stepPendingPriceField('price', 1)}
+                          className="mt5-trade-spin-btn"
+                          aria-label="Increase pending price"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => stepPendingPriceField('price', -1)}
+                          className="mt5-trade-spin-btn"
+                          aria-label="Decrease pending price"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+
+                    {isStopLimitOrderType(pendingOrderType) && (
+                      <>
+                        <label className="mt5-trade-label-inline">Stop Limit:</label>
+                        <div className="mt5-trade-spinbox">
+                          <input
+                            type="text"
+                            value={stopLimitPriceStr}
+                            placeholder={currentAsk ? currentAsk.toFixed(specDigits) : '0.00000'}
+                            aria-label="Stop Limit price"
+                            onChange={(e) => setStopLimitPriceStr(e.target.value)}
+                            onBlur={handleBlurPendingPrice(setStopLimitPriceStr)}
+                            className="mt5-trade-spinbox-input"
+                          />
+                          <div className="mt5-trade-spinbox-btns">
+                            <button
+                              type="button"
+                              onClick={() => stepPendingPriceField('stopLimitPrice', 1)}
+                              className="mt5-trade-spin-btn"
+                              aria-label="Increase Stop Limit price"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => stepPendingPriceField('stopLimitPrice', -1)}
+                              className="mt5-trade-spin-btn"
+                              aria-label="Decrease Stop Limit price"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => adjustAtPriceByPoints(10)}
+                      className="mt5-trade-point-btn"
+                      aria-label="Add 10 points to price"
+                      title="Increase At Price by 10 points (+10p)"
+                    >
+                      +10p
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustAtPriceByPoints(-10)}
+                      className="mt5-trade-point-btn"
+                      aria-label="Subtract 10 points from price"
+                      title="Decrease At Price by 10 points (-10p)"
+                    >
+                      -10p
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt5-trade-spinbox">
+                      <input
+                        type="text"
+                        value={displayedAtPrice}
+                        aria-label="At price"
+                        onChange={(e) => {
+                          isAutoPipTrackRef.current = false;
+                          setIsAutoPipTrack(false);
+                          setManualAtPrice(e.target.value);
+                        }}
+                        className="mt5-trade-spinbox-input"
+                      />
+                      <div className="mt5-trade-spinbox-btns">
+                        <button
+                          type="button"
+                          onClick={() => adjustAtPrice(1)}
+                          className="mt5-trade-spin-btn"
+                          aria-label="Increase price"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => adjustAtPrice(-1)}
+                          className="mt5-trade-spin-btn"
+                          aria-label="Decrease price"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => adjustAtPriceByPoints(10)}
+                      className="mt5-trade-point-btn"
+                      aria-label="Add 10 points to price"
+                      title="Increase At Price by 10 points (+10p)"
+                    >
+                      +10p
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustAtPriceByPoints(-10)}
+                      className="mt5-trade-point-btn"
+                      aria-label="Subtract 10 points from price"
+                      title="Decrease At Price by 10 points (-10p)"
+                    >
+                      -10p
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Stop Loss & Take Profit on a single MT5 row */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label">Stop Loss:</label>
+              <div className="mt5-trade-sltp-group">
+                <div className="mt5-trade-spinbox">
+                  <input
+                    type="text"
+                    value={tradeSL}
+                    aria-label="Stop loss"
+                    onChange={(e) => {
+                      setTradeSL(e.target.value);
+                      isAutoPipTrackRef.current = false;
+                      setIsAutoPipTrack(false);
+                    }}
+                    className="mt5-trade-spinbox-input"
+                  />
+                  <div className="mt5-trade-spinbox-btns">
+                    <button
+                      type="button"
+                      onClick={() => adjustByPips(setTradeSL, 1)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Increase SL"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustByPips(setTradeSL, -1)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Decrease SL"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
+
+                <label className="mt5-trade-label-inline">Take Profit:</label>
+                <div className="mt5-trade-spinbox">
+                  <input
+                    type="text"
+                    value={tradeTP}
+                    aria-label="Take profit"
+                    onChange={(e) => {
+                      setTradeTP(e.target.value);
+                      isAutoPipTrackRef.current = false;
+                      setIsAutoPipTrack(false);
+                    }}
+                    className="mt5-trade-spinbox-input"
+                  />
+                  <div className="mt5-trade-spinbox-btns">
+                    <button
+                      type="button"
+                      onClick={() => adjustByPips(setTradeTP, 1)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Increase TP"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustByPips(setTradeTP, -1)}
+                      className="mt5-trade-spin-btn"
+                      aria-label="Decrease TP"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comment */}
+            <div className="mt5-trade-row">
+              <label className="mt5-trade-label">Comment:</label>
+              <div className="mt5-trade-control-full">
+                <div className="mt5-trade-combo">
+                  <input
+                    type="text"
+                    value={tradeComment}
+                    onChange={(e) => setTradeComment(e.target.value)}
+                    aria-label="Comment"
+                    className="mt5-trade-combo-input"
+                  />
+                  <select
+                    aria-label="Comment presets"
+                    className="mt5-trade-combo-select"
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) setTradeComment(e.target.value);
+                    }}
+                  >
+                    <option value="" />
+                    {COMMENT_PRESETS.map((p) => (
+                      <option key={p.id} value={p.en}>
+                        {p.en} ({p.zh})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {tradeComment && detectCommentLanguage(tradeComment) === 'zh' && (
+                  <span className="mt5-trade-comment-hint">
+                    Default EN display: {normalizeCommentForDefault(tradeComment)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Large MT5 Dual Quote Display: 1.12098 / 1.12107 */}
+            <div className="mt5-trade-quote-banner">
+              <Mt5DualPricePart price={currentBid} digits={digits} side="bid" />
+              <span className="mt5-trade-quote-slash">/</span>
+              <Mt5DualPricePart price={currentAsk} digits={digits} side="ask" />
+            </div>
+
+            {/* Execution Buttons: Sell / Buy */}
+            <div className="mt5-trade-action-buttons">
               <button
                 type="button"
-                onClick={() => setSelectedTicketRow(null)}
-                disabled={isUpdatingTrade || isPlacingTrade}
-                className="h-8 px-3 rounded border border-gray-500/50 bg-gray-500/10 hover:bg-gray-500/20 text-gray-300 font-semibold text-[12px] flex items-center gap-1 transition-colors disabled:opacity-50"
-                title="Clear the selected position and prepare a new market order"
+                onClick={() => handlePlaceTrade('sell')}
+                disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol || (isPendingMode && !isPendingSideValidForSide('sell'))}
+                title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : (isPendingMode ? 'Place SELL pending order' : 'Place SELL market order'))}
+                className="mt5-trade-exec-btn is-sell"
               >
-                <Plus size={13} /> New order
-              </button>
-              <button
-                type="button"
-                onClick={handleUpdateTrade}
-                disabled={!canUpdateTrade}
-                title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
-                className="flex-1 h-8 rounded bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-[12px] flex items-center justify-center gap-1.5 shadow-md transition-colors disabled:opacity-50"
-              >
-                <CheckCircle2 size={14} />
-                {isUpdatingTrade
-                  ? 'Modifying…'
-                  : `Modify Position #${selectedTicketRow.position || selectedTicketRow.ticket}`}
+                {isPendingMode
+                  ? `${alignOrderTypeToSide(pendingOrderType, 'sell')} at ${priceStr || '--'}`
+                  : `Sell at ${currentBid ? currentBid.toFixed(digits) : '--'}`}
               </button>
 
-              {canCloseTrades && (
+              <button
+                type="button"
+                onClick={() => handlePlaceTrade('buy')}
+                disabled={Boolean(selectedTicketRow) || isPlacingTrade || !canManipulateTrades || !hasTradeSymbol || (isPendingMode && !isPendingSideValidForSide('buy'))}
+                title={selectedTicketRow ? 'Clear the selected position to place a new order' : (!hasTradeSymbol ? 'Select a symbol before placing an order' : (isPendingMode ? 'Place BUY pending order' : 'Place BUY market order'))}
+                className="mt5-trade-exec-btn is-buy"
+              >
+                {isPendingMode
+                  ? `${alignOrderTypeToSide(pendingOrderType, 'buy')} at ${priceStr || '--'}`
+                  : `Buy at ${currentAsk ? currentAsk.toFixed(digits) : '--'}`}
+              </button>
+            </div>
+
+            {/* Bottom Recessed Status / Position Action Bar */}
+            {selectedTicketRow ? (
+              <div className="mt5-trade-status-bar is-editing">
                 <button
                   type="button"
-                  onClick={() =>
-                    requestTradeClose({ position: selectedTicketRow.position || selectedTicketRow.ticket })
-                  }
-                  disabled={!hasTradeSymbol}
-                  className="h-8 px-3 rounded border border-red-500/50 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-[12px] flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!hasTradeSymbol ? 'Select a symbol before closing' : 'Close Position'}
+                  onClick={() => setSelectedTicketRow(null)}
+                  disabled={isUpdatingTrade || isPlacingTrade}
+                  className="mt5-trade-pos-btn"
+                  title="Clear the selected position and prepare a new market order"
                 >
-                  <Trash2 size={13} /> Close
+                  <Plus size={11} /> New order
                 </button>
-              )}
-            </div>
-          ) : (
-            <div className="mt-0.5 p-1.5 rounded bg-[var(--surface-2)] border border-[var(--border)] shrink-0">
-              {positions.length > 0 ? (
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1 text-gray-400">
-                    <span className="font-medium">Select an open position to modify:</span>
-                    <span className="font-mono text-gray-500">{positions.length} open</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 max-h-[52px] overflow-y-auto custom-scrollbar">
-                    {positions.map((p) => (
-                      <button
-                        key={p.position || p.ticket}
-                        type="button"
-                        onClick={() => handleModifySLTP(p)}
-                        className="px-2 py-0.5 rounded bg-[var(--surface-2)] hover:bg-blue-600/25 border border-[var(--border)] text-[10px] font-mono font-medium text-gray-200 flex items-center gap-1.5 transition-colors"
-                      >
-                        <span
-                          className={`font-bold ${
-                            p.type === 'buy' ? 'text-blue-400' : 'text-red-400'
-                          }`}
-                        >
-                          {p.type?.toUpperCase()}
-                        </span>
-                        <span className="text-gray-300">#{p.position || p.ticket}</span>
-                        <span className="text-gray-400 font-semibold">{p.symbol}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center text-gray-400 py-1 text-[10px] font-normal">
-                  Use the SELL or BUY quote above to place a new market order for account #{loginId}.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        </>
+                <button
+                  type="button"
+                  onClick={handleUpdateTrade}
+                  disabled={!canUpdateTrade}
+                  title={!canManipulateTrades ? TRADE_MUTATION_DENIED_MESSAGE : undefined}
+                  className="mt5-trade-pos-btn is-primary"
+                >
+                  <CheckCircle2 size={11} />
+                  {isUpdatingTrade
+                    ? 'Modifying…'
+                    : `Modify Position #${selectedTicketRow.position || selectedTicketRow.ticket}`}
+                </button>
+                {canCloseTrades && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      requestTradeClose({ position: selectedTicketRow.position || selectedTicketRow.ticket })
+                    }
+                    disabled={!hasTradeSymbol}
+                    className="mt5-trade-pos-btn is-danger"
+                    title={!hasTradeSymbol ? 'Select a symbol before closing' : 'Close Position'}
+                  >
+                    <Trash2 size={11} /> Close
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="mt5-trade-status-bar">
+                {pendingHintText && (
+                  <span className="mt5-trade-status-hint">{pendingHintText}</span>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-1.5 p-4">
             <span className="text-[11px] font-normal text-gray-200">

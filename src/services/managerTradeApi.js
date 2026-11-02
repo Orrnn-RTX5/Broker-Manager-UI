@@ -2,6 +2,8 @@ import { fetchManagerApi } from './managerFetch.js';
 import {
   buildManagerOrderCloseEndpoint,
   buildManagerOrderStatusEndpoint,
+  buildPendingOrdersListEndpoint,
+  buildPendingOrderTicketEndpoint,
   MANAGER_API,
 } from '../config/managerApiContract.js';
 
@@ -142,4 +144,104 @@ export const closeManagerPosition = async (ticket) => {
   return result;
 };
 
-export default { closeManagerPosition, getManagerOrderStatus, placeManagerOrder };
+export const placePendingOrder = async (payload = {}) => {
+  const clientOrderId = payload.client_order_id || createClientOrderId();
+  const accountLogin = Number(payload.account_login ?? payload.login);
+  const symbol = String(payload.symbol || '').trim();
+  const side = String(payload.side || payload.operation || '').toLowerCase();
+  const volume = Number(payload.volume ?? payload.lots);
+  const type = String(payload.type || '').toLowerCase();
+  const price = Number(payload.price);
+
+  const wirePayload = {
+    account_login: accountLogin,
+    client_order_id: clientOrderId,
+    symbol,
+    side,
+    volume,
+    type,
+    price,
+  };
+
+  if (payload.price_limit !== undefined && payload.price_limit !== null && Number(payload.price_limit) > 0) {
+    wirePayload.price_limit = Number(payload.price_limit);
+  }
+  if (payload.sl !== undefined && payload.sl !== null && Number(payload.sl) > 0) {
+    wirePayload.sl = Number(payload.sl);
+  } else if (payload.stoploss !== undefined && payload.stoploss !== null && Number(payload.stoploss) > 0) {
+    wirePayload.sl = Number(payload.stoploss);
+  }
+  if (payload.tp !== undefined && payload.tp !== null && Number(payload.tp) > 0) {
+    wirePayload.tp = Number(payload.tp);
+  } else if (payload.takeprofit !== undefined && payload.takeprofit !== null && Number(payload.takeprofit) > 0) {
+    wirePayload.tp = Number(payload.takeprofit);
+  }
+  if (payload.expiry !== undefined && payload.expiry !== null && Number.isFinite(Number(payload.expiry)) && Number(payload.expiry) > 0) {
+    wirePayload.expiry = Math.floor(Number(payload.expiry));
+  }
+  if (typeof payload.comment === 'string' && payload.comment.trim() !== '') {
+    wirePayload.comment = payload.comment.trim();
+  }
+
+  const response = await fetchManagerApi(MANAGER_API.pendingOrders, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(wirePayload),
+  });
+  const result = await readManagerTradeResponse(response);
+  throwTradeError(result, response, 'Failed to place pending order');
+  return result;
+};
+
+export const modifyPendingOrder = async ({ ticket, account_login, login, price, sl, tp, expiry, comment } = {}) => {
+  const accountLogin = Number(account_login ?? login);
+  const wirePayload = { account_login: accountLogin };
+  if (price !== undefined && price !== null && Number(price) > 0) wirePayload.price = Number(price);
+  if (sl !== undefined && sl !== null && Number(sl) >= 0) wirePayload.sl = Number(sl);
+  if (tp !== undefined && tp !== null && Number(tp) >= 0) wirePayload.tp = Number(tp);
+  if (expiry !== undefined && expiry !== null && Number.isFinite(Number(expiry)) && Number(expiry) > 0) {
+    wirePayload.expiry = Math.floor(Number(expiry));
+  }
+  if (typeof comment === 'string') wirePayload.comment = comment.trim();
+
+  const response = await fetchManagerApi(buildPendingOrderTicketEndpoint(ticket), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(wirePayload),
+  });
+  const result = await readManagerTradeResponse(response);
+  throwTradeError(result, response, 'Failed to modify pending order');
+  return result;
+};
+
+export const cancelPendingOrder = async (ticket, accountLogin) => {
+  const idempotencyKey = createClientOrderId();
+  const response = await fetchManagerApi(buildPendingOrderTicketEndpoint(ticket, accountLogin), {
+    method: 'DELETE',
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+    },
+  });
+  const result = await readManagerTradeResponse(response);
+  throwTradeError(result, response, 'Failed to cancel pending order');
+  return result;
+};
+
+export const fetchPendingOrders = async (accountLogin) => {
+  const response = await fetchManagerApi(buildPendingOrdersListEndpoint(accountLogin), {
+    method: 'GET',
+  });
+  const result = await readManagerTradeResponse(response);
+  throwTradeError(result, response, 'Failed to load pending orders');
+  return Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : (Array.isArray(result?.orders) ? result.orders : []));
+};
+
+export default {
+  closeManagerPosition,
+  getManagerOrderStatus,
+  placeManagerOrder,
+  placePendingOrder,
+  modifyPendingOrder,
+  cancelPendingOrder,
+  fetchPendingOrders,
+};

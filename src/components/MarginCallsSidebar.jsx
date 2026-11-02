@@ -6,6 +6,10 @@ import AccountDetailsModal from './Popups/AccountDetailsModal';
 import AccountsSummaryModal from './Popups/AccountsSummaryModal';
 import AccountRestrictionsModal from './Popups/AccountRestrictionsModal';
 import AccountActionDialog from './Popups/AccountActionDialog';
+import BulkOperationsChargesModal from './Popups/BulkOperationsChargesModal';
+import CheckBalanceDialog from './Popups/CheckBalanceDialog';
+import InternalMailModal from './Popups/InternalMailModal';
+import PushNotificationModal from './Popups/PushNotificationModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
 import { deleteManagerAccount } from '../services/managerAccountApi';
@@ -22,8 +26,10 @@ import { useMultiScreenStore } from '../store/multiScreenStore';
 import { PERMISSIONS } from '../utils/permissions';
 import { TRADING_ACCOUNTS_INITIAL_PARAMS } from '../utils/workspaceQueryOptions';
 import { getSidebarAccountType } from '../utils/sidebarAccountRows';
+import { AccountTypeIcon } from '../features/clients/components/TradingAccountsDataGrid';
 import { useGroupList } from '../hooks/useGroupList';
 import { buildGroupMarginLevels, buildMarginAlerts } from '../features/terminal/terminalAlerts';
+import { copyToClipboard, downloadBlob, rowsToCSV, rowsToJSON, rowsToTSV, stampedFilename } from '../utils/gridUtils';
 
 const ACCOUNT_SEARCH_DEBOUNCE_MS = 300;
 const MIN_ACCOUNT_SEARCH_LENGTH = 2;
@@ -51,6 +57,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const queryClient = useQueryClient();
   const [accountSearch, setAccountSearch] = useState('');
   const [debouncedAccountSearch, setDebouncedAccountSearch] = useState('');
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const openAccountWindows = useMultiScreenStore((state) => state.openAccountWindows);
   const activeAccountWindowLogin = useMultiScreenStore((state) => state.activeAccountWindowLogin);
   const tradingAccountsMounted = useMultiScreenStore((state) => Boolean(state.mountedAccountWindowHosts?.tradingAccounts));
@@ -63,7 +70,16 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   const [blockedUsers, setBlockedUsers] = useState({});
   const [restrictLogin, setRestrictLogin] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
+  const [bulkChargesAccounts, setBulkChargesAccounts] = useState(null);
+  const [checkBalanceAccounts, setCheckBalanceAccounts] = useState(null);
+  const [mailAccounts, setMailAccounts] = useState(null);
+  const [notificationAccounts, setNotificationAccounts] = useState(null);
   const [selectedLogin, setSelectedLogin] = useState(null);
+  const [autoScroll, setAutoScroll] = useState(false);
+  const [autoArrange, setAutoArrange] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [hiddenColumns, setHiddenColumns] = useState(() => new Set());
+  const searchInputRef = useRef(null);
   const prefetchTimerRef = useRef(null);
   const lastTapRef = useRef({ login: null, time: 0 });
 
@@ -190,6 +206,15 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
     return map;
   }, [groups]);
 
+  const groupRecordByNameMap = useMemo(() => {
+    const map = new Map();
+    for (const grp of Array.isArray(groups) ? groups : []) {
+      const grpName = String(grp?.name ?? grp?.Name ?? grp?.group ?? grp?.Group ?? '').trim();
+      if (grpName) map.set(grpName.toLowerCase(), grp);
+    }
+    return map;
+  }, [groups]);
+
   const accounts = useMemo(() => {
     const detailsByLogin = new Map(balanceDetails.map((account) => [String(account.login), account]));
     return baseAccounts.map((account) => {
@@ -257,9 +282,11 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   };
 
   const handleMenuAction = (action, acc) => {
-    const login = typeof acc === 'object' ? acc.login : acc;
+    const login = typeof acc === 'object' ? acc?.login : acc;
 
-    if (action === 'summary') {
+    if (action === 'new-account') {
+      openAccountScreen();
+    } else if (action === 'summary') {
       setSummaryAccount({ login, row: typeof acc === 'object' ? acc : undefined });
     } else if (action === 'details') {
       setSelectedLogin(String(login));
@@ -268,6 +295,28 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         source: 'sidebar',
         initialTab: 'Overview',
       });
+    } else if (action === 'charges') {
+      setBulkChargesAccounts(acc ? [acc] : []);
+    } else if (action === 'balance') {
+      setCheckBalanceAccounts(acc ? [acc] : []);
+    } else if (action === 'fix-balance') {
+      setSelectedLogin(String(login));
+      warmAccount(acc);
+      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+        source: 'sidebar',
+        initialTab: 'Balance',
+      });
+    } else if (action === 'fix-personal-data') {
+      setSelectedLogin(String(login));
+      warmAccount(acc);
+      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+        source: 'sidebar',
+        initialTab: 'Personal',
+      });
+    } else if (action === 'mail') {
+      setMailAccounts(acc ? [acc] : []);
+    } else if (action === 'notification') {
+      setNotificationAccounts(acc ? [acc] : []);
     } else if (action === 'restrictions') {
       if (!canOpenRestrictions) {
         showResult.error('Your role does not have permission to change account restrictions or trade overrides.');
@@ -280,6 +329,25 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         return;
       }
       setPendingAction({ action, account: acc });
+    } else if (action === 'find') {
+      searchInputRef.current?.focus();
+    } else if (action === 'clear-filter') {
+      setAccountSearch('');
+      setDebouncedAccountSearch('');
+    } else if (action === 'filter-group' && typeof acc === 'string') {
+      setAccountSearch(acc);
+      setDebouncedAccountSearch(acc);
+    } else if (action === 'copy-logins') {
+      const text = login ? String(login) : accounts.map((a) => (typeof a === 'object' ? a.login : a)).join('\n');
+      void copyToClipboard(text).then(() => showResult.success('Copied login(s) to clipboard.'));
+    } else if (action === 'copy-csv' || action === 'copy-tsv' || action === 'copy-json') {
+      const cols = [{ key: 'login', label: 'Login' }, { key: 'balance', label: 'Balance' }];
+      const target = acc && typeof acc === 'object' ? [acc] : accounts;
+      const text = action === 'copy-json' ? rowsToJSON(target, cols) : action === 'copy-tsv' ? rowsToTSV(target, cols) : rowsToCSV(target, cols);
+      void copyToClipboard(text).then(() => showResult.success(`Copied ${target.length} account(s).`));
+    } else if (action === 'export') {
+      const cols = [{ key: 'login', label: 'Login' }, { key: 'balance', label: 'Balance' }];
+      downloadBlob(rowsToCSV(accounts, cols), stampedFilename('accounts', 'csv'));
     }
   };
 
@@ -315,6 +383,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
               <input
+                ref={searchInputRef}
                 value={accountSearch}
                 onChange={handleSearchChange}
                 onKeyDown={(event) => {
@@ -422,7 +491,16 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
                         className="accounts-sidebar-login"
                         style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}
                       >
-                        <span className="tabular font-mono">{login}</span>
+                        <span className="trading-accounts-login-wrap">
+                          <AccountTypeIcon
+                            group={isPrimitive ? '' : (acc?.group ?? acc?.Group)}
+                            row={isPrimitive ? null : acc}
+                            groupRecord={!isPrimitive && (acc?.group ?? acc?.Group)
+                              ? groupRecordByNameMap.get(String(acc.group ?? acc.Group).trim().toLowerCase()) || null
+                              : null}
+                          />
+                          <span className="tabular font-mono">{login}</span>
+                        </span>
                       </td>
                      
                       <td className="accounts-sidebar-balance tabular font-mono" style={{ textAlign: 'right', color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}>
@@ -469,17 +547,64 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
 
       {pendingAction && <AccountActionDialog {...pendingAction} onClose={() => setPendingAction(null)} onConfirm={performAccountAction} />}
 
+      {bulkChargesAccounts && (
+        <BulkOperationsChargesModal
+          accounts={bulkChargesAccounts}
+          groups={groups}
+          canEditAccounts={canManageAccounts}
+          onOpenAccountDetails={(acc) => handleMenuAction('details', acc)}
+          onClose={() => setBulkChargesAccounts(null)}
+          onSuccess={handleRefresh}
+        />
+      )}
+
+      {checkBalanceAccounts && (
+        <CheckBalanceDialog
+          accounts={checkBalanceAccounts}
+          onClose={() => setCheckBalanceAccounts(null)}
+          onBalancesChecked={() => handleRefresh()}
+        />
+      )}
+
+      {mailAccounts && (
+        <InternalMailModal
+          accounts={mailAccounts}
+          onClose={() => setMailAccounts(null)}
+        />
+      )}
+
+      {notificationAccounts && (
+        <PushNotificationModal
+          accounts={notificationAccounts}
+          onClose={() => setNotificationAccounts(null)}
+        />
+      )}
+
       {contextMenu && (
         <SidebarContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
           account={contextMenu.account}
+          rows={accounts}
           onClose={() => setContextMenu(null)}
           onAction={handleMenuAction}
           onIntent={handleMenuIntent}
           canManageAccounts={canManageAccounts}
           canManageRestrictions={canOpenRestrictions}
           isBlocked={blockedUsers[typeof contextMenu.account === 'object' ? contextMenu.account.login : contextMenu.account]}
+          autoScroll={autoScroll}
+          autoArrange={autoArrange}
+          showGrid={showGrid}
+          hiddenColumns={hiddenColumns}
+          onToggleAutoScroll={() => setAutoScroll((prev) => !prev)}
+          onToggleAutoArrange={() => setAutoArrange((prev) => !prev)}
+          onToggleGrid={() => setShowGrid((prev) => !prev)}
+          onToggleColumn={(key) => setHiddenColumns((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else if (next.size < 1) next.add(key);
+            return next;
+          })}
         />
       )}
     </div>

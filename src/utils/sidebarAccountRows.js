@@ -76,6 +76,44 @@ export const getSidebarAccountType = (account = {}) => {
   return /demo/i.test(group) ? 'demo' : 'real';
 };
 
+export const getAccountVisualType = (groupOrAccount, groupRecord = null) => {
+  const rawGroup = typeof groupOrAccount === 'object' && groupOrAccount !== null
+    ? String(
+      groupOrAccount.group
+      ?? groupOrAccount.Group
+      ?? groupOrAccount.accountGroup
+      ?? groupOrAccount.AccountGroup
+      ?? groupOrAccount.raw?.Group
+      ?? groupOrAccount.raw?.group
+      ?? ''
+    ).trim()
+    : String(groupOrAccount ?? '').trim();
+
+  const rawType = String(
+    (typeof groupOrAccount === 'object' && groupOrAccount !== null
+      ? (groupOrAccount.accountType ?? groupOrAccount.account_type ?? groupOrAccount.type ?? groupOrAccount.Type ?? '')
+      : '')
+    || groupRecord?.accountType
+    || groupRecord?.account_type
+    || groupRecord?.type
+    || groupRecord?.Type
+    || ''
+  ).trim();
+
+  if (/contest/i.test(rawGroup) || /contest/i.test(rawType)) {
+    return 'contest';
+  }
+  if (
+    /demo/i.test(rawGroup)
+    || /demo/i.test(rawType)
+    || groupRecord?.demo === true
+    || (typeof groupOrAccount === 'object' && groupOrAccount?.demo === true)
+  ) {
+    return 'demo';
+  }
+  return 'real';
+};
+
 export const normalizeSidebarAccountPage = (page) => {
   if (!page || !Array.isArray(page.rows)) return undefined;
   const normalizedRows = page.rows

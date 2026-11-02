@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAccount, getSidebarAccountType, normalizeSidebarAccountPage } from './sidebarAccountRows.js';
+import {
+  normalizeAccount,
+  getSidebarAccountType,
+  getAccountVisualType,
+  normalizeSidebarAccountPage,
+} from './sidebarAccountRows.js';
 
 test('mixed sidebar accounts are separated by their normalized server group', () => {
   const accounts = [
@@ -12,6 +17,25 @@ test('mixed sidebar accounts are separated by their normalized server group', ()
   assert.deepEqual(accounts.filter(a => getSidebarAccountType(a) === 'demo').map(a => a.login), ['200001', '200003']);
   assert.deepEqual(accounts.filter(a => getSidebarAccountType(a) === 'real').map(a => a.login), ['200002']);
   assert.equal(getSidebarAccountType(accounts[3]), null);
+});
+
+test('getAccountVisualType classifies demo, real, and contest accounts accurately', () => {
+  // Demo accounts -> 'demo' (green)
+  assert.equal(getAccountVisualType('Yopips/demo'), 'demo');
+  assert.equal(getAccountVisualType('Ormn/demo-std'), 'demo');
+  assert.equal(getAccountVisualType('Auj/demo'), 'demo');
+  assert.equal(getAccountVisualType({ login: 200012, group: 'Yopips/demo' }), 'demo');
+
+  // Real accounts -> 'real' (yellow)
+  assert.equal(getAccountVisualType('Auj/real'), 'real');
+  assert.equal(getAccountVisualType('ARSHAD-0'), 'real');
+  assert.equal(getAccountVisualType({ login: 200027, group: 'ARSHAD-0' }), 'real');
+
+  // Contest accounts -> 'contest' (blue)
+  assert.equal(getAccountVisualType('contest\\arena-01'), 'contest');
+  assert.equal(getAccountVisualType('Yopips/contest'), 'contest');
+  assert.equal(getAccountVisualType({ login: 200050, group: 'Arena/Phase1', accountType: 'Contest' }), 'contest');
+  assert.equal(getAccountVisualType({ login: 200051, group: 'Arena/Phase1' }, { accountType: 'contest' }), 'contest');
 });
 
 test('a cached account gains its type when account details arrive', () => {

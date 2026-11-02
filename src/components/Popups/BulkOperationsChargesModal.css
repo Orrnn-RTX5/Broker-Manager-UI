@@ -1,0 +1,446 @@
+#root .bulk-ops-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  background: transparent;
+  pointer-events: none;
+}
+
+#root .bulk-ops-window {
+  position: fixed;
+  z-index: 10051;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: #1c1e22 !important;
+  border: 1px solid #383c44;
+  border-radius: 6px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  color: #e6e8ec;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  overflow: hidden;
+}
+
+#root .bulk-ops-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px 0 12px;
+  background: #1c1e22;
+  border-bottom: 1px solid #282b32;
+  cursor: move;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-title-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#root .bulk-ops-title-text {
+  color: #e6e8ec;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+#root .bulk-ops-window.is-inactive-window .bulk-ops-title-text,
+#root .bulk-ops-window.is-inactive-window .bulk-ops-title-btn {
+  color: #7d8592;
+}
+
+#root .bulk-ops-window.is-inactive-window .bulk-ops-title-left svg {
+  opacity: 0.72;
+}
+
+#root .bulk-ops-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#root .bulk-ops-title-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+#root .bulk-ops-title-btn:hover {
+  background: #2d3139;
+  color: #ffffff;
+}
+
+#root .bulk-ops-title-btn.is-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+#root .bulk-ops-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 10px;
+  gap: 10px;
+}
+
+#root .bulk-ops-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+#root .bulk-ops-label {
+  width: 72px;
+  text-align: right;
+  color: #c9ced6;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-select,
+#root .bulk-ops-input {
+  height: 24px;
+  padding: 2px 8px;
+  background: #16181d;
+  border: 1px solid #3f444e;
+  border-radius: 3px;
+  color: #e6e8ec;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+#root .bulk-ops-select:hover,
+#root .bulk-ops-input:hover {
+  border-color: #525866;
+}
+
+#root .bulk-ops-select:focus,
+#root .bulk-ops-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+}
+
+#root .bulk-ops-select {
+  width: 220px;
+}
+
+#root .bulk-ops-operation-dropdown {
+  position: relative;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-operation-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 24px;
+  padding: 2px 8px;
+  background: #23262d;
+  border: 1px solid #3f444e;
+  border-radius: 3px;
+  color: #e6e8ec;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+#root .bulk-ops-operation-trigger:hover:not(:disabled),
+#root .bulk-ops-operation-trigger.is-open {
+  background: #2c3039;
+  border-color: #525866;
+}
+
+#root .bulk-ops-operation-trigger:focus-visible {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+}
+
+#root .bulk-ops-operation-chevron {
+  width: 10px;
+  height: 10px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-operation-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  background: #1c1e22;
+  border: 1px solid #383c44;
+  border-radius: 4px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.58);
+}
+
+#root .bulk-ops-operation-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 21px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: #e6e8ec;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#root .bulk-ops-operation-option.is-active,
+#root .bulk-ops-operation-option:hover {
+  background: #1b65b8;
+  color: #ffffff;
+}
+
+#root .bulk-ops-amount-input {
+  width: 172px;
+  font-variant-numeric: tabular-nums;
+}
+
+#root .bulk-ops-ccy-input {
+  width: 44px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#root .bulk-ops-comment-input {
+  width: 460px;
+  max-width: calc(100% - 84px);
+}
+
+#root .bulk-ops-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 24px;
+  padding: 0 12px;
+  background: #252830;
+  border: 1px solid #3f444e;
+  border-radius: 3px;
+  color: #e6e8ec;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+#root .bulk-ops-btn:hover:not(:disabled) {
+  background: #2f333d;
+  border-color: #555c69;
+  color: #ffffff;
+}
+
+#root .bulk-ops-btn:disabled {
+  background: #1f2228;
+  border-color: #32363e;
+  color: #6b7280;
+  cursor: default;
+}
+
+#root .bulk-ops-btn.is-primary-outline {
+  border-color: #4b5563;
+}
+
+#root .bulk-ops-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 80px;
+  min-height: 20px;
+  color: #c9ced6;
+  cursor: pointer;
+}
+
+#root .bulk-ops-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
+#root .bulk-ops-rates-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 80px;
+  padding: 5px 10px;
+  background: #16181d;
+  border: 1px solid #32363e;
+  border-radius: 3px;
+  color: #c9ced6;
+  font-size: 11px;
+}
+
+#root .bulk-ops-table-container {
+  flex: 1;
+  min-height: 150px;
+  background: #16181d;
+  border: 1px solid #363a42;
+  border-radius: 4px;
+  overflow: auto;
+}
+
+#root .bulk-ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+  color: #e6e8ec;
+}
+
+#root .bulk-ops-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 24px;
+  padding: 4px 10px;
+  background: #1d2026;
+  border-right: 1px solid #2b2f37;
+  border-bottom: 1px solid #2e323b;
+  color: #b8bec8;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#root .bulk-ops-table thead th:last-child {
+  border-right: 0;
+}
+
+#root .bulk-ops-table thead th.is-right,
+#root .bulk-ops-table tbody td.is-right {
+  text-align: left;
+}
+
+#root .bulk-ops-table tbody tr {
+  height: 24px;
+  cursor: pointer;
+  transition: background-color 90ms ease;
+}
+
+#root .bulk-ops-table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+#root .bulk-ops-table tbody tr.is-selected {
+  background: #0d4b85;
+  color: #ffffff;
+}
+
+#root .bulk-ops-table tbody td {
+  height: 24px;
+  padding: 4px 10px;
+  border-right: 1px solid #24272e;
+  border-bottom: 1px solid #24272e;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+#root .bulk-ops-table tbody td:last-child {
+  border-right: 0;
+}
+
+#root .bulk-ops-login-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+#root .bulk-ops-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+#root .bulk-ops-status {
+  color: #a1a1aa;
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#root .bulk-ops-status.is-error {
+  color: #f87171;
+}
+
+#root .bulk-ops-status.is-success {
+  color: #4ade80;
+}
+
+#root .bulk-ops-footer-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-right: 10px;
+}
+
+#root .bulk-ops-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  color: #71717a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -6,6 +6,7 @@ export const MANAGER_API = Object.freeze({
   refresh: '/api/v1/manager/auth/refresh',
   accounts: '/api/v1/manager/accounts',
   orders: '/api/v1/manager/orders',
+  pendingOrders: '/api/v2/orders/pending',
   transactionDeposit: '/api/v1/manager/transactions/deposit',
   transactionWithdraw: '/api/v1/manager/transactions/withdraw',
   transactionCredit: '/api/v1/manager/transactions/credit',
@@ -36,6 +37,17 @@ export const buildManagerOrderCloseEndpoint = (ticket) =>
 
 export const buildManagerOrderStatusEndpoint = (login, clientOrderId) =>
   `${buildManagerAccountEndpoint(login)}/orders/by-client-id/${encodePathSegment(clientOrderId, 'Client order ID')}`;
+
+export const buildPendingOrderTicketEndpoint = (ticket, accountLogin) => {
+  const base = `${MANAGER_API.pendingOrders}/${encodePathSegment(ticket, 'Pending order ticket')}`;
+  if (accountLogin !== undefined && accountLogin !== null && String(accountLogin).trim() !== '') {
+    return `${base}?account_login=${encodePathSegment(accountLogin, 'Account login')}`;
+  }
+  return base;
+};
+
+export const buildPendingOrdersListEndpoint = (accountLogin) =>
+  `${MANAGER_API.pendingOrders}?account_login=${encodePathSegment(accountLogin, 'Account login')}`;
 
 const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

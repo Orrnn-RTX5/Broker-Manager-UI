@@ -520,6 +520,9 @@
 .groups-folder-mark { display: block; width: 14px; height: 14px; }
 .groups-folder-mark path { fill: #e2b340; stroke: #8d6a12; stroke-width: 0.75; }
 .groups-account-mark { display: block; width: 13px; height: 13px; color: #8ea0b5; }
+.groups-account-mark.is-demo { color: #22c55e; }
+.groups-account-mark.is-real { color: #facc15; }
+.groups-account-mark.is-contest { color: #3b82f6; }
 .groups-account-mark circle,
 .groups-account-mark path { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; }
 .cc-navigator .cc-tree-node .groups-account-mark { color: var(--text-3); }

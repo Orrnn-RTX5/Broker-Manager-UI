@@ -9,22 +9,27 @@
   pointer-events: none;
 }
 #root .account-details-window {
-  border: 1px solid #48484d;
+  border: 1px solid #383c44 !important;
   border-radius: 6px !important;
-  background: #1f1f22 !important;
-  box-shadow: 0 16px 40px rgb(0 0 0 / .55);
+  background: #1c1e22 !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.03) inset !important;
+  font-family: 'Segoe UI', Tahoma, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 #root .account-details-window.is-active-window {
-  border-color: color-mix(in srgb, #3b82f6 55%, #48484d);
+  border-color: #434853 !important;
 }
 #root .account-details-window.is-docked {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 14px 36px rgb(0 0 0 / .42);
 }
 #root .account-details-titlebar {
-  min-height: 32px;
-  padding: 0 10px;
-  background: #1f1f22 !important;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px 0 12px;
+  background: #1c1e22 !important;
   border-bottom: none !important;
 }
 #root .account-details-title-user-icon {
@@ -34,70 +39,87 @@
   color: #22c55e !important;
 }
 #root .account-details-title-user-icon.is-real {
-  color: #d9822b !important;
+  color: #facc15 !important;
+}
+#root .account-details-title-user-icon.is-contest {
+  color: #3b82f6 !important;
 }
 #root#root#root#root#root#root .account-details-window .account-details-title {
-  color: #a1a1aa !important;
+  color: #e6e8ec !important;
+  font-size: 12px !important;
   font-weight: 400 !important;
 }
-#root .account-details-dock-controls {
+#root .account-details-dock-controls,
+#root .account-details-controls-sep {
+  display: none !important;
+}
+#root .account-details-window-controls {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
-#root .account-details-dock-controls button.is-active {
-  background: var(--accent-soft) !important;
-  color: var(--accent-text) !important;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)) !important;
+#root .account-details-window-controls button {
+  width: 26px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  border-radius: 3px !important;
+  color: #9ca3af !important;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-#root .account-details-controls-sep {
-  width: 1px;
-  height: 14px;
-  margin: 0 4px;
-  background: var(--border);
-  flex-shrink: 0;
+#root .account-details-window-controls button:hover {
+  background: #2d3139 !important;
+  color: #ffffff !important;
+}
+#root .account-details-window-controls button.is-close:hover {
+  background: #c42b1c !important;
+  color: #ffffff !important;
 }
 #root .account-details-tabs {
   flex: 0 0 auto;
   min-height: 28px;
-  padding: 0 10px;
-  gap: 2px;
+  height: 28px;
+  padding: 0 12px;
+  gap: 4px;
   overflow-x: auto;
-  background: #1f1f22 !important;
-  border-bottom: none !important;
+  background: #1c1e22 !important;
+  border-bottom: 1px solid #282b32 !important;
 }
 #root .account-details-window .account-details-tab {
   flex: 0 0 auto;
-  height: 26px;
-  padding: 0 7px;
+  height: 27px;
+  padding: 0 8px;
   border: 0 !important;
   border-bottom: 2px solid transparent !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #e4e4e7 !important;
+  color: #b8bec8 !important;
   box-shadow: none !important;
+  outline: none !important;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
 }
 #root .account-details-window .account-details-tab:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.04) !important;
+  color: #f4f5f7 !important;
+  background: rgba(255, 255, 255, 0.035) !important;
 }
-#root .account-details-window .account-details-tab.is-active,
-#root .account-details-window .account-details-tab:focus-visible {
+#root#root .account-details-window .account-details-tab.is-active,
+#root#root .account-details-window .account-details-tab:focus,
+#root#root .account-details-window .account-details-tab:focus-visible {
   border: 0 !important;
-  border-bottom: 2px solid #3b82f6 !important;
+  border-bottom: 2px solid #2b88d8 !important;
   background: transparent !important;
   color: #ffffff !important;
   outline: none !important;
+  box-shadow: none !important;
 }
 #root .account-details-content {
   min-height: 0;
   gap: 10px;
   padding: 10px 14px;
-  background: #1f1f22 !important;
+  background: #1c1e22 !important;
 }
 #root .account-details-content.is-overview {
   padding: 10px 14px 6px;
-  background: #1f1f22 !important;
+  background: #1c1e22 !important;
 }
 
 /* MT5 Overview Layout */
@@ -111,21 +133,21 @@
 #root .account-overview-mt5 .account-overview-summary {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   padding: 2px 2px 4px;
   border-bottom: none !important;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-headline,
 #root#root#root#root#root#root .account-details-window .account-overview-headline * {
-  font-size: 16px !important;
+  font-size: 15px !important;
   font-weight: 400 !important;
   line-height: 1.3;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-headline {
-  color: #f4f4f5 !important;
+  color: #eef0f4 !important;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-link {
-  color: #3b82f6 !important;
+  color: #3b9eff !important;
   text-decoration: none;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-link.is-underlined,
@@ -138,22 +160,24 @@
   gap: 3px;
 }
 #root .account-overview-meta-line {
-  color: #e4e4e7 !important;
-  line-height: 1.35;
+  color: #c9ced6 !important;
+  line-height: 1.4;
 }
 #root .account-overview-meta-line.account-overview-timestamps {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-top: 0 !important;
-  color: #e4e4e7 !important;
+  color: #9ca3af !important;
 }
 
 /* Bordered Positions & Summary Box */
 #root .account-overview-positions-box {
-  border: 1px solid #9ca3af;
-  background: #141416;
+  border: 1px solid #363a42;
+  border-radius: 4px;
+  background: #16181d;
   min-height: 110px;
+  overflow: hidden;
 }
 #root .account-overview-table-scroll {
   display: flex;
@@ -180,14 +204,15 @@
   text-align: right;
 }
 #root .account-overview-pos-header {
-  background: #1c1c1f;
-  border-bottom: 1px solid #323236;
-  color: #e4e4e7;
+  background: #1d2026;
+  border-bottom: 1px solid #2b2f37;
+  color: #b8bec8;
 }
 #root .account-overview-pos-header > div {
   min-height: 22px;
-  padding: 2px 6px;
-  border-right: 1px solid #323236;
+  height: 22px;
+  padding: 2px 8px;
+  border-right: 1px solid #282c34;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,21 +224,24 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  background: #141416;
+  background: #16181d;
 }
 #root .account-overview-pos-row {
-  background: #141416;
-  color: #e4e4e7;
+  background: #16181d;
+  color: #e6e8ec;
+  border-bottom: 1px solid #20232a;
 }
 #root .account-overview-pos-row:hover {
-  background: #1e2430;
+  background: rgba(59, 130, 246, 0.08);
 }
 #root .account-overview-pos-row > div {
-  min-height: 21px;
-  padding: 2px 6px;
+  min-height: 22px;
+  height: 22px;
+  padding: 2px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 #root .account-overview-pos-symbol {
   display: flex;
@@ -225,82 +253,98 @@
   flex-shrink: 0;
 }
 #root .account-overview-pos-icon.is-sell {
-  color: #ef4444 !important;
+  color: #eb5757 !important;
 }
 #root .account-overview-pos-icon.is-buy {
-  color: #3b82f6 !important;
+  color: #3b9eff !important;
 }
 
 /* Grey Summary Strip inside Positions Box */
 #root .account-overview-summary-strip {
-  background: #3e3e42;
+  background: #23262e;
+  border-top: 1px solid #2f333d;
   padding: 2px 0 3px;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-summary-strip,
 #root#root#root#root#root#root .account-details-window .account-overview-summary-strip * {
-  font-weight: 700 !important;
-  color: #ffffff !important;
+  font-weight: 600 !important;
+  color: #f4f5f7 !important;
+  font-variant-numeric: tabular-nums;
 }
 #root .account-overview-summary-metrics {
   grid-column: 1 / 8;
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 1px 6px;
+  padding: 1px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 #root .account-overview-balance-icon {
   flex-shrink: 0;
-  color: #d4d4d8 !important;
+  color: #b8bec8 !important;
 }
 #root .account-overview-summary-swap {
   grid-column: 8 / 9;
-  padding: 1px 6px;
+  padding: 1px 8px;
 }
 #root .account-overview-summary-profit {
   grid-column: 9 / 10;
-  padding: 1px 6px;
+  padding: 1px 8px;
 }
 #root .account-overview-summary-sub {
-  padding: 1px 6px 1px 24px;
+  padding: 1px 8px 1px 24px;
   white-space: nowrap;
 }
 
 /* Footer Bar */
 #root .account-details-footer {
-  min-height: 40px !important;
+  position: relative;
+  min-height: 38px !important;
   padding: 6px 14px 10px !important;
-  background: #1f1f22 !important;
-  border-top: none !important;
+  background: #1c1e22 !important;
+  border-top: 1px solid #282b32 !important;
 }
 #root .account-details-footer .account-details-btn {
   min-height: 24px !important;
-  height: 24px;
-  padding: 2px 14px !important;
+  height: 24px !important;
+  padding: 0 12px !important;
   border-radius: 3px !important;
-  border: 1px solid #6b6b70 !important;
-  background: #2b2b2e !important;
-  color: #e4e4e7 !important;
+  border: 1px solid #3f444e !important;
+  background: #252830 !important;
+  color: #e6e8ec !important;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 #root .account-details-footer .account-details-new-client {
-  min-width: 156px !important;
+  min-width: 148px !important;
 }
 #root .account-details-footer .account-details-footer-right .account-details-btn {
   min-width: 78px !important;
 }
 #root .account-details-footer .account-details-btn:hover:not(:disabled) {
-  background: #3a3a3f !important;
-  border-color: #8a8a90 !important;
+  background: #2f333d !important;
+  border-color: #555c69 !important;
   color: #ffffff !important;
 }
 #root .account-details-footer .account-details-btn:disabled {
-  background: #252528 !important;
-  border-color: #48484d !important;
-  color: #71717a !important;
+  background: #1f2228 !important;
+  border-color: #32363e !important;
+  color: #6b7280 !important;
   cursor: not-allowed;
+}
+#root .account-details-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  color: #71717a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #root .account-details-window :is(.account-personal-tab, .account-settings-tab, .account-security-tab) { gap: 12px; }
@@ -330,11 +374,16 @@
 #root .account-details-window .account-positions-header > div { min-height: 28px; padding: 5px 8px; }
 #root .account-details-window .account-positions-row > div { min-height: 26px; padding: 4px 8px; }
 #root .account-details-window .account-details-status { flex: 0 0 auto; min-height: 26px; padding: 4px 8px; border-radius: 3px; }
-#root .account-details-window :is(input, select, textarea, button):focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+#root .account-details-window :is(input, select, textarea, button:not(.account-details-tab)):focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 #root#root#root#root#root :is(.account-details-window, .account-details-window *) { font-size: 11px !important; font-weight: 400 !important; }
+#root#root#root#root#root#root .account-details-window .account-details-title {
+  color: #e4e4e7 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
 #root#root#root#root#root#root .account-details-window .account-overview-headline,
 #root#root#root#root#root#root .account-details-window .account-overview-headline * {
-  font-size: 16px !important;
+  font-size: 15px !important;
   font-weight: 400 !important;
   line-height: 1.3;
 }
@@ -342,6 +391,564 @@
 #root#root#root#root#root#root .account-details-window .account-overview-summary-strip * {
   font-weight: 700 !important;
   color: #ffffff !important;
+}
+
+/* Native MT5 Trade Tab Layout & Controls */
+#root .account-details-window .mt5-trade-workspace {
+  display: grid !important;
+  grid-template-columns: 252px minmax(0, 1fr) !important;
+  gap: 14px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 6px 10px 6px 8px !important;
+  overflow: hidden !important;
+  background: #1c1e22 !important;
+}
+#root .account-details-window .mt5-trade-chart-box {
+  width: 252px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  border: 1px solid #363a42 !important;
+  border-radius: 4px !important;
+  background: #131519 !important;
+  padding: 4px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
+}
+#root .account-details-window .mt5-trade-plot-row {
+  order: 1 !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+#root .account-details-window .mt5-trade-plot-canvas {
+  flex: 1 1 auto;
+  position: relative;
+  border: 1px solid #282c34;
+  border-radius: 2px;
+  background: #111317;
+  overflow: hidden;
+}
+#root .account-details-window .mt5-trade-plot-symbol {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  color: #e6e8ec !important;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 1.1;
+}
+#root .account-details-window .mt5-trade-plot-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#root .account-details-window .mt5-trade-grid-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #242830;
+}
+#root .account-details-window .mt5-trade-grid-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed #242830;
+}
+#root .account-details-window .mt5-trade-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#root .account-details-window .mt5-trade-yaxis {
+  width: 56px;
+  flex: 0 0 56px;
+  position: relative;
+  background: #131519;
+  user-select: none;
+}
+#root .account-details-window .mt5-trade-yaxis-tick {
+  position: absolute;
+  left: 0;
+  right: 2px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+#root .account-details-window .mt5-trade-yaxis-mark {
+  width: 3px;
+  height: 1px;
+  background: #4b5563;
+  flex-shrink: 0;
+}
+#root .account-details-window .mt5-trade-yaxis-label {
+  color: #9ca3af !important;
+  text-align: right;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+#root .account-details-window .mt5-trade-price-badge {
+  position: absolute;
+  left: 2px;
+  right: 1px;
+  height: 16px;
+  line-height: 14px;
+  padding: 0 3px;
+  text-align: right;
+  border-radius: 2px !important;
+  z-index: 20;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+#root .account-details-window .mt5-trade-xaxis {
+  order: 2 !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  padding: 2px 4px 0 2px !important;
+  background: #131519 !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  color: #9ca3af !important;
+  font-variant-numeric: tabular-nums;
+}
+#root .account-details-window .mt5-trade-xaxis-date,
+#root .account-details-window .mt5-trade-xaxis-time {
+  color: #9ca3af !important;
+  white-space: nowrap;
+}
+#root .account-details-window .mt5-trade-order-panel {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 2px 6px 2px 2px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+#root .account-details-window .mt5-trade-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 7px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+#root .account-details-window .mt5-trade-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  min-height: 23px;
+}
+#root .account-details-window .mt5-trade-row-spaced {
+  margin-bottom: 6px;
+}
+#root .account-details-window .mt5-trade-label {
+  text-align: right;
+  color: #c9ced6 !important;
+  white-space: nowrap;
+  user-select: none;
+}
+#root .account-details-window .mt5-trade-label.is-disabled {
+  color: #6b7280 !important;
+}
+#root .account-details-window .mt5-trade-label-inline {
+  color: #c9ced6 !important;
+  white-space: nowrap;
+  user-select: none;
+  margin-left: 12px;
+  margin-right: 6px;
+}
+#root .account-details-window .mt5-trade-control-full {
+  width: 100%;
+  min-width: 0;
+}
+#root .account-details-window .mt5-trade-inline-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#root .account-details-window .mt5-trade-sltp-group {
+  display: flex;
+  align-items: center;
+}
+#root .account-details-window .mt5-trade-select {
+  width: 100%;
+  height: 23px !important;
+  min-height: 23px !important;
+  padding: 0 24px 0 8px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  color-scheme: dark;
+  background-color: #16181d !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1.5 1.25L5 4.75L8.5 1.25' stroke='%239ca3af' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 10px 6px !important;
+  border: 1px solid #3f444e !important;
+  border-radius: 3px !important;
+  color: #e6e8ec !important;
+  outline: none !important;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+#root .account-details-window .mt5-trade-select:hover:not(:disabled):not(.is-disabled) {
+  border-color: #555c69 !important;
+}
+#root .account-details-window .mt5-trade-select:focus:not(:disabled):not(.is-disabled) {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16) !important;
+}
+#root .account-details-window .mt5-trade-select option {
+  background-color: #1c1e22;
+  color: #e6e8ec;
+}
+#root .account-details-window .mt5-trade-select-compact {
+  width: 128px !important;
+}
+#root .account-details-window .mt5-trade-select.is-disabled,
+#root .account-details-window .mt5-trade-select:disabled {
+  background-color: #1a1c22 !important;
+  border-color: #32363e !important;
+  color: #6b7280 !important;
+  cursor: default;
+}
+#root .account-details-window .mt5-trade-spinbox {
+  width: 128px;
+  height: 23px;
+  min-height: 23px;
+  display: flex;
+  align-items: stretch;
+  background: #16181d;
+  border: 1px solid #3f444e;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+#root .account-details-window .mt5-trade-spinbox:hover:not(.is-auto) {
+  border-color: #555c69;
+}
+#root .account-details-window .mt5-trade-spinbox:focus-within:not(.is-auto) {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+}
+#root .account-details-window .mt5-trade-spinbox.is-auto {
+  border-color: #32363e;
+  background: #191b20;
+}
+#root .account-details-window .mt5-trade-spinbox-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 6px;
+  background: transparent !important;
+  border: none !important;
+  color: #e6e8ec !important;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none !important;
+}
+#root .account-details-window .mt5-trade-spinbox.is-auto .mt5-trade-spinbox-input {
+  color: #7d8592 !important;
+}
+#root .account-details-window .mt5-trade-spinbox-btns {
+  width: 16px;
+  flex: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #343841;
+  background: #23262d;
+}
+#root .account-details-window .mt5-trade-spin-btn {
+  flex: 1 1 50%;
+  min-height: 0 !important;
+  height: 11px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: #23262d !important;
+  color: #b8bec8 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-spin-btn {
+  font-size: 7px !important;
+}
+#root .account-details-window .mt5-trade-spin-btn:first-child {
+  border-bottom: 1px solid #32363e !important;
+}
+#root .account-details-window .mt5-trade-spin-btn:hover {
+  background: #2f333d !important;
+  color: #ffffff !important;
+}
+#root .account-details-window .mt5-trade-volume-units {
+  color: #c9ced6 !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#root .account-details-window .mt5-trade-update-btn,
+#root .account-details-window .mt5-trade-point-btn {
+  height: 23px !important;
+  min-height: 23px !important;
+  background: #252830 !important;
+  border: 1px solid #3f444e !important;
+  border-radius: 3px !important;
+  color: #e6e8ec !important;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+#root .account-details-window .mt5-trade-update-btn {
+  min-width: 84px !important;
+  padding: 0 12px !important;
+}
+#root .account-details-window .mt5-trade-point-btn {
+  min-width: 54px !important;
+  padding: 0 10px !important;
+  font-weight: 500 !important;
+}
+#root .account-details-window .mt5-trade-update-btn:hover,
+#root .account-details-window .mt5-trade-point-btn:hover {
+  background: #2f333d !important;
+  border-color: #555c69 !important;
+  color: #ffffff !important;
+}
+#root .account-details-window .mt5-trade-point-btn:active {
+  background: #1d2027 !important;
+  border-color: #3b82f6 !important;
+}
+#root .account-details-window .mt5-trade-auto-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #c9ced6 !important;
+  cursor: pointer;
+  user-select: none;
+}
+#root .account-details-window .mt5-trade-auto-check input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: #3b82f6;
+  margin: 0;
+  cursor: pointer;
+}
+#root .account-details-window .mt5-trade-combo {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 23px;
+  background: #16181d;
+  border: 1px solid #3f444e;
+  border-radius: 3px;
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+#root .account-details-window .mt5-trade-combo:hover {
+  border-color: #555c69;
+}
+#root .account-details-window .mt5-trade-combo:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+}
+#root .account-details-window .mt5-trade-combo-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  background: transparent !important;
+  border: none !important;
+  color: #e6e8ec !important;
+  outline: none !important;
+}
+#root .account-details-window .mt5-trade-combo-select {
+  width: 20px;
+  flex: 0 0 20px;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: #23262d !important;
+  border: none !important;
+  border-left: 1px solid #343841 !important;
+  color: #b8bec8 !important;
+  cursor: pointer;
+  outline: none !important;
+}
+#root .account-details-window .mt5-trade-quote-banner {
+  margin: auto 0 10px 82px;
+  padding-top: 6px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-side.is-bid,
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-side.is-bid * {
+  color: #eb5757 !important;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-side.is-ask,
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-side.is-ask * {
+  color: #3b9eff !important;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-main {
+  font-size: 22px !important;
+  font-weight: 400 !important;
+  line-height: 1.1 !important;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-frac {
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  line-height: 1.1 !important;
+}
+#root#root#root#root#root#root .account-details-window .mt5-trade-quote-slash {
+  font-size: 20px !important;
+  font-weight: 400 !important;
+  color: #6b7280 !important;
+  line-height: 1.1 !important;
+}
+#root .account-details-window .mt5-trade-action-buttons {
+  margin-left: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+#root .account-details-window .mt5-trade-exec-btn {
+  width: 186px;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 10px !important;
+  border-radius: 3px !important;
+  color: #ffffff !important;
+  text-align: center;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: filter 120ms ease, opacity 120ms ease, transform 80ms ease;
+}
+#root .account-details-window .mt5-trade-exec-btn.is-sell:not(:disabled) {
+  background: linear-gradient(180deg, #b83b3b 0%, #962828 55%, #751b1b 100%) !important;
+  border: 1px solid #c94a4a !important;
+  color: #ffffff !important;
+}
+#root .account-details-window .mt5-trade-exec-btn.is-sell:hover:not(:disabled) {
+  background: linear-gradient(180deg, #c94444 0%, #a62e2e 55%, #822020 100%) !important;
+  border-color: #db5a5a !important;
+}
+#root .account-details-window .mt5-trade-exec-btn.is-buy:not(:disabled) {
+  background: linear-gradient(180deg, #3b6fd4 0%, #2a56b0 55%, #1e408a 100%) !important;
+  border: 1px solid #4d82eb !important;
+  color: #ffffff !important;
+}
+#root .account-details-window .mt5-trade-exec-btn.is-buy:hover:not(:disabled) {
+  background: linear-gradient(180deg, #477ce3 0%, #3262c4 55%, #244b9e 100%) !important;
+  border-color: #6394f5 !important;
+}
+#root .account-details-window .mt5-trade-exec-btn:disabled {
+  background: #22252c !important;
+  border: 1px solid #30343e !important;
+  color: #646b78 !important;
+  box-shadow: none !important;
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+#root .account-details-window .mt5-trade-status-bar {
+  margin-left: 82px;
+  margin-top: 8px;
+  height: 23px;
+  min-height: 23px;
+  background: #16181d;
+  border: 1px solid #2b2f37;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+#root .account-details-window .mt5-trade-status-bar.is-editing {
+  background: #1c1f26;
+  justify-content: space-between;
+}
+#root .account-details-window .mt5-trade-pos-btn {
+  height: 19px !important;
+  min-height: 19px !important;
+  padding: 0 8px !important;
+  border-radius: 2px !important;
+  border: 1px solid #454a54 !important;
+  background: #252830 !important;
+  color: #e6e8ec !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+#root .account-details-window .mt5-trade-pos-btn.is-primary {
+  background: #1d4ed8 !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+#root .account-details-window .mt5-trade-pos-btn.is-danger {
+  background: #7f1d1d !important;
+  border-color: #991b1b !important;
+  color: #fecaca !important;
+}
+#root .account-details-window .mt5-trade-pos-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#root .account-details-window .mt5-trade-form.is-pending {
+  gap: 5px !important;
+}
+#root .account-details-window .mt5-trade-form.is-pending .mt5-trade-row-spaced {
+  margin-bottom: 2px;
+}
+#root .account-details-window .mt5-trade-form.is-pending .mt5-trade-quote-banner {
+  margin: auto 0 6px 82px !important;
+  padding-top: 4px !important;
+}
+#root .account-details-window .mt5-trade-date-input {
+  height: 23px !important;
+  min-height: 23px !important;
+  width: 144px;
+  padding: 0 6px !important;
+  background: #16181d !important;
+  border: 1px solid #3f444e !important;
+  border-radius: 3px !important;
+  color: #e6e8ec !important;
+  color-scheme: dark;
+  outline: none !important;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+#root .account-details-window .mt5-trade-date-input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16) !important;
+}
+#root .account-details-window .mt5-trade-status-hint {
+  color: #9ca3af !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
   #root .account-details-window .account-personal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
