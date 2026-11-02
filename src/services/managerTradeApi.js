@@ -6,6 +6,7 @@ import {
   buildPendingOrdersListEndpoint,
   buildPendingOrderTicketEndpoint,
   MANAGER_API,
+  PENDING_ORDERS_ENDPOINT,
 } from '../config/managerApiContract.js';
 
 const PENDING_ORDER_TYPES = new Set([
@@ -211,7 +212,7 @@ export const placePendingOrder = async (payload = {}) => {
     wirePayload.comment = payload.comment.trim();
   }
 
-  const response = await fetchManagerApi(MANAGER_API.pendingOrders, {
+  const response = await fetchManagerApi(PENDING_ORDERS_ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(wirePayload),
