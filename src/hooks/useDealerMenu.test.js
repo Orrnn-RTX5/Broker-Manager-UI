@@ -18,6 +18,8 @@ const stubs = {
   positionCommentChange: async () => ({ success: true }),
   positionForceClose: async () => ({ success: true }),
   positionForceCloseAll: async () => ({ success: true }),
+  orderModify: async () => ({ success: true }),
+  orderDelete: async () => ({ success: true }),
   orderPriceChange: async () => ({ success: true }),
   orderReject: async () => ({ success: true }),
   orderApprove: async () => ({ success: true }),
@@ -76,6 +78,8 @@ const bundled = await build({
           export const positionCommentChange = (...args) => stubs.positionCommentChange(...args);
           export const positionForceClose = (...args) => stubs.positionForceClose(...args);
           export const positionForceCloseAll = (...args) => stubs.positionForceCloseAll(...args);
+          export const orderModify = (...args) => stubs.orderModify(...args);
+          export const orderDelete = (...args) => stubs.orderDelete(...args);
           export const orderPriceChange = (...args) => stubs.orderPriceChange(...args);
           export const orderReject = (...args) => stubs.orderReject(...args);
           export const orderApprove = (...args) => stubs.orderApprove(...args);

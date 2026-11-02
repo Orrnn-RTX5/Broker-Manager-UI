@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 import useSymbolStore, { ensureSymbolTickSeries } from '../../store/symbolStore';
-import { placeManagerOrder, placePendingOrder } from '../../services/managerTradeApi';
+import { placeManagerOrder, placeManagerPendingOrder } from '../../services/managerTradeApi';
 import { TRADE_MUTATION_DENIED_MESSAGE } from './accountTradePermissions';
 import DepositDialog from './DepositDialog';
 import { COMMENT_PRESETS, normalizeCommentForDefault, detectCommentLanguage } from '../../utils/commentTranslation';
@@ -187,6 +187,7 @@ const Mt5DualPricePart = ({ price, digits = 5, side = 'bid' }) => {
 const AccountTradeTab = ({
   loginId,
   positions = [],
+  pendingOrders = [],
   // Tenant symbol catalog (optional). Default empty preserves today's
   // behavior: symbols then come only from the row, positions and live feed.
   symbols = [],
@@ -210,7 +211,7 @@ const AccountTradeTab = ({
   // values count as empty and later positions are scanned past an empty
   // first entry -- both fail-safe, both invent nothing.
   const [modalSymbol, setModalSymbol] = useState(
-    resolveTradeSymbol({ selectedTicketRow, positions, catalog: symbols })
+    resolveTradeSymbol({ selectedTicketRow, positions: [...positions, ...pendingOrders], catalog: symbols })
   );
   const [orderCategory, setOrderCategory] = useState('Market Order');
   const [pendingOrderType, setPendingOrderType] = useState('Buy Limit');
@@ -236,9 +237,11 @@ const AccountTradeTab = ({
     setTradeConfirmation(null);
     resolve?.(confirmed);
   };
+  const isSelectedPendingOrder = Boolean(selectedTicketRow?.isPendingOrder) || adapter?.entity === 'order';
   const stopsChanged = Boolean(selectedTicketRow) && (
     Number(tradeSL) !== Number(selectedTicketRow?.priceSl || 0) ||
-    Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0)
+    Number(tradeTP) !== Number(selectedTicketRow?.priceTp || 0) ||
+    (isSelectedPendingOrder && Number(manualAtPrice || 0) !== Number(selectedTicketRow?.priceOpen || selectedTicketRow?.priceTrigger || 0))
   );
   const volumeChanged = Boolean(selectedTicketRow) && Number(tradeVolume) !== Number(selectedTicketRow.volume ?? selectedTicketRow.lots ?? 0);
   // Fail-closed: empty symbol stays empty (no invented fallback) and gates
@@ -358,11 +361,11 @@ const AccountTradeTab = ({
 
   // Available symbols list
   const availableSymbols = useMemo(() => {
-    const set = new Set(buildTradeSymbolList({ catalog: symbols, positions, activeSymbol: modalSymbol }));
+    const set = new Set(buildTradeSymbolList({ catalog: symbols, positions: [...positions, ...pendingOrders], activeSymbol: modalSymbol }));
     const storeSymbols = useSymbolStore.getState().symbols || {};
     Object.keys(storeSymbols).forEach((s) => set.add(s));
     return Array.from(set).sort();
-  }, [modalSymbol, positions, symbols]);
+  }, [modalSymbol, positions, pendingOrders, symbols]);
   // Fail-closed: with no symbol from any source (catalog, positions, active
   // symbol, live feed) the order form is replaced by operator guidance below.
   const hasAnySymbol = availableSymbols.length > 0;
@@ -372,6 +375,19 @@ const AccountTradeTab = ({
       setModalSymbol(availableSymbols[0]);
     }
   }, [selectedTicketRow, modalSymbol, availableSymbols]);
+
+  // Sync trigger price into manualAtPrice when a pending order row is selected or updated
+  useEffect(() => {
+    if (!selectedTicketRow || (!selectedTicketRow.isPendingOrder && adapter?.entity !== 'order')) return;
+    const rowSymbol = selectedTicketRow.symbol ?? modalSymbol;
+    const formatDigits = rowSymbol ? getSymbolDigits(rowSymbol) : digits;
+    const rawTrigger = Number(selectedTicketRow.priceOpen ?? selectedTicketRow.priceTrigger ?? 0);
+    if (Number.isFinite(rawTrigger) && rawTrigger > 0) {
+      isAutoPipTrackRef.current = false;
+      setIsAutoPipTrack(false);
+      setManualAtPrice(rawTrigger.toFixed(formatDigits));
+    }
+  }, [Number(selectedTicketRow?.position ?? selectedTicketRow?.ticket ?? 0), Number(selectedTicketRow?.priceOpen ?? selectedTicketRow?.priceTrigger ?? 0), Boolean(selectedTicketRow?.isPendingOrder), adapter?.entity, modalSymbol, digits]);
 
   // Reuse the shared feed; opening or switching this tab never creates a socket.
   useEffect(() => {
@@ -570,6 +586,12 @@ const AccountTradeTab = ({
       if (pos) handleModifySLTP(pos);
       return;
     }
+    if (value.startsWith('ord:')) {
+      const ticketId = value.slice(4);
+      const ord = pendingOrders.find((o) => String(o.ticket || o.position) === ticketId);
+      if (ord) handleModifySLTP({ ...ord, isPendingOrder: true });
+      return;
+    }
     setSelectedTicketRow(null);
     setOrderCategory(value);
     if (value === 'Pending Order') {
@@ -721,17 +743,43 @@ const AccountTradeTab = ({
         throw new Error(result.error?.message || result.error || result.message || 'Trade update rejected.');
       }
     };
+    const triggerPrice = Number(manualAtPrice || displayedAtPrice);
+    const savedTriggerPrice = Number(selectedTicketRow?.priceOpen || selectedTicketRow?.priceTrigger || 0);
+    const priceChanged = isSelectedPendingOrder && Number.isFinite(triggerPrice) && triggerPrice > 0 && triggerPrice !== savedTriggerPrice;
+    if (isSelectedPendingOrder && (!String(manualAtPrice || displayedAtPrice || '').trim() || !Number.isFinite(triggerPrice) || triggerPrice <= 0)) {
+      showError('Update trade', new Error('Trigger price must be greater than 0 for a pending order.'));
+      return;
+    }
     setIsUpdatingTrade(true);
     isAutoPipTrackRef.current = false;
     setIsAutoPipTrack(false);
     try {
       if (stopsChanged) {
         if (adapter.modifyStops) {
-          checkResult(await adapter.modifyStops({ ticket, stoploss: sl, takeprofit: tp }));
-          saved.priceSl = sl;
-          saved.priceTp = tp;
-          changed.push('SL/TP');
+          checkResult(await adapter.modifyStops({
+            ticket,
+            login: Number(loginId),
+            ...(priceChanged ? { price: triggerPrice } : {}),
+            stoploss: sl,
+            takeprofit: tp,
+          }));
+          if (priceChanged) {
+            saved.priceOpen = triggerPrice;
+            saved.priceTrigger = triggerPrice;
+            changed.push('Price');
+          }
+          if (sl !== Number(saved.priceSl || 0) || tp !== Number(saved.priceTp || 0) || !priceChanged) {
+            saved.priceSl = sl;
+            saved.priceTp = tp;
+            changed.push('SL/TP');
+          }
         } else {
+          if (priceChanged && adapter.modifyField) {
+            checkResult(await adapter.modifyField({ ticket, field: 'price', value: triggerPrice }));
+            saved.priceOpen = triggerPrice;
+            saved.priceTrigger = triggerPrice;
+            changed.push('Price');
+          }
           if (sl !== Number(saved.priceSl || 0)) {
             checkResult(await adapter.modifyField({ ticket, field: 'stoploss', value: sl }));
             saved.priceSl = sl;
@@ -744,17 +792,20 @@ const AccountTradeTab = ({
           }
         }
       }
-      if (volumeChanged) {
+      if (volumeChanged && !isSelectedPendingOrder) {
         checkResult(await adapter.modifyField({ ticket, field: 'volume', value: lots }));
         saved.volume = lots;
         saved.lots = lots;
         changed.push('volume');
       }
       setSelectedTicketRow(saved);
-      showResult('Update trade', { message: `${changed.join(" and ")} updated successfully for position #${ticket}.` });
+      showResult('Update trade', { message: `${changed.join(" and ")} updated successfully for ${isSelectedPendingOrder ? 'order' : 'position'} #${ticket}.` });
       onTradePlaced?.();
     } catch (err) {
       setSelectedTicketRow(saved);
+      if (isSelectedPendingOrder) {
+        setManualAtPrice(Number(saved.priceOpen || saved.priceTrigger || 0).toFixed(digits));
+      }
       setTradeSL(Number(saved.priceSl || 0).toFixed(digits));
       setTradeTP(Number(saved.priceTp || 0).toFixed(digits));
       setTradeVolume(String(saved.volume ?? saved.lots ?? '0.01'));
@@ -817,21 +868,26 @@ const AccountTradeTab = ({
 
       setIsPlacingTrade(true);
       try {
-        const result = await placePendingOrder({
+        const result = await placeManagerPendingOrder({
+          login,
           account_login: login,
           symbol,
           side: operation,
-          volume: lots,
+          operation: wireType,
           type: wireType,
+          orderType: wireType,
+          lots,
+          volume: lots,
           price: entryPrice,
-          ...(stopLimitPrice !== undefined && stopLimitPrice > 0 ? { price_limit: stopLimitPrice } : {}),
-          ...(stoploss > 0 ? { sl: stoploss } : {}),
-          ...(takeprofit > 0 ? { tp: takeprofit } : {}),
+          ...(stopLimitPrice !== undefined && stopLimitPrice > 0 ? { price_limit: stopLimitPrice, priceLimit: stopLimitPrice } : {}),
+          ...(stoploss > 0 ? { sl: stoploss, stoploss } : {}),
+          ...(takeprofit > 0 ? { tp: takeprofit, takeprofit } : {}),
           ...(expiryResolved.seconds !== undefined ? { expiry: expiryResolved.seconds } : {}),
           comment: normalizeCommentForDefault(tradeComment.trim()),
         });
+        const ticketStr = result?.ticket ? ` (#${result.ticket})` : '';
         showResult(`Place ${alignedType} order`, {
-          message: `${alignedType} ${lots} lots of ${symbol} at ${entryPrice.toFixed(specDigits)} submitted successfully for account #${login}. ${typeof result?.message === 'string' ? result.message : ''}`,
+          message: `${alignedType} ${lots} lots of ${symbol} at ${entryPrice.toFixed(specDigits)}${ticketStr} submitted successfully for account #${login}. ${typeof result?.message === 'string' ? result.message : ''}`,
         });
         setTradeComment('');
         onTradePlaced?.(result);
@@ -1098,12 +1154,12 @@ const AccountTradeTab = ({
               </div>
             </div>
 
-            {/* Type (Market Order / Pending Order / Open Positions) */}
+            {/* Type (Market Order / Pending Order / Open Positions / Pending Orders) */}
             <div className={`mt5-trade-row ${isPendingMode ? '' : 'mt5-trade-row-spaced'}`}>
               <label className="mt5-trade-label">Type:</label>
               <div className="mt5-trade-control-full">
                 <select
-                  value={selectedTicketRow ? `pos:${selectedTicketRow.position || selectedTicketRow.ticket}` : orderCategory}
+                  value={selectedTicketRow ? `${isSelectedPendingOrder ? 'ord' : 'pos'}:${selectedTicketRow.position || selectedTicketRow.ticket}` : orderCategory}
                   onChange={(e) => handleOrderCategoryChange(e.target.value)}
                   className="mt5-trade-select"
                   aria-label="Order type"
@@ -1113,8 +1169,16 @@ const AccountTradeTab = ({
                   {positions.map((p) => {
                     const ticketId = p.position || p.ticket;
                     return (
-                      <option key={ticketId} value={`pos:${ticketId}`}>
+                      <option key={`pos-${ticketId}`} value={`pos:${ticketId}`}>
                         Position #{ticketId} ({String(p.type || '').toUpperCase()} {p.volume || p.lots} {p.symbol})
+                      </option>
+                    );
+                  })}
+                  {pendingOrders.map((o) => {
+                    const ticketId = o.ticket || o.position;
+                    return (
+                      <option key={`ord-${ticketId}`} value={`ord:${ticketId}`}>
+                        Order #{ticketId} ({String(o.side || o.type || 'PENDING').toUpperCase()} {o.volume || o.lots} {o.symbol})
                       </option>
                     );
                   })}
@@ -1517,7 +1581,7 @@ const AccountTradeTab = ({
                   onClick={() => setSelectedTicketRow(null)}
                   disabled={isUpdatingTrade || isPlacingTrade}
                   className="mt5-trade-pos-btn"
-                  title="Clear the selected position and prepare a new market order"
+                  title="Clear the selected ticket and prepare a new order"
                 >
                   <Plus size={11} /> New order
                 </button>
@@ -1531,7 +1595,7 @@ const AccountTradeTab = ({
                   <CheckCircle2 size={11} />
                   {isUpdatingTrade
                     ? 'Modifying…'
-                    : `Modify Position #${selectedTicketRow.position || selectedTicketRow.ticket}`}
+                    : `Modify ${isSelectedPendingOrder ? 'Order' : 'Position'} #${selectedTicketRow.position || selectedTicketRow.ticket}`}
                 </button>
                 {canCloseTrades && (
                   <button
@@ -1541,9 +1605,9 @@ const AccountTradeTab = ({
                     }
                     disabled={!hasTradeSymbol}
                     className="mt5-trade-pos-btn is-danger"
-                    title={!hasTradeSymbol ? 'Select a symbol before closing' : 'Close Position'}
+                    title={!hasTradeSymbol ? 'Select a symbol before closing' : (isSelectedPendingOrder ? 'Cancel Pending Order' : 'Close Position')}
                   >
-                    <Trash2 size={11} /> Close
+                    <Trash2 size={11} /> {isSelectedPendingOrder ? 'Cancel' : 'Close'}
                   </button>
                 )}
               </div>

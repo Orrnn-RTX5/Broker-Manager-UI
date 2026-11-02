@@ -1,6 +1,12 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeManagerPosition, getManagerOrderStatus, placeManagerOrder } from './managerTradeApi.js';
+import {
+  closeManagerPosition,
+  getManagerOrderStatus,
+  normalizePendingOrderType,
+  placeManagerOrder,
+  placeManagerPendingOrder,
+} from './managerTradeApi.js';
 import { accountRestrictList, getDealerQueue } from './tradeApi.js';
 
 const createStorage = () => {
@@ -289,4 +295,88 @@ test('read path still returns records for genuine successes', async () => {
   const queue = await getDealerQueue();
   assert.equal(queue.length, 1);
   assert.equal(queue[0].orderTicket, 101);
+});
+
+test('normalizePendingOrderType normalizes supported pending order types and rejects invalid types', () => {
+  assert.equal(normalizePendingOrderType('Buy Limit'), 'buy_limit');
+  assert.equal(normalizePendingOrderType('sell_limit'), 'sell_limit');
+  assert.equal(normalizePendingOrderType('BUY_STOP'), 'buy_stop');
+  assert.equal(normalizePendingOrderType('sell-stop'), 'sell_stop');
+  assert.equal(normalizePendingOrderType('buy_stop_limit'), 'buy_stop_limit');
+  assert.equal(normalizePendingOrderType('sell_stop_limit'), 'sell_stop_limit');
+  assert.equal(normalizePendingOrderType('buy'), '');
+  assert.equal(normalizePendingOrderType('market'), '');
+  assert.equal(normalizePendingOrderType(''), '');
+  assert.equal(normalizePendingOrderType(null), '');
+});
+
+test('placeManagerPendingOrder falls back to POST /OrderSend when WebSocket is undefined', async () => {
+  const originalWebSocket = globalThis.WebSocket;
+  delete globalThis.WebSocket;
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), options });
+      return new Response(JSON.stringify({ retcode: 'MT_RET_REQUEST_DONE', order: 77701 }), { status: 200 });
+    };
+
+    const result = await placeManagerPendingOrder({
+      login: 200001,
+      symbol: 'eurusd',
+      operation: 'Buy Limit',
+      lots: 0.25,
+      price: 1.0825,
+      stoploss: 1.079,
+      takeprofit: 1.09,
+      comment: 'manager pending test',
+    });
+
+    assert.equal(result.order, 77701);
+    assert.equal(result.ticket, 77701);
+    assert.equal(calls.length, 1);
+    const parsedUrl = new URL(calls[0].url);
+    assert.match(parsedUrl.pathname, /\/OrderSend$/);
+    assert.equal(parsedUrl.search, '');
+    assert.equal(calls[0].options.method, 'POST');
+    const body = JSON.parse(calls[0].options.body);
+    assert.equal(body.login, 200001);
+    assert.equal(body.symbol, 'EURUSD');
+    assert.equal(body.operation, 'BUY_LIMIT');
+    assert.equal(body.lots, 0.25);
+    assert.equal(body.price, 1.0825);
+    assert.equal(body.stoploss, 1.079);
+    assert.equal(body.takeprofit, 1.09);
+    assert.equal(body.comment, 'manager pending test');
+  } finally {
+    if (originalWebSocket !== undefined) {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  }
+});
+
+test('placeManagerPendingOrder validates input parameters before sending requests', async () => {
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 0, symbol: 'EURUSD', operation: 'buy_limit', lots: 0.1, price: 1.08 }),
+    /Account login must be a positive integer/,
+  );
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 200001, symbol: '   ', operation: 'buy_limit', lots: 0.1, price: 1.08 }),
+    /Select a symbol before placing a pending order/,
+  );
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy', lots: 0.1, price: 1.08 }),
+    /Select a valid pending order type/,
+  );
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy_limit', lots: 0, price: 1.08 }),
+    /Volume must be greater than 0 and no more than 1,000 lots/,
+  );
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy_limit', lots: 0.1, price: 0 }),
+    /Trigger price must be greater than 0 for pending orders/,
+  );
+  await assert.rejects(
+    () => placeManagerPendingOrder({ login: 200001, symbol: 'EURUSD', operation: 'buy_stop_limit', lots: 0.1, price: 1.08 }),
+    /Stop-limit price must be greater than 0 for stop-limit orders/,
+  );
+  assert.equal(calls.length, 0);
 });
