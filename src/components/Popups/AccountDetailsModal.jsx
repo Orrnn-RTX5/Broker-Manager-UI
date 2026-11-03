@@ -12,12 +12,45 @@ import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import AccountTradeTab from './AccountTradeTab';
 import DepositDialog from './DepositDialog';
+import { buildFinanceAttemptScope, pendingFinanceAttempts } from './pendingFinanceAttempts.js';
+import { useI18nStore } from '../../i18n/index.js';
+import {
+  BALANCE_AFTER_LABEL,
+  BALANCE_REFRESH_FAILED_NOTE,
+  CONFIRMED_AS_CHECKED_TEXT,
+  DUPLICATE_PROTECTION_OFF_TEXT,
+  HISTORY_HEADING_TEXT,
+  HISTORY_LOADING_TEXT,
+  HISTORY_NO_MATCH_TEXT,
+  HISTORY_OPEN_TEXT,
+  HISTORY_PENDING_LABEL,
+  STARTED_BY_MANAGER_PREFIX,
+  SUBMIT_BLOCKED_TEXT,
+  UNRESOLVED_OPERATION_TITLE,
+  acknowledgeCheckView,
+  acknowledgeNewOperation,
+  buildRecentCompletionPrompt,
+  canShowSkipMargin,
+  canUseSkipMargin,
+  deriveBalanceFinanceView,
+  describeAcknowledgeOutcome,
+  describeHistoryRow,
+  describeOriginalOperation,
+  executeBalanceOperation,
+  loadAcknowledgeHistory,
+  persistObservedExpiry,
+  prepareBalanceSubmission,
+  recentCompletionFor,
+  resolveBalanceOutcomeView,
+  retryBalanceOperation,
+  shouldApplyOutcome,
+} from './balanceTabController.js';
 
 import { changeManagerPassword, checkManagerPassword } from '../../services/managerPasswordApi';
 import { loadAccountDetails, peekAccountDetails, updateCachedAccountDetails } from '../../services/accountDetails';
 import { useAccountDetails } from '../../hooks/useAccountDetails';
 import { cancelManagerPendingOrder, closeManagerPosition } from '../../services/managerTradeApi';
-import { submitManagerTransaction } from '../../services/managerFinanceApi';
+import { createTransactionIdempotencyKey, submitManagerTransaction } from '../../services/managerFinanceApi';
 import { updateManagerAccount } from '../../services/managerAccountApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useMultiScreenStore } from '../../store/multiScreenStore';
@@ -31,22 +64,56 @@ import {
   TRADE_CLOSE_DENIED_MESSAGE,
   TRADE_MUTATION_DENIED_MESSAGE,
 } from './accountTradePermissions';
-import { joinMoneyAmount } from './accountTransactionCopy.js';
 import {
   DEFAULT_MANAGER_TRANSACTION_TYPE,
-  buildManagerTransactionConfirmation,
-  buildManagerTransactionFailurePrefix,
-  buildManagerTransactionSuccessMessage,
-  getManagerTransactionActionLabel,
+  DIRECTION_IN,
+  DIRECTION_OUT,
+  formatManagerMoneyText,
+  getManagerCommentPresets,
   getManagerTransactionOptions,
-  getManagerTransactionPendingLabel,
-  getManagerTransactionPendingNoun,
+  isManagerTransactionAvailable,
   isTransferType,
   resolveManagerTransactionType,
-  resolveTransferDestination,
 } from './accountFinanceOps.js';
 
 const ADAPTERS = { position: positionAdapter, order: orderAdapter, deal: dealAdapter };
+
+const SKIP_MARGIN_WARNING_TEXT = 'This can make the balance negative.';
+
+// Renders a finance feedback record as separate text nodes, so static copy can be translated.
+const renderTransactionFeedback = (feedback) => (
+  <>
+    {feedback.lead ? `${feedback.lead}: ` : null}
+    {feedback.text}
+    {feedback.detail ? ` — ${feedback.detail}` : null}
+    {feedback.code ? ` (${feedback.code})` : null}
+  </>
+);
+
+// Renders a finance success record with "Balance after" as a separate translatable text node.
+const renderTransactionSuccess = (success) => {
+  if (!success) return null;
+  if (typeof success === 'string') return <span>{success}</span>;
+  return (
+    <>
+      <span>{success.mainText}</span>
+      {success.balanceAfterValue ? (
+        <>
+          {' '}
+          <span>{BALANCE_AFTER_LABEL}</span>
+          {`: ${success.balanceAfterValue}.`}
+        </>
+      ) : null}
+      {success.serverMessage ? ` ${success.serverMessage}` : null}
+      {success.note ? (
+        <>
+          {' '}
+          <span>{success.note}</span>
+        </>
+      ) : null}
+    </>
+  );
+};
 
 const TABS = [
   'Overview', 'Exposure', 'Personal', 'Account', 'Limits', 'Profile', 'Balance', 'Trade', 'History', 'Security', 'Credentials'
@@ -435,14 +502,29 @@ const AccountDetailsModal = ({
 }) => {
   const adapter = ADAPTERS[entity] || positionAdapter;
   const loginId = account && typeof account === 'object' ? account.login : account;
-  const { canAct, resolved, hasPermission } = usePermissions();
+  // Pending money attempts are kept per login, outside this component (see pendingFinanceAttempts.js).
+  const financeLoginKey = String(loginId);
+  const { canAct, resolved, hasPermission, manager: financeIdentity, permissions } = usePermissions();
   const canViewPositions = resolved && hasPermission(PERMISSIONS.VIEW_POSITIONS);
   const initialPositions = canViewPositions ? peekAccountPositions(loginId) : undefined;
   const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
   const canManageFinances = canAct(PERMISSIONS.MANAGE_FINANCES);
+  const canSkipMargin = canUseSkipMargin({ resolved, permissions });
   const canManagePasswords = canAct(PERMISSIONS.MANAGE_PASSWORDS);
   const canManipulateTrades = canMutateAccountTrades(canAct);
   const canCloseTrades = canCloseAccountTrades(canAct);
+  // Pending money attempts are scoped by manager, broker and login. The store is the source of the notice,
+  // the barrier and the running state (see balanceTabController.js).
+  // The UI language, for the translated H1 confirm text (6c). Not the account's Language field.
+  const uiLanguage = useI18nStore((state) => state.language);
+  const financeScope = buildFinanceAttemptScope({ managerLogin: financeIdentity?.login, brokerId: financeIdentity?.brokerId });
+  const financeView = deriveBalanceFinanceView({
+    store: pendingFinanceAttempts, scope: financeScope, loginKey: financeLoginKey, canManageFinances,
+  });
+  const isDepositing = financeView.running;
+  // The popup's current login, read by the outcome handlers so a result for another login is not shown here.
+  const activeLoginRef = useRef(financeLoginKey);
+  activeLoginRef.current = financeLoginKey;
   const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const multiScreenCount = useMultiScreenStore(
     (state) => state.accountScreens.length + state.groupScreens.length
@@ -477,16 +559,78 @@ const AccountDetailsModal = ({
   const [depositComment, setDepositComment] = useState('');
   const [depositDestination, setDepositDestination] = useState('');
   const [transactionType, setTransactionType] = useState(DEFAULT_MANAGER_TRANSACTION_TYPE);
-  const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositSuccess, setDepositSuccess] = useState(null);
   const [depositConfirmation, setDepositConfirmation] = useState(null);
   const depositConfirmationRef = useRef(null);
+  const [depositReplayed, setDepositReplayed] = useState(false);
+  const [depositConfirmationWarning, setDepositConfirmationWarning] = useState(false);
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [skipMarginChecked, setSkipMarginChecked] = useState(false);
+  const [skipMarginReason, setSkipMarginReason] = useState('');
+  // The skip checkbox belongs to the Balance withdrawal only. Its gate is the operation, never the comment text.
+  const showSkipMargin = canShowSkipMargin({ resolved, permissions, type: transactionType, direction: DIRECTION_OUT });
+  // Hidden skip state never survives: clear it whenever the checkbox is not shown.
+  useEffect(() => {
+    if (showSkipMargin) return;
+    setSkipMarginChecked(false);
+    setSkipMarginReason('');
+  }, [showSkipMargin]);
   useEffect(() => () => depositConfirmationRef.current?.(false), []);
+  // R8 (b): the acknowledge check. The latest balance-history rows are loaded and checked against the pending record
+  // before the acknowledge button is enabled. A check belongs to one pending record on one login; any change closes it.
+  const [historyCheck, setHistoryCheck] = useState(null);
+  const historyRequestRef = useRef(0);
+  const pendingKey = financeView.notice?.idempotencyKey ?? null;
+  // R9: the panel is reset on any change of the record it checked: its version (a retry result, another tab's write, a
+  // storage event that changed the record) and its expiry (the clock).
+  const pendingVersion = financeView.notice?.version ?? null;
+  const pendingExpired = financeView.notice?.expired ?? null;
+  useEffect(() => {
+    historyRequestRef.current += 1;
+    setHistoryCheck(null);
+  }, [financeLoginKey, pendingKey, pendingVersion, pendingExpired]);
+  const closeHistoryCheck = () => {
+    historyRequestRef.current += 1;
+    setHistoryCheck(null);
+  };
+  const openHistoryCheck = () => {
+    const notice = financeView.notice;
+    if (!notice?.canConfirm || !notice.original) return;
+    historyRequestRef.current += 1;
+    const token = historyRequestRef.current;
+    setHistoryCheck({ token, idempotencyKey: notice.idempotencyKey, version: notice.version, loading: true, ok: false, matched: false, rows: [], text: '' });
+    // R10 (L2): no reader is passed; the controller uses the production history reader.
+    void loadAcknowledgeHistory({
+      login: financeLoginKey,
+      original: notice.original,
+    }).then((check) => {
+      if (historyRequestRef.current !== token) return;
+      setHistoryCheck({ token, idempotencyKey: notice.idempotencyKey, version: notice.version, loading: false, ...check });
+    });
+  };
+  // The store is the source of the notice, the barrier and the running state. Any change, here or in another tab, re-renders.
+  const [financeTick, setFinanceTick] = useState(0);
+  useEffect(() => pendingFinanceAttempts.subscribe(() => setFinanceTick((tick) => tick + 1)), []);
+  // L5: the advisory lock poll runs only while this popup is open.
+  useEffect(() => {
+    pendingFinanceAttempts.startAdvisoryPolling();
+    return () => pendingFinanceAttempts.stopAdvisoryPolling();
+  }, []);
+  // E5 / C4: an observed expiry is saved by a locked pass, so a later clock change cannot clear it. While it is not saved,
+  // every store change (view refresh) retries the save. Never sends.
+  const expiryUnsaved = Boolean(financeView.expiryUnsaved);
+  useEffect(() => {
+    if (!expiryUnsaved || !financeScope) return;
+    void persistObservedExpiry({ store: pendingFinanceAttempts, scope: financeScope, loginKey: financeLoginKey });
+  }, [expiryUnsaved, financeScope, financeLoginKey, financeTick]);
+  // R10 (H2): the account clock mark is NOT refreshed while this popup is open. Only real locked writes move it (a view
+  // refresh would let one browser with a fast clock block every other tab of the account).
   const finishDepositConfirmation = (confirmed) => {
     const resolve = depositConfirmationRef.current;
     depositConfirmationRef.current = null;
     setDepositConfirmation(null);
+    setDepositConfirmationWarning(false);
     resolve?.(confirmed);
   };
 
@@ -525,6 +669,10 @@ const AccountDetailsModal = ({
     setDepositDestination('');
     setDepositError(null);
     setDepositSuccess(null);
+    setDepositReplayed(false);
+    setResultDialogOpen(false);
+    setSkipMarginChecked(false);
+    setSkipMarginReason('');
     finishDepositConfirmation(false);
     setPositions(canViewPositions ? (peekAccountPositions(loginId) || []) : []);
     setPendingOrders([]);
@@ -1376,122 +1524,165 @@ const AccountDetailsModal = ({
     }
   };
 
-  const handleTransaction = async () => {
+  const resetBalanceForm = (resetSkip = false) => {
+    setDepositAmount('');
+    setDepositComment('');
+    setDepositDestination('');
+    setSkipMarginReason('');
+    if (resetSkip) setSkipMarginChecked(false);
+  };
+
+  // Applies an outcome to this popup via the controller's pure outcome router. A result for another
+  // login is already stored by the controller; it must not be shown in a popup displaying another login.
+  const applyBalanceOutcome = (outcome, sentForLogin) => {
+    const viewUpdate = resolveBalanceOutcomeView(outcome, {
+      activeLoginKey: activeLoginRef.current,
+      sentForLogin,
+    });
+    if (!viewUpdate.apply) return viewUpdate;
+    if (viewUpdate.resetForm) {
+      resetBalanceForm(viewUpdate.resetSkipChecked);
+    }
+    setDepositReplayed(viewUpdate.replayed);
+    setDepositSuccess(viewUpdate.depositSuccess);
+    setDepositError(viewUpdate.depositError);
+    setResultDialogOpen(viewUpdate.openDialog);
+    return viewUpdate;
+  };
+
+  // Runs a stored operation and applies its outcome. A successful outcome also refreshes this account.
+  const runAndApply = async (run) => {
+    const sentForLogin = financeLoginKey;
+    const sentForAccount = loginId;
+    let outcome;
+    try {
+      outcome = await run();
+    } catch {
+      // The controller resolves every outcome; this only guards an unexpected throw. Nothing is assumed sent.
+      outcome = { kind: 'skipped', reason: 'storage-unavailable', loginKey: sentForLogin };
+    }
+    const viewUpdate = applyBalanceOutcome(outcome, sentForLogin);
+    if (!viewUpdate?.refreshAccount) return;
+    // Refresh failures must never turn a completed transaction into a failed transaction.
+    void Promise.resolve().then(() => onAccountUpdated?.(sentForAccount)).catch(() => {});
+    // Do not wait for the next grid/websocket interval after the backend has accepted the transaction:
+    // refresh the displayed balance immediately.
+    void loadAccountDetails(sentForAccount, { force: true })
+      .catch(() => {
+        if (!shouldApplyOutcome({ activeLoginKey: activeLoginRef.current, outcomeLoginKey: sentForLogin })) return;
+        setDepositSuccess((prev) => {
+          if (!prev) return prev;
+          if (typeof prev === 'string') return `${prev} ${BALANCE_REFRESH_FAILED_NOTE}`;
+          return { ...prev, note: BALANCE_REFRESH_FAILED_NOTE };
+        });
+      });
+  };
+
+  // Re-sends the stored operation with its same key and body. Refused without the permission,
+  // while the same operation is running, when expired, or when the stored record is gone.
+  const retryPendingTransaction = () => {
+    const notice = financeView.notice;
+    if (!notice?.canRetry) return;
+    void runAndApply(() => retryBalanceOperation({
+      store: pendingFinanceAttempts,
+      scope: financeScope,
+      loginKey: financeLoginKey,
+      idempotencyKey: notice.idempotencyKey,
+      submit: submitManagerTransaction,
+      currency: currencyValue,
+      canManageFinances,
+    }));
+  };
+
+  // The manager's explicit confirmation: "I checked the history, start a new operation". Logged with a timestamp.
+  const confirmNewOperation = async () => {
+    // R9: refused unless the panel's check belongs to this same pending record and version, loaded, and is not truncated.
+    const notice = financeView.notice;
+    const shown = acknowledgeCheckView(historyCheck);
+    if (!historyCheck?.ok || !notice || historyCheck.idempotencyKey !== notice.idempotencyKey) return;
+    if (historyCheck.version !== notice.version || !shown.canAcknowledge) return;
+    // R10 (L1): the check names this record and version (checkedFor). matchConfirmed is true only when the panel showed the
+    // match warning at this click. The controller reads the history again for THIS record inside the account lock.
+    const clickLoginKey = financeLoginKey;
+    const ackResult = await acknowledgeNewOperation({
+      store: pendingFinanceAttempts,
+      scope: financeScope,
+      loginKey: financeLoginKey,
+      canManageFinances,
+      checkedFor: { idempotencyKey: notice.idempotencyKey, version: historyCheck.version },
+      matchConfirmed: shown.warning !== null,
+    });
+    // R10 (L3): the result is shown only while the popup still shows the login the acknowledge was sent for.
+    if (!shouldApplyOutcome({ activeLoginKey: activeLoginRef.current, outcomeLoginKey: clickLoginKey })) return;
+    const errorFeedback = describeAcknowledgeOutcome(ackResult);
+    if (errorFeedback) {
+      setDepositSuccess(null);
+      setDepositError(errorFeedback);
+    }
+  };
+
+  const handleTransaction = async (direction = null) => {
     if (depositConfirmationRef.current || isDepositing) return;
-    const reportFailure = (message) => {
-      setDepositAmount('');
-      setDepositComment('');
-      setDepositDestination('');
-      setDepositError(`${message} The amount, destination and comment have been reset.`);
-    };
     setDepositError(null);
     setDepositSuccess(null);
-    // The selector only offers supported types, but the submit path still
-    // resolves fail-closed so a tampered selection can never be submitted as
-    // the wrong transaction kind. All four types share the same permission
-    // gate, validation, and idempotency flow below.
-    let transactionTypeKey;
-    try {
-      transactionTypeKey = resolveManagerTransactionType(transactionType);
-    } catch {
-      reportFailure('Unsupported transaction type selected.');
-      return;
-    }
-    const transactionActionLabel = getManagerTransactionActionLabel(transactionTypeKey);
-    if (!canManageFinances) {
-      reportFailure('Your role does not have permission to manage account funds.');
-      return;
-    }
-    // Client-side validation is defence-in-depth only — the backend remains the
-    // authority — but it must still reject malformed/blank/over-precision input
-    // before a financial request reaches the backend.
-    const validateMoney = (raw, { allowNegative = false } = {}) => {
-      const str = String(raw).trim();
-      // up to 2 decimal places, optional leading minus
-      if (!/^-?\d+(\.\d{1,2})?$/.test(str)) return null;
-      const num = Number(str);
-      if (!Number.isFinite(num)) return null;
-      if (!allowNegative && num <= 0) return null;
-      if (Math.abs(num) > 1000000) return null;
-      return num;
-    };
 
-    const amountVal = validateMoney(depositAmount);
-    if (amountVal === null) {
-      reportFailure("Amount must be a positive number with up to 2 decimals and cannot exceed 1,000,000.");
+    const prepared = prepareBalanceSubmission({
+      transactionType,
+      direction,
+      canManageFinances,
+      canSkipMargin,
+      skipMarginChecked,
+      skipMarginReason,
+      depositAmount,
+      loginId,
+      depositDestination,
+      depositComment,
+      currencyValue,
+      financeView,
+    });
+    if (!prepared.ok) {
+      if (prepared.resetForm) resetBalanceForm(false);
+      setDepositError(prepared.feedback);
+      setResultDialogOpen(prepared.openDialog);
       return;
-    }
-
-    const parsedLogin = Number(loginId);
-    if (!Number.isSafeInteger(parsedLogin) || parsedLogin <= 0) {
-      reportFailure('This account has an invalid login ID. Please reopen the account and try again.');
-      return;
-    }
-
-    // Transfers require a destination account login, resolved through the
-    // tested helper (SecureTransfer contract: from_login AND to_login as
-    // positive different integers). All other types send no to_login.
-    let parsedDestination = null;
-    if (transactionTypeKey === 'transfer') {
-      try {
-        parsedDestination = resolveTransferDestination(depositDestination, parsedLogin);
-      } catch (err) {
-        reportFailure(err?.message || 'Destination login must be a positive integer account login.');
-        return;
-      }
     }
 
     if (depositConfirmationRef.current || isDepositing) return;
-    const confirmed = await new Promise((resolve) => {
+    const askConfirmation = (prompt, warning) => new Promise((resolve) => {
       depositConfirmationRef.current = resolve;
-      setDepositConfirmation(buildManagerTransactionConfirmation(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin, parsedDestination));
+      setDepositConfirmationWarning(warning);
+      setDepositConfirmation(prompt);
     });
+    const confirmed = await askConfirmation(prepared.confirmationPrompt, prepared.skipForAttempt);
     if (!confirmed) return;
 
-    setIsDepositing(true);
-    setDepositError(null);
-    setDepositSuccess(null);
-
-    try {
-      // TransferRequest carries from_login/to_login (no `login` key); all
-      // other types carry `login`. The backend 400s a transfer without both
-      // positive different integers, so the keys must match the endpoint.
-      const result = await submitManagerTransaction(transactionTypeKey, {
-        ...(transactionTypeKey === 'transfer'
-          ? { from_login: parsedLogin, to_login: parsedDestination }
-          : { login: parsedLogin }),
-        amount: amountVal,
-        comment: depositComment.trim(),
-      });
-
-      if (result && typeof result === 'object' && (result.success === false || result.ok === false)) {
-        throw new Error(result.error || result.message || `${transactionActionLabel} failed`);
-      }
-
-      const responseMessage = result && typeof result === 'object'
-        ? (result.message || result.detail || result.status_message)
-        : '';
-      const successMessage = buildManagerTransactionSuccessMessage(transactionTypeKey, joinMoneyAmount(amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), currencyValue), parsedLogin, parsedDestination);
-      setDepositSuccess(typeof responseMessage === 'string' && responseMessage ? `${successMessage} ${responseMessage}` : successMessage);
-      setDepositAmount('');
-      setDepositComment('');
-      setDepositDestination('');
-      // Refresh failures must never turn a completed transaction into a failed transaction.
-      void Promise.resolve().then(() => onAccountUpdated?.(loginId)).catch(() => {});
-
-      // Do not wait for the next grid/websocket interval after the backend has
-      // accepted the transaction: refresh the displayed balance immediately.
-      void loadAccountDetails(loginId, { force: true })
-        .catch(() => {
-          setDepositSuccess((message) => message
-            ? `${message} The balance could not be refreshed. Reopen the account to check it; do not repeat the transaction.`
-            : message);
-        });
-    } catch (err) {
-      reportFailure(`${buildManagerTransactionFailurePrefix(transactionTypeKey, parsedLogin)}: ${err?.message || 'The result could not be confirmed. Check account history before trying again.'}`);
-    } finally {
-      setIsDepositing(false);
+    // H1 soft guard: a definite success on this account within the last 60 s needs one more explicit confirm.
+    let acceptRecentCompletion = false;
+    let acknowledgedCompletionAt = null;
+    const recent = recentCompletionFor({ store: pendingFinanceAttempts, scope: financeScope, loginKey: financeLoginKey });
+    if (recent) {
+      const extraConfirmed = await askConfirmation(buildRecentCompletionPrompt(recent, { currency: currencyValue, language: uiLanguage }), false);
+      if (!extraConfirmed) return;
+      acceptRecentCompletion = true;
+      acknowledgedCompletionAt = recent.at;
     }
+
+    // Execute check, record write, read-back verification, and send under the cross-tab account lease.
+    await runAndApply(() => executeBalanceOperation({
+      store: pendingFinanceAttempts,
+      scope: financeScope,
+      loginKey: financeLoginKey,
+      type: prepared.transactionTypeKey,
+      direction: prepared.direction,
+      endpointKey: prepared.request.endpointKey,
+      payload: prepared.request.payload,
+      createKey: createTransactionIdempotencyKey,
+      canManageFinances,
+      acceptRecentCompletion,
+      acknowledgedCompletionAt,
+      submit: submitManagerTransaction,
+      currency: currencyValue,
+    }));
   };
 
   const firstNameValue = pickFirstValue(fieldSources, ['FirstName', 'firstName']);
@@ -1530,6 +1721,13 @@ const AccountDetailsModal = ({
     if (val === null || val === undefined || isNaN(Number(val))) return '0.00';
     return ACCOUNT_NUMBER_FORMATTER.format(Number(val));
   };
+
+  // Balance tab summary: exact decimal text, a dash when unknown (never 0.00, never a computed fallback).
+  const summaryBalanceText = formatManagerMoneyText(getFieldValue('Balance', null));
+  const summaryCreditText = formatManagerMoneyText(getFieldValue('Credit', null));
+  const summaryEquityText = formatManagerMoneyText(getFieldValue('Equity', null));
+  const summaryFreeMarginText = formatManagerMoneyText(getFieldValue('MarginFree', null));
+  const hasUnavailableOperations = getManagerTransactionOptions().some((option) => !option.enabled);
 
   const rawBalanceVal = getFieldValue('Balance', 0);
   const rawEquityVal = getFieldValue('Equity', rawBalanceVal);
@@ -2239,23 +2437,128 @@ const AccountDetailsModal = ({
                 <div className="account-transaction-card">
                   <div className="account-transaction-header">
                     <h2 className="text-[12px] font-bold   tracking-wide uppercase">
-                      {getManagerTransactionActionLabel(transactionType)} funds
+                      Balance operation
                     </h2>
                   </div>
 
-                  <form className="account-transaction-body" noValidate onSubmit={(event) => { event.preventDefault(); handleTransaction(); }}>
-                    <div className="account-transaction-balance">
-                      <span className=" ">Current balance</span>
-                      <span className="font-semibold tabular  ">{balanceVal}</span>
+                  <form className="account-transaction-body" noValidate onSubmit={(event) => event.preventDefault()}>
+                    <div className="account-transaction-balance flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span>Balance</span>
+                      <strong className="font-semibold tabular">{summaryBalanceText}</strong>
+                      <span aria-hidden="true">·</span>
+                      <span>Credit</span>
+                      <strong className="font-semibold tabular">{summaryCreditText}</strong>
+                      <span aria-hidden="true">·</span>
+                      <span>Equity</span>
+                      <strong className="font-semibold tabular">{summaryEquityText}</strong>
+                      <span aria-hidden="true">·</span>
+                      <span>Free margin</span>
+                      <strong className="font-semibold tabular">{summaryFreeMarginText}</strong>
                     </div>
-                    {depositError && (
+                    {financeView.storageNotice && (
+                      <div role="status" className="p-3 bg-amber-100/50 dark:bg-amber-900/30 border border-amber-200/50 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 rounded-md text-[12px]">
+                        {financeView.storageNotice}
+                      </div>
+                    )}
+                    {financeView.notice && (
                       <div className="p-3 bg-red-100/50 dark:bg-red-900/30  border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-md text-[12px]">
-                        {depositError}
+                        <p className="font-semibold">
+                          <span>{UNRESOLVED_OPERATION_TITLE}</span>
+                          {financeView.notice.manager ? (
+                            <>
+                              {' — '}
+                              <span>{STARTED_BY_MANAGER_PREFIX}</span>
+                              {`: ${financeView.notice.manager}`}
+                            </>
+                          ) : null}
+                        </p>
+                        <div className="mt-1">{renderTransactionFeedback(financeView.notice)}</div>
+                        <p className="mt-2">{SUBMIT_BLOCKED_TEXT}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {financeView.notice.canRetry && (
+                            <button
+                              type="button"
+                              disabled={isDepositing}
+                              onClick={retryPendingTransaction}
+                              className="account-transaction-submit"
+                            >
+                              Retry with the same key
+                            </button>
+                          )}
+                          {financeView.notice.canConfirm && !historyCheck && (
+                            <button
+                              type="button"
+                              disabled={isDepositing}
+                              onClick={openHistoryCheck}
+                              className="text-[12px] underline self-center"
+                            >
+                              {HISTORY_OPEN_TEXT}
+                            </button>
+                          )}
+                        </div>
+                        {financeView.notice.canConfirm && historyCheck && (() => {
+                          const check = acknowledgeCheckView(historyCheck);
+                          const original = describeOriginalOperation(financeView.notice.original, {
+                            currency: currencyValue,
+                            language: uiLanguage,
+                          });
+                          return (
+                            <div role="region" aria-label={HISTORY_HEADING_TEXT} className="mt-2 p-2 border border-red-200/50 dark:border-red-800/50 rounded-md flex flex-col gap-1.5">
+                              <p className="font-semibold">{HISTORY_PENDING_LABEL}</p>
+                              {original && (
+                                <p>{`${original.typeText} ${original.amountText} · ${STARTED_BY_MANAGER_PREFIX}: ${original.manager} · ${original.time}`}</p>
+                              )}
+                              {historyCheck.loading && <p role="status">{HISTORY_LOADING_TEXT}</p>}
+                              {!historyCheck.loading && check.unavailableText && (
+                                <p role="alert" className="font-semibold">{check.unavailableText}</p>
+                              )}
+                              {!historyCheck.loading && historyCheck.ok && (
+                                <>
+                                  <p>{HISTORY_HEADING_TEXT}</p>
+                                  <ul className="text-[11px] flex flex-col gap-0.5">
+                                    {historyCheck.rows.map((row) => (
+                                      <li key={row.id}>{describeHistoryRow(row, currencyValue)}</li>
+                                    ))}
+                                  </ul>
+                                  {check.warning
+                                    ? <p role="alert" className="font-semibold text-red-700 dark:text-red-300">{check.warning}</p>
+                                    : (check.truncated ? null : <p>{HISTORY_NO_MATCH_TEXT}</p>)}
+                                </>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isDepositing || historyCheck.loading || !check.canAcknowledge}
+                                  onClick={confirmNewOperation}
+                                  className="account-transaction-submit"
+                                >
+                                  {check.confirmText}
+                                </button>
+                                <button type="button" onClick={closeHistoryCheck} className="text-[12px] underline">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    {financeView.confirmations.map((item) => (
+                      <p key={`${item.idempotencyKey || ''}-${item.at}`} role="status" className="text-[12px] text-gray-600 dark:text-gray-300">
+                        {item.lead ? `${item.lead}: ` : null}
+                        <span>{CONFIRMED_AS_CHECKED_TEXT}</span>{' '}
+                        <span>{new Date(item.at).toLocaleString()}</span>
+                        {item.acknowledgedBy ? <span>{` (${item.acknowledgedBy})`}</span> : null}
+                      </p>
+                    ))}
+                    {depositError && depositError.kind !== 'unconfirmed' && (
+                      <div className="p-3 bg-red-100/50 dark:bg-red-900/30  border border-red-200/50 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-md text-[12px]">
+                        {renderTransactionFeedback(depositError)}
                       </div>
                     )}
                     {depositSuccess && (
                       <div className="p-3 bg-blue-100/50 dark:bg-blue-900/30  border border-blue-200/50 dark:border-blue-800/50 text-blue-800 dark:text-blue-300 rounded-md text-[12px]">
-                        {depositSuccess}
+                        {renderTransactionSuccess(depositSuccess)}
                       </div>
                     )}
 
@@ -2266,17 +2569,25 @@ const AccountDetailsModal = ({
                         value={transactionType}
                         disabled={isDepositing || !canManageFinances}
                         onChange={(e) => {
-                          setTransactionType(resolveManagerTransactionType(e.target.value));
+                          const nextType = resolveManagerTransactionType(e.target.value);
+                          setTransactionType(nextType);
                           setDepositDestination('');
+                          if (nextType !== 'balance') {
+                            setSkipMarginChecked(false);
+                            setSkipMarginReason('');
+                          }
                           setDepositError(null);
                           setDepositSuccess(null);
                         }}
                         className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
                       >
                         {getManagerTransactionOptions().map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
+                          <option key={option.value} value={option.value} disabled={!option.enabled}>{option.label}</option>
                         ))}
                       </select>
+                      {hasUnavailableOperations && (
+                        <p className="text-[11px] text-gray-500">Some operations are not available yet</p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -2322,6 +2633,8 @@ const AccountDetailsModal = ({
                       <input
                         type="text"
                         id="transaction-comment"
+                        list="transaction-comment-presets"
+                        maxLength={500}
                         disabled={isDepositing || !canManageFinances}
                         value={depositComment}
                         onChange={(e) => {
@@ -2331,16 +2644,81 @@ const AccountDetailsModal = ({
                         }}
                         className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all"
                       />
+                      <datalist id="transaction-comment-presets">
+                        {getManagerCommentPresets(transactionType).map((preset) => (
+                          <option key={preset} value={preset} />
+                        ))}
+                      </datalist>
                     </div>
 
-                    <button
-                      type="submit"
-                      disabled={isDepositing || !canManageFinances}
-                      title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
-                      className="account-transaction-submit"
-                    >
-                      {isDepositing ? getManagerTransactionPendingLabel(transactionType) : getManagerTransactionActionLabel(transactionType)}
-                    </button>
+                    {showSkipMargin && (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="flex items-center gap-2 text-[12px]">
+                          <input
+                            type="checkbox"
+                            checked={skipMarginChecked}
+                            disabled={isDepositing || !canManageFinances}
+                            onChange={(e) => {
+                              setSkipMarginChecked(e.target.checked);
+                              setDepositError(null);
+                              setDepositSuccess(null);
+                            }}
+                          />
+                          <span>Withdrawal: skip margin check</span>
+                        </label>
+                        {skipMarginChecked && (
+                          <>
+                            <label htmlFor="transaction-skip-reason" className="text-[12px] font-medium">Skip reason (10-500 characters)</label>
+                            <input
+                              type="text"
+                              id="transaction-skip-reason"
+                              maxLength={500}
+                              value={skipMarginReason}
+                              disabled={isDepositing || !canManageFinances}
+                              onChange={(e) => {
+                                setSkipMarginReason(e.target.value);
+                                setDepositError(null);
+                                setDepositSuccess(null);
+                              }}
+                              className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all"
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {isTransferType(transactionType) ? (
+                      <button
+                        type="button"
+                        disabled={isDepositing || !canManageFinances || financeView.blocked || !isManagerTransactionAvailable(transactionType)}
+                        title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
+                        onClick={() => handleTransaction(null)}
+                        className="account-transaction-submit"
+                      >
+                        Transfer
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isDepositing || !canManageFinances || financeView.blocked || !isManagerTransactionAvailable(transactionType)}
+                          title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
+                          onClick={() => handleTransaction(DIRECTION_IN)}
+                          className="account-transaction-submit flex-1"
+                        >
+                          Deposit (+)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isDepositing || !canManageFinances || financeView.blocked || !isManagerTransactionAvailable(transactionType)}
+                          title={!canManageFinances ? 'You do not have permission to manage account funds' : undefined}
+                          onClick={() => handleTransaction(DIRECTION_OUT)}
+                          className="account-transaction-submit flex-1"
+                        >
+                          Withdrawal (−)
+                        </button>
+                      </div>
+                    )}
                     {!canManageFinances && <p role="status">Your role does not have permission to manage account funds.</p>}
                   </form>
                 </div>
@@ -2476,12 +2854,35 @@ const AccountDetailsModal = ({
         onDismiss={() => setUpdateFeedback(null)}
       />
     )}
-    {(depositConfirmation || isDepositing || depositSuccess || depositError) && (
+    {(depositConfirmation || isDepositing || (resultDialogOpen && (depositError || depositSuccess))) && (
       <DepositDialog
-        status={depositConfirmation ? 'confirm' : isDepositing ? 'pending' : depositError ? 'error' : 'success'}
-        message={depositConfirmation || (isDepositing ? `Waiting for the broker to confirm your ${getManagerTransactionPendingNoun(transactionType)}. Please do not submit it again.` : depositError || depositSuccess)}
+        status={depositConfirmation ? 'confirm' : isDepositing ? 'pending' : depositError ? 'error' : depositReplayed ? 'info' : 'success'}
+        title={depositConfirmation
+          ? 'Confirm balance operation'
+          : isDepositing
+            ? 'Processing balance operation'
+            : depositError
+              ? (depositError.kind === 'unconfirmed' ? 'Result not confirmed' : 'Balance operation could not be completed')
+              : depositReplayed ? 'Balance operation already applied' : 'Balance operation successful'}
+        message={depositConfirmation
+          ? (
+            <>
+              {depositConfirmation}
+              {depositConfirmationWarning && <span className="block mt-2">{SKIP_MARGIN_WARNING_TEXT}</span>}
+            </>
+          )
+          : isDepositing
+            ? 'Waiting for the broker to confirm. Please do not submit it again.'
+            : depositError ? renderTransactionFeedback(depositError) : renderTransactionSuccess(depositSuccess)}
+        confirmLabel="Confirm"
+        dismissLabel={depositError ? 'Back to details' : undefined}
         onConfirm={() => finishDepositConfirmation(true)}
-        onDismiss={() => { finishDepositConfirmation(false); setDepositError(null); setDepositSuccess(null); }}
+        onDismiss={() => {
+          finishDepositConfirmation(false);
+          setResultDialogOpen(false);
+          setDepositError(null);
+          setDepositSuccess(null);
+        }}
       />
     )}
     </>

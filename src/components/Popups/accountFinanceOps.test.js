@@ -1,356 +1,651 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { PERMISSIONS, decidePermission } from '../../utils/permissions.js';
 import {
+  normalizeSkipMarginReason,
   DEFAULT_MANAGER_TRANSACTION_TYPE,
   MANAGER_TRANSACTION_TYPES,
   buildManagerTransactionConfirmation,
   buildManagerTransactionFailurePrefix,
+  buildManagerTransactionRequest,
   buildManagerTransactionSuccessMessage,
-  getManagerTransactionActionLabel,
+  describeManagerTransactionFailure,
+  describeManagerTransactionPending,
+  EXPIRED_PENDING_TEXT,
+  IN_FLIGHT_PENDING_TEXT,
+  OUTCOME_UNKNOWN_PENDING_TEXT,
+  STORE_UNAVAILABLE_PENDING_TEXT,
+  UNVERIFIED_PENDING_TEXT,
+  formatManagerMoneyIfKnown,
+  formatManagerMoneyText,
+  getManagerBalanceOpDirections,
+  MANAGER_REPLAY_TEXT,
+  getManagerCommentPresets,
   getManagerTransactionOptions,
-  getManagerTransactionPendingLabel,
-  getManagerTransactionPendingNoun,
+  isManagerTransactionAvailable,
   isSupportedManagerTransactionType,
   isTransferType,
+  normalizeManagerAmount,
   resolveManagerTransactionType,
   resolveTransferDestination,
+  IDEMPOTENCY_CODE_CLASSES,
+  KEY_CONFLICT_PENDING_TEXT,
+  KEY_HOLD_PENDING_TEXT,
+  KEY_REJECTED_PENDING_TEXT,
+  isKeyHoldCode,
 } from './accountFinanceOps.js';
 
-describe('accountFinanceOps transaction type mapping', () => {
-  it('defaults to deposit', () => {
-    assert.equal(DEFAULT_MANAGER_TRANSACTION_TYPE, 'deposit');
-    assert.equal(resolveManagerTransactionType(DEFAULT_MANAGER_TRANSACTION_TYPE), 'deposit');
+// Fake logins only. Never real owner or QA-pool accounts in test data.
+const LOGIN = 710001;
+const DESTINATION = 710002;
+
+const MT5_ORDER = [
+  'balance', 'credit', 'charge', 'correction', 'bonus', 'commission',
+  'tax', 'so_compensation', 'so_credit_compensation', 'transfer',
+];
+const DISABLED = ['charge', 'correction', 'bonus', 'commission', 'tax', 'so_compensation', 'so_credit_compensation'];
+
+
+describe('accountFinanceOps operation list', () => {
+  it('defaults to balance and lists the ten MT5 operations in MT5 order', () => {
+    assert.equal(DEFAULT_MANAGER_TRANSACTION_TYPE, 'balance');
+    assert.deepEqual([...MANAGER_TRANSACTION_TYPES], MT5_ORDER);
   });
 
-  it('exposes exactly the four mapped types in selector order', () => {
-    assert.deepEqual([...MANAGER_TRANSACTION_TYPES], ['deposit', 'withdraw', 'credit', 'transfer']);
-  });
-
-  it('routes each supported type to its own endpoint key', () => {
-    assert.equal(resolveManagerTransactionType('deposit'), 'deposit');
-    assert.equal(resolveManagerTransactionType('withdraw'), 'withdraw');
-    assert.equal(resolveManagerTransactionType('credit'), 'credit');
-    assert.equal(resolveManagerTransactionType('transfer'), 'transfer');
-  });
-
-  it('accepts surrounding whitespace and casing on supported types', () => {
-    assert.equal(resolveManagerTransactionType('  Deposit  '), 'deposit');
-    assert.equal(resolveManagerTransactionType('WITHDRAW'), 'withdraw');
-  });
-
-  it('offers one generic selector option per supported type', () => {
-    assert.deepEqual(getManagerTransactionOptions(), [
-      { value: 'deposit', label: 'Deposit' },
-      { value: 'withdraw', label: 'Withdraw' },
-      { value: 'credit', label: 'Credit' },
-      { value: 'transfer', label: 'Transfer' },
-    ]);
-  });
-
-  it('labels every supported type generically', () => {
-    assert.equal(getManagerTransactionActionLabel('deposit'), 'Deposit');
-    assert.equal(getManagerTransactionActionLabel('withdraw'), 'Withdraw');
-    assert.equal(getManagerTransactionActionLabel('credit'), 'Credit');
-    assert.equal(getManagerTransactionActionLabel('transfer'), 'Transfer');
-    assert.equal(getManagerTransactionPendingLabel('deposit'), 'Depositing...');
-    assert.equal(getManagerTransactionPendingLabel('withdraw'), 'Withdrawing...');
-    assert.equal(getManagerTransactionPendingLabel('credit'), 'Applying...');
-    assert.equal(getManagerTransactionPendingLabel('transfer'), 'Transferring...');
-    assert.equal(getManagerTransactionPendingNoun('deposit'), 'deposit');
-    assert.equal(getManagerTransactionPendingNoun('withdraw'), 'withdrawal');
-    assert.equal(getManagerTransactionPendingNoun('credit'), 'credit');
-    assert.equal(getManagerTransactionPendingNoun('transfer'), 'transfer');
-  });
-
-  it('builds per-type confirmation and result copy naming the amount and account', () => {
-    assert.equal(
-      buildManagerTransactionConfirmation('deposit', '100.00 USD', 200001),
-      'Deposit 100.00 USD into account #200001?',
+  it('enables only balance, credit and transfer in Phase A', () => {
+    const options = getManagerTransactionOptions();
+    assert.deepEqual(options.map((option) => option.value), MT5_ORDER);
+    assert.deepEqual(
+      options.filter((option) => option.enabled).map((option) => option.value),
+      ['balance', 'credit', 'transfer'],
     );
-    assert.equal(
-      buildManagerTransactionConfirmation('withdraw', '100.00 USD', 200001),
-      'Withdraw 100.00 USD from account #200001?',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('deposit', '100.00 USD', 200001),
-      'Deposited 100.00 USD into account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('withdraw', '100.00 USD', 200001),
-      'Withdrew 100.00 USD from account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('credit', '100.00 USD', 200001),
-      'Credited 100.00 USD to account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('transfer', '100.00 USD', 200001),
-      'Transferred 100.00 USD from account #200001 successfully.',
-    );
-    assert.equal(buildManagerTransactionFailurePrefix('credit', 200001), 'Credit for account #200001');
-    assert.equal(buildManagerTransactionFailurePrefix('transfer', 200001), 'Transfer for account #200001');
+    assert.equal(options.find((option) => option.value === 'so_credit_compensation').label, 'SO credit compensation');
+    assert.equal(options.find((option) => option.value === 'balance').label, 'Balance');
   });
 
-  it('fails closed on unknown, empty, and nullish types', () => {
-    for (const bad of ['rebate', 'bonus', '', '   ', null, undefined, 0, 123, {}, []]) {
-      assert.throws(() => resolveManagerTransactionType(bad), TypeError);
-      assert.equal(isSupportedManagerTransactionType(bad), false);
-      assert.throws(() => getManagerTransactionActionLabel(bad), TypeError);
-      assert.throws(() => buildManagerTransactionConfirmation(bad, '10.00', 1), TypeError);
-      assert.throws(() => buildManagerTransactionSuccessMessage(bad, '10.00', 1), TypeError);
-      assert.throws(() => buildManagerTransactionFailurePrefix(bad, 1), TypeError);
+  it('returns fresh option objects on every call', () => {
+    const first = getManagerTransactionOptions();
+    first[0].value = 'rebate';
+    assert.equal(getManagerTransactionOptions()[0].value, 'balance');
+  });
+
+  it('reports availability: enabled only for live routes, false for unknown', () => {
+    for (const type of ['balance', 'credit', 'transfer']) assert.equal(isManagerTransactionAvailable(type), true);
+    for (const type of DISABLED) assert.equal(isManagerTransactionAvailable(type), false);
+    assert.equal(isManagerTransactionAvailable('rebate'), false);
+    assert.equal(isManagerTransactionAvailable(''), false);
+  });
+
+  it('normalizes case and whitespace on every listed key', () => {
+    assert.equal(resolveManagerTransactionType('  Balance  '), 'balance');
+    assert.equal(resolveManagerTransactionType('CREDIT'), 'credit');
+    assert.equal(resolveManagerTransactionType('\tTransfer\n'), 'transfer');
+    assert.equal(resolveManagerTransactionType(' SO_CREDIT_COMPENSATION '), 'so_credit_compensation');
+    for (const type of MT5_ORDER) assert.equal(isSupportedManagerTransactionType(type), true);
+  });
+
+  it('fails closed on unknown, legacy, empty, nullish, and lookalike types', () => {
+    const bad = [
+      'rebate', 'deposit', 'withdraw', 'deposits', 'balance_op', 'balance-op', 'de posit',
+      '', '   ', '\n\t ', null, undefined, 0, 123, -1, true, Number.NaN, {}, [],
+      Symbol('balance'), 'toString', '__proto__', 'constructor',
+    ];
+    for (const value of bad) {
+      assert.equal(isSupportedManagerTransactionType(value), false);
+      assert.throws(() => resolveManagerTransactionType(value), TypeError);
+      assert.throws(() => buildManagerTransactionRequest({ type: value, direction: 'in', login: LOGIN, amount: '1.00' }), TypeError);
+      assert.throws(() => buildManagerTransactionConfirmation(value, '1.00 USD', LOGIN, undefined, 'in'), TypeError);
+      assert.throws(() => buildManagerTransactionSuccessMessage(value, '1.00 USD', LOGIN, undefined, 'in'), TypeError);
+      assert.throws(() => buildManagerTransactionFailurePrefix(value, LOGIN, 'in'), TypeError);
     }
   });
 
-  it('reports support for exactly the four mapped types', () => {
-    for (const good of ['deposit', 'withdraw', 'credit', 'transfer']) {
-      assert.equal(isSupportedManagerTransactionType(good), true);
+  it('predicates the transfer operation without throwing', () => {
+    assert.equal(isTransferType('transfer'), true);
+    assert.equal(isTransferType(' Transfer '), true);
+    assert.equal(isTransferType('balance'), false);
+    assert.equal(isTransferType('credit'), false);
+    assert.equal(isTransferType(null), false);
+    assert.equal(isTransferType('rebate'), false);
+  });
+});
+
+describe('accountFinanceOps route mapping (existing routes)', () => {
+  it('maps balance in to deposit and balance out to withdraw, with no credit_out', () => {
+    assert.deepEqual(
+      buildManagerTransactionRequest({ type: 'balance', direction: 'in', login: LOGIN, amount: '100.00', comment: 'Deposit' }),
+      { endpointKey: 'deposit', payload: { login: LOGIN, amount: '100.00', comment: 'Deposit' } },
+    );
+    assert.deepEqual(
+      buildManagerTransactionRequest({ type: 'balance', direction: 'out', login: LOGIN, amount: '100.00' }),
+      { endpointKey: 'withdraw', payload: { login: LOGIN, amount: '100.00', comment: '' } },
+    );
+  });
+
+  it('maps credit in to credit without credit_out', () => {
+    const request = buildManagerTransactionRequest({ type: 'credit', direction: 'in', login: LOGIN, amount: '500.00' });
+    assert.equal(request.endpointKey, 'credit');
+    assert.equal('credit_out' in request.payload, false);
+  });
+
+  it('maps credit out to credit with credit_out: true', () => {
+    const request = buildManagerTransactionRequest({ type: 'credit', direction: 'out', login: LOGIN, amount: '200.00', comment: 'Remove credit' });
+    assert.deepEqual(request, {
+      endpointKey: 'credit',
+      payload: { login: LOGIN, amount: '200.00', comment: 'Remove credit', credit_out: true },
+    });
+  });
+
+  it('maps transfer to from_login and to_login only, with no login key', () => {
+    const request = buildManagerTransactionRequest({
+      type: 'transfer', direction: null, login: LOGIN, destination: String(DESTINATION), amount: '250.00', comment: 'Internal move',
+    });
+    assert.deepEqual(request, {
+      endpointKey: 'transfer',
+      payload: { from_login: LOGIN, to_login: DESTINATION, amount: '250.00', comment: 'Internal move' },
+    });
+    assert.equal('login' in request.payload, false);
+  });
+
+  it('requires a direction for balance and credit, and none for transfer', () => {
+    for (const direction of [undefined, null, '', 'IN', 'sideways', 'both']) {
+      assert.throws(() => buildManagerTransactionRequest({ type: 'balance', direction, login: LOGIN, amount: '1.00' }), TypeError);
+      assert.throws(() => buildManagerTransactionRequest({ type: 'credit', direction, login: LOGIN, amount: '1.00' }), TypeError);
+    }
+    for (const direction of ['in', 'out']) {
+      assert.throws(() => buildManagerTransactionRequest({
+        type: 'transfer', direction, login: LOGIN, destination: DESTINATION, amount: '1.00',
+      }), /does not take a direction/);
     }
   });
 
-  it('normalizes case and surrounding whitespace for every type key', () => {
-    const variants = {
-      deposit: ['deposit', ' Deposit', 'DEPOSIT', '  Deposit  ', '\tdeposit\n', 'dEpOsIt'],
-      withdraw: ['withdraw', ' WITHDRAW ', 'Withdraw', '\nwithdraw\t', 'wItHdRaW'],
-      credit: ['credit', ' CREDIT ', 'Credit', '\tCREDIT\n', 'cReDiT'],
-      transfer: ['transfer', ' TRANSFER ', 'Transfer', '\nTransfer\t', 'tRaNsFeR'],
-    };
-    for (const [expected, forms] of Object.entries(variants)) {
-      for (const form of forms) {
-        assert.equal(resolveManagerTransactionType(form), expected);
-        assert.equal(isSupportedManagerTransactionType(form), true);
+  it('fails closed on a transfer to the same account and on a missing destination', () => {
+    assert.throws(() => buildManagerTransactionRequest({
+      type: 'transfer', direction: null, login: LOGIN, destination: LOGIN, amount: '1.00',
+    }), /different from the source/);
+    assert.throws(() => buildManagerTransactionRequest({
+      type: 'transfer', direction: null, login: LOGIN, destination: '', amount: '1.00',
+    }), /Enter a destination login/);
+  });
+
+  it('refuses every disabled operation in both directions, so no balance-op route is reachable', () => {
+    for (const type of DISABLED) {
+      for (const direction of ['in', 'out']) {
+        assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /not available yet/);
       }
     }
-    assert.equal(getManagerTransactionActionLabel(' deposit '), 'Deposit');
-    assert.equal(getManagerTransactionActionLabel('CREDIT'), 'Credit');
-    assert.equal(getManagerTransactionPendingLabel(' WITHDRAW '), 'Withdrawing...');
-    assert.equal(getManagerTransactionPendingLabel('credit'), 'Applying...');
-    assert.equal(getManagerTransactionPendingNoun(' TRANSFER '), 'transfer');
-    assert.equal(getManagerTransactionPendingNoun('Withdraw'), 'withdrawal');
   });
 
-  it('maps every selector option value straight onto its endpoint key', () => {
-    const options = getManagerTransactionOptions();
-    assert.equal(options.length, 4);
+  it('gives SO credit compensation no deposit path and SO compensation no withdrawal path', () => {
+    assert.throws(() => buildManagerTransactionRequest({ type: 'so_credit_compensation', direction: 'in', login: LOGIN, amount: '1.00' }), /not available yet/);
+    assert.throws(() => buildManagerTransactionRequest({ type: 'so_compensation', direction: 'out', login: LOGIN, amount: '1.00' }), /not available yet/);
+  });
+
+  it('rejects invalid logins before building a request', () => {
+    for (const login of [0, -1, 1.5, '', 'abc', '12abc', null, undefined, Number.NaN]) {
+      assert.throws(() => buildManagerTransactionRequest({ type: 'balance', direction: 'in', login, amount: '1.00' }), /invalid login/);
+    }
+  });
+
+  it('trims the comment and refuses one longer than 500 characters', () => {
+    assert.equal(buildManagerTransactionRequest({ type: 'balance', direction: 'in', login: LOGIN, amount: '1.00', comment: '  Bonus note  ' }).payload.comment, 'Bonus note');
+    assert.throws(() => buildManagerTransactionRequest({
+      type: 'balance', direction: 'in', login: LOGIN, amount: '1.00', comment: 'x'.repeat(501),
+    }), /500 characters/);
+    assert.equal(buildManagerTransactionRequest({
+      type: 'balance', direction: 'in', login: LOGIN, amount: '1.00', comment: 'x'.repeat(500),
+    }).payload.comment.length, 500);
+  });
+});
+
+describe('accountFinanceOps amount handling (exact decimal text)', () => {
+  it('returns a canonical two-decimal string', () => {
+    assert.equal(normalizeManagerAmount('1.5'), '1.50');
+    assert.equal(normalizeManagerAmount(1.5), '1.50');
+    assert.equal(normalizeManagerAmount('12'), '12.00');
+    assert.equal(normalizeManagerAmount('  12  '), '12.00');
+    assert.equal(normalizeManagerAmount('0.01'), '0.01');
+    assert.equal(normalizeManagerAmount('00.50'), '0.50');
+    assert.equal(normalizeManagerAmount('1000000'), '1000000.00');
+    assert.equal(normalizeManagerAmount('1000000.00'), '1000000.00');
+  });
+
+  it('rejects exponents, signs, zero, extra decimals, grouping, and out-of-range values', () => {
+    for (const bad of ['1e3', '-1', '0', '0.00', '1.005', '.5', '1.', '1,000.00', 'abc', '', '   ', '1000000.01', '1000001', '10000000', 1e21, null, undefined, Number.NaN, true]) {
+      assert.equal(normalizeManagerAmount(bad), null, String(bad));
+    }
+  });
+
+  it('formats money text exactly and shows unknown values as a dash, never 0.00', () => {
+    assert.equal(formatManagerMoneyText('9737.5'), '9,737.50');
+    assert.equal(formatManagerMoneyText('1234567'), '1,234,567.00');
+    assert.equal(formatManagerMoneyText('-1234.5'), '-1,234.50');
+    assert.equal(formatManagerMoneyText(0), '0.00');
+    assert.equal(formatManagerMoneyText('0'), '0.00');
+    assert.equal(formatManagerMoneyText(9737.5), '9,737.50');
+    for (const unknown of [null, undefined, '', '   ', 'abc', Number.NaN, Number.POSITIVE_INFINITY, {}]) {
+      assert.equal(formatManagerMoneyText(unknown), '—');
+    }
+  });
+});
+
+describe('accountFinanceOps confirmation, success and failure copy', () => {
+  it('builds exact confirmation copy per route', () => {
+    assert.equal(buildManagerTransactionConfirmation('balance', '100.00 USD', LOGIN, undefined, 'in'), 'Deposit 100.00 USD into account #710001?');
+    assert.equal(buildManagerTransactionConfirmation('balance', '100.00 USD', LOGIN, undefined, 'out'), 'Withdraw 100.00 USD from account #710001?');
+    assert.equal(buildManagerTransactionConfirmation('credit', '100.00 USD', LOGIN, undefined, 'in'), 'Credit 100.00 USD to account #710001?');
+    assert.equal(buildManagerTransactionConfirmation('credit', '100.00 USD', LOGIN, undefined, 'out'), 'Withdraw credit 100.00 USD from account #710001?');
+    assert.equal(buildManagerTransactionConfirmation('transfer', '100.00 USD', LOGIN, DESTINATION, null), 'Transfer 100.00 USD from account #710001 to account #710002?');
+    assert.equal(buildManagerTransactionConfirmation('transfer', '100.00 USD', LOGIN, null, null), 'Transfer 100.00 USD from account #710001?');
+  });
+
+  it('builds exact success copy per route', () => {
+    assert.equal(buildManagerTransactionSuccessMessage('balance', '100.00 USD', LOGIN, undefined, 'in'), 'Deposited 100.00 USD into account #710001 successfully.');
+    assert.equal(buildManagerTransactionSuccessMessage('balance', '100.00 USD', LOGIN, undefined, 'out'), 'Withdrew 100.00 USD from account #710001 successfully.');
+    assert.equal(buildManagerTransactionSuccessMessage('credit', '100.00 USD', LOGIN, undefined, 'in'), 'Credited 100.00 USD to account #710001 successfully.');
+    assert.equal(buildManagerTransactionSuccessMessage('credit', '100.00 USD', LOGIN, undefined, 'out'), 'Credit withdrawn 100.00 USD from account #710001 successfully.');
+    assert.equal(buildManagerTransactionSuccessMessage('transfer', '100.00 USD', LOGIN, DESTINATION, null), 'Transferred 100.00 USD from account #710001 to account #710002 successfully.');
+  });
+
+  it('builds failure prefixes per route', () => {
+    assert.equal(buildManagerTransactionFailurePrefix('balance', LOGIN, 'in'), 'Deposit for account #710001');
+    assert.equal(buildManagerTransactionFailurePrefix('balance', LOGIN, 'out'), 'Withdraw for account #710001');
+    assert.equal(buildManagerTransactionFailurePrefix('credit', LOGIN, 'out'), 'Withdraw credit for account #710001');
+    assert.equal(buildManagerTransactionFailurePrefix(' TRANSFER ', LOGIN, null), 'Transfer for account #710001');
+  });
+
+  it('keeps the server code and maps INSUFFICIENT_FUNDS to the balance copy', () => {
     assert.deepEqual(
-      options.map((option) => option.value),
-      ['deposit', 'withdraw', 'credit', 'transfer'],
+      describeManagerTransactionFailure({ code: 'INSUFFICIENT_FUNDS', message: 'Not enough balance' }, 'balance'),
+      { text: 'Insufficient balance / free margin', detail: 'Not enough balance', code: 'INSUFFICIENT_FUNDS' },
     );
-    for (const option of options) {
-      assert.equal(resolveManagerTransactionType(option.value), option.value);
-      assert.equal(isSupportedManagerTransactionType(option.value), true);
+  });
+
+  it('maps engine-owned codes on transfer, and shows the backend message for them on other operations', () => {
+    for (const code of ['ACCOUNT_ENGINE_OWNED', 'ACCOUNT_NOT_ENGINE_OWNED']) {
+      assert.deepEqual(
+        describeManagerTransactionFailure({ code, message: 'server says no' }, 'transfer'),
+        { text: 'Transfer not available on this server version', detail: 'server says no', code },
+      );
     }
-    assert.equal(new Set(options.map((option) => option.value)).size, 4);
-  });
-
-  it('builds confirmation copy for credit and transfer without mirroring logic', () => {
-    assert.equal(
-      buildManagerTransactionConfirmation('credit', '100.00 USD', 200001),
-      'Credit 100.00 USD to account #200001?',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('transfer', '100.00 USD', 200001),
-      'Transfer 100.00 USD from account #200001?',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation(' CREDIT ', '100.00 USD', 200001),
-      'Credit 100.00 USD to account #200001?',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('Transfer', '100.00 USD', 200001),
-      'Transfer 100.00 USD from account #200001?',
+    assert.deepEqual(
+      describeManagerTransactionFailure({ code: 'ACCOUNT_ENGINE_OWNED', message: 'server says no' }, 'balance'),
+      { text: 'server says no', detail: '', code: 'ACCOUNT_ENGINE_OWNED' },
     );
   });
 
-  it('builds failure prefixes for deposit and withdraw without mirroring logic', () => {
-    assert.equal(buildManagerTransactionFailurePrefix('deposit', 200001), 'Deposit for account #200001');
-    assert.equal(buildManagerTransactionFailurePrefix('withdraw', 200001), 'Withdraw for account #200001');
-    assert.equal(buildManagerTransactionFailurePrefix(' DEPOSIT ', 200001), 'Deposit for account #200001');
-    assert.equal(buildManagerTransactionFailurePrefix('Withdraw', 200001), 'Withdraw for account #200001');
+  it('shows the backend message for unlisted codes and a fallback when there is no message', () => {
+    assert.deepEqual(
+      describeManagerTransactionFailure({ code: 'CREDIT_OUT_ENGINE_ONLY', message: 'Credit out needs an engine account' }, 'credit'),
+      { text: 'Credit out needs an engine account', detail: '', code: 'CREDIT_OUT_ENGINE_ONLY' },
+    );
+    assert.deepEqual(describeManagerTransactionFailure({}, 'balance'), { text: 'The request was not completed.', detail: '', code: null });
   });
 
-  it('accepts normalized variants in every copy builder', () => {
-    assert.equal(
-      buildManagerTransactionSuccessMessage(' DEPOSIT ', '100.00 USD', 200001),
-      'Deposited 100.00 USD into account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('withdraw', '100.00 USD', 200001),
-      'Withdrew 100.00 USD from account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('  CREDIT  ', '100.00 USD', 200001),
-      'Credited 100.00 USD to account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('TRANSFER', '100.00 USD', 200001),
-      'Transferred 100.00 USD from account #200001 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('  Deposit  ', '100.00 USD', 200001),
-      'Deposit 100.00 USD into account #200001?',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('WITHDRAW', '100.00 USD', 200001),
-      'Withdraw 100.00 USD from account #200001?',
-    );
-  });
-
-  it('fails closed on pending labels, nouns, and lookalike keys', () => {
-    const lookalikes = [
-      'deposits',
-      'withdraws',
-      'credits',
-      'transfers',
-      'de posit',
-      'with-draw',
-      'deposit_withdraw',
-      'CREDITS',
-      '\n\t ',
-      true,
-      false,
-      Number.NaN,
-      Number.POSITIVE_INFINITY,
-      -1,
-      Symbol('deposit'),
-    ];
-    for (const bad of lookalikes) {
-      assert.equal(isSupportedManagerTransactionType(bad), false);
-      assert.throws(() => resolveManagerTransactionType(bad), TypeError);
-      assert.throws(() => getManagerTransactionActionLabel(bad), TypeError);
-      assert.throws(() => getManagerTransactionPendingLabel(bad), TypeError);
-      assert.throws(() => getManagerTransactionPendingNoun(bad), TypeError);
-      assert.throws(() => buildManagerTransactionConfirmation(bad, '10.00', 1), TypeError);
-      assert.throws(() => buildManagerTransactionSuccessMessage(bad, '10.00', 1), TypeError);
-      assert.throws(() => buildManagerTransactionFailurePrefix(bad, 1), TypeError);
+  it('describes pending, expired, and exact idempotency pending codes with specific copy, never as success or Unrecognised status', () => {
+    assert.deepEqual(describeManagerTransactionPending('balance', 'pending', null), {
+      text: 'Pending: check history, do not repeat. Send the same form again only to retry it.', detail: '', code: null,
+    });
+    assert.deepEqual(describeManagerTransactionPending('transfer', 'unresolved', 'TRANSFER_UNRESOLVED'), {
+      text: 'Transfer is half applied. Send the same form again to complete it. Do not change the form.',
+      detail: '',
+      code: 'TRANSFER_UNRESOLVED',
+    });
+    assert.deepEqual(describeManagerTransactionPending('balance', 'expired', null), {
+      text: EXPIRED_PENDING_TEXT,
+      detail: '',
+      code: null,
+    });
+    for (const code of ['IDEMPOTENCY_IN_FLIGHT', 'IN_FLIGHT', 'IN_PROGRESS']) {
+      assert.deepEqual(describeManagerTransactionPending('balance', 'pending', code), {
+        text: IN_FLIGHT_PENDING_TEXT,
+        detail: '',
+        code,
+      });
     }
+    for (const code of ['IDEMPOTENCY_OUTCOME_UNKNOWN', 'OUTCOME_UNKNOWN']) {
+      assert.deepEqual(describeManagerTransactionPending('balance', 'pending', code), {
+        text: OUTCOME_UNKNOWN_PENDING_TEXT,
+        detail: '',
+        code,
+      });
+    }
+    for (const code of ['IDEMPOTENCY_STORE_UNAVAILABLE', 'STORE_UNAVAILABLE', 'IDEMPOTENCY_UNAVAILABLE', 'UNAVAILABLE']) {
+      assert.deepEqual(describeManagerTransactionPending('balance', 'pending', code), {
+        text: STORE_UNAVAILABLE_PENDING_TEXT,
+        detail: '',
+        code,
+      });
+    }
+    for (const code of ['IDEMPOTENCY_UNVERIFIED', 'UNVERIFIED']) {
+      assert.deepEqual(describeManagerTransactionPending('balance', 'pending', code), {
+        text: UNVERIFIED_PENDING_TEXT,
+        detail: '',
+        code,
+      });
+    }
+    assert.match(describeManagerTransactionPending('transfer', 'pending', null).text, /^Pending:/);
+  });
+});
+
+describe('accountFinanceOps margin-check skip (Withdrawal only)', () => {
+  const REASON = 'Owner-approved withdrawal below zero, ticket OPS-124';
+
+  it('sends skip_margin_check and the reason only on withdraw', () => {
+    assert.deepEqual(buildManagerTransactionRequest({
+      type: 'balance', direction: 'out', login: LOGIN, amount: '1500.00', comment: 'Balance withdrawal',
+      skipMarginCheck: true, skipMarginReason: REASON,
+    }), {
+      endpointKey: 'withdraw',
+      payload: { login: LOGIN, amount: '1500.00', comment: 'Balance withdrawal', skip_margin_check: true, skip_margin_reason: REASON },
+    });
   });
 
-  it('throws a descriptive TypeError instead of defaulting', () => {
-    assert.throws(() => resolveManagerTransactionType('rebate'), /Unsupported manager transaction type/);
-    try {
-      resolveManagerTransactionType('');
-      assert.fail('expected resolveManagerTransactionType to throw');
-    } catch (error) {
-      assert.equal(error instanceof TypeError, true);
-      assert.match(error.message, /Unsupported manager transaction type/);
+  it('never sends the flag on deposit, credit in, or credit out when it is not set', () => {
+    for (const [type, direction] of [['balance', 'in'], ['credit', 'in'], ['credit', 'out']]) {
+      const request = buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00', skipMarginCheck: false });
+      assert.equal('skip_margin_check' in request.payload, false);
+      assert.equal('skip_margin_reason' in request.payload, false);
     }
   });
 
-  it('keeps the selector contract stable: frozen types, default membership, fresh options', () => {
-    assert.equal(Object.isFrozen(MANAGER_TRANSACTION_TYPES), true);
-    assert.equal(MANAGER_TRANSACTION_TYPES.includes(DEFAULT_MANAGER_TRANSACTION_TYPE), true);
-    assert.equal(resolveManagerTransactionType(DEFAULT_MANAGER_TRANSACTION_TYPE), 'deposit');
-    assert.equal(isSupportedManagerTransactionType(DEFAULT_MANAGER_TRANSACTION_TYPE), true);
-    const first = getManagerTransactionOptions();
-    const second = getManagerTransactionOptions();
-    assert.notEqual(first, second);
-    assert.notEqual(first[0], second[0]);
-    first[0].value = 'rebate';
-    assert.equal(getManagerTransactionOptions()[0].value, 'deposit');
+  it('refuses the flag on deposit, credit in, credit out, and transfer', () => {
+    for (const [type, direction] of [['balance', 'in'], ['credit', 'in'], ['credit', 'out']]) {
+      assert.throws(() => buildManagerTransactionRequest({
+        type, direction, login: LOGIN, amount: '1.00', skipMarginCheck: true, skipMarginReason: REASON,
+      }), /only be skipped on a withdrawal/);
+    }
+    assert.throws(() => buildManagerTransactionRequest({
+      type: 'transfer', direction: null, login: LOGIN, destination: DESTINATION, amount: '1.00', skipMarginCheck: true, skipMarginReason: REASON,
+    }), /cannot be skipped on a transfer/);
+  });
+
+  it('requires a reason of 10 to 500 characters when the flag is set', () => {
+    for (const reason of ['', '   ', 'short', 'a'.repeat(9), 'a'.repeat(501), undefined, null]) {
+      assert.throws(() => buildManagerTransactionRequest({
+        type: 'balance', direction: 'out', login: LOGIN, amount: '1.00', skipMarginCheck: true, skipMarginReason: reason,
+      }), /characters to skip the margin check/);
+    }
+    assert.equal(normalizeSkipMarginReason(`  ${'a'.repeat(10)}  `), 'a'.repeat(10));
+    assert.equal(normalizeSkipMarginReason('a'.repeat(500)).length, 500);
+  });
+
+  it('refuses a non-boolean skip flag instead of guessing', () => {
+    assert.throws(() => buildManagerTransactionRequest({
+      type: 'balance', direction: 'out', login: LOGIN, amount: '1.00', skipMarginCheck: 'yes',
+    }), /true or false/);
+  });
+
+  it('gates the checkbox on manage_finances_skip_margin: visible when granted, hidden otherwise', () => {
+    assert.equal(PERMISSIONS.MANAGE_FINANCES_SKIP_MARGIN, 'manage_finances_skip_margin');
+    const granted = { isAdmin: false, permissions: ['manage_finances', 'manage_finances_skip_margin'], isLoading: false, isError: false };
+    const withoutSkip = { isAdmin: false, permissions: ['manage_finances'], isLoading: false, isError: false };
+    const failed = { isAdmin: false, permissions: [], isLoading: false, isError: true };
+    assert.equal(decidePermission(granted, PERMISSIONS.MANAGE_FINANCES_SKIP_MARGIN), true);
+    assert.equal(decidePermission(withoutSkip, PERMISSIONS.MANAGE_FINANCES_SKIP_MARGIN), false);
+    assert.equal(decidePermission(failed, PERMISSIONS.MANAGE_FINANCES_SKIP_MARGIN), false);
+  });
+
+  it('keeps the server code for each skip refusal and shows the backend message', () => {
+    for (const code of ['SKIP_MARGIN_NOT_PERMITTED', 'INVALID_INPUT', 'SKIP_MARGIN_ENGINE_ONLY', 'IDEMPOTENCY_MISMATCH']) {
+      assert.deepEqual(
+        describeManagerTransactionFailure({ code, message: 'server text' }, 'balance'),
+        { text: 'server text', detail: '', code },
+      );
+    }
+  });
+
+  it('keeps a negative balance_after exact as decimal text', () => {
+    assert.equal(formatManagerMoneyText('-500.00'), '-500.00');
+    assert.equal(formatManagerMoneyText('-1234.5'), '-1,234.50');
+  });
+});
+
+describe('accountFinanceOps transfer reversal and unrecognised outcomes', () => {
+  it('shows TRANSFER_REVERSED as a refusal with the leg code and the returned amount', () => {
+    assert.deepEqual(describeManagerTransactionFailure({
+      code: 'TRANSFER_REVERSED',
+      message: 'Transfer refused by the receiving account',
+      body: { status: 'REVERSED', in_leg: 'refused', in_leg_code: 'ACCOUNT_DISABLED', reversal: 'applied', from: { login: LOGIN, balance_after: '10000.00' } },
+    }, 'transfer'), {
+      text: 'Transfer refused: ACCOUNT_DISABLED. The amount was returned to #710001.',
+      detail: '',
+      code: 'TRANSFER_REVERSED',
+    });
+  });
+
+  it('falls back to the server message when there is no leg code', () => {
+    assert.deepEqual(describeManagerTransactionFailure({
+      code: 'TRANSFER_REVERSED', message: 'Receiver refused.', body: {},
+    }, 'transfer'), {
+      text: 'Transfer refused: Receiver refused. The amount was returned to the sending account.',
+      detail: '',
+      code: 'TRANSFER_REVERSED',
+    });
+  });
+
+  it('shows an unrecognised status as a failure with the raw code', () => {
+    assert.deepEqual(describeManagerTransactionFailure({ code: 'PARTIAL_REVERSAL', message: '', unrecognized: true }, 'transfer'), {
+      text: 'Unrecognised status', detail: '', code: 'PARTIAL_REVERSAL',
+    });
+  });
+
+  it('uses the retry-with-same-key copy for a 202 whose reversal is pending', () => {
+    assert.deepEqual(describeManagerTransactionPending('transfer', 'unresolved', 'TRANSFER_UNRESOLVED', 'pending'), {
+      text: 'Transfer is unresolved: the return of the amount is pending. Retry with the same key. Do not change the form.',
+      detail: '',
+      code: 'TRANSFER_UNRESOLVED',
+    });
+    assert.equal(
+      describeManagerTransactionPending('transfer', 'unresolved', 'TRANSFER_UNRESOLVED', 'none').text,
+      'Transfer is half applied. Send the same form again to complete it. Do not change the form.',
+    );
+  });
+});
+
+describe('accountFinanceOps balance-op directions (contract v4)', () => {
+  const BALANCE_OP_TYPES = ['charge', 'correction', 'bonus', 'commission', 'tax', 'so_compensation', 'so_credit_compensation'];
+
+  it('gives each balance-op type the directions contract v4 allows', () => {
+    for (const type of ['charge', 'correction', 'bonus', 'commission', 'tax']) {
+      assert.deepEqual(getManagerBalanceOpDirections(type), ['in', 'out']);
+    }
+    assert.deepEqual(getManagerBalanceOpDirections('so_compensation'), ['in']);
+    assert.deepEqual(getManagerBalanceOpDirections('so_credit_compensation'), ['out']);
+  });
+
+  it('gives no balance-op directions to the existing-route operations', () => {
+    for (const type of ['balance', 'credit', 'transfer']) assert.deepEqual(getManagerBalanceOpDirections(type), []);
+    assert.throws(() => getManagerBalanceOpDirections('rebate'), TypeError);
+  });
+
+  it('never offers dividend or dividend_franked', () => {
+    for (const type of ['dividend', 'dividend_franked']) {
+      assert.equal(isSupportedManagerTransactionType(type), false);
+      assert.throws(() => buildManagerTransactionRequest({ type, direction: 'in', login: LOGIN, amount: '1.00' }), TypeError);
+    }
+    assert.equal(getManagerTransactionOptions().some((option) => /dividend/.test(option.value)), false);
+    assert.equal(getManagerTransactionOptions().some((option) => /Dividend/.test(option.label)), false);
+  });
+
+  it('keeps every balance-op type disabled in Phase A, whatever direction v4 names', () => {
+    for (const type of BALANCE_OP_TYPES) {
+      assert.equal(isManagerTransactionAvailable(type), false);
+      for (const direction of ['in', 'out']) {
+        assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /not available yet/);
+      }
+    }
+  });
+});
+
+describe('accountFinanceOps comment presets', () => {
+  it('offers non-empty, fresh suggestion lists per operation', () => {
+    assert.deepEqual(getManagerCommentPresets('balance'), ['Deposit', 'Withdrawal']);
+    assert.deepEqual(getManagerCommentPresets('credit'), ['Credit in', 'Credit out']);
+    assert.deepEqual(getManagerCommentPresets('transfer'), ['Transfer']);
+    assert.deepEqual(getManagerCommentPresets('tax'), ['Tax']);
+    for (const type of MT5_ORDER) {
+      const presets = getManagerCommentPresets(type);
+      assert.ok(presets.length > 0);
+      assert.ok(presets.every((preset) => preset.length > 0));
+    }
+    const first = getManagerCommentPresets('balance');
+    first.push('rebate');
+    assert.deepEqual(getManagerCommentPresets('balance'), ['Deposit', 'Withdrawal']);
   });
 });
 
 describe('accountFinanceOps transfer destination plumbing', () => {
   it('resolves a valid destination login against a different source', () => {
-    assert.equal(resolveTransferDestination('200002', 200001), 200002);
-    assert.equal(resolveTransferDestination(200002, 200001), 200002);
-    assert.equal(resolveTransferDestination('  200002  ', 200001), 200002);
+    assert.equal(resolveTransferDestination('710002', 710001), 710002);
+    assert.equal(resolveTransferDestination(710002, 710001), 710002);
+    assert.equal(resolveTransferDestination('  710002  ', 710001), 710002);
+    assert.equal(resolveTransferDestination(710002, '710001'), 710002);
   });
 
-  it('accepts fromLogin as string or number variants', () => {
-    assert.equal(resolveTransferDestination(200002, '200001'), 200002);
-    assert.equal(resolveTransferDestination('200002', '200001'), 200002);
-    assert.equal(resolveTransferDestination('200002', '  200001  '), 200002);
-    assert.equal(resolveTransferDestination(200002, 200001), 200002);
-  });
-
-  it('throws a clear TypeError for blank destinations', () => {
-    for (const blank of ['', '   ', '\t\n ', null, undefined]) {
-      assert.throws(() => resolveTransferDestination(blank, 200001), TypeError);
-      assert.throws(() => resolveTransferDestination(blank, '200001'), TypeError);
+  it('throws a clear TypeError for blank, zero, negative, float, non-numeric, and same-account destinations', () => {
+    for (const blank of ['', '   ', null, undefined]) {
+      assert.throws(() => resolveTransferDestination(blank, 710001), /Enter a destination login\./);
     }
-    assert.throws(() => resolveTransferDestination('', 200001), /Enter a destination login\./);
-    assert.throws(() => resolveTransferDestination('   ', 200001), /Enter a destination login\./);
-  });
-
-  it('throws a clear TypeError for zero destinations', () => {
-    assert.throws(() => resolveTransferDestination(0, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('0', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(' 0 ', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(0, 200001), /positive integer/i);
-  });
-
-  it('throws a clear TypeError for negative destinations', () => {
-    assert.throws(() => resolveTransferDestination(-5, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('-5', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('-5', 200001), /positive integer/i);
-  });
-
-  it('throws a clear TypeError for float text and non-integer numbers', () => {
-    assert.throws(() => resolveTransferDestination('12.5', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(12.5, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('200002.5', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('12.5', 200001), /positive integer/i);
-  });
-
-  it('throws a clear TypeError for non-numeric destinations', () => {
-    for (const bad of ['abc', '12abc', 'USD', '--5', '1,000']) {
-      assert.throws(() => resolveTransferDestination(bad, 200001), TypeError);
-      assert.throws(() => resolveTransferDestination(bad, 200001), /positive integer/i);
+    for (const zero of [0, '0', ' 0 ']) assert.throws(() => resolveTransferDestination(zero, 710001), /positive integer/i);
+    for (const negative of [-5, '-5']) assert.throws(() => resolveTransferDestination(negative, 710001), /positive integer/i);
+    for (const fraction of ['12.5', 12.5, '710002.5']) assert.throws(() => resolveTransferDestination(fraction, 710001), TypeError);
+    for (const bad of ['abc', '12abc', '--5', '1,000', Number.NaN, Number.POSITIVE_INFINITY, true, {}]) {
+      assert.throws(() => resolveTransferDestination(bad, 710001), TypeError);
     }
-    assert.throws(() => resolveTransferDestination(Number.NaN, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(Number.POSITIVE_INFINITY, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(true, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination({}, 200001), TypeError);
+    assert.throws(() => resolveTransferDestination(710001, 710001), /different/i);
+    assert.throws(() => resolveTransferDestination('710001', '  710001  '), /different/i);
+  });
+});
+
+describe('accountFinanceOps exact money display (M2, contract v5)', () => {
+  it('shows a JS number at two decimals, without float artefacts', () => {
+    assert.equal(formatManagerMoneyText(10012.345678901234), '10,012.35');
+    assert.equal(formatManagerMoneyText(0.1 + 0.2), '0.30');
+    assert.equal(formatManagerMoneyText(1234.5), '1,234.50');
+    assert.equal(formatManagerMoneyText(0), '0.00');
+    assert.equal(formatManagerMoneyText(-12.3), '-12.30');
+    assert.equal(formatManagerMoneyText(123456789.12), '123,456,789.12');
+    assert.equal(formatManagerMoneyText(1.005), '1.01');
   });
 
-  it('throws a clear TypeError when destination equals the source', () => {
-    assert.throws(() => resolveTransferDestination(200001, 200001), TypeError);
-    assert.throws(() => resolveTransferDestination('200001', 200001), TypeError);
-    assert.throws(() => resolveTransferDestination(200001, '200001'), TypeError);
-    assert.throws(() => resolveTransferDestination('200001', '200001'), TypeError);
-    assert.throws(() => resolveTransferDestination('  200001  ', '200001'), TypeError);
-    assert.throws(() => resolveTransferDestination(200001, 200001), /different/i);
+  it('shows a value of 1e21 and above as its full number, never the dash', () => {
+    assert.equal(formatManagerMoneyText(1e21), '1,000,000,000,000,000,000,000.00');
+    assert.equal(formatManagerMoneyText(-1e21), '-1,000,000,000,000,000,000,000.00');
+    assert.equal(formatManagerMoneyText(1.5e21), '1,500,000,000,000,000,000,000.00');
   });
 
-  it('predicates the transfer type without throwing', () => {
-    assert.equal(isTransferType('transfer'), true);
-    assert.equal(isTransferType(' Transfer '), true);
-    assert.equal(isTransferType('TRANSFER'), true);
-    assert.equal(isTransferType('deposit'), false);
-    assert.equal(isTransferType('withdraw'), false);
-    assert.equal(isTransferType('credit'), false);
-    assert.equal(isTransferType(''), false);
-    assert.equal(isTransferType(null), false);
-    assert.equal(isTransferType(undefined), false);
-    assert.equal(isTransferType('rebate'), false);
+  it('expands a large number from its shortest decimal text, with no binary artefact (L1)', () => {
+    assert.equal(formatManagerMoneyText(1e23), '100,000,000,000,000,000,000,000.00');
+    assert.equal(formatManagerMoneyText(-2.5e22), '-25,000,000,000,000,000,000,000.00');
+    assert.equal(formatManagerMoneyText('100000000000000000000000.00'), '100,000,000,000,000,000,000,000.00');
   });
 
-  it('names the destination in transfer confirm and success copy', () => {
-    assert.equal(
-      buildManagerTransactionConfirmation('transfer', '100.00 USD', 200317, 200318),
-      'Transfer 100.00 USD from account #200317 to account #200318?',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('transfer', '100.00 USD', 200317, 200318),
-      'Transferred 100.00 USD from account #200317 to account #200318 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('transfer', '100.00 USD', 200317, null),
-      'Transfer 100.00 USD from account #200317?',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('transfer', '100.00 USD', 200317, ''),
-      'Transferred 100.00 USD from account #200317 successfully.',
-    );
-    assert.equal(
-      buildManagerTransactionConfirmation('deposit', '100.00 USD', 200317, 200318),
-      'Deposit 100.00 USD into account #200317?',
-    );
-    assert.equal(
-      buildManagerTransactionSuccessMessage('deposit', '100.00 USD', 200317, 200318),
-      'Deposited 100.00 USD into account #200317 successfully.',
-    );
+  it('shows a very small number as 0.00, with no negative zero', () => {
+    assert.equal(formatManagerMoneyText(5e-7), '0.00');
+    assert.equal(formatManagerMoneyText(-5e-7), '0.00');
+    assert.equal(formatManagerMoneyText('-0.001'), '0.00');
   });
+
+  it('rounds a decimal string by string arithmetic and keeps every digit beyond 2^53', () => {
+    assert.equal(formatManagerMoneyText('10012.345678901234'), '10,012.35');
+    assert.equal(formatManagerMoneyText('10012.344'), '10,012.34');
+    assert.equal(formatManagerMoneyText('0.125'), '0.13');
+    assert.equal(formatManagerMoneyText('-0.125'), '-0.13');
+    assert.equal(formatManagerMoneyText('999.999'), '1,000.00');
+    assert.equal(formatManagerMoneyText('-999.999'), '-1,000.00');
+    assert.equal(formatManagerMoneyText('9007199254740993.00'), '9,007,199,254,740,993.00');
+    assert.equal(formatManagerMoneyText('123456789012345678901234567890.505'), '123,456,789,012,345,678,901,234,567,890.51');
+  });
+
+  it('keeps the unknown marker for missing or non-decimal values, never an invented number', () => {
+    for (const unknown of [null, undefined, '', 'abc', '1e5', Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, {}, true]) {
+      assert.equal(formatManagerMoneyText(unknown), '—', String(unknown));
+    }
+  });
+
+  it('exposes the replay copy used when the server answers from its idempotency cache', () => {
+    assert.equal(MANAGER_REPLAY_TEXT, 'Already done — balance refreshed');
+  });
+});
+
+describe('accountFinanceOps balance_after (contract v5: JSON number on existing routes, string on new routes)', () => {
+  it('formats the number form and the string form of the same amount the same way', () => {
+    const cases = [
+      [1234.5, '1,234.50'], ['1234.50', '1,234.50'],
+      [0, '0.00'], ['0', '0.00'],
+      [-12.3, '-12.30'], ['-12.30', '-12.30'],
+      [123456789.12, '123,456,789.12'], ['123456789.12', '123,456,789.12'],
+      ['-500.00', '-500.00'],
+    ];
+    for (const [value, text] of cases) {
+      assert.equal(formatManagerMoneyIfKnown(value), text, String(value));
+    }
+  });
+
+  it('returns null, not the dash, for a value that is not money, so the sentence is omitted', () => {
+    for (const value of [undefined, null, '', 'abc', Number.NaN, Number.POSITIVE_INFINITY, {}, [], true]) {
+      assert.equal(formatManagerMoneyIfKnown(value), null, String(value));
+    }
+  });
+});
+
+describe('accountFinanceOps refuses a JS number amount (spec)', () => {
+  it('buildManagerTransactionRequest refuses a JS number on every route, and accepts the decimal string', () => {
+    for (const amount of [100, 1.5, 0, 1e21]) {
+      assert.throws(() => buildManagerTransactionRequest({ type: 'balance', direction: 'in', login: LOGIN, amount }), /never a JS number/);
+      assert.throws(() => buildManagerTransactionRequest({ type: 'credit', direction: 'out', login: LOGIN, amount }), /never a JS number/);
+      assert.throws(() => buildManagerTransactionRequest({
+        type: 'transfer', direction: null, login: LOGIN, destination: DESTINATION, amount,
+      }), /never a JS number/);
+    }
+    assert.equal(buildManagerTransactionRequest({ type: 'balance', direction: 'in', login: LOGIN, amount: '100' }).payload.amount, '100.00');
+  });
+});
+
+describe('accountFinanceOps unknown status copy keeps the raw HTTP status (contract v5 section 3)', () => {
+  it('shows an unknown status or code with its HTTP status and the raw code', () => {
+    assert.deepEqual(describeManagerTransactionFailure({
+      code: 'SOMETHING_NEW', message: 'raw text', unrecognized: true, httpStatus: 422,
+    }, 'balance'), {
+      text: 'Unrecognised status', detail: 'raw text HTTP 422', code: 'SOMETHING_NEW',
+    });
+    assert.deepEqual(describeManagerTransactionFailure({
+      code: null, message: '', unrecognized: true, httpStatus: 400,
+    }, 'balance'), {
+      text: 'Unrecognised status', detail: 'HTTP 400', code: null,
+    });
+  });
+});
+
+describe('round 7 key-hold and key-rejection text', () => {
+  it('the key-rejection, key-conflict and key-reuse codes get their own specific text', () => {
+    assert.equal(describeManagerTransactionPending('balance', 'pending', 'KEY_REQUIRED').text, KEY_REJECTED_PENDING_TEXT);
+    assert.equal(describeManagerTransactionPending('balance', 'pending', 'IDEMPOTENCY_CONFLICT').text, KEY_CONFLICT_PENDING_TEXT);
+    assert.equal(describeManagerTransactionPending('balance', 'pending', 'KEY_CONFLICT').text, KEY_CONFLICT_PENDING_TEXT);
+    assert.equal(describeManagerTransactionPending('balance', 'pending', 'KEY_REUSED').text, KEY_HOLD_PENDING_TEXT);
+    assert.equal(describeManagerTransactionPending('balance', 'pending', 'MISMATCH').code, 'MISMATCH');
+  });
+
+  it('an expired key-hold record keeps its key-hold text and also says the status is unknown (L3)', () => {
+    const expired = describeManagerTransactionPending('balance', 'expired', 'KEY_REUSED');
+    assert.equal(expired.text, `${KEY_HOLD_PENDING_TEXT} ${EXPIRED_PENDING_TEXT}`);
+    assert.equal(expired.code, 'KEY_REUSED');
+    assert.equal(describeManagerTransactionPending('balance', 'expired', 'KEY_CONFLICT').text, `${KEY_CONFLICT_PENDING_TEXT} ${EXPIRED_PENDING_TEXT}`);
+    assert.equal(describeManagerTransactionPending('balance', 'expired', null).text, EXPIRED_PENDING_TEXT);
+  });
+
+  it('every key-hold code is held (no same-key retry), and KEY_INVALID is not', () => {
+    for (const code of ['KEY_REQUIRED', 'IDEMPOTENCY_KEY_REQUIRED', 'KEY_CONFLICT', 'IDEMPOTENCY_KEY_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'KEY_REUSED', 'MISMATCH']) {
+      assert.equal(isKeyHoldCode(code), true, code);
+    }
+    assert.equal(isKeyHoldCode('KEY_INVALID'), false);
+    assert.equal(isKeyHoldCode('IDEMPOTENCY_KEY_INVALID'), false);
+  });
+});
+
+it('R8 (a): the expired text says a same-key retry is safe, and key-hold codes are unchanged', () => {
+  assert.equal(EXPIRED_PENDING_TEXT, 'Status unknown: retry with the same key (recommended) or check history');
+  assert.equal(describeManagerTransactionPending('balance', 'expired', null).text, EXPIRED_PENDING_TEXT);
+  assert.equal(IDEMPOTENCY_CODE_CLASSES.keyHold.includes('IDEMPOTENCY_KEY_REUSED'), true);
 });

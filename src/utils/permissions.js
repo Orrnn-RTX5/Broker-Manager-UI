@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   MANAGE_PASSWORDS: 'manage_passwords',   // UserPasswordChange / UserPasswordCheck
   MANAGE_RESTRICTIONS: 'manage_restrictions', // Legacy blended key; action gates use edit_accounts/manipulate_trades.
   MANAGE_FINANCES: 'manage_finances',
+  MANAGE_FINANCES_SKIP_MARGIN: 'manage_finances_skip_margin', // Withdrawal may skip the free-margin and balance checks
   DEPOSIT: 'deposit',
   CREDIT: 'credit',
   EDIT_ACCOUNTS: 'edit_accounts',
