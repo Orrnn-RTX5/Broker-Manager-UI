@@ -9,7 +9,7 @@ import './NewGroupModal.css';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
-import { EXECUTION_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, bookTypeForRoutingMode, buildGroupSavePayload, buildNewGroupPayload, resolveNewGroupTradeAllowed, submitGroup, validateNewGroupFields } from '../groupPayload.js';
+import { EXECUTION_MODE_OPTIONS, GROUP_MARGIN_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, NETTING_NEEDS_B_BOOK_HINT, bookTypeForRoutingMode, buildGroupSavePayload, buildNewGroupPayload, resolveNewGroupTradeAllowed, submitGroup, validateGroupMarginMode, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
@@ -437,10 +437,13 @@ const NewGroupModal = ({
     // Editing a field clears its inline policy error; the visible Book choice
     // edits routingMode, which carries the backend-canonical bookType error.
     setFieldErrors((prev) => {
-      if (!prev[key] && !(key === 'routingMode' && prev.bookType)) return prev;
+      if (!prev[key] && !(key === 'routingMode' && (prev.bookType || prev.marginMode))) return prev;
       const next = { ...prev };
       delete next[key];
-      if (key === 'routingMode') delete next.bookType;
+      if (key === 'routingMode') {
+        delete next.bookType;
+        delete next.marginMode;
+      }
       return next;
     });
     setFormData(prev => {
@@ -487,6 +490,12 @@ const NewGroupModal = ({
     if (allowedError) {
       setError(allowedError);
       setFieldErrors({});
+      return;
+    }
+    const marginModeError = validateGroupMarginMode({ marginMode: formData.marginMode, routingMode: formData.routingMode });
+    if (marginModeError) {
+      setError(null);
+      setFieldErrors({ marginMode: marginModeError });
       return;
     }
     if (!isEditing) {
@@ -714,6 +723,13 @@ const NewGroupModal = ({
               ]}
               onChange={(v) => handleChange('routingMode', v)}
             />
+            <GroupChoice
+              label="Account mode"
+              value={formData.marginMode || 'hedging'}
+              error={fieldErrors.marginMode}
+              options={GROUP_MARGIN_MODE_OPTIONS}
+              onChange={(v) => handleChange('marginMode', v)}
+            />
             <InputGroup label="Commission rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} />
             <InputGroup label="Commission type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} />
             <InputGroup label="Max lot per trade" type="number" value={formData.maxLotPerTrade} onChange={(v) => handleChange('maxLotPerTrade', v)} />
@@ -721,6 +737,9 @@ const NewGroupModal = ({
             <InputGroup label="Lot divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} />
             <InputGroup label="Swap multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} />
           </div>
+          {String(formData.routingMode ?? '').trim() !== '' && bookTypeForRoutingMode(formData.routingMode) !== 'b' && !fieldErrors.marginMode ? (
+            <p className="group-create-note">{NETTING_NEEDS_B_BOOK_HINT}</p>
+          ) : null}
         </section>
 
         <section className="group-create-panel">

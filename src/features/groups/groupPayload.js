@@ -5,6 +5,7 @@ import { advanceRealtimeCacheRevision } from '../../services/realtimeCacheRevisi
 import { accountGroupName, accountsInGroup, buildAccountPatchFromGroup, describeGroupSave, groupNameKey, storedGroupOf } from './groupAccountRows.js';
 import { resolveCreateLeverage } from './groupLeverage.js';
 import { isNotConfiguredRefusal, parseUnavailableSymbols } from './groupSymbolAvailability.js';
+import { ACCOUNT_MODE_REFUSAL_MESSAGES, extractRefusalCode } from '../../components/Popups/accountModeRefusals.js';
 
 export { buildAccountPatchFromGroup, describeGroupSave };
 
@@ -35,13 +36,15 @@ export const GROUP_DEFAULT_PAYLOAD = Object.freeze({
   symbolsBlocked: [],
   parentGroup: '',
   groupPurpose: '',
+  // Account mode (hedging | netting). Blank means hedging on the server.
+  marginMode: '',
 });
 
 // Only these keys are ever sent to GroupCreate/GroupUpdate. Anything else that
 // ends up in a form (e.g. server-echoed fields like createdAt/updatedAt/enabled
 // when editing, or values injected via dev-tools) is stripped before submit.
-// parentGroup/groupPurpose are the only creation-payload additions: no other
-// new backend keys are introduced here.
+// parentGroup/groupPurpose and marginMode (GroupCreate/GroupUpdate body field)
+// are the only additions: no other new backend keys are introduced here.
 export const GROUP_ALLOWED_FIELDS = Object.keys(GROUP_DEFAULT_PAYLOAD);
 
 // Backend-canonical book_type values (groups.book_type, COALESCE 'b').
@@ -86,7 +89,33 @@ const NEW_GROUP_OMIT_BLANK_KEYS = new Set([
   'routingMode',
   'parentGroup',
   'groupPurpose',
+  'marginMode',
 ]);
+
+// Group account mode choices. Hedging is the default; the server refuses
+// netting unless the group routes B-book (NETTING_REQUIRES_B_BOOK).
+export const GROUP_MARGIN_MODE_OPTIONS = Object.freeze([
+  { value: 'hedging', label: 'Hedging' },
+  { value: 'netting', label: 'Netting' },
+]);
+
+export const NETTING_NEEDS_B_BOOK_HINT = 'Netting needs B-book routing.';
+
+/** 'hedging' | 'netting' for a known value (any casing), else ''. */
+export const normalizeGroupMarginMode = (value) => {
+  const token = String(value ?? '').trim().toLowerCase();
+  return token === 'hedging' || token === 'netting' ? token : '';
+};
+
+/** A group record's account mode from its known API keys, else '' (= hedging). */
+export const groupMarginModeOf = (record) => {
+  if (!record || typeof record !== 'object') return '';
+  for (const key of ['marginMode', 'margin_mode', 'MarginMode']) {
+    const mode = normalizeGroupMarginMode(record[key]);
+    if (mode) return mode;
+  }
+  return '';
+};
 
 const isBlankString = (value) => typeof value === 'string' && value.trim() === '';
 
@@ -101,6 +130,16 @@ export const bookTypeForRoutingMode = (mode) => {
   if (token === 'b_book' || token === 'bbook' || token === 'b') return 'b';
   if (token === 'hybrid' || token === 'h') return 'hybrid';
   return '';
+};
+
+/**
+ * Netting with an explicit A-book/Hybrid routing is refused before submit.
+ * A blank routing is left to the server (it defaults to B-book).
+ */
+export const validateGroupMarginMode = ({ marginMode, routingMode } = {}) => {
+  if (normalizeGroupMarginMode(marginMode) !== 'netting') return null;
+  if (String(routingMode ?? '').trim() === '') return null;
+  return bookTypeForRoutingMode(routingMode) === 'b' ? null : NETTING_NEEDS_B_BOOK_HINT;
 };
 
 /** True for the canonical bookType values the backend stores. */
@@ -344,7 +383,12 @@ export const submitGroup = async ({ originalName, payload: rawPayload, queryClie
     throw new Error(responseText || 'Invalid JSON received from server');
   }
   if (!res.ok) {
-    const error = new Error(responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+    // Account-mode refusals (netting) show readable text; the code is read from
+    // engine_code, error_code or code. Every other refusal keeps the server text.
+    const modeCode = extractRefusalCode(responseData);
+    const modeText = ACCOUNT_MODE_REFUSAL_MESSAGES[modeCode];
+    const error = new Error(modeText || responseData.error || responseData.message || (originalName ? 'Failed to update group' : 'Failed to create group'));
+    if (modeText) error.code = modeCode;
     // Every allowed symbol the save refused for having no enabled instrument,
     // so the form can show them all at once (empty for any other failure).
     error.unavailableSymbols = parseUnavailableSymbols(responseData, error.message);

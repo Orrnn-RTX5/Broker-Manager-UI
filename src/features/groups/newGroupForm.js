@@ -1,4 +1,4 @@
-import { GROUP_DEFAULT_PAYLOAD as defaultPayload, bookTypeForRoutingMode } from './groupPayload.js';
+import { GROUP_DEFAULT_PAYLOAD as defaultPayload, bookTypeForRoutingMode, groupMarginModeOf } from './groupPayload.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from './groupFinancialPresets.js';
 import { readLeverageRatio } from './groupAccountRows.js';
 
@@ -41,6 +41,8 @@ export const buildNewGroupFormData = ({ initialData, duplicateData, presetName }
     const canonical = bookTypeForRoutingMode(data.routingMode);
     if (canonical) data.bookType = canonical;
   }
+  // Account mode from the source group's known API keys (blank = hedging).
+  if (source) data.marginMode = groupMarginModeOf(source);
   if (Array.isArray(data.symbolsAllowed)) data.symbolsAllowed = data.symbolsAllowed.join(', ');
   if (Array.isArray(data.symbolsBlocked)) data.symbolsBlocked = data.symbolsBlocked.join(', ');
   return data;

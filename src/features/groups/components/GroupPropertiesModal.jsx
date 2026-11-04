@@ -4,7 +4,7 @@ import { AlertCircle, Loader2, Pencil, X } from 'lucide-react';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
-import { GROUP_DEFAULT_PAYLOAD, bookTypeForRoutingMode, buildGroupSavePayload, submitGroup, toSymbolList } from '../groupPayload.js';
+import { GROUP_DEFAULT_PAYLOAD, GROUP_MARGIN_MODE_OPTIONS, NETTING_NEEDS_B_BOOK_HINT, bookTypeForRoutingMode, buildGroupSavePayload, groupMarginModeOf, submitGroup, toSymbolList, validateGroupMarginMode } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
@@ -49,6 +49,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     // else the operator must enter one (no leverage literal default).
     leverage: readLeverageRatio(group) || (group?.isNew ? '' : 0),
     name: String(group?.name ?? ''),
+    marginMode: groupMarginModeOf(group),
     symbolsAllowed: toSymbolList(group?.symbolsAllowed),
     symbolsBlocked: toSymbolList(group?.symbolsBlocked),
   }));
@@ -64,6 +65,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [leverageError, setLeverageError] = useState(null);
+  const [marginModeError, setMarginModeError] = useState(null);
   const [leverageDefaultMissing, setLeverageDefaultMissing] = useState(false);
   const [editedLevels, setEditedLevels] = useState({ marginCallLevel: false, stopOutLevel: false, leverage: false });
   const isNewGroup = Boolean(group?.isNew);
@@ -94,6 +96,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
   const update = (key, value) => {
     if (key === 'leverage') setLeverageError(null);
+    if (key === 'marginMode' || key === 'routingMode') setMarginModeError(null);
     setForm((prev) => {
       const next = { ...prev, [key]: value };
       if (key === 'routingMode') {
@@ -139,6 +142,12 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
 
   const handleSave = async () => {
     if (!canManageGroups) { setPermissionDenied(true); return; }
+    const modeError = validateGroupMarginMode({ marginMode: form.marginMode, routingMode: form.routingMode || 'b_book' });
+    if (modeError) {
+      setMarginModeError(modeError);
+      setTab('Margin');
+      return;
+    }
     if (group.isNew) {
       const leverageCheck = resolveCreateLeverage({ leverage: form.leverage, parentGroup: form.parentGroup, leverageTouched: true });
       if (leverageCheck.error) {
@@ -226,6 +235,31 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                       {ROUTING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
+                  <label className="groups-props-field">
+                    <span className="groups-props-field-label">Account mode</span>
+                    <select
+                      className="ui-input ui-input-sm"
+                      value={form.marginMode || 'hedging'}
+                      aria-invalid={marginModeError ? 'true' : undefined}
+                      onChange={(event) => update('marginMode', event.target.value)}
+                    >
+                      {GROUP_MARGIN_MODE_OPTIONS.map((option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                          disabled={option.value === 'netting' && form.marginMode !== 'netting' && bookTypeForRoutingMode(form.routingMode || 'b_book') !== 'b'}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {bookTypeForRoutingMode(form.routingMode || 'b_book') !== 'b' && !marginModeError ? (
+                    <p className="group-create-note">{NETTING_NEEDS_B_BOOK_HINT}</p>
+                  ) : null}
+                  {marginModeError && (
+                    <div className="groups-props-error" role="alert"><AlertCircle size={14} /><span>{marginModeError}</span></div>
+                  )}
                 </div>
               </div>
 
