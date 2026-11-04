@@ -179,15 +179,16 @@
   flex-direction: column;
   gap: 9px;
 }
-#root .account-overview-mt5 .account-overview-summary {
+#root .account-overview-mt5 .account-overview-summary,
+#root .account-overview-mt5 .account-overview-header {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 9px 12px;
-  border: 1px solid #303542 !important;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #21252f 0%, #181b22 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 2px 6px rgba(0, 0, 0, 0.22);
+  gap: 2px;
+  padding: 2px 2px 5px;
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 #root .account-overview-header-top {
   display: flex;
@@ -198,9 +199,9 @@
 }
 #root#root#root#root#root#root .account-details-window .account-overview-headline,
 #root#root#root#root#root#root .account-details-window .account-overview-headline * {
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  line-height: 1.3;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  line-height: 1.35;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-headline {
   display: inline-flex;
@@ -247,6 +248,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 5px;
+  margin-left: auto;
 }
 #root#root#root#root#root#root .account-details-window .account-overview-pill {
   display: inline-flex;
@@ -308,9 +310,26 @@
 #root .account-overview-meta-block {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+  border-top: none !important;
+}
+#root .account-overview-info-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #cbd5e1 !important;
+}
+#root .account-overview-info-item {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+#root .account-overview-info-sep {
+  color: #525a68 !important;
 }
 #root .account-overview-meta-primary {
   display: flex;
@@ -342,12 +361,13 @@
   color: #e2e6ee !important;
   font-weight: 500 !important;
 }
-#root .account-overview-meta-line.account-overview-timestamps {
+#root .account-overview-meta-line.account-overview-timestamps,
+#root .account-overview-info-line.account-overview-timestamps {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 0 !important;
+  gap: 6px 16px;
+  margin-top: 1px !important;
   color: #9ca3af !important;
 }
 #root .account-overview-timestamp-item {
@@ -521,7 +541,7 @@
 #root .account-overview-pos-header {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
   background: linear-gradient(180deg, #22262f 0%, #1b1e25 100%);
   border-bottom: 1px solid #2e333f;
   color: #b8c0cc;
@@ -571,6 +591,21 @@
   border-bottom: 1px solid #20242c;
   background: rgba(20, 23, 28, 0.92);
   text-align: center;
+}
+#root .account-overview-empty-trades.account-overview-empty-line {
+  flex: 0 0 auto;
+  flex-direction: row;
+  padding: 16px 12px;
+  border-bottom: 1px solid #1e222a;
+  background: transparent;
+  color: #64748b !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+#root#root#root#root#root#root .account-details-window .account-overview-empty-trades.account-overview-empty-line span {
+  color: #64748b !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
 }
 #root .account-overview-empty-icon {
   display: inline-flex;
@@ -680,13 +715,14 @@
   border-bottom: 1px solid #2b303c;
   padding: 2px 0;
 }
-#root .account-overview-summary-strip.account-overview-summary-bottom {
-  margin-top: auto;
+#root .account-overview-summary-strip.account-overview-summary-top {
   position: sticky;
-  bottom: 0;
+  top: 25px;
   z-index: 2;
-  border-bottom: none;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.28);
+  border-top: none;
+  border-bottom: 1px solid #333946;
+  background: linear-gradient(180deg, #262b36 0%, #1e222a 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 #root#root#root#root#root#root .account-details-window .account-overview-summary-strip,
 #root#root#root#root#root#root .account-details-window .account-overview-summary-strip * {

@@ -75,6 +75,12 @@ const toFiniteNumber = (value, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const toLiveNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 export const formatAccountExposureSpaceNumber = (val, decimals = 2) => {
   const n = Number(val);
   if (val === null || val === undefined || val === '' || !Number.isFinite(n)) {
@@ -219,16 +225,15 @@ export function buildAccountExposureBreakdown({
   symbols = {},
   accountCurrency = 'USD',
   balance = 0,
-  equity = 0,
-  margin = 0,
-  freeMargin = 0,
+  equity = null,
+  margin = null,
+  freeMargin = null,
   leverage = 100,
 } = {}) {
   const depositCurrency = String(accountCurrency || 'USD').trim().toUpperCase() || 'USD';
-  const safeBalance = toFiniteNumber(balance, 0);
-  const safeEquity = toFiniteNumber(equity, safeBalance);
+  const safeEquity = toLiveNumberOrNull(equity);
   const safeMargin = Math.max(0, toFiniteNumber(margin, 0));
-  const safeFreeMargin = toFiniteNumber(freeMargin, safeEquity - safeMargin);
+  const safeFreeMargin = toLiveNumberOrNull(freeMargin);
   const safeLeverage = Math.max(1, toFiniteNumber(leverage, 100));
 
   const specBySymbol = new Map();
@@ -350,16 +355,18 @@ export function buildAccountExposureBreakdown({
     .filter((b) => b.asset !== depositCurrency && b.value > 0)
     .reduce((sum, b) => sum + b.value, 0);
 
-  const cashBasis =
-    safeFreeMargin > 0
-      ? safeFreeMargin
-      : safeEquity > 0
-        ? safeEquity
-        : safeBalance;
-  const depositCurrencyValue = Math.max(0, cashBasis - nonCashLongExposure);
+  if (safeEquity !== null && safeFreeMargin !== null) {
+    const cashBasis =
+      safeFreeMargin > 0
+        ? safeFreeMargin
+        : safeEquity > 0
+          ? safeEquity
+          : 0;
+    const depositCurrencyValue = Math.max(0, cashBasis - nonCashLongExposure);
 
-  if (depositCurrencyValue > 0.004) {
-    addLeg(depositCurrency, depositCurrencyValue, depositCurrencyValue, 1, 2);
+    if (depositCurrencyValue > 0.004) {
+      addLeg(depositCurrency, depositCurrencyValue, depositCurrencyValue, 1, 2);
+    }
   }
 
   const rawRows = Array.from(buckets.values())

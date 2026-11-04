@@ -2795,128 +2795,81 @@ const AccountDetailsModal = ({
 
             {visibleTab === 'Overview' ? (
               <div className="account-overview-mt5">
-                {/* Top Info Section */}
-                {(() => {
-                  const overviewFloatingProfitNum = Number(profitVal || 0);
-                  const overviewFloatingProfitTone = overviewFloatingProfitNum > 0
-                    ? 'is-positive'
-                    : overviewFloatingProfitNum < 0
-                      ? 'is-negative'
-                      : '';
-                  return (
-                    <section className="account-overview-summary">
-                      <div className="account-overview-header-top">
-                        <div className="account-overview-headline">
-                          <span className="account-overview-avatar" aria-hidden="true">{accountInitials}</span>
-                          <span className="account-overview-name-text">{name}</span>
-                          <span className="account-overview-comma">, </span>
-                          <span className="account-overview-login-text tabular">{loginId}</span>
-                          <span className="account-overview-comma">, </span>
-                          <a
-                            href="#account"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setActiveTab('Account');
-                            }}
-                            className="account-overview-link is-underlined"
-                          >
-                            {groupValue || '—'}
-                          </a>
-                          <span className="account-overview-comma">, </span>
-                          <span className="account-overview-leverage-text tabular">1 : {rawLeverageNumber}</span>
-                        </div>
+                {/* Header (compact MT5-inspired text header) */}
+                <header className="account-overview-header account-overview-summary" aria-label="Account identity">
+                  <div className="account-overview-header-top">
+                    <div className="account-overview-headline">
+                      <span className="account-overview-name-text">{name}</span>
+                      <span className="account-overview-comma">, </span>
+                      <span className="account-overview-login-text tabular">{loginId}</span>
+                      <span className="account-overview-comma">, </span>
+                      <a
+                        href="#account"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setActiveTab('Account');
+                        }}
+                        className="account-overview-link is-underlined"
+                      >
+                        {groupValue || '—'}
+                      </a>
+                      <span className="account-overview-comma">, </span>
+                      <span className="account-overview-leverage-text tabular">1 : {rawLeverageNumber}</span>
+                    </div>
 
-                        <div className="account-overview-badges" aria-label="Account parameters">
-                          <span className="account-overview-pill tabular">
-                            {currencyValue || 'USD'}
-                          </span>
-                          <span className="account-overview-pill tabular">
-                            {leverageHeaderLabel || `1:${rawLeverageNumber}`}
-                          </span>
-                          <span className="account-overview-pill is-mode">
-                            {modeHeaderLabel}
-                          </span>
-                        </div>
+                    <div className="account-overview-badges" aria-label="Account parameters">
+                      <span className="account-overview-pill tabular">
+                        {currencyValue || 'USD'}
+                      </span>
+                      <span className="account-overview-pill is-mode">
+                        {modeHeaderLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="account-overview-meta-block">
+                    {emailValue && (
+                      <div className="account-overview-info-line">
+                        <a href={`mailto:${emailValue}`} className="account-overview-link">
+                          {emailValue}
+                        </a>
                       </div>
-
-                      <div className="account-overview-meta-block">
-                        <div className="account-overview-meta-primary">
-                          <div className="account-overview-meta-line">
-                            <span className="account-overview-meta-label">Email:</span>{' '}
-                            {emailValue ? (
-                              <a href={`mailto:${emailValue}`} className="account-overview-link">
-                                {emailValue}
-                              </a>
-                            ) : (
-                              <span className="account-overview-meta-val">—</span>
-                            )}
-                            {phoneValue && (
-                              <span className="account-overview-meta-inline-chip">
-                                <span className="account-overview-meta-label">Phone:</span>{' '}
-                                <span className="account-overview-meta-val tabular">{phoneValue}</span>
-                              </span>
-                            )}
-                            {countryValue && (
-                              <span className="account-overview-meta-inline-chip">
-                                <span className="account-overview-meta-label">Country:</span>{' '}
-                                <span className="account-overview-meta-val">{countryValue}</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="account-overview-meta-line account-overview-timestamps">
-                          <span className="account-overview-timestamp-item">
-                            <span className="account-overview-meta-label">Registered:</span>{' '}
-                            <span className="account-overview-meta-val tabular">{formatOverviewDate(registrationValue) || '—'}</span>
+                    )}
+                    {(phoneValue || countryValue) && (
+                      <div className="account-overview-info-line">
+                        {phoneValue && (
+                          <span className="account-overview-info-item">
+                            <span className="account-overview-meta-label account-overview-info-label">Phone:</span>{' '}
+                            <span className="account-overview-meta-val account-overview-info-val tabular">{phoneValue}</span>
                           </span>
-                          <span className="account-overview-timestamp-item">
-                            <span className="account-overview-meta-label">Last access:</span>{' '}
-                            <span className="account-overview-meta-val tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</span>
+                        )}
+                        {phoneValue && countryValue && <span className="account-overview-info-sep">•</span>}
+                        {countryValue && (
+                          <span className="account-overview-info-item">
+                            <span className="account-overview-meta-label account-overview-info-label">Country:</span>{' '}
+                            <span className="account-overview-meta-val account-overview-info-val">{countryValue}</span>
                           </span>
-                          <span className="account-overview-timestamp-item">
-                            <span className="account-overview-meta-label">Last Address:</span>{' '}
-                            <span className="account-overview-meta-val tabular">{lastIpValue || '—'}</span>
-                          </span>
-                        </div>
+                        )}
                       </div>
+                    )}
+                    <div className="account-overview-info-line account-overview-timestamps">
+                      <span className="account-overview-timestamp-item">
+                        <span className="account-overview-meta-label account-overview-info-label">Registered:</span>{' '}
+                        <span className="account-overview-meta-val account-overview-info-val tabular">{formatOverviewDate(registrationValue) || '—'}</span>
+                      </span>
+                      <span className="account-overview-timestamp-item">
+                        <span className="account-overview-meta-label account-overview-info-label">Last access:</span>{' '}
+                        <span className="account-overview-meta-val account-overview-info-val tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</span>
+                      </span>
+                      <span className="account-overview-timestamp-item">
+                        <span className="account-overview-meta-label account-overview-info-label">Last Address:</span>{' '}
+                        <span className="account-overview-meta-val account-overview-info-val tabular">{lastIpValue || '—'}</span>
+                      </span>
+                    </div>
+                  </div>
+                </header>
 
-                      <div className="account-overview-kpi-grid" role="group" aria-label="Key financial metrics">
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Balance</span>
-                          <span className="account-overview-kpi-val tabular">
-                            {balanceSpaceVal} <small>{currencyValue}</small>
-                          </span>
-                        </div>
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Equity</span>
-                          <span className="account-overview-kpi-val tabular">
-                            {equitySpaceVal !== '—' ? <>{equitySpaceVal} <small>{currencyValue}</small></> : '—'}
-                          </span>
-                        </div>
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Floating P / L</span>
-                          <span className={`account-overview-kpi-val tabular ${overviewFloatingProfitTone}`}>
-                            {overviewFloatingProfitNum > 0 ? `+${profitSpaceVal}` : profitSpaceVal} <small>{currencyValue}</small>
-                          </span>
-                        </div>
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Margin Used</span>
-                          <span className="account-overview-kpi-val tabular">{marginSpaceVal}</span>
-                        </div>
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Free Margin</span>
-                          <span className="account-overview-kpi-val tabular">{freeMarginSpaceVal}</span>
-                        </div>
-                        <div className="account-overview-kpi-card">
-                          <span className="account-overview-kpi-label">Margin Level</span>
-                          <span className="account-overview-kpi-val tabular">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
-                        </div>
-                      </div>
-                    </section>
-                  );
-                })()}
-
-                {/* Bordered Positions & Summary Box */}
+                {/* Positions Grid (filling the tab like MT5) */}
                 <div className="account-overview-positions-box flex-1 flex flex-col overflow-hidden">
                   <div className="account-overview-box-toolbar">
                     <div className="account-overview-box-toolbar-left">
@@ -2926,6 +2879,14 @@ const AccountDetailsModal = ({
                       </span>
                     </div>
                     <div className="account-overview-box-toolbar-actions">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('Trade')}
+                        className="account-overview-quick-btn"
+                        title="Open Trade Ticket"
+                      >
+                        Open Trade Ticket
+                      </button>
                       <button
                         type="button"
                         onClick={() => setActiveTab('Trade')}
@@ -2949,7 +2910,7 @@ const AccountDetailsModal = ({
                       <div className="is-right is-last">Profit</div>
                     </div>
 
-                    {/* Position Rows + Bottom Summary Strip */}
+                    {/* Position Rows + Top Summary Strip */}
                     <div className="account-overview-pos-body">
                       {(() => {
                         const displayPositions = showPositions
@@ -2970,6 +2931,49 @@ const AccountDetailsModal = ({
 
                         return (
                           <>
+                            {/* Highlighted financial summary row at TOP of grid body (like MT5) */}
+                            <div
+                              className="account-overview-summary-strip account-overview-summary-top"
+                              role="group"
+                              aria-label="Account financial summary"
+                            >
+                              <div className="account-overview-pos-grid account-overview-summary-main">
+                                <div className="account-overview-summary-metrics">
+                                  <SummaryBalanceIcon />
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Balance:</span>{' '}
+                                    <span className="account-overview-metric-value">
+                                      {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
+                                    </span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Equity:</span>{' '}
+                                    <span className="account-overview-metric-value">{equitySpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Margin:</span>{' '}
+                                    <span className="account-overview-metric-value">{marginSpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Free Margin:</span>{' '}
+                                    <span className="account-overview-metric-value">{freeMarginSpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item is-last">
+                                    <span className="account-overview-metric-label">Margin Level:</span>{' '}
+                                    <span className="account-overview-metric-value">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
+                                  </span>
+                                </div>
+                                <div className="is-right tabular account-overview-summary-swap">
+                                  {summarySwapDisplay}
+                                </div>
+                                <div
+                                  className={`is-right is-last tabular account-overview-summary-profit${totalProfitNum > 0 ? ' is-positive' : totalProfitNum < 0 ? ' is-negative' : ''}`}
+                                >
+                                  {summaryProfitDisplay}
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="account-overview-pos-rows-area">
                               {positionsError && displayPositions.length > 0 && (
                                 <div className="account-positions-partial-error" role="alert">
@@ -3106,66 +3110,10 @@ const AccountDetailsModal = ({
                                   })}
                                 </>
                               ) : (
-                                <div className="account-overview-empty-trades" role="status">
-                                  <div className="account-overview-empty-icon" aria-hidden="true">
-                                    <BarChart3 size={18} />
-                                  </div>
-                                  <span className="account-overview-empty-trades-title">No open trades</span>
-                                  <span className="account-overview-empty-trades-sub">
-                                    There are currently no open positions or pending orders for this account.
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveTab('Trade')}
-                                    className="account-overview-empty-action-btn"
-                                  >
-                                    Open Trade Ticket
-                                  </button>
+                                <div className="account-overview-empty-trades account-overview-empty-line" role="status">
+                                  <span>No open trades</span>
                                 </div>
                               )}
-                            </div>
-
-                            {/* Grey Financial Summary Strip pinned at the bottom */}
-                            <div
-                              className="account-overview-summary-strip account-overview-summary-bottom"
-                              role="group"
-                              aria-label="Account financial snapshot"
-                            >
-                              <div className="account-overview-pos-grid account-overview-summary-main">
-                                <div className="account-overview-summary-metrics">
-                                  <SummaryBalanceIcon />
-                                  <span className="account-overview-metric-item">
-                                    <span className="account-overview-metric-label">Balance:</span>{' '}
-                                    <span className="account-overview-metric-value">
-                                      {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
-                                    </span>
-                                  </span>
-                                  <span className="account-overview-metric-item">
-                                    <span className="account-overview-metric-label">Equity:</span>{' '}
-                                    <span className="account-overview-metric-value">{equitySpaceVal}</span>
-                                  </span>
-                                  <span className="account-overview-metric-item">
-                                    <span className="account-overview-metric-label">Margin:</span>{' '}
-                                    <span className="account-overview-metric-value">{marginSpaceVal}</span>
-                                  </span>
-                                  <span className="account-overview-metric-item">
-                                    <span className="account-overview-metric-label">Free Margin:</span>{' '}
-                                    <span className="account-overview-metric-value">{freeMarginSpaceVal}</span>
-                                  </span>
-                                  <span className="account-overview-metric-item is-last">
-                                    <span className="account-overview-metric-label">Margin Level:</span>{' '}
-                                    <span className="account-overview-metric-value">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
-                                  </span>
-                                </div>
-                                <div className="is-right tabular account-overview-summary-swap">
-                                  {summarySwapDisplay}
-                                </div>
-                                <div
-                                  className={`is-right is-last tabular account-overview-summary-profit${totalProfitNum > 0 ? ' is-positive' : totalProfitNum < 0 ? ' is-negative' : ''}`}
-                                >
-                                  {summaryProfitDisplay}
-                                </div>
-                              </div>
                             </div>
                           </>
                         );

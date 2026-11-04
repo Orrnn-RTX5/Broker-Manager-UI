@@ -98,6 +98,77 @@ test('buildAccountExposureBreakdown decomposes long and short open positions alo
   assert.equal(breakdown.shortSlices[0].asset, 'XAU');
 });
 
+test('buildAccountExposureBreakdown omits deposit currency cash row when live metrics are null / unavailable (no Balance - Margin, no balance fallback)', () => {
+  // Case 1: no open positions, balance present, live metrics null
+  const breakdownNoPos = buildAccountExposureBreakdown({
+    positions: [],
+    symbols: {},
+    accountCurrency: 'USD',
+    balance: 5018.09,
+    equity: null,
+    margin: null,
+    freeMargin: null,
+    leverage: 100,
+  });
+
+  assert.equal(breakdownNoPos.rows.length, 0, 'No cash row is fabricated when live metrics are null');
+  assert.equal(breakdownNoPos.rows.some((r) => r.asset === 'USD'), false);
+  assert.equal(breakdownNoPos.longSlices.length, 0);
+  assert.equal(breakdownNoPos.shortSlices.length, 0);
+
+  // Case 2: open positions present, balance present, live metrics null
+  const breakdownWithPos = buildAccountExposureBreakdown({
+    positions: [
+      {
+        symbol: 'EURUSD',
+        type: 'buy',
+        volume: 0.1,
+        priceOpen: 1.085,
+        priceCurrent: 1.0865,
+      },
+      {
+        symbol: 'XAUUSD',
+        type: 'sell',
+        volume: 0.01,
+        priceOpen: 2745.5,
+        priceCurrent: 2750.0,
+      },
+    ],
+    symbols: {},
+    accountCurrency: 'USD',
+    balance: 5018.09,
+    equity: null,
+    margin: null,
+    freeMargin: null,
+    leverage: 100,
+  });
+
+  // USD cash row must not exist
+  assert.equal(
+    breakdownWithPos.rows.some((r) => r.asset === 'USD'),
+    false,
+    'USD cash row must be omitted when live metrics are null'
+  );
+
+  // Verify no row value equals balance or Balance - Margin
+  for (const row of breakdownWithPos.rows) {
+    assert.notEqual(row.value, 5018.09, 'No row value equals balance');
+    assert.notEqual(row.formattedValue, '5 018.09', 'No formatted value equals balance');
+    assert.notEqual(
+      row.value,
+      5018.09 - breakdownWithPos.totalLongValue,
+      'No row value equals Balance - Margin'
+    );
+  }
+
+  // Open position rows must remain intact
+  const byAsset = Object.fromEntries(breakdownWithPos.rows.map((r) => [r.asset, r]));
+  assert.ok(byAsset.EUR, 'EUR long position row is present');
+  assert.ok(byAsset.XAU, 'XAU short position row is present');
+  assert.ok(byAsset.EUR.value > 0);
+  assert.ok(byAsset.XAU.value < 0);
+});
+
 test('formatAccountExposureVolume, formatAccountExposureRate and formatAccountExposureSpaceNumber format trading numbers', () => {
   assert.equal(formatAccountExposureVolume('USD', 5018.09), '5.02K');
   assert.equal(formatAccountExposureVolume('EUR', -100000), '-100.00K');
@@ -287,12 +358,12 @@ test('AccountDetailsModal Overview tab renders institutional header card, parame
   assert.doesNotMatch(modalSource, /MetaQuotes ID:/);
   assert.match(modalSource, /account-overview-empty-trades/);
   assert.match(modalSource, /No open trades/);
-  assert.match(modalSource, /account-overview-summary-bottom/);
+  assert.match(modalSource, /account-overview-summary-top/);
   assert.match(modalSource, /account-overview-metric-item/);
   assert.match(modalSource, /account-overview-metric-label/);
   assert.match(modalSource, /account-overview-metric-value/);
   assert.match(modalSource, /setSelectedOverviewRowKey/);
   assert.match(modalCss, /#root#root#root#root#root#root \.account-details-window \.account-details-tab\.is-active/);
-  assert.match(modalCss, /#root \.account-overview-summary-strip\.account-overview-summary-bottom/);
+  assert.match(modalCss, /#root \.account-overview-summary-strip\.account-overview-summary-top/);
   assert.match(modalCss, /#root \.account-overview-metric-item/);
 });
