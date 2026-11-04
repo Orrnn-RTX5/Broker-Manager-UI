@@ -11,6 +11,7 @@ import {
   joinGroupPath,
   listGroupContainerPaths,
   listGroupsUnder,
+  listLeafGroups,
   nestGroupName,
   separatorForContainer,
 } from './groupTree.js';
@@ -143,4 +144,32 @@ test('groups differing only by case get separate tree nodes and folder rows', ()
   assert.equal(rows.filter((row) => row.label.toLowerCase() === 'grp').length, 2);
   assert.equal(countGroupsUnder(groups, 'Team'), 1);
   assert.equal(countGroupsUnder(groups, 'TEAM'), 1);
+  const screenshotGroups = [
+    { name: 'Auj' },
+    { name: 'Auj/demo' },
+    { name: 'Auj/real' },
+    { name: 'Orrnn' },
+    { name: 'Orrnn/demo-std' },
+    { name: 'orrnn/demo-std' },
+    { name: 'Yopips' },
+    { name: 'Yopips/demo' },
+    { name: 'Yopips/real' },
+    { name: 'ARIJIT' },
+    { name: 'Arijit' },
+    { name: 'Arshad' },
+    { name: 'ARSHAD' },
+    { name: 'ARSHAD-0' },
+    { name: 'dipannita' },
+    { name: 'fdsf' },
+    { name: 'Notun' },
+    { name: 'Raj' },
+    { name: 'sdfc' },
+    { name: 'Test' },
+    { name: 'testing' },
+    { name: 'YoPips Demo' },
+    { name: 'YoPips real' },
+  ];
+  assert.equal(buildGroupNavigatorTree(screenshotGroups).length, 18);
+  assert.equal(getGroupFolderRows(screenshotGroups, '').length, 18);
+  assert.equal(listLeafGroups(screenshotGroups).length, 20);
 });

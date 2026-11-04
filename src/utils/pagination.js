@@ -217,6 +217,13 @@ const rowMatchesFilters = (row, filters = {}) => {
     const capVal = row?.[capKey];
     if (matchesFilterValue(capVal, expected)) return true;
 
+    if (key === 'group') {
+      const groupVal = String(val ?? capVal ?? row?.accountGroup ?? row?.AccountGroup ?? '').trim().toLowerCase();
+      const expStr = String(expected ?? '').trim().toLowerCase();
+      if (groupVal && (expStr === 'lp' || expStr === 'real' || expStr === 'demo' || expStr === 'contest')) {
+        if (groupVal.includes(expStr)) return true;
+      }
+    }
     if (key === 'type') {
       if (matchesFilterValue(row?.action ?? row?.Action ?? row?.side ?? row?.Side ?? row?.cmd ?? row?.Cmd, expected)) return true;
     }

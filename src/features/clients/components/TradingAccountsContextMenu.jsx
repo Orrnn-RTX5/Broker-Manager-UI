@@ -115,6 +115,7 @@ export const TradingAccountsMenuIcon = memo(function TradingAccountsMenuIcon({ n
         </svg>
       );
     case 'fix-balance':
+    case 'customize':
       return (
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <circle cx="8" cy="8" r="2.1" stroke="#2b99ff" strokeWidth="1.25" />
@@ -126,11 +127,55 @@ export const TradingAccountsMenuIcon = memo(function TradingAccountsMenuIcon({ n
           />
         </svg>
       );
+    case 'filter-none':
+      return (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          {checked !== false && (
+            <rect
+              x="0.5"
+              y="0.5"
+              width="17"
+              height="17"
+              fill="rgba(255, 255, 255, 0.04)"
+              stroke="#9ca3af"
+              strokeWidth="1"
+            />
+          )}
+          <rect
+            x="4"
+            y="4"
+            width="10"
+            height="10"
+            stroke="#2b99ff"
+            strokeWidth="1.2"
+            strokeDasharray="1.6 1.4"
+          />
+        </svg>
+      );
     case 'fix-personal-data':
+    case 'copy-list-of-logins':
       return (
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <circle cx="8" cy="4.8" r="2.3" stroke="#2b99ff" strokeWidth="1.3" />
           <path d="M3.4 13.2c.55-2.4 2.2-3.6 4.6-3.6s4.05 1.2 4.6 3.6H3.4Z" stroke="#2b99ff" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'copy-lines':
+      return (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M5.2 12H3.1C2.77 12 2.5 11.73 2.5 11.4V2.4C2.5 2.07 2.77 1.8 3.1 1.8H9.2C9.53 1.8 9.8 2.07 9.8 2.4V3.8"
+            stroke="#2b99ff"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M5.8 3.8H10.9L13.5 6.4V13.6C13.5 13.93 13.23 14.2 12.9 14.2H5.8C5.47 14.2 5.2 13.93 5.2 13.6V4.4C5.2 4.07 5.47 3.8 5.8 3.8Z"
+            stroke="#2b99ff"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          <path d="M10.7 3.8V6.5H13.5" stroke="#2b99ff" strokeWidth="1.15" strokeLinejoin="round" />
         </svg>
       );
     case 'logins-clipboard':
@@ -191,6 +236,7 @@ const TradingAccountsContextMenu = memo(function TradingAccountsContextMenu({
   onFilterByGroup,
   onFilterByCountry,
   onClearFilter,
+  onCustomizeFilter,
   onCopyAs,
   onCopyLogins,
   onExport,
@@ -235,6 +281,7 @@ const TradingAccountsContextMenu = memo(function TradingAccountsContextMenu({
         onFilterByGroup,
         onFilterByCountry,
         onClearFilter,
+        onCustomizeFilter,
         onCopyAs,
         onCopyLogins,
         onExport,
@@ -273,6 +320,7 @@ const TradingAccountsContextMenu = memo(function TradingAccountsContextMenu({
       onFilterByGroup,
       onFilterByCountry,
       onClearFilter,
+      onCustomizeFilter,
       onCopyAs,
       onCopyLogins,
       onExport,
@@ -399,6 +447,7 @@ const TradingAccountsContextMenu = memo(function TradingAccountsContextMenu({
                 minHeight: '23px',
                 padding: '2px 10px 2px 6px',
                 border: 0,
+                outline: 'none',
                 borderRadius: '3px',
                 background: isHovered && !isDisabled ? '#1b65b8' : 'transparent',
                 color: isDisabled ? '#6e7683' : (isHovered ? '#ffffff' : '#e6e8ec'),
@@ -518,7 +567,7 @@ const TradingAccountsContextMenu = memo(function TradingAccountsContextMenu({
                         <span
                           style={{
                             width: '20px',
-                            height: '16px',
+                            height: '18px',
                             flex: '0 0 20px',
                             marginRight: '6px',
                             display: 'inline-flex',

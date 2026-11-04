@@ -85,6 +85,7 @@ export function buildTradingAccountsContextMenuItems({
   onFilterByGroup,
   onFilterByCountry,
   onClearFilter,
+  onCustomizeFilter,
   onCopyAs,
   onCopyLogins,
   onExport,
@@ -100,8 +101,12 @@ export function buildTradingAccountsContextMenuItems({
   const selectedIds = grid?.selectedIds ?? new Set();
   const hasSelection = selectedIds.size > 0;
   const hasTargetAccount = Boolean(selectedRow?.login ?? selectedRow) || hasSelection;
-  const targetGroup = String(selectedRow?.group ?? '').trim();
-  const targetCountry = String(selectedRow?.country ?? '').trim();
+  const normalizedGroupFilter = String(groupFilter ?? '').trim().toLowerCase();
+  const normalizedCountryFilter = String(countryFilter ?? '').trim().toLowerCase();
+  const isNoneFilterActive = (
+    (!normalizedGroupFilter || normalizedGroupFilter === 'all groups' || normalizedGroupFilter === 'none')
+    && (!normalizedCountryFilter || normalizedCountryFilter === 'all countries')
+  );
   const columns = Array.isArray(grid?.columns) && grid.columns.length > 0
     ? grid.columns
     : DEFAULT_TRADING_ACCOUNT_COLUMNS;
@@ -136,49 +141,43 @@ export function buildTradingAccountsContextMenuItems({
     },
   ];
 
-  const filterSubmenu = [];
-  if (targetGroup) {
-    filterSubmenu.push({
-      key: 'filter-group-target',
-      label: `Group: ${targetGroup}`,
-      checked: groupFilter === targetGroup,
-      onSelect: () => onFilterByGroup?.(targetGroup),
-    });
-  }
-  if (targetCountry) {
-    filterSubmenu.push({
-      key: 'filter-country-target',
-      label: `Country: ${targetCountry}`,
-      checked: countryFilter === targetCountry,
-      onSelect: () => onFilterByCountry?.(targetCountry),
-    });
-  }
-  if (filterSubmenu.length > 0) {
-    filterSubmenu.push({ divider: true });
-  }
-  filterSubmenu.push(
+  const filterSubmenu = [
     {
-      key: 'filter-all-groups',
-      label: 'All Groups',
-      checked: groupFilter === 'All Groups',
-      onSelect: () => onFilterByGroup?.('All Groups'),
-    },
-    {
-      key: 'filter-all-countries',
-      label: 'All Countries',
-      checked: countryFilter === 'All Countries',
-      onSelect: () => onFilterByCountry?.('All Countries'),
-    },
-    { divider: true },
-    {
-      key: 'filter-clear',
-      label: 'Clear Filter',
+      key: 'filter-none',
+      label: 'None',
+      icon: 'filter-none',
+      checked: isNoneFilterActive,
       onSelect: () => {
+        onFilterByGroup?.('All Groups');
+        onFilterByCountry?.('All Countries');
         if (onClearFilter) onClearFilter();
         else grid?.clearFilter?.();
       },
-    }
-  );
+    },
+    { divider: true },
+    {
+      key: 'filter-lp',
+      label: 'lp',
+      checked: normalizedGroupFilter === 'lp',
+      onSelect: () => onFilterByGroup?.('lp'),
+    },
+    {
+      key: 'filter-real',
+      label: 'real',
+      checked: normalizedGroupFilter === 'real',
+      onSelect: () => onFilterByGroup?.('real'),
+    },
+    { divider: true },
+    {
+      key: 'filter-customize',
+      label: 'Customize',
+      icon: 'customize',
+      onSelect: () => {
+        if (onCustomizeFilter) onCustomizeFilter();
+        else onFind?.();
+      },
+    },
+  ];
 
   const bulkOperationsSubmenu = [
     {
@@ -227,27 +226,50 @@ export function buildTradingAccountsContextMenuItems({
 
   const copyAsSubmenu = [
     {
-      key: 'copy-tsv',
-      label: 'Text (Tab-Separated)',
+      key: 'copy-lines',
+      label: 'Lines',
+      icon: 'copy-lines',
       shortcut: 'Ctrl+C',
-      onSelect: () => onCopyAs?.('tsv'),
+      onSelect: () => {
+        if (onCopyAs) {
+          onCopyAs('tsv');
+          return;
+        }
+        const targetRows = selectedIds.size > 0
+          ? rows.filter((r) => selectedIds.has(r?.[rowKey]))
+          : selectedRow
+            ? [selectedRow]
+            : rows;
+        const visibleCols = columns.filter((col) => !hiddenColumns.has(col.key));
+        const text = targetRows
+          .map((row) => visibleCols.map((col) => String(row?.[col.key] ?? '')).join('\t'))
+          .join('\n');
+        if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(text);
+        }
+      },
     },
     {
-      key: 'copy-csv',
-      label: 'CSV',
-      onSelect: () => onCopyAs?.('csv'),
-    },
-    {
-      key: 'copy-json',
-      label: 'JSON',
-      onSelect: () => onCopyAs?.('json'),
-    },
-    { divider: true },
-    {
-      key: 'copy-login',
-      label: 'Login ID',
+      key: 'copy-list-of-logins',
+      label: 'List Of Logins',
+      icon: 'copy-list-of-logins',
       disabled: !hasTargetAccount && rows.length === 0,
-      onSelect: () => onCopyLogins?.(selectedRow),
+      onSelect: () => {
+        if (onCopyLogins) {
+          onCopyLogins(selectedRow);
+          return;
+        }
+        const logins = selectedIds.size > 0
+          ? [...selectedIds]
+          : (() => {
+            const login = typeof selectedRow === 'object' ? selectedRow?.[rowKey] ?? selectedRow?.login : selectedRow;
+            return login ? [login] : rows.map((r) => r?.[rowKey] ?? r?.login).filter(Boolean);
+          })();
+        const text = logins.map(String).join('\n');
+        if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(text);
+        }
+      },
     },
   ];
 

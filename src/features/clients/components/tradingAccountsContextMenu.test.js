@@ -7,6 +7,10 @@ import {
   buildTradingAccountsContextMenuItems,
   DEFAULT_TRADING_ACCOUNT_COLUMNS,
 } from './tradingAccountsContextMenuModel.js';
+import {
+  CLOSE_POPUPS_REQUIRED_EVENT,
+  getBlockingPopupWindowSummary,
+} from '../../../components/Popups/popupContextMenuGuard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,7 +87,27 @@ test('buildTradingAccountsContextMenuItems matches MT5 Trading Accounts right-cl
     ]
   );
   assert.ok(Array.isArray(byKey['filter'].submenu));
+  assert.deepEqual(
+    byKey['filter'].submenu.map((item) =>
+      item.divider ? '---' : [item.label, item.icon ?? null, item.checked ?? null]
+    ),
+    [
+      ['None', 'filter-none', true],
+      '---',
+      ['lp', null, false],
+      ['real', null, false],
+      '---',
+      ['Customize', 'customize', null],
+    ]
+  );
   assert.ok(Array.isArray(byKey['copy-as'].submenu));
+  assert.deepEqual(
+    byKey['copy-as'].submenu.map((item) => [item.label, item.icon, item.shortcut ?? null]),
+    [
+      ['Lines', 'copy-lines', 'Ctrl+C'],
+      ['List Of Logins', 'copy-list-of-logins', null],
+    ]
+  );
   assert.equal(byKey['export'].icon, 'export');
   assert.equal(byKey['import'].icon, 'import');
   assert.equal(byKey['find'].icon, 'find');
@@ -144,6 +168,11 @@ test('buildTradingAccountsContextMenuItems invokes callbacks for menu actions an
     onToggleAutoArrange: () => calls.push(['toggleAutoArrange']),
     onToggleGrid: () => calls.push(['toggleGrid']),
     onCopyAs: (fmt) => calls.push(['copyAs', fmt]),
+    onCopyLogins: (row) => calls.push(['copyLogins', row?.login]),
+    onFilterByGroup: (grp) => calls.push(['filterByGroup', grp]),
+    onFilterByCountry: (country) => calls.push(['filterByCountry', country]),
+    onClearFilter: () => calls.push(['clearFilter']),
+    onCustomizeFilter: () => calls.push(['customizeFilter']),
   });
 
   const byKey = Object.fromEntries(
@@ -161,6 +190,20 @@ test('buildTradingAccountsContextMenuItems invokes callbacks for menu actions an
   byKey['auto-scroll'].onSelect();
   byKey['auto-arrange'].onSelect();
   byKey['grid'].onSelect();
+
+  const filterByKey = Object.fromEntries(
+    byKey['filter'].submenu.filter((item) => !item.divider).map((item) => [item.key, item])
+  );
+  filterByKey['filter-lp'].onSelect();
+  filterByKey['filter-real'].onSelect();
+  filterByKey['filter-none'].onSelect();
+  filterByKey['filter-customize'].onSelect();
+
+  const copyAsByKey = Object.fromEntries(
+    byKey['copy-as'].submenu.filter((item) => !item.divider).map((item) => [item.key, item])
+  );
+  copyAsByKey['copy-lines'].onSelect();
+  copyAsByKey['copy-list-of-logins'].onSelect();
 
   const profitCol = byKey['columns'].submenu.find(
     (col) => col.key === 'col-profit'
@@ -180,6 +223,14 @@ test('buildTradingAccountsContextMenuItems invokes callbacks for menu actions an
     ['toggleAutoScroll'],
     ['toggleAutoArrange'],
     ['toggleGrid'],
+    ['filterByGroup', 'lp'],
+    ['filterByGroup', 'real'],
+    ['filterByGroup', 'All Groups'],
+    ['filterByCountry', 'All Countries'],
+    ['clearFilter'],
+    ['customizeFilter'],
+    ['copyAs', 'tsv'],
+    ['copyLogins', '68096272'],
     ['toggleColumn', 'profit'],
   ]);
 });
@@ -302,4 +353,53 @@ test('TradingAccountsDataGrid and CSS style demo accounts green, real accounts y
   assert.match(indexCss, /\.trading-accounts-login-icon\.is-demo[\s\S]*?color:\s*#22c55e/);
   assert.match(indexCss, /\.trading-accounts-login-icon\.is-real[\s\S]*?color:\s*#facc15/);
   assert.match(indexCss, /\.trading-accounts-login-icon\.is-contest[\s\S]*?color:\s*#3b82f6/);
+});
+
+test('Right-click context menu is blocked while Bulk Operations and Account Details tabs are open and indicates to cross (✕) them first', () => {
+  const twoTabsSummary = getBlockingPopupWindowSummary({
+    openAccountWindows: [{ login: '200013', minimized: false }],
+    hasBulkOperations: true,
+    doc: null,
+  });
+  assert.equal(twoTabsSummary.isBlocked, true);
+  assert.equal(twoTabsSummary.totalOpenTabs, 2);
+  assert.match(twoTabsSummary.message, /Please cross \(✕\) these 2 open tabs first/);
+
+  const singleTabSummary = getBlockingPopupWindowSummary({
+    openAccountWindows: [{ login: '200013', minimized: false }],
+    hasBulkOperations: false,
+    doc: null,
+  });
+  assert.equal(singleTabSummary.isBlocked, true);
+  assert.equal(singleTabSummary.totalOpenTabs, 1);
+  assert.match(singleTabSummary.message, /Please cross \(✕\) this open tab first/);
+
+  const closedOrMinimizedSummary = getBlockingPopupWindowSummary({
+    openAccountWindows: [{ login: '200013', minimized: true }],
+    hasBulkOperations: false,
+    doc: null,
+  });
+  assert.equal(closedOrMinimizedSummary.isBlocked, false);
+  assert.equal(closedOrMinimizedSummary.totalOpenTabs, 0);
+
+  const pageSource = fs.readFileSync(
+    path.resolve(__dirname, '../TradingAccountsPage.jsx'),
+    'utf8'
+  );
+  const accountDetailsSource = fs.readFileSync(
+    path.resolve(__dirname, '../../../components/Popups/AccountDetailsModal.jsx'),
+    'utf8'
+  );
+  const bulkModalSource = fs.readFileSync(
+    path.resolve(__dirname, '../../../components/Popups/BulkOperationsChargesModal.jsx'),
+    'utf8'
+  );
+
+  assert.equal(CLOSE_POPUPS_REQUIRED_EVENT, 'rtx:close-popups-required');
+  assert.match(pageSource, /canOpenContextMenu:\s*\(\)\s*=>\s*!hasOpenBlockingWindows/);
+  assert.match(pageSource, /ctl\.contextMenuProps\.isOpen && !hasOpenBlockingWindows/);
+  assert.match(accountDetailsSource, /notifyCloseOpenPopupsRequired/);
+  assert.match(accountDetailsSource, /is-close-highlight/);
+  assert.match(bulkModalSource, /notifyCloseOpenPopupsRequired/);
+  assert.match(bulkModalSource, /is-close-highlight/);
 });

@@ -16,7 +16,13 @@ export const loadAllGroups = async ({ signal } = {}) => {
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await getGroupsPage({ search: '', sort_by: 'name', sort_dir: 'asc', limit: PAGE_SIZE, offset }, { signal });
     const pageRows = Array.isArray(result?.rows) ? result.rows : [];
-    rows.push(...pageRows);
+    for (const row of pageRows) {
+      const name = String(row?.name ?? '').trim();
+      if (!name) continue;
+      if (!rows.some((existing) => String(existing?.name ?? '').trim() === name)) {
+        rows.push(row);
+      }
+    }
     if (!result?.hasMore || pageRows.length === 0) break;
     offset += pageRows.length;
   }

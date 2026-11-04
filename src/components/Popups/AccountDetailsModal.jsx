@@ -1,7 +1,7 @@
 import { showResult } from '../../store/resultDialogStore.js';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Minus, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
+import { X, Minus, Square, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
 import { completeAccountPositions, getAccountPendingOrders, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
 import PositionHistoryGrid from '../../features/clients/components/PositionHistoryGrid';
 import { getPositionSnapshotRows, getPositionUpdateLogin, subscribeToPositionSync, requiresPositionReconciliation } from '../../services/positionSync';
@@ -12,6 +12,18 @@ import orderAdapter from './adapters/order';
 import dealAdapter from './adapters/deal';
 import AccountTradeTab from './AccountTradeTab';
 import DepositDialog from './DepositDialog';
+import useSymbolStore from '../../store/symbolStore';
+import {
+  buildAccountExposureBreakdown,
+  buildExposureChartSignature,
+  buildExposureContextMenuItems,
+  interpolateExposureChartSlices,
+} from './accountExposureModel';
+import {
+  CLOSE_POPUPS_REQUIRED_EVENT,
+  getBlockingPopupWindowSummary,
+  notifyCloseOpenPopupsRequired,
+} from './popupContextMenuGuard';
 import { buildFinanceAttemptScope, pendingFinanceAttempts } from './pendingFinanceAttempts.js';
 import { useI18nStore } from '../../i18n/index.js';
 import {
@@ -430,7 +442,7 @@ const ACCOUNT_FIELD_KEYS = {
   LeadCampaign: ['LeadCampaign', 'leadCampaign', 'LeadCampaignName', 'leadCampaignName', 'lead_campaign', 'Campaign', 'campaign', 'CampaignId', 'campaignId'],
   LeadSource: ['LeadSource', 'leadSource', 'lead_source', 'Source', 'source', 'LeadSourceId', 'leadSourceId'],
   MQID: ['MQID', 'mqid', 'MetaQuotesID', 'MetaQuotesId', 'metaQuotesID', 'metaQuotesId'],
-  Email: ['Email', 'email'],
+  Email: ['Email', 'email', 'username', 'Username'],
   Phone: ['Phone', 'phone', 'PhoneNumber', 'phoneNumber', 'phone_number', 'Mobile', 'mobile', 'MobilePhone', 'mobilePhone', 'CellPhone', 'cellPhone', 'Telephone', 'telephone'],
   Country: ['Country', 'country', 'CountryName', 'countryName', 'country_name', 'ClientCountry', 'clientCountry', 'client_country'],
   State: ['State', 'state', 'StateName', 'stateName', 'state_name', 'Province', 'province', 'Region', 'region'],
@@ -438,9 +450,9 @@ const ACCOUNT_FIELD_KEYS = {
   ZipCode: ['ZipCode', 'zipCode', 'Zip', 'zip', 'zip_code', 'PostalCode', 'postalCode', 'postal_code'],
   Address: ['Address', 'address', 'Address1', 'address1', 'Address2', 'address2', 'Street', 'street'],
   Comment: ['Comment', 'comment', 'Notes', 'notes', 'Note', 'note'],
-  Group: ['Group', 'group'],
-  Currency: ['Currency', 'currency'],
-  Leverage: ['Leverage', 'leverage'],
+  Group: ['Group', 'group', 'accountGroup', 'AccountGroup', 'group_name', 'GroupName'],
+  Currency: ['Currency', 'currency', 'depositCurrency', 'DepositCurrency'],
+  Leverage: ['Leverage', 'leverage', 'defaultLeverage', 'default_leverage'],
   Registration: ['Registration', 'registration', 'Registered', 'registered'],
   LastAccess: ['LastAccess', 'lastAccess', 'last_access'],
   LastIP: ['LastIP', 'lastIP', 'last_ip'],
@@ -457,6 +469,430 @@ const ACCOUNT_FIELD_KEYS = {
   StopOutLevel: ['StopOutLevel', 'stopOutLevel'],
 };
 
+const usePrefersReducedMotion = () => {
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return Boolean(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event) => setReducedMotion(Boolean(event.matches));
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+    if (typeof mediaQuery.addListener === 'function') {
+      mediaQuery.addListener(handleChange);
+      return () => mediaQuery.removeListener(handleChange);
+    }
+    return undefined;
+  }, []);
+
+  return reducedMotion;
+};
+
+const ExposureDonutRatioChart = ({
+  loginId,
+  chartTitle,
+  effectiveChartSide,
+  activeSlices,
+  moneyDecimals,
+  hoveredExposureAsset,
+  onHoverAsset,
+}) => {
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const chartSignature = useMemo(
+    () => buildExposureChartSignature(effectiveChartSide, activeSlices),
+    [effectiveChartSide, activeSlices]
+  );
+
+  const completedSignatureRef = useRef(null);
+  const displayedStateByAssetRef = useRef({});
+  const rafIdRef = useRef(null);
+
+  const [animState, setAnimState] = useState(() => ({
+    signature: null,
+    progress: prefersReducedMotion ? 1 : 0,
+    isInitialEntrance: true,
+    fromStateByAsset: {},
+  }));
+
+  useEffect(() => {
+    if (rafIdRef.current && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
+    if (String(chartSignature).endsWith(':empty')) {
+      completedSignatureRef.current = chartSignature;
+      displayedStateByAssetRef.current = {};
+      return undefined;
+    }
+
+    if (prefersReducedMotion) {
+      completedSignatureRef.current = chartSignature;
+      return undefined;
+    }
+
+    // Do not replay animation once this signature has completed its animation
+    if (completedSignatureRef.current === chartSignature) {
+      return undefined;
+    }
+
+    const isFirstLoad =
+      completedSignatureRef.current === null ||
+      String(completedSignatureRef.current).endsWith(':empty');
+    const fromStateSnapshot = isFirstLoad
+      ? {}
+      : { ...displayedStateByAssetRef.current };
+
+    const durationMs = isFirstLoad ? 680 : 520;
+    const startTime =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+
+    const step = (nowTimestamp) => {
+      const now =
+        typeof nowTimestamp === 'number'
+          ? nowTimestamp
+          : typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+      const rawProgress = Math.max(0, Math.min(1, (now - startTime) / durationMs));
+      if (rawProgress >= 1) {
+        completedSignatureRef.current = chartSignature;
+        rafIdRef.current = null;
+      }
+      setAnimState({
+        signature: chartSignature,
+        progress: rawProgress,
+        isInitialEntrance: isFirstLoad,
+        fromStateByAsset: fromStateSnapshot,
+      });
+
+      if (rawProgress < 1) {
+        rafIdRef.current = requestAnimationFrame(step);
+      }
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      rafIdRef.current = requestAnimationFrame(step);
+    } else {
+      completedSignatureRef.current = chartSignature;
+    }
+
+    return () => {
+      if (rafIdRef.current && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [chartSignature, prefersReducedMotion]);
+
+  const effectiveProgress =
+    prefersReducedMotion
+      ? 1
+      : animState.signature === chartSignature
+        ? animState.progress
+        : 0;
+
+  const { slices: interpolatedSlices, isStatic, overallEased, rotationDeg } = useMemo(
+    () =>
+      interpolateExposureChartSlices(
+        activeSlices,
+        animState.fromStateByAsset,
+        effectiveProgress,
+        {
+          isInitialEntrance: animState.isInitialEntrance,
+          moneyDecimals,
+          reducedMotion: prefersReducedMotion,
+        }
+      ),
+    [
+      activeSlices,
+      animState.fromStateByAsset,
+      effectiveProgress,
+      animState.isInitialEntrance,
+      moneyDecimals,
+      prefersReducedMotion,
+    ]
+  );
+
+  useEffect(() => {
+    const currentMap = {};
+    for (const slice of interpolatedSlices) {
+      currentMap[slice.asset] = {
+        ratio: slice.animatedRatio,
+        signedValue: slice.animatedSignedValue,
+      };
+    }
+    displayedStateByAssetRef.current = currentMap;
+  }, [interpolatedSlices]);
+
+  const cx = 104;
+  const cy = 76;
+  const r = 50;
+  const holeR = 29;
+  const labelR = 62;
+
+  const sliceGeometry = useMemo(() => {
+    const baseStartTheta = -Math.PI / 2;
+    let animatedCurrentTheta = baseStartTheta;
+    let targetCurrentTheta = baseStartTheta;
+    const items = [];
+
+    for (let idx = 0; idx < interpolatedSlices.length; idx += 1) {
+      const slice = interpolatedSlices[idx];
+      const animatedSweep = Math.max(0, slice.animatedRatio * Math.PI * 2);
+      const startTheta = animatedCurrentTheta;
+      const endTheta = startTheta + animatedSweep;
+      animatedCurrentTheta = endTheta;
+
+      const targetSweep = Math.max(0, slice.ratio * Math.PI * 2);
+      const targetStartTheta = targetCurrentTheta;
+      const targetMidTheta =
+        interpolatedSlices.length === 1 && slice.ratio >= 0.999
+          ? Math.PI
+          : targetStartTheta + targetSweep / 2;
+      targetCurrentTheta += targetSweep;
+
+      const x1 = cx + r * Math.cos(startTheta);
+      const y1 = cy + r * Math.sin(startTheta);
+      const x2 = cx + r * Math.cos(endTheta);
+      const y2 = cy + r * Math.sin(endTheta);
+      const largeArc = animatedSweep > Math.PI ? 1 : 0;
+      const isFullCircle = animatedSweep >= Math.PI * 2 - 1e-4;
+      const hasVisibleArc = animatedSweep >= 1e-4;
+      const path =
+        !hasVisibleArc || isFullCircle
+          ? null
+          : `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+
+      const tickX1 = cx + (r + 1) * Math.cos(targetMidTheta);
+      const tickY1 = cy + (r + 1) * Math.sin(targetMidTheta);
+      const tickX2 = cx + (labelR - 3) * Math.cos(targetMidTheta);
+      const tickY2 = cy + (labelR - 3) * Math.sin(targetMidTheta);
+      const lx = cx + labelR * Math.cos(targetMidTheta);
+      const ly = cy + labelR * Math.sin(targetMidTheta);
+      const cosMid = Math.cos(targetMidTheta);
+      const textAnchor =
+        Math.abs(cosMid) < 0.22 ? 'middle' : cosMid > 0 ? 'start' : 'end';
+
+      items.push({
+        ...slice,
+        gradId: `acct-exp-grad-${loginId}-${idx}`,
+        isFullCircle,
+        hasVisibleArc,
+        path,
+        tickX1,
+        tickY1,
+        tickX2,
+        tickY2,
+        lx,
+        ly,
+        textAnchor,
+        showLabel: slice.ratio >= 0.04,
+      });
+    }
+
+    return items;
+  }, [interpolatedSlices, loginId]);
+
+  const focusedSlice =
+    sliceGeometry.find((s) => s.asset === hoveredExposureAsset) ||
+    sliceGeometry[0] ||
+    null;
+
+  const rotorStateClass = isStatic
+    ? 'is-static'
+    : animState.isInitialEntrance
+      ? 'is-entering'
+      : 'is-updating';
+
+  return (
+    <div className="account-exposure-chart-body">
+      {sliceGeometry.length > 0 ? (
+        <>
+          <div className="account-exposure-pie-stage">
+            <svg
+              viewBox="0 0 208 152"
+              className="account-exposure-pie-svg"
+              role="img"
+              aria-label={`${chartTitle} composition`}
+              data-chart-static={isStatic ? 'true' : 'false'}
+            >
+              <defs>
+                {sliceGeometry.map((slice) => (
+                  <linearGradient
+                    key={slice.gradId}
+                    id={slice.gradId}
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="100%"
+                  >
+                    <stop offset="0%" stopColor={slice.color} stopOpacity="1" />
+                    <stop offset="100%" stopColor={slice.color} stopOpacity="0.76" />
+                  </linearGradient>
+                ))}
+              </defs>
+              <circle
+                cx={cx}
+                cy={cy}
+                r={r + 3}
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.14)"
+                strokeWidth="1"
+              />
+              <g
+                className={`account-exposure-pie-rotor ${rotorStateClass}`}
+                style={
+                  isStatic
+                    ? undefined
+                    : {
+                        transform: `rotate(${rotationDeg}deg)`,
+                      }
+                }
+              >
+                {sliceGeometry.map((slice) => {
+                  const isHovered = hoveredExposureAsset === slice.asset;
+                  return (
+                    <g
+                      key={slice.asset}
+                      className={`account-exposure-pie-slice${isHovered ? ' is-hovered' : ''}`}
+                      onMouseEnter={() => onHoverAsset(slice.asset)}
+                      onMouseLeave={() => onHoverAsset(null)}
+                    >
+                      {slice.isFullCircle ? (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={r}
+                          fill={`url(#${slice.gradId})`}
+                          stroke={isHovered ? '#f8fafc' : '#16181d'}
+                          strokeWidth={isHovered ? '1.6' : '1.2'}
+                        />
+                      ) : slice.hasVisibleArc ? (
+                        <path
+                          d={slice.path}
+                          fill={`url(#${slice.gradId})`}
+                          stroke={isHovered ? '#f8fafc' : '#16181d'}
+                          strokeWidth={isHovered ? '1.6' : '1.2'}
+                        />
+                      ) : null}
+                    </g>
+                  );
+                })}
+              </g>
+              <circle
+                cx={cx}
+                cy={cy}
+                r={holeR}
+                className="account-exposure-pie-hole"
+                pointerEvents="none"
+              />
+              {focusedSlice && (
+                <g
+                  className={`account-exposure-pie-center-group ${isStatic ? 'is-static' : 'is-animating'}`}
+                  style={isStatic ? undefined : { opacity: Math.max(0.25, overallEased) }}
+                  pointerEvents="none"
+                >
+                  <text
+                    x={cx}
+                    y={cy - 4}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    className="account-exposure-pie-center-asset"
+                  >
+                    {focusedSlice.asset}
+                  </text>
+                  <text
+                    x={cx}
+                    y={cy + 9}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    className="account-exposure-pie-center-pct"
+                  >
+                    {focusedSlice.animatedPercentLabel}
+                  </text>
+                </g>
+              )}
+              {sliceGeometry.map((slice) =>
+                slice.showLabel ? (
+                  <g
+                    key={`lbl-${slice.asset}`}
+                    className={`account-exposure-pie-label-group ${isStatic ? 'is-static' : 'is-animating'}`}
+                    style={isStatic ? undefined : { opacity: slice.sliceProgress }}
+                    pointerEvents="none"
+                  >
+                    <line
+                      x1={slice.tickX1}
+                      y1={slice.tickY1}
+                      x2={slice.tickX2}
+                      y2={slice.tickY2}
+                      stroke="rgba(148, 163, 184, 0.45)"
+                      strokeWidth="0.9"
+                    />
+                    <text
+                      x={slice.lx}
+                      y={slice.ly}
+                      textAnchor={slice.textAnchor}
+                      dominantBaseline="central"
+                      className="account-exposure-pie-label"
+                    >
+                      {slice.asset}
+                    </text>
+                  </g>
+                ) : null
+              )}
+            </svg>
+          </div>
+
+          <div className="account-exposure-legend custom-scrollbar" aria-label="Asset allocation breakdown">
+            {sliceGeometry.map((slice) => {
+              const isActive = hoveredExposureAsset === slice.asset;
+              return (
+                <div
+                  key={`legend-${slice.asset}`}
+                  className={`account-exposure-legend-row${isActive ? ' is-active' : ''}${isStatic ? ' is-static' : ' is-animating'}`}
+                  style={isStatic ? undefined : { opacity: Math.max(0.35, slice.sliceProgress) }}
+                  onMouseEnter={() => onHoverAsset(slice.asset)}
+                  onMouseLeave={() => onHoverAsset(null)}
+                >
+                  <span
+                    className="account-exposure-legend-dot"
+                    style={{ backgroundColor: slice.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="account-exposure-legend-asset">{slice.asset}</span>
+                  <span className="account-exposure-legend-val tabular">
+                    {slice.animatedFormattedValue}
+                  </span>
+                  <span className="account-exposure-legend-pct tabular">
+                    {slice.animatedPercentLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="account-exposure-chart-empty">
+          <div className="account-exposure-empty-ring" aria-hidden="true" />
+          <span>No {chartTitle.toLowerCase()}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canCloseTrades, canManipulateTrades }) => {
   const style = {
     top: Math.min(y, window.innerHeight - 400),
@@ -465,9 +901,9 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
 
   return (
     <div
-      className="fixed z-[100000] w-56 ui-card shadow-2xl border border-[var(--border)] rounded-lg py-1 overflow-hidden"
+      className="fixed z-[100200] w-56 ui-card shadow-2xl border border-[var(--border)] rounded-lg py-1 overflow-hidden"
       style={style}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
     >
       <TradeContextMenuItem text={`${data?.isPendingOrder ? 'ORDER' : 'TRADE'} #${data?.position || data?.ticket || '---'}`} isHeader />
       <TradeContextMenuItem icon={Plus} text="New Order" color="var(--ok-text)" onClick={() => { onModify(null); onClose(); }} />
@@ -488,6 +924,170 @@ const TradeContextMenu = ({ x, y, data, onClose, onModify, onCloseTrade, canClos
       <TradeContextMenuItem text="Grid" />
       <TradeContextMenuSeparator />
       <TradeContextMenuItem text="Columns" submenu />
+    </div>
+  );
+};
+
+const ExposureContextMenu = ({
+  x,
+  y,
+  chartSide,
+  autoArrange,
+  showGrid,
+  onSelectChartSide,
+  onCopyReport,
+  onExportCsv,
+  onExportHtml,
+  onToggleAutoArrange,
+  onToggleGrid,
+  onClose,
+}) => {
+  const [openSubmenuKey, setOpenSubmenuKey] = useState(null);
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 720;
+  const left = Math.max(8, Math.min(x, vw - 188));
+  const top = Math.max(8, Math.min(y, vh - 148));
+  const flipSubmenuLeft = left + 330 > vw;
+
+  const items = useMemo(
+    () =>
+      buildExposureContextMenuItems({
+        chartSide,
+        autoArrange,
+        showGrid,
+        onSelectChartSide,
+        onCopyReport,
+        onExportCsv,
+        onExportHtml,
+        onToggleAutoArrange,
+        onToggleGrid,
+      }),
+    [
+      chartSide,
+      autoArrange,
+      showGrid,
+      onSelectChartSide,
+      onCopyReport,
+      onExportCsv,
+      onExportHtml,
+      onToggleAutoArrange,
+      onToggleGrid,
+    ]
+  );
+
+  return (
+    <div
+      className="account-exposure-context-menu"
+      style={{ top: `${top}px`, left: `${left}px` }}
+      role="menu"
+      aria-label="Exposure context menu"
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      {items.map((item) => {
+        if (item.divider) {
+          return (
+            <div
+              key={item.key}
+              className="account-exposure-context-divider"
+              role="separator"
+            />
+          );
+        }
+        const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+        const isSubmenuOpen = openSubmenuKey === item.key;
+
+        return (
+          <div
+            key={item.key}
+            className="account-exposure-context-item-wrap"
+            onMouseEnter={() => setOpenSubmenuKey(hasSubmenu ? item.key : null)}
+            onMouseLeave={() => {
+              if (hasSubmenu) setOpenSubmenuKey(null);
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              aria-haspopup={hasSubmenu ? 'menu' : undefined}
+              aria-expanded={hasSubmenu ? isSubmenuOpen : undefined}
+              className={`account-exposure-context-item${isSubmenuOpen ? ' is-open' : ''}`}
+              onClick={() => {
+                if (hasSubmenu) {
+                  setOpenSubmenuKey((prev) => (prev === item.key ? null : item.key));
+                  return;
+                }
+                item.onSelect?.();
+                onClose?.();
+              }}
+            >
+              <span className="account-exposure-context-check" aria-hidden="true">
+                {item.checked ? (
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2.2 6.3L4.8 8.9L9.8 3.3"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : null}
+              </span>
+              <span className="account-exposure-context-label">{item.label}</span>
+              {hasSubmenu ? (
+                <span className="account-exposure-context-arrow" aria-hidden="true">
+                  ▸
+                </span>
+              ) : item.shortcut ? (
+                <span className="account-exposure-context-shortcut">{item.shortcut}</span>
+              ) : null}
+            </button>
+
+            {hasSubmenu && isSubmenuOpen && (
+              <div
+                className={`account-exposure-context-submenu${flipSubmenuLeft ? ' is-left' : ''}`}
+                role="menu"
+                aria-label={`${item.label} submenu`}
+              >
+                {item.submenu.map((sub) => (
+                  <button
+                    key={sub.key}
+                    type="button"
+                    role="menuitem"
+                    className="account-exposure-context-item"
+                    onClick={() => {
+                      sub.onSelect?.();
+                      onClose?.();
+                    }}
+                  >
+                    <span className="account-exposure-context-check" aria-hidden="true">
+                      {sub.checked ? (
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                          <path
+                            d="M2.2 6.3L4.8 8.9L9.8 3.3"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : null}
+                    </span>
+                    <span className="account-exposure-context-label">{sub.label}</span>
+                    {sub.shortcut ? (
+                      <span className="account-exposure-context-shortcut">{sub.shortcut}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -662,6 +1262,20 @@ const AccountDetailsModal = ({
   const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
   const positions = useLivePositions(showPositions ? snapshotPositions : [], loginId, showPositions, positionsSnapshotRevision);
   const liveMetrics = useLiveAccountMetrics(loginId);
+  const symbolsMap = useSymbolStore((state) => state.symbols);
+  const [exposureChartSide, setExposureChartSide] = useState('long');
+  const [hoveredExposureAsset, setHoveredExposureAsset] = useState(null);
+  const [selectedExposureAsset, setSelectedExposureAsset] = useState(null);
+  const [selectedOverviewRowKey, setSelectedOverviewRowKey] = useState(null);
+  const [exposureAutoArrange, setExposureAutoArrange] = useState(true);
+  const [exposureShowGrid, setExposureShowGrid] = useState(true);
+  const [exposureCtxMenu, setExposureCtxMenu] = useState({
+    x: 0,
+    y: 0,
+    isOpen: false,
+    row: null,
+    rows: [],
+  });
   const [, setPositionsLoading] = useState(() => initialPositions === undefined);
   const [positionsError, setPositionsError] = useState('');
   const [historyRows, setHistoryRows] = useState([]);
@@ -706,6 +1320,9 @@ const AccountDetailsModal = ({
     setSelectedTicketRow(null);
     setPendingTradeClose(null);
     setCtxMenu({ x: 0, y: 0, isOpen: false, data: null });
+    setExposureCtxMenu({ x: 0, y: 0, isOpen: false, row: null, rows: [] });
+    setSelectedExposureAsset(null);
+    setSelectedOverviewRowKey(null);
   }, [loginId, initialTab, targetTicket, canViewPositions]);
 
   useEffect(() => {
@@ -740,15 +1357,48 @@ const AccountDetailsModal = ({
   }, [pendingTradeClose]);
 
   const [ctxMenu, setCtxMenu] = useState({ x: 0, y: 0, isOpen: false, data: null });
+  const [closeRequiredAlert, setCloseRequiredAlert] = useState(null);
+  const closeRequiredTimerRef = useRef(null);
 
   useEffect(() => {
-    const closeMenu = () => setCtxMenu(prev => prev.isOpen ? { ...prev, isOpen: false } : prev);
+    const closeMenu = () => {
+      setCtxMenu(prev => prev.isOpen ? { ...prev, isOpen: false } : prev);
+      setExposureCtxMenu(prev => prev.isOpen ? { ...prev, isOpen: false } : prev);
+    };
     window.addEventListener('click', closeMenu);
     return () => window.removeEventListener('click', closeMenu);
   }, []);
 
-  const initialWidth = Math.min(760, window.innerWidth - 40);
-  const initialHeight = Math.min(545, window.innerHeight - 40);
+  useEffect(() => {
+    const handleRequireClose = (event) => {
+      const fallback = getBlockingPopupWindowSummary({ openAccountWindows });
+      const detail = event?.detail || fallback;
+      setCloseRequiredAlert({
+        active: true,
+        totalOpenTabs: detail.totalOpenTabs || fallback.totalOpenTabs || 1,
+        message:
+          detail.message ||
+          fallback.message ||
+          'Please cross (✕) the open tabs first — right-click will work again after closing them.',
+      });
+      if (closeRequiredTimerRef.current) {
+        clearTimeout(closeRequiredTimerRef.current);
+      }
+      closeRequiredTimerRef.current = setTimeout(() => {
+        setCloseRequiredAlert(null);
+      }, 2800);
+    };
+    window.addEventListener(CLOSE_POPUPS_REQUIRED_EVENT, handleRequireClose);
+    return () => {
+      window.removeEventListener(CLOSE_POPUPS_REQUIRED_EVENT, handleRequireClose);
+      if (closeRequiredTimerRef.current) {
+        clearTimeout(closeRequiredTimerRef.current);
+      }
+    };
+  }, [openAccountWindows]);
+
+  const initialWidth = Math.min(820, window.innerWidth - 40);
+  const initialHeight = Math.min(565, window.innerHeight - 40);
   const hasUserMovedRef = useRef(false);
 
   const computeMultiScreenSafeBounds = useCallback((slotIdx = windowIndex, totalCount = nonMinimizedWindowCount) => {
@@ -1507,13 +2157,23 @@ const AccountDetailsModal = ({
   // Early return AFTER all hooks so hook order is invariant across renders.
   if (!account) return null;
 
-  const rowData = account && typeof account === 'object' ? account : {};
+  const rowData = account && typeof account === 'object'
+    ? account
+    : (storeWindowEntry?.account && typeof storeWindowEntry.account === 'object' ? storeWindowEntry.account : {});
   const fieldSources = [...getAccountDetailSources(accountData), ...getAccountDetailSources(rowData)];
   const getFieldValue = (field, fallback = '') => {
     const metricField = { Balance: 'balance', Credit: 'credit', Equity: 'equity', Margin: 'used_margin', MarginFree: 'free_margin', FreeMargin: 'free_margin', MarginLevel: 'margin_level', Profit: 'floating_pnl' }[field];
     if (metricField && liveMetrics?.[metricField] != null) return liveMetrics[metricField];
     // A saved empty string is intentional; do not revive an older row value.
-    if (accountData?.[field] !== undefined && accountData[field] !== null) return accountData[field];
+    if (
+      accountData?.__patchedFields
+      && Object.prototype.hasOwnProperty.call(accountData.__patchedFields, field)
+      && accountData?.[field] !== undefined
+      && accountData[field] !== null
+    ) {
+      return accountData[field];
+    }
+    if (hasDisplayValue(accountData?.[field])) return accountData[field];
     return pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
   };
 
@@ -1772,10 +2432,7 @@ const AccountDetailsModal = ({
     `Account ${loginId}`;
 
   const groupValue = getFieldValue('Group');
-  // No group-currency source is in scope here (only the account payload and
-  // live metrics), so an unreported currency stays '' (unknown) instead of
-  // inventing 'USD'. Render sites already treat '' as unknown ('—'/blank).
-  const currencyValue = getFieldValue('Currency', '');
+  const currencyValue = getFieldValue('Currency', 'USD') || 'USD';
   const rawLeverageValue = getFieldValue('Leverage');
   const rawLeverageNumber = String(rawLeverageValue || '100').replace(/^1\s*:\s*/, '');
   const leverageValue = rawLeverageValue ? `1:${String(rawLeverageValue).replace(/^1:/, '')}` : '';
@@ -1794,7 +2451,23 @@ const AccountDetailsModal = ({
   const lastAccessValue = getFieldValue('LastAccess');
   const lastIpValue = getFieldValue('LastIP');
   const emailValue = getFieldValue('Email');
+  const phoneValue = getFieldValue('Phone');
+  const countryValue = getFieldValue('Country');
+  const cityValue = getFieldValue('City');
+  const stateValue = getFieldValue('State');
+  const zipCodeValue = getFieldValue('ZipCode');
+  const addressValue = getFieldValue('Address');
+  const companyValue = getFieldValue('Company');
   const mqidValue = getFieldValue('MQID');
+  const leadSourceValue = getFieldValue('LeadSource');
+  const leadCampaignValue = getFieldValue('LeadCampaign');
+  const commentValue = getFieldValue('Comment');
+  const accountInitials = useMemo(() => {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    if (parts.length === 1 && parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+    return String(loginId || 'AC').slice(-2).toUpperCase();
+  }, [name, loginId]);
 
   const formatNumber = (val) => {
     if (val === null || val === undefined || isNaN(Number(val))) return '0.00';
@@ -1809,25 +2482,23 @@ const AccountDetailsModal = ({
   const hasUnavailableOperations = getManagerTransactionOptions().some((option) => !option.enabled);
 
   const rawBalanceVal = getFieldValue('Balance', 0);
+  const rawCreditVal = getFieldValue('Credit', 0);
   const rawEquityVal = getFieldValue('Equity', rawBalanceVal);
   const rawMarginVal = getFieldValue('Margin', 0);
   const rawFreeMarginVal = getFieldValue('MarginFree', Number(rawEquityVal || 0) - Number(rawMarginVal || 0));
   const balanceVal = formatNumber(rawBalanceVal);
-  const equityVal = formatNumber(rawEquityVal);
-  const marginVal = formatNumber(rawMarginVal);
-  const freeMarginVal = formatNumber(rawFreeMarginVal);
   const rawMarginLevel = getFieldValue('MarginLevel', null);
   const hasMarginLevel = rawMarginLevel !== null && rawMarginLevel !== undefined && rawMarginLevel !== '' && Number.isFinite(Number(rawMarginLevel));
   const computedMarginLevel = hasMarginLevel
     ? Number(rawMarginLevel)
     : (Number(rawMarginVal) > 0 ? (Number(rawEquityVal) / Number(rawMarginVal)) * 100 : null);
-  const marginLevelVal = hasMarginLevel ? formatNumber(rawMarginLevel) : '—';
   const profitVal = getFieldValue('Profit', 0);
-  const swapVal = formatNumber(getFieldValue('Swap', 0));
   const balanceSpaceVal = formatSpaceNumber(rawBalanceVal);
+  const creditSpaceVal = formatSpaceNumber(rawCreditVal);
   const equitySpaceVal = formatSpaceNumber(rawEquityVal);
   const marginSpaceVal = formatSpaceNumber(rawMarginVal);
   const freeMarginSpaceVal = formatSpaceNumber(rawFreeMarginVal);
+  const profitSpaceVal = formatSpaceNumber(profitVal);
   const marginLevelSpaceVal = computedMarginLevel !== null && Number.isFinite(computedMarginLevel)
     ? formatSpaceNumber(computedMarginLevel)
     : '0.00';
@@ -1896,13 +2567,42 @@ const AccountDetailsModal = ({
       ref={windowRef}
       onMouseDownCapture={() => { if (!isMinimized) onFocusWindow?.(); }}
       onFocusCapture={() => { if (!isMinimized) onFocusWindow?.(); }}
+      onContextMenu={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isMinimized) {
+          onFocusWindow?.();
+          notifyCloseOpenPopupsRequired({ openAccountWindows });
+        }
+      }}
       onKeyDown={event => {
         if (pendingTradeClose || isDepositing || depositConfirmation || updateFeedback) return;
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
           if (ctxMenu.isOpen) setCtxMenu(previous => ({ ...previous, isOpen: false }));
+          else if (exposureCtxMenu.isOpen) setExposureCtxMenu(previous => ({ ...previous, isOpen: false }));
           else onClose();
+        }
+        if (
+          activeTab === 'Exposure' &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
+        ) {
+          const lowerKey = event.key.toLowerCase();
+          if (lowerKey === 'a') {
+            event.preventDefault();
+            setExposureAutoArrange(prev => !prev);
+            return;
+          }
+          if (lowerKey === 'g') {
+            event.preventDefault();
+            setExposureShowGrid(prev => !prev);
+            return;
+          }
         }
         if (event.key !== 'Tab') return;
         const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]')].filter(control => control.getClientRects().length > 0);
@@ -1929,7 +2629,7 @@ const AccountDetailsModal = ({
             zIndex: 100000 + (Number(zOrder) || 1),
           }
       }
-      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone && !isMinimized ? ` is-docked is-docked--${dockZone}` : ''}${isMinimized ? ' is-minimized' : ''}${isActiveWindow && !isMinimized ? ' is-active-window' : ''}`}
+      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone && !isMinimized ? ` is-docked is-docked--${dockZone}` : ''}${isMinimized ? ' is-minimized' : ''}${isActiveWindow && !isMinimized ? ' is-active-window' : ''}${closeRequiredAlert?.active && !isMinimized ? ' is-close-required' : ''}`}
       data-maximized={isMaximized}
       data-minimized={isMinimized}
       data-dock-zone={isMinimized ? 'minimized' : (dockZone || 'floating')}
@@ -2034,7 +2734,7 @@ const AccountDetailsModal = ({
             onClick={onClose}
             title="Close"
             aria-label="Close account details"
-            className="is-close"
+            className={`is-close${closeRequiredAlert?.active && !isMinimized ? ' is-close-highlight' : ''}`}
           >
             <X size={isMinimized ? 13 : 15} />
           </button>
@@ -2075,9 +2775,9 @@ const AccountDetailsModal = ({
             id="account-details-tabpanel"
             role="tabpanel"
             aria-labelledby={`account-tab-${visibleTab.toLowerCase()}`}
-            className={`account-details-content flex-1 overflow-auto flex flex-col ${visibleTab === 'Overview' ? 'is-overview' : ''} ${visibleTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
+            className={`account-details-content flex-1 overflow-auto flex flex-col ${visibleTab === 'Overview' || visibleTab === 'Exposure' ? 'is-overview' : ''} ${visibleTab === 'Exposure' ? 'is-exposure' : ''} ${visibleTab === 'Trade' ? '!p-2 !gap-0 !overflow-hidden' : ''}`}
           >
-            {activeTab !== 'Trade' && activeTab !== 'Overview' && (detailsLoading || detailsError) && (
+            {activeTab !== 'Trade' && activeTab !== 'Overview' && activeTab !== 'Exposure' && (detailsLoading || detailsError) && (
               <div className={`account-details-status ${detailsError ? 'is-error' : 'is-loading'}`} role={detailsError ? 'alert' : 'status'}>
                 {detailsLoading && <Loader size={12} className="animate-spin" />}
                 <span>{detailsError ? `Live account details unavailable: ${detailsError}` : 'Refreshing account details…'}</span>
@@ -2087,45 +2787,145 @@ const AccountDetailsModal = ({
             {visibleTab === 'Overview' ? (
               <div className="account-overview-mt5">
                 {/* Top Info Section */}
-                <section className="account-overview-summary">
-                  <div className="account-overview-headline">
-                    <span>{name}, {loginId}, </span>
-                    <a
-                      href="#account"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setActiveTab('Account');
-                      }}
-                      className="account-overview-link is-underlined"
-                    >
-                      {groupValue || '—'}
-                    </a>
-                    <span>, 1 : {rawLeverageNumber}</span>
-                  </div>
+                {(() => {
+                  const overviewFloatingProfitNum = Number(profitVal || 0);
+                  const overviewFloatingProfitTone = overviewFloatingProfitNum > 0
+                    ? 'is-positive'
+                    : overviewFloatingProfitNum < 0
+                      ? 'is-negative'
+                      : '';
+                  return (
+                    <section className="account-overview-summary">
+                      <div className="account-overview-header-top">
+                        <div className="account-overview-headline">
+                          <span className="account-overview-avatar" aria-hidden="true">{accountInitials}</span>
+                          <span className="account-overview-name-text">{name}</span>
+                          <span className="account-overview-comma">, </span>
+                          <span className="account-overview-login-text tabular">{loginId}</span>
+                          <span className="account-overview-comma">, </span>
+                          <a
+                            href="#account"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setActiveTab('Account');
+                            }}
+                            className="account-overview-link is-underlined"
+                          >
+                            {groupValue || '—'}
+                          </a>
+                          <span className="account-overview-comma">, </span>
+                          <span className="account-overview-leverage-text tabular">1 : {rawLeverageNumber}</span>
+                        </div>
 
-                  <div className="account-overview-meta-block">
-                    <div className="account-overview-meta-line">
-                      MetaQuotes ID: {mqidValue || '—'}
-                    </div>
-                    <div className="account-overview-meta-line">
-                      {emailValue ? (
-                        <a href={`mailto:${emailValue}`} className="account-overview-link">
-                          {emailValue}
-                        </a>
-                      ) : (
-                        <span className="account-overview-link">—</span>
-                      )}
-                    </div>
-                    <div className="account-overview-meta-line account-overview-timestamps">
-                      <span>Registered: {formatOverviewDate(registrationValue) || '—'}</span>
-                      <span>Last access: {formatOverviewDateTime(lastAccessValue) || '—'}</span>
-                      <span>Last Address: {lastIpValue || '—'}</span>
-                    </div>
-                  </div>
-                </section>
+                        <div className="account-overview-badges" aria-label="Account parameters">
+                          <span className="account-overview-pill tabular">
+                            {currencyValue || 'USD'}
+                          </span>
+                          <span className="account-overview-pill tabular">
+                            {leverageHeaderLabel || `1:${rawLeverageNumber}`}
+                          </span>
+                          <span className="account-overview-pill is-mode">
+                            {modeHeaderLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="account-overview-meta-block">
+                        <div className="account-overview-meta-primary">
+                          <div className="account-overview-meta-line">
+                            <span className="account-overview-meta-label">Email:</span>{' '}
+                            {emailValue ? (
+                              <a href={`mailto:${emailValue}`} className="account-overview-link">
+                                {emailValue}
+                              </a>
+                            ) : (
+                              <span className="account-overview-meta-val">—</span>
+                            )}
+                            {phoneValue && (
+                              <span className="account-overview-meta-inline-chip">
+                                <span className="account-overview-meta-label">Phone:</span>{' '}
+                                <span className="account-overview-meta-val tabular">{phoneValue}</span>
+                              </span>
+                            )}
+                            {countryValue && (
+                              <span className="account-overview-meta-inline-chip">
+                                <span className="account-overview-meta-label">Country:</span>{' '}
+                                <span className="account-overview-meta-val">{countryValue}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="account-overview-meta-line account-overview-timestamps">
+                          <span className="account-overview-timestamp-item">
+                            <span className="account-overview-meta-label">Registered:</span>{' '}
+                            <span className="account-overview-meta-val tabular">{formatOverviewDate(registrationValue) || '—'}</span>
+                          </span>
+                          <span className="account-overview-timestamp-item">
+                            <span className="account-overview-meta-label">Last access:</span>{' '}
+                            <span className="account-overview-meta-val tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</span>
+                          </span>
+                          <span className="account-overview-timestamp-item">
+                            <span className="account-overview-meta-label">Last Address:</span>{' '}
+                            <span className="account-overview-meta-val tabular">{lastIpValue || '—'}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="account-overview-kpi-grid" role="group" aria-label="Key financial metrics">
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Balance</span>
+                          <span className="account-overview-kpi-val tabular">
+                            {balanceSpaceVal} <small>{currencyValue}</small>
+                          </span>
+                        </div>
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Equity</span>
+                          <span className="account-overview-kpi-val tabular">
+                            {equitySpaceVal} <small>{currencyValue}</small>
+                          </span>
+                        </div>
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Floating P / L</span>
+                          <span className={`account-overview-kpi-val tabular ${overviewFloatingProfitTone}`}>
+                            {overviewFloatingProfitNum > 0 ? `+${profitSpaceVal}` : profitSpaceVal} <small>{currencyValue}</small>
+                          </span>
+                        </div>
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Margin Used</span>
+                          <span className="account-overview-kpi-val tabular">{marginSpaceVal}</span>
+                        </div>
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Free Margin</span>
+                          <span className="account-overview-kpi-val tabular">{freeMarginSpaceVal}</span>
+                        </div>
+                        <div className="account-overview-kpi-card">
+                          <span className="account-overview-kpi-label">Margin Level</span>
+                          <span className="account-overview-kpi-val tabular">{marginLevelSpaceVal} %</span>
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
 
                 {/* Bordered Positions & Summary Box */}
                 <div className="account-overview-positions-box flex-1 flex flex-col overflow-hidden">
+                  <div className="account-overview-box-toolbar">
+                    <div className="account-overview-box-toolbar-left">
+                      <span className="account-overview-box-title">Open Positions &amp; Working Orders</span>
+                      <span className="account-overview-count-chip tabular">
+                        {showPositions ? positions.length : 0} Open
+                      </span>
+                    </div>
+                    <div className="account-overview-box-toolbar-actions">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('Trade')}
+                        className="account-overview-quick-btn is-primary"
+                      >
+                        + New Order
+                      </button>
+                    </div>
+                  </div>
                   <div className="account-overview-table-scroll custom-scrollbar">
                     {/* Header */}
                     <div className="account-overview-pos-grid account-overview-pos-header">
@@ -2140,12 +2940,16 @@ const AccountDetailsModal = ({
                       <div className="is-right is-last">Profit</div>
                     </div>
 
-                    {/* Position Rows + Summary Strip */}
+                    {/* Position Rows + Bottom Summary Strip */}
                     <div className="account-overview-pos-body">
                       {(() => {
                         const displayPositions = showPositions
                           ? (focusedTicket ? positions.filter(p => String(p.position) === String(focusedTicket)) : positions)
                           : [];
+                        const displayPendingOrders = showPositions
+                          ? (focusedTicket ? pendingOrders.filter(o => String(o.ticket ?? o.position) === String(focusedTicket)) : pendingOrders)
+                          : [];
+                        const hasAnyOpenTrades = displayPositions.length > 0 || displayPendingOrders.length > 0;
                         const totalSwapNum = displayPositions.length > 0
                           ? displayPositions.reduce((acc, p) => acc + Number(p.swap || 0), 0)
                           : Number(getFieldValue('Swap', 0) || 0);
@@ -2157,142 +2961,201 @@ const AccountDetailsModal = ({
 
                         return (
                           <>
-                            {positionsError && displayPositions.length > 0 && (
-                              <div className="account-positions-partial-error" role="alert">
-                                <span>Some open positions could not be loaded.</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    invalidatePositionsCache(loginId);
-                                    setPositionSyncRevision((revision) => revision + 1);
-                                  }}
-                                >
-                                  Retry
-                                </button>
-                              </div>
-                            )}
-
-                            {displayPositions.map((pos) => {
-                              const sideText = String(pos.type || '').toLowerCase();
-                              const volNum = Number(pos.volume ?? pos.lots ?? 0);
-                              return (
-                                <div
-                                  key={pos.position}
-                                  onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
-                                  }}
-                                  className="account-overview-pos-grid account-overview-pos-row cursor-pointer"
-                                >
-                                  <div className="is-left account-overview-pos-symbol">
-                                    <PositionSymbolIcon type={sideText} />
-                                    <span className="truncate">{pos.symbol}</span>
-                                  </div>
-                                  <div className="is-right">{sideText}</div>
-                                  <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : pos.volume}</div>
-                                  <div className="is-right tabular">{Number(pos.priceOpen || 0).toFixed(5)}</div>
-                                  <div
-                                    onDoubleClick={() => handleModifySLTP(pos)}
-                                    className="is-right tabular cursor-pointer"
-                                    title="Double-click to modify S/L"
+                            <div className="account-overview-pos-rows-area">
+                              {positionsError && displayPositions.length > 0 && (
+                                <div className="account-positions-partial-error" role="alert">
+                                  <span>Some open positions could not be loaded.</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      invalidatePositionsCache(loginId);
+                                      setPositionSyncRevision((revision) => revision + 1);
+                                    }}
                                   >
-                                    {Number(pos.priceSl || 0).toFixed(5)}
-                                  </div>
-                                  <div
-                                    onDoubleClick={() => handleModifySLTP(pos)}
-                                    className="is-right tabular cursor-pointer"
-                                    title="Double-click to modify T/P"
-                                  >
-                                    {Number(pos.priceTp || 0).toFixed(5)}
-                                  </div>
-                                  <div className="is-right tabular">
-                                    {pos.priceCurrent == null ? '—' : Number(pos.priceCurrent).toFixed(5)}
-                                  </div>
-                                  <div className="is-right tabular">{formatSpaceNumber(pos.swap || 0)}</div>
-                                  <div className="is-right is-last tabular">
-                                    {pos.profit == null ? '—' : formatSpaceNumber(pos.profit)}
-                                  </div>
+                                    Retry
+                                  </button>
                                 </div>
-                              );
-                            })}
+                              )}
 
-                            {(showPositions ? (focusedTicket ? pendingOrders.filter(o => String(o.ticket ?? o.position) === String(focusedTicket)) : pendingOrders) : []).map((ord) => {
-                              const ordTicket = ord.ticket || ord.position;
-                              const sideText = String(ord.side || ord.type || 'pending').toLowerCase().replace(/_/g, ' ');
-                              const volNum = Number(ord.volume ?? ord.lots ?? 0);
-                              const pendingRow = { ...ord, position: ordTicket, ticket: ordTicket, isPendingOrder: true };
-                              return (
-                                <div
-                                  key={`pending-${ordTicket}`}
-                                  onDoubleClick={() => handleModifySLTP(pendingRow)}
-                                  onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pendingRow });
-                                  }}
-                                  className="account-overview-pos-grid account-overview-pos-row cursor-pointer opacity-90"
-                                  title="Working pending order — double-click to modify or cancel"
-                                >
-                                  <div className="is-left account-overview-pos-symbol">
-                                    <PositionSymbolIcon type={sideText.includes('buy') ? 'buy' : 'sell'} />
-                                    <span className="truncate">{ord.symbol}</span>
+                              {hasAnyOpenTrades ? (
+                                <>
+                                  {displayPositions.map((pos) => {
+                                    const sideText = String(pos.type || '').toLowerCase();
+                                    const volNum = Number(pos.volume ?? pos.lots ?? 0);
+                                    const rowKey = `pos-${pos.position}`;
+                                    const isSelected = selectedOverviewRowKey === rowKey;
+                                    const posProfitNum = Number(pos.profit ?? 0);
+                                    const profitToneClass = posProfitNum > 0
+                                      ? ' is-positive'
+                                      : posProfitNum < 0
+                                        ? ' is-negative'
+                                        : '';
+                                    const sideToneClass = sideText === 'buy'
+                                      ? ' is-buy'
+                                      : sideText === 'sell'
+                                        ? ' is-sell'
+                                        : '';
+                                    return (
+                                      <div
+                                        key={pos.position}
+                                        onClick={() => setSelectedOverviewRowKey(rowKey)}
+                                        onContextMenu={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setSelectedOverviewRowKey(rowKey);
+                                          setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pos });
+                                        }}
+                                        className={`account-overview-pos-grid account-overview-pos-row cursor-pointer${isSelected ? ' is-selected' : ''}`}
+                                      >
+                                        <div className="is-left account-overview-pos-symbol">
+                                          <PositionSymbolIcon type={sideText} />
+                                          <span className="truncate">{pos.symbol}</span>
+                                        </div>
+                                        <div className={`is-right account-overview-side-cell${sideToneClass}`}>{sideText}</div>
+                                        <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : pos.volume}</div>
+                                        <div className="is-right tabular">{Number(pos.priceOpen || 0).toFixed(5)}</div>
+                                        <div
+                                          onDoubleClick={() => handleModifySLTP(pos)}
+                                          className="is-right tabular cursor-pointer"
+                                          title="Double-click to modify S/L"
+                                        >
+                                          {Number(pos.priceSl || 0).toFixed(5)}
+                                        </div>
+                                        <div
+                                          onDoubleClick={() => handleModifySLTP(pos)}
+                                          className="is-right tabular cursor-pointer"
+                                          title="Double-click to modify T/P"
+                                        >
+                                          {Number(pos.priceTp || 0).toFixed(5)}
+                                        </div>
+                                        <div className="is-right tabular">
+                                          {pos.priceCurrent == null ? '—' : Number(pos.priceCurrent).toFixed(5)}
+                                        </div>
+                                        <div className="is-right tabular">{formatSpaceNumber(pos.swap || 0)}</div>
+                                        <div className={`is-right is-last tabular account-overview-profit-cell${profitToneClass}`}>
+                                          {pos.profit == null ? '—' : formatSpaceNumber(pos.profit)}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+
+                                  {displayPendingOrders.map((ord) => {
+                                    const ordTicket = ord.ticket || ord.position;
+                                    const sideText = String(ord.side || ord.type || 'pending').toLowerCase().replace(/_/g, ' ');
+                                    const volNum = Number(ord.volume ?? ord.lots ?? 0);
+                                    const pendingRow = { ...ord, position: ordTicket, ticket: ordTicket, isPendingOrder: true };
+                                    const rowKey = `pending-${ordTicket}`;
+                                    const isSelected = selectedOverviewRowKey === rowKey;
+                                    return (
+                                      <div
+                                        key={rowKey}
+                                        onClick={() => setSelectedOverviewRowKey(rowKey)}
+                                        onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                        onContextMenu={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setSelectedOverviewRowKey(rowKey);
+                                          setCtxMenu({ x: e.clientX, y: e.clientY, isOpen: true, data: pendingRow });
+                                        }}
+                                        className={`account-overview-pos-grid account-overview-pos-row cursor-pointer opacity-90${isSelected ? ' is-selected' : ''}`}
+                                        title="Working pending order — double-click to modify or cancel"
+                                      >
+                                        <div className="is-left account-overview-pos-symbol">
+                                          <PositionSymbolIcon type={sideText.includes('buy') ? 'buy' : 'sell'} />
+                                          <span className="truncate">{ord.symbol}</span>
+                                        </div>
+                                        <div className="is-right text-amber-400 font-semibold">{sideText}</div>
+                                        <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : ord.volume}</div>
+                                        <div
+                                          onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                          className="is-right tabular cursor-pointer"
+                                          title="Double-click to modify trigger price"
+                                        >
+                                          {Number(ord.priceOpen || ord.priceTrigger || 0).toFixed(5)}
+                                        </div>
+                                        <div
+                                          onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                          className="is-right tabular cursor-pointer"
+                                          title="Double-click to modify S/L"
+                                        >
+                                          {Number(ord.priceSl || 0).toFixed(5)}
+                                        </div>
+                                        <div
+                                          onDoubleClick={() => handleModifySLTP(pendingRow)}
+                                          className="is-right tabular cursor-pointer"
+                                          title="Double-click to modify T/P"
+                                        >
+                                          {Number(ord.priceTp || 0).toFixed(5)}
+                                        </div>
+                                        <div className="is-right tabular">—</div>
+                                        <div className="is-right tabular">0.00</div>
+                                        <div className="is-right is-last tabular text-amber-400 font-semibold">
+                                          placed
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </>
+                              ) : (
+                                <div className="account-overview-empty-trades" role="status">
+                                  <div className="account-overview-empty-icon" aria-hidden="true">
+                                    <BarChart3 size={18} />
                                   </div>
-                                  <div className="is-right text-amber-400 font-semibold">{sideText}</div>
-                                  <div className="is-right tabular">{Number.isFinite(volNum) ? volNum.toFixed(2) : ord.volume}</div>
-                                  <div
-                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
-                                    className="is-right tabular cursor-pointer"
-                                    title="Double-click to modify trigger price"
+                                  <span className="account-overview-empty-trades-title">No open trades</span>
+                                  <span className="account-overview-empty-trades-sub">
+                                    There are currently no open positions or pending orders for this account.
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTab('Trade')}
+                                    className="account-overview-empty-action-btn"
                                   >
-                                    {Number(ord.priceOpen || ord.priceTrigger || 0).toFixed(5)}
-                                  </div>
-                                  <div
-                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
-                                    className="is-right tabular cursor-pointer"
-                                    title="Double-click to modify S/L"
-                                  >
-                                    {Number(ord.priceSl || 0).toFixed(5)}
-                                  </div>
-                                  <div
-                                    onDoubleClick={() => handleModifySLTP(pendingRow)}
-                                    className="is-right tabular cursor-pointer"
-                                    title="Double-click to modify T/P"
-                                  >
-                                    {Number(ord.priceTp || 0).toFixed(5)}
-                                  </div>
-                                  <div className="is-right tabular">—</div>
-                                  <div className="is-right tabular">0.00</div>
-                                  <div className="is-right is-last tabular text-amber-400 font-semibold">
-                                    placed
-                                  </div>
+                                    Open Trade Ticket
+                                  </button>
                                 </div>
-                              );
-                            })}
+                              )}
+                            </div>
 
-                            {/* Grey Financial Summary Strip */}
+                            {/* Grey Financial Summary Strip pinned at the bottom */}
                             <div
-                              className="account-overview-summary-strip"
+                              className="account-overview-summary-strip account-overview-summary-bottom"
                               role="group"
                               aria-label="Account financial snapshot"
                             >
                               <div className="account-overview-pos-grid account-overview-summary-main">
                                 <div className="account-overview-summary-metrics">
                                   <SummaryBalanceIcon />
-                                  <span>
-                                    Balance: {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
-                                    {'  '}Equity: {equitySpaceVal}
-                                    {'  '}Margin: {marginSpaceVal}
-                                    {'  '}Free Margin: {freeMarginSpaceVal}
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Balance:</span>{' '}
+                                    <span className="account-overview-metric-value">
+                                      {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
+                                    </span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Equity:</span>{' '}
+                                    <span className="account-overview-metric-value">{equitySpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Margin:</span>{' '}
+                                    <span className="account-overview-metric-value">{marginSpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item">
+                                    <span className="account-overview-metric-label">Free Margin:</span>{' '}
+                                    <span className="account-overview-metric-value">{freeMarginSpaceVal}</span>
+                                  </span>
+                                  <span className="account-overview-metric-item is-last">
+                                    <span className="account-overview-metric-label">Margin Level:</span>{' '}
+                                    <span className="account-overview-metric-value">{marginLevelSpaceVal} %</span>
                                   </span>
                                 </div>
                                 <div className="is-right tabular account-overview-summary-swap">
                                   {summarySwapDisplay}
                                 </div>
-                                <div className="is-right is-last tabular account-overview-summary-profit">
+                                <div
+                                  className={`is-right is-last tabular account-overview-summary-profit${totalProfitNum > 0 ? ' is-positive' : totalProfitNum < 0 ? ' is-negative' : ''}`}
+                                >
                                   {summaryProfitDisplay}
                                 </div>
-                              </div>
-                              <div className="account-overview-summary-sub">
-                                Margin Level: {marginLevelSpaceVal} %
                               </div>
                             </div>
                           </>
@@ -2303,51 +3166,247 @@ const AccountDetailsModal = ({
                 </div>
               </div>
             ) : activeTab === 'Exposure' ? (
-              <div className="flex flex-1 gap-2">
-                <div className="border border-[#333] rounded-sm flex flex-col flex-1 bg-[#1e1e1e]">
-                  {/* Header */}
-                  <div className="grid grid-cols-[140px_1fr_1fr_1fr_160px] bg-[#252526] border-b border-[#333] text-[12px] text-gray-700 dark:text-gray-300 font-medium font-sans">
-                    <div className="p-1 px-2 border-r border-[#333]">Asset</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Volume</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Rate</div>
-                    <div className="p-1 px-2 border-r border-[#333] text-right">Value</div>
-                    <div className="p-1 px-2 text-center">Graph</div>
-                  </div>
-                  {/* Rows */}
-                  <div className="flex flex-col text-[12px] font-sans text-gray-800 dark:text-gray-200">
-                    <div role="status" className="p-1 px-2 border-b border-[#333] text-center">No exposure breakdown is available for the account.</div>
-                  </div>
-                  {/* Summary Footer */}
-                  <div className="bg-[#3e3e42] mt-auto">
-                    <div className="flex border-b border-[#333] text-[12px] font-bold font-sans">
-                      <div className="flex-1 p-1 px-2 flex items-center gap-1.5 text-gray-900 dark:text-white">
-                        <PlusSquare size={10} className="text-gray-700 dark:text-gray-300" />
-                        Balance: {balanceVal} {currencyValue} <span className="font-normal opacity-80 mx-1">Equity:</span> {equityVal} <span className="font-normal opacity-80 mx-1">Margin:</span> {marginVal} <span className="font-normal opacity-80 mx-1">Free Margin:</span> {freeMarginVal}
-                      </div>
-                      <div className="w-[80px] p-1 px-2 text-right">
-                        {swapVal}
-                      </div>
-                      <div className={`w-[100px] p-1 px-2 text-right font-medium ${Number(profitVal ?? 0) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                        {formatNumber(profitVal)}
-                      </div>
-                    </div>
-                    <div className="p-1 px-6 text-[12px] font-bold font-sans text-gray-900 dark:text-white">
-                      <span className="font-normal opacity-80 mr-1">Margin Level:</span> {marginLevelVal} %
-                    </div>
-                  </div>
-                </div>
+              (() => {
+                const accountExposure = buildAccountExposureBreakdown({
+                  positions: showPositions ? positions : [],
+                  symbols: symbolsMap,
+                  accountCurrency: currencyValue || 'USD',
+                  balance: rawBalanceVal,
+                  equity: rawEquityVal,
+                  margin: rawMarginVal,
+                  freeMargin: rawFreeMarginVal,
+                  leverage: rawLeverageNumber,
+                });
 
-                <div className="w-[200px] flex flex-col items-center justify-start pt-6 border border-[#333] bg-[#1a1a1c] relative flex-shrink-0">
-                  <span className="text-[12px] text-gray-800 dark:text-gray-200 mb-6 font-sans">Long Positions</span>
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#717bf5] to-[#121c9c] border border-gray-300 dark:border-gray-600 shadow-xl flex items-center justify-center">
+                const effectiveChartSide =
+                  exposureChartSide === 'short' ? 'short' : 'long';
+
+                const activeSlices =
+                  effectiveChartSide === 'short'
+                    ? accountExposure.shortSlices
+                    : accountExposure.longSlices;
+
+                const chartTitle =
+                  effectiveChartSide === 'short' ? 'Short Positions' : 'Long Positions';
+
+                return (
+                  <div className="account-exposure-tab">
+                    {/* Left Table & Financial Summary Box */}
+                    <div
+                      className={`account-exposure-table-box${exposureShowGrid ? '' : ' is-no-grid'}${exposureAutoArrange ? '' : ' is-manual-arrange'}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setExposureCtxMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          isOpen: true,
+                          row:
+                            accountExposure.rows.find(
+                              (item) => item.asset === selectedExposureAsset
+                            ) ||
+                            accountExposure.rows[0] ||
+                            null,
+                          rows: accountExposure.rows,
+                        });
+                      }}
+                    >
+                      <div className="account-exposure-table-scroll custom-scrollbar">
+                        {/* Header */}
+                        <div className="account-exposure-grid account-exposure-header">
+                          <div className="is-left">Asset</div>
+                          <div className="is-right">Volume</div>
+                          <div className="is-right">Rate</div>
+                          <div className="is-right">Value</div>
+                          <div className="is-center is-last">Graph</div>
+                        </div>
+
+                        {/* Exposure Rows + Summary Strip */}
+                        <div className="account-exposure-body">
+                          {accountExposure.rows.length > 0 ? (
+                            accountExposure.rows.map((row) => {
+                              const isHighlighted = hoveredExposureAsset === row.asset;
+                              const isSelected = selectedExposureAsset === row.asset;
+                              const barHalfWidth = Math.min(
+                                48,
+                                Math.max(4, Math.abs(row.barPct) * 0.46)
+                              );
+                              return (
+                                <div
+                                  key={row.asset}
+                                  className={`account-exposure-grid account-exposure-row${isHighlighted ? ' is-highlighted' : ''}${isSelected ? ' is-selected' : ''}`}
+                                  onClick={() => setSelectedExposureAsset(row.asset)}
+                                  onMouseEnter={() => setHoveredExposureAsset(row.asset)}
+                                  onMouseLeave={() => setHoveredExposureAsset(null)}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSelectedExposureAsset(row.asset);
+                                    setExposureCtxMenu({
+                                      x: e.clientX,
+                                      y: e.clientY,
+                                      isOpen: true,
+                                      row,
+                                      rows: accountExposure.rows,
+                                    });
+                                  }}
+                                >
+                                  <div className="is-left account-exposure-asset-cell">
+                                    <span
+                                      className={`account-exposure-asset-badge is-${row.badge.tone}`}
+                                      aria-hidden="true"
+                                    >
+                                      {row.badge.symbol}
+                                    </span>
+                                    <span className="account-exposure-asset-code">{row.asset}</span>
+                                  </div>
+                                  <div className="is-right tabular account-exposure-vol-cell">
+                                    {row.formattedVolume}
+                                  </div>
+                                  <div className="is-right tabular account-exposure-rate-cell">
+                                    {row.formattedRate}
+                                  </div>
+                                  <div
+                                    className={`is-right tabular account-exposure-val-cell${row.isNegative ? ' is-negative' : ''}`}
+                                  >
+                                    {row.formattedValue}
+                                  </div>
+                                  <div className="is-last account-exposure-graph-cell">
+                                    <div
+                                      className="account-exposure-graph-track"
+                                      title={`${row.asset}: ${row.formattedValue} ${accountExposure.accountCurrency}`}
+                                    >
+                                      <span className="account-exposure-graph-axis" aria-hidden="true" />
+                                      {row.barPct !== 0 && (
+                                        <span
+                                          className={`account-exposure-graph-bar ${row.barPct < 0 ? 'is-negative' : 'is-positive'}`}
+                                          style={
+                                            row.barPct < 0
+                                              ? { right: '50%', width: `${barHalfWidth.toFixed(1)}%` }
+                                              : {
+                                                  left: '50%',
+                                                  width: `${barHalfWidth.toFixed(1)}%`,
+                                                  '--exposure-bar-color': row.color,
+                                                }
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                    <span
+                                      className="account-exposure-swatch"
+                                      style={{ backgroundColor: row.color }}
+                                      aria-hidden="true"
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div role="status" className="account-exposure-empty-row">
+                              No exposure breakdown is available for the account.
+                            </div>
+                          )}
+
+                          {/* Grey Financial Summary Strip */}
+                          <div
+                            className="account-overview-summary-strip account-exposure-summary-strip"
+                            role="group"
+                            aria-label="Account financial snapshot"
+                          >
+                            <div className="account-exposure-summary-main">
+                              <div className="account-overview-summary-metrics account-exposure-summary-metrics">
+                                <SummaryBalanceIcon />
+                                <span className="account-overview-metric-item">
+                                  <span className="account-overview-metric-label">Balance:</span>{' '}
+                                  <span className="account-overview-metric-value">
+                                    {balanceSpaceVal}{currencyValue ? ` ${currencyValue}` : ''}
+                                  </span>
+                                </span>
+                                <span className="account-overview-metric-item">
+                                  <span className="account-overview-metric-label">Equity:</span>{' '}
+                                  <span className="account-overview-metric-value">{equitySpaceVal}</span>
+                                </span>
+                                <span className="account-overview-metric-item">
+                                  <span className="account-overview-metric-label">Margin:</span>{' '}
+                                  <span className="account-overview-metric-value">{marginSpaceVal}</span>
+                                </span>
+                                <span className="account-overview-metric-item">
+                                  <span className="account-overview-metric-label">Free Margin:</span>{' '}
+                                  <span className="account-overview-metric-value">{freeMarginSpaceVal}</span>
+                                </span>
+                                <span className="account-overview-metric-item is-last">
+                                  <span className="account-overview-metric-label">Margin Level:</span>{' '}
+                                  <span className="account-overview-metric-value">{marginLevelSpaceVal} %</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Exposure Distribution Chart Box */}
+                    <aside
+                      className="account-exposure-chart-box"
+                      aria-label="Exposure distribution chart"
+                    >
+                      <div className="account-exposure-chart-header">
+                        <span className="account-exposure-chart-title">{chartTitle}</span>
+                        <div className="account-exposure-chart-toggle" role="group" aria-label="Position direction">
+                          <button
+                            type="button"
+                            className={`account-exposure-side-btn${effectiveChartSide === 'long' ? ' is-active' : ''}`}
+                            aria-pressed={effectiveChartSide === 'long'}
+                            onClick={() => setExposureChartSide('long')}
+                            title="Show long asset exposure"
+                          >
+                            Long
+                          </button>
+                          <button
+                            type="button"
+                            className={`account-exposure-side-btn${effectiveChartSide === 'short' ? ' is-active' : ''}`}
+                            aria-pressed={effectiveChartSide === 'short'}
+                            onClick={() => setExposureChartSide('short')}
+                            title="Show short asset exposure"
+                          >
+                            Short
+                          </button>
+                        </div>
+                      </div>
+
+                      <ExposureDonutRatioChart
+                        loginId={loginId}
+                        chartTitle={chartTitle}
+                        effectiveChartSide={effectiveChartSide}
+                        activeSlices={activeSlices}
+                        moneyDecimals={accountExposure.moneyDecimals}
+                        hoveredExposureAsset={hoveredExposureAsset}
+                        onHoverAsset={setHoveredExposureAsset}
+                      />
+                    </aside>
                   </div>
-                </div>
-              </div>
+                );
+              })()
             ) : activeTab === 'Personal' ? (
-              <div className="account-personal-tab">
+              <div className="account-personal-tab custom-scrollbar">
                 <header className="account-personal-intro">
-                  <div><h2>Personal details</h2></div>
-                  <span className="account-personal-account-ref">#{loginId}</span>
+                  <div className="account-personal-intro-left">
+                    <span className="account-personal-avatar" aria-hidden="true">{accountInitials}</span>
+                    <div className="account-personal-intro-copy">
+                      <h2>Personal details</h2>
+                      <p className="account-personal-subtitle">
+                        {name}{emailValue ? ` · ${emailValue}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="account-personal-intro-badges">
+                    <span className={`account-overview-pill is-status is-status-${statusValue}`}>
+                      <span className="account-overview-status-dot" aria-hidden="true" />
+                      {statusLabel}
+                    </span>
+                    {groupValue && <span className="account-overview-pill">{groupValue}</span>}
+                    <span className="account-personal-account-ref tabular">#{loginId}</span>
+                  </div>
                 </header>
                 {[
                   { title: 'Identity', description: 'Account holder information', fields: [
@@ -2364,9 +3423,12 @@ const AccountDetailsModal = ({
                     ['Registered', 'Registered', '', 'registered'],
                     ['LeadCampaign', 'Lead campaign'], ['LeadSource', 'Lead source'], ['Comment', 'Comment'],
                   ] },
-                ].map(({ title, fields }) => (
+                ].map(({ title, description, fields }) => (
                   <section className="account-personal-section" key={title}>
-                    <div className="account-personal-section-header"><h3>{title}</h3></div>
+                    <div className="account-personal-section-header">
+                      <h3>{title}</h3>
+                      {description && <span className="account-personal-section-desc">{description}</span>}
+                    </div>
                     <div className="account-personal-grid">
                       {fields.map(([key, label, fallback = '', kind]) => (
                         <label className={'account-personal-field' + (kind === 'wide' ? ' account-personal-span-full' : '')} key={key}>
@@ -2394,7 +3456,9 @@ const AccountDetailsModal = ({
                 <div className="account-section-heading">
                   <div>
                     <h2>Trading configuration</h2>
+                    <p>Configure group routing, leverage ratio, and inspect real-time margin parameters.</p>
                   </div>
+                  <span className="account-personal-account-ref tabular">#{loginId}</span>
                 </div>
 
                 <section className="account-settings-card">
@@ -2434,6 +3498,50 @@ const AccountDetailsModal = ({
                   </div>
                 </section>
 
+                <section className="account-settings-card">
+                  <div className="account-settings-card-title">
+                    <h3>Financial &amp; margin telemetry</h3>
+                    <span className="account-card-meta-tag tabular">{currencyValue || 'USD'}</span>
+                  </div>
+                  <div className="account-telemetry-grid">
+                    <div className="account-settings-field is-readonly">
+                      <span>Balance</span>
+                      <strong className="tabular">{balanceSpaceVal} {currencyValue}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Credit</span>
+                      <strong className="tabular">{creditSpaceVal} {currencyValue}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Equity</span>
+                      <strong className="tabular">{equitySpaceVal} {currencyValue}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Floating P / L</span>
+                      <strong className={`tabular ${Number(profitVal) > 0 ? 'is-positive' : Number(profitVal) < 0 ? 'is-negative' : ''}`}>
+                        {Number(profitVal) > 0 ? `+${profitSpaceVal}` : profitSpaceVal} {currencyValue}
+                      </strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Margin used</span>
+                      <strong className="tabular">{marginSpaceVal}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Free margin</span>
+                      <strong className="tabular">{freeMarginSpaceVal}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Margin level</span>
+                      <strong className="tabular">{marginLevelSpaceVal} %</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Open / Pending</span>
+                      <strong className="tabular">
+                        {showPositions ? positions.length : 0} / {showPositions ? pendingOrders.length : 0}
+                      </strong>
+                    </div>
+                  </div>
+                </section>
               </div>
             ) : activeTab === 'Limits' ? (
               <div className="account-settings-tab account-limits-tab custom-scrollbar">
@@ -2442,9 +3550,14 @@ const AccountDetailsModal = ({
                     <h2>Risk thresholds</h2>
                     <p>Configure the server-enforced margin protection levels for this account.</p>
                   </div>
+                  <span className="account-personal-account-ref tabular">#{loginId}</span>
                 </div>
 
                 <section className="account-settings-card account-risk-card">
+                  <div className="account-settings-card-title">
+                    <h3>Margin call &amp; liquidation levels</h3>
+                    <span className="account-card-meta-tag tabular">Current Margin Level: {marginLevelSpaceVal}%</span>
+                  </div>
                   <div className="account-risk-grid">
                     <label className="account-settings-field">
                       <span>Margin call level</span>
@@ -2466,15 +3579,89 @@ const AccountDetailsModal = ({
                   <div className="account-risk-preview">
                     <span>Threshold preview</span>
                     <dl>
-                      <div><dt>Margin call</dt><dd>{getValue('MarginCallLevel', '100') || '—'}%</dd></div>
-                      <div><dt>Stop out</dt><dd>{getValue('StopOutLevel', '50') || '—'}%</dd></div>
+                      <div><dt>Margin call</dt><dd className="is-warn tabular">{getValue('MarginCallLevel', '100') || '—'}%</dd></div>
+                      <div><dt>Stop out</dt><dd className="is-danger tabular">{getValue('StopOutLevel', '50') || '—'}%</dd></div>
+                      <div><dt>Leverage</dt><dd className="tabular">1:{rawLeverageNumber}</dd></div>
+                      <div><dt>Mode</dt><dd>{modeHeaderLabel}</dd></div>
                     </dl>
                   </div>
                 </section>
 
                 <div className="account-settings-note">
                   <strong>Group settings</strong>
-                  <span>Trading permissions, reporting, API access and order limits are inherited from the assigned group.</span>
+                  <span>Trading permissions, reporting, API access and order limits are inherited from the assigned group ({groupValue || '—'}).</span>
+                </div>
+              </div>
+            ) : activeTab === 'Profile' ? (
+              <div className="account-settings-tab account-profile-tab custom-scrollbar">
+                <header className="account-personal-intro">
+                  <div className="account-personal-intro-left">
+                    <span className="account-personal-avatar" aria-hidden="true">{accountInitials}</span>
+                    <div className="account-personal-intro-copy">
+                      <h2>{name}</h2>
+                      <p className="account-personal-subtitle">
+                        Login #{loginId} · {groupValue || 'Unassigned group'} · 1:{rawLeverageNumber}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="account-personal-intro-badges">
+                    <span className={`account-overview-pill is-status is-status-${statusValue}`}>
+                      <span className="account-overview-status-dot" aria-hidden="true" />
+                      {statusLabel}
+                    </span>
+                    <span className="account-overview-pill tabular">{currencyValue}</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('Personal')}
+                      className="account-overview-quick-btn"
+                    >
+                      Edit Personal
+                    </button>
+                  </div>
+                </header>
+
+                <div className="account-profile-columns">
+                  <section className="account-settings-card">
+                    <div className="account-settings-card-title">
+                      <h3>Client &amp; contact dossier</h3>
+                      <span className="account-card-meta-tag">KYC / Holder</span>
+                    </div>
+                    <dl className="account-dossier-list">
+                      <div><dt>Full Name</dt><dd>{name || '—'}</dd></div>
+                      <div><dt>Email Address</dt><dd>{emailValue || '—'}</dd></div>
+                      <div><dt>Phone Number</dt><dd className="tabular">{phoneValue || '—'}</dd></div>
+                      <div><dt>Country</dt><dd>{countryValue || '—'}</dd></div>
+                      <div><dt>City / State</dt><dd>{[cityValue, stateValue].filter(Boolean).join(', ') || '—'}</dd></div>
+                      <div><dt>Postal Code</dt><dd className="tabular">{zipCodeValue || '—'}</dd></div>
+                      <div><dt>Street Address</dt><dd>{addressValue || '—'}</dd></div>
+                      <div><dt>Company</dt><dd>{companyValue || '—'}</dd></div>
+                      <div><dt>Language</dt><dd>{languageValue || '—'}</dd></div>
+                    </dl>
+                  </section>
+
+                  <section className="account-settings-card">
+                    <div className="account-settings-card-title">
+                      <h3>Trading &amp; attribution summary</h3>
+                      <span className="account-card-meta-tag">Activity</span>
+                    </div>
+                    <dl className="account-dossier-list">
+                      <div><dt>Current Balance</dt><dd className="tabular">{balanceSpaceVal} {currencyValue}</dd></div>
+                      <div><dt>Current Equity</dt><dd className="tabular">{equitySpaceVal} {currencyValue}</dd></div>
+                      <div>
+                        <dt>Floating P / L</dt>
+                        <dd className={`tabular ${Number(profitVal) > 0 ? 'is-positive' : Number(profitVal) < 0 ? 'is-negative' : ''}`}>
+                          {Number(profitVal) > 0 ? `+${profitSpaceVal}` : profitSpaceVal} {currencyValue}
+                        </dd>
+                      </div>
+                      <div><dt>Free Margin</dt><dd className="tabular">{freeMarginSpaceVal} {currencyValue}</dd></div>
+                      <div><dt>Margin Level</dt><dd className="tabular">{marginLevelSpaceVal} %</dd></div>
+                      <div><dt>Registered</dt><dd className="tabular">{formatOverviewDate(registrationValue) || '—'}</dd></div>
+                      <div><dt>Last Access</dt><dd className="tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</dd></div>
+                      <div><dt>Last IP Address</dt><dd className="tabular">{lastIpValue || '—'}</dd></div>
+                      <div><dt>Lead Source / Campaign</dt><dd>{[leadSourceValue, leadCampaignValue].filter(Boolean).join(' · ') || '—'}</dd></div>
+                      <div><dt>Comment</dt><dd>{commentValue || '—'}</dd></div>
+                    </dl>
+                  </section>
                 </div>
               </div>
             ) : activeTab === 'Trade' ? (
@@ -2501,9 +3688,18 @@ const AccountDetailsModal = ({
               />
             ) : activeTab === 'History' && showPositions ? (
               <div className="account-history-tab">
-                <div className="account-section-heading">
+                <div className="account-section-heading account-history-heading">
                   <div>
                     <h2>Position history</h2>
+                    <p>Closed positions and historical deal execution records for account #{loginId}.</p>
+                  </div>
+                  <div className="account-history-kpis">
+                    <span className="account-overview-count-chip tabular">
+                      {historyRows.length} Deals
+                    </span>
+                    <span className="account-overview-count-chip tabular">
+                      Net P/L: {formatSpaceNumber(historyRows.reduce((sum, r) => sum + Number(r.profit || 0), 0))} {currencyValue}
+                    </span>
                   </div>
                 </div>
                 <PositionHistoryGrid
@@ -2514,23 +3710,27 @@ const AccountDetailsModal = ({
                 />
               </div>
             ) : activeTab === 'Security' ? (
-              <div className="account-security-tab">
+              <div className="account-security-tab custom-scrollbar">
                 <div className="account-section-heading">
                   <div>
                     <h2>Password management</h2>
                     <p>Verify or change account passwords.</p>
                   </div>
+                  <span className="account-personal-account-ref tabular">#{loginId}</span>
                 </div>
 
                 <div className="account-security-list">
                   {[
-                    { field: 'master', type: 'USER_PASS_MAIN', title: 'Master password', description: 'Full trading access for the account owner.' },
-                    { field: 'investor', type: 'USER_PASS_INVESTOR', title: 'Investor password', description: 'Read-only access to account activity.' },
-                    { field: 'api', type: 'USER_PASS_API', title: 'API password', description: 'Access through approved Web API integrations.' },
-                  ].map(({ field, type, title, description }) => (
+                    { field: 'master', type: 'USER_PASS_MAIN', badge: 'FULL ACCESS', title: 'Master password', description: 'Full trading access for the account owner.' },
+                    { field: 'investor', type: 'USER_PASS_INVESTOR', badge: 'READ-ONLY', title: 'Investor password', description: 'Read-only access to account activity.' },
+                    { field: 'api', type: 'USER_PASS_API', badge: 'WEB API', title: 'API password', description: 'Access through approved Web API integrations.' },
+                  ].map(({ field, type, badge, title, description }) => (
                     <section className="account-security-card" key={field}>
                       <div className="account-security-copy">
-                        <h3>{title}</h3>
+                        <div className="account-security-title-row">
+                          <h3>{title}</h3>
+                          <span className="account-security-tier-badge">{badge}</span>
+                        </div>
                         <p>{description}</p>
                       </div>
                       <div className="account-security-controls">
@@ -2568,6 +3768,25 @@ const AccountDetailsModal = ({
               </div>
             ) : activeTab === 'Balance' ? (
               <div className="account-transaction-tab custom-scrollbar">
+                <div className="account-transaction-metrics-bar">
+                  <div className="account-transaction-metric-tile">
+                    <span>Current balance</span>
+                    <strong className="tabular">{balanceSpaceVal} {currencyValue}</strong>
+                  </div>
+                  <div className="account-transaction-metric-tile">
+                    <span>Credit</span>
+                    <strong className="tabular">{creditSpaceVal} {currencyValue}</strong>
+                  </div>
+                  <div className="account-transaction-metric-tile">
+                    <span>Current equity</span>
+                    <strong className="tabular">{equitySpaceVal} {currencyValue}</strong>
+                  </div>
+                  <div className="account-transaction-metric-tile">
+                    <span>Free margin</span>
+                    <strong className="tabular">{freeMarginSpaceVal} {currencyValue}</strong>
+                  </div>
+                </div>
+
                 <div className="account-transaction-card">
                   <div className="account-transaction-header">
                     <h2 className="text-[12px] font-bold   tracking-wide uppercase">
@@ -2696,8 +3915,8 @@ const AccountDetailsModal = ({
                       </div>
                     )}
 
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="transaction-type" className="text-[12px] font-medium">Type *</label>
+                    <div className="account-transaction-field">
+                      <label htmlFor="transaction-type">Type *</label>
                       <select
                         id="transaction-type"
                         value={transactionType}
@@ -2713,7 +3932,7 @@ const AccountDetailsModal = ({
                           setDepositError(null);
                           setDepositSuccess(null);
                         }}
-                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
+                        className="account-transaction-input"
                       >
                         {getManagerTransactionOptions().map((option) => (
                           <option key={option.value} value={option.value} disabled={!option.enabled}>{option.label}</option>
@@ -2724,8 +3943,27 @@ const AccountDetailsModal = ({
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="transaction-amount" className="text-[12px] font-medium">Amount *</label>
+                    <div className="account-transaction-field">
+                      <div className="account-transaction-field-head">
+                        <label htmlFor="transaction-amount">Amount * ({currencyValue})</label>
+                        <div className="account-transaction-presets">
+                          {[100, 500, 1000, 5000, 10000].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              disabled={isDepositing || !canManageFinances}
+                              onClick={() => {
+                                setDepositAmount(String(preset));
+                                setDepositError(null);
+                                setDepositSuccess(null);
+                              }}
+                              className="account-transaction-preset-chip tabular"
+                            >
+                              +{preset.toLocaleString()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="number"
                         id="transaction-amount" value={depositAmount}
@@ -2738,13 +3976,13 @@ const AccountDetailsModal = ({
                         placeholder="Max 1,000,000"
                         min="0.01"
                         step="0.01"
-                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all "
+                        className="account-transaction-input tabular"
                       />
                     </div>
 
                     {isTransferType(transactionType) && (
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="transaction-to-login" className="text-[11px] font-normal">To login *</label>
+                      <div className="account-transaction-field">
+                        <label htmlFor="transaction-to-login">To login *</label>
                         <input
                           type="text"
                           id="transaction-to-login"
@@ -2757,13 +3995,13 @@ const AccountDetailsModal = ({
                           }}
                           placeholder="Destination account login"
                           inputMode="numeric"
-                          className="w-full h-9    border   rounded-md px-3 text-[11px]   focus:outline-none   transition-all "
+                          className="account-transaction-input tabular"
                         />
                       </div>
                     )}
 
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="transaction-comment" className="text-[12px] font-medium  ">Comment</label>
+                    <div className="account-transaction-field">
+                      <label htmlFor="transaction-comment">Comment</label>
                       <input
                         type="text"
                         id="transaction-comment"
@@ -2771,12 +4009,13 @@ const AccountDetailsModal = ({
                         maxLength={500}
                         disabled={isDepositing || !canManageFinances}
                         value={depositComment}
+                        placeholder="Optional ledger reference or audit note"
                         onChange={(e) => {
                           setDepositComment(e.target.value);
                           setDepositError(null);
                           setDepositSuccess(null);
                         }}
-                        className="w-full h-9    border   rounded-md px-3 text-[12px]   focus:outline-none   transition-all"
+                        className="account-transaction-input"
                       />
                       <datalist id="transaction-comment-presets">
                         {getManagerCommentPresets(transactionType).map((preset) => (
@@ -2857,10 +4096,102 @@ const AccountDetailsModal = ({
                   </form>
                 </div>
               </div>
+            ) : activeTab === 'Credentials' ? (
+              <div className="account-settings-tab account-credentials-tab custom-scrollbar">
+                <div className="account-section-heading">
+                  <div>
+                    <h2>Account credentials &amp; access</h2>
+                    <p>Terminal login identifiers, server group assignment, and session connection audit.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('credentials-summary', `Login: ${loginId}\nName: ${name}\nGroup: ${groupValue || '-'}\nCurrency: ${currencyValue}\nLeverage: 1:${rawLeverageNumber}\nMode: ${modeHeaderLabel}`)}
+                      className="account-overview-quick-btn"
+                    >
+                      {copiedField === 'credentials-summary' ? 'Copied Summary' : 'Copy Summary'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('Security')}
+                      className="account-overview-quick-btn is-primary"
+                    >
+                      Manage Passwords
+                    </button>
+                  </div>
+                </div>
+
+                <section className="account-settings-card">
+                  <div className="account-settings-card-title">
+                    <h3>Terminal connection parameters</h3>
+                    <span className={`ui-status ${statusValue === 'active' ? 'ui-status-ok' : 'ui-status-danger'}`}>{statusLabel}</span>
+                  </div>
+                  <div className="account-telemetry-grid">
+                    <div className="account-settings-field is-readonly">
+                      <span>Trading Login ID</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="tabular">{loginId}</strong>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('cred-login', String(loginId))}
+                          className="account-inline-copy-btn"
+                          title="Copy login ID"
+                        >
+                          {copiedField === 'cred-login' ? <CheckIcon size={12} /> : <Copy size={12} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Server Group</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="truncate">{groupValue || '—'}</strong>
+                        {groupValue && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy('cred-group', String(groupValue))}
+                            className="account-inline-copy-btn"
+                            title="Copy server group"
+                          >
+                            {copiedField === 'cred-group' ? <CheckIcon size={12} /> : <Copy size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Account Holder</span>
+                      <strong className="truncate">{name || '—'}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Base Currency &amp; Leverage</span>
+                      <strong className="tabular">{currencyValue} · 1:{rawLeverageNumber}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Accounting Mode</span>
+                      <strong>{modeHeaderLabel}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Registered Date</span>
+                      <strong className="tabular">{formatOverviewDate(registrationValue) || '—'}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Last Terminal Access</span>
+                      <strong className="tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</strong>
+                    </div>
+                    <div className="account-settings-field is-readonly">
+                      <span>Last Known IP</span>
+                      <strong className="tabular">{lastIpValue || '—'}</strong>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="account-settings-note">
+                  <strong>Security &amp; authentication</strong>
+                  <span>For security compliance, existing Master, Investor, and Web API passwords are never displayed in plaintext. Use the Security tab to verify or rotate credentials.</span>
+                </div>
+              </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
                 <p>Placeholder content for <strong>{activeTab}</strong> tab.</p>
-                <p className="text-[12px] mt-2">Provide UI structure references to complete this tab.</p>
               </div>
             )}
 
@@ -2953,6 +4284,78 @@ const AccountDetailsModal = ({
           onCloseTrade={(ticket) => requestTradeClose({ ...(ctxMenu.data || {}), position: ticket })}
           canCloseTrades={canCloseTrades && (entity !== 'position' || Boolean(String(ctxMenu.data?.symbol ?? positions.find((position) => String(position.position) === String(ctxMenu.data?.position))?.symbol ?? '').trim()))}
           canManipulateTrades={canManipulateTrades}
+        />
+      )}
+
+      {exposureCtxMenu.isOpen && activeTab === 'Exposure' && (
+        <ExposureContextMenu
+          x={exposureCtxMenu.x}
+          y={exposureCtxMenu.y}
+          chartSide={exposureChartSide}
+          autoArrange={exposureAutoArrange}
+          showGrid={exposureShowGrid}
+          onSelectChartSide={(side) => setExposureChartSide(side)}
+          onCopyReport={() => {
+            const targetList = exposureCtxMenu.row
+              ? [exposureCtxMenu.row]
+              : exposureCtxMenu.rows || [];
+            const lines = [
+              ['Asset', 'Volume', 'Rate', 'Value'].join('\t'),
+              ...targetList.map((r) =>
+                [r.asset, r.formattedVolume, r.formattedRate, r.formattedValue].join('\t')
+              ),
+            ].join('\n');
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+              navigator.clipboard
+                .writeText(lines)
+                .then(() => showResult.success('Exposure report copied to clipboard.'))
+                .catch(() => {});
+            }
+          }}
+          onExportCsv={() => {
+            const rowsToExport = exposureCtxMenu.rows || [];
+            const csv = [
+              'Asset,Volume,Rate,Value',
+              ...rowsToExport.map(
+                (r) => `"${r.asset}","${r.formattedVolume}","${r.formattedRate}","${r.formattedValue}"`
+              ),
+            ].join('\n');
+            if (typeof document !== 'undefined') {
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `exposure-${loginId}.csv`;
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              URL.revokeObjectURL(url);
+            }
+          }}
+          onExportHtml={() => {
+            const rowsToExport = exposureCtxMenu.rows || [];
+            const htmlRows = rowsToExport
+              .map(
+                (r) =>
+                  `<tr><td>${r.asset}</td><td>${r.formattedVolume}</td><td>${r.formattedRate}</td><td>${r.formattedValue}</td></tr>`
+              )
+              .join('');
+            const html = `<!doctype html><html><head><meta charset="utf-8"><title>Exposure ${loginId}</title></head><body><table><thead><tr><th>Asset</th><th>Volume</th><th>Rate</th><th>Value</th></tr></thead><tbody>${htmlRows}</tbody></table></body></html>`;
+            if (typeof document !== 'undefined') {
+              const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `exposure-${loginId}.html`;
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              URL.revokeObjectURL(url);
+            }
+          }}
+          onToggleAutoArrange={() => setExposureAutoArrange((prev) => !prev)}
+          onToggleGrid={() => setExposureShowGrid((prev) => !prev)}
+          onClose={() => setExposureCtxMenu((prev) => ({ ...prev, isOpen: false }))}
         />
       )}
 

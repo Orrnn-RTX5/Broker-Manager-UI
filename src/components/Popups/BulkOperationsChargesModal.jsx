@@ -6,6 +6,11 @@ import { invalidateRealtimeCaches, preloadAccountPositions } from '../../service
 import { loadAccountDetails, prefetchAccountDetails, seedAccountDetails } from '../../services/accountDetails';
 import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { showResult } from '../../store/resultDialogStore';
+import {
+  CLOSE_POPUPS_REQUIRED_EVENT,
+  getBlockingPopupWindowSummary,
+  notifyCloseOpenPopupsRequired,
+} from './popupContextMenuGuard';
 import './BulkOperationsChargesModal.css';
 
 const BULK_CHARGE_OPERATIONS = [
@@ -144,9 +149,43 @@ const BulkOperationsChargesModal = ({
     };
   });
 
+  const [closeRequiredAlert, setCloseRequiredAlert] = useState(null);
+  const closeRequiredTimerRef = useRef(null);
+
   useEffect(() => {
     amountInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const handleRequireClose = (event) => {
+      const fallback = getBlockingPopupWindowSummary({
+        openAccountWindows,
+        hasBulkOperations: true,
+      });
+      const detail = event?.detail || fallback;
+      setCloseRequiredAlert({
+        active: true,
+        totalOpenTabs: detail.totalOpenTabs || fallback.totalOpenTabs || 1,
+        message:
+          detail.message ||
+          fallback.message ||
+          'Please cross (✕) the open tabs first — right-click will work again after closing them.',
+      });
+      if (closeRequiredTimerRef.current) {
+        clearTimeout(closeRequiredTimerRef.current);
+      }
+      closeRequiredTimerRef.current = setTimeout(() => {
+        setCloseRequiredAlert(null);
+      }, 2800);
+    };
+    window.addEventListener(CLOSE_POPUPS_REQUIRED_EVENT, handleRequireClose);
+    return () => {
+      window.removeEventListener(CLOSE_POPUPS_REQUIRED_EVENT, handleRequireClose);
+      if (closeRequiredTimerRef.current) {
+        clearTimeout(closeRequiredTimerRef.current);
+      }
+    };
+  }, [openAccountWindows]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -433,7 +472,15 @@ const BulkOperationsChargesModal = ({
         role="dialog"
         aria-modal="true"
         aria-label="Bulk Operations"
-        className={`bulk-ops-window${hasOpenAccountWindow ? ' is-inactive-window' : ''}`}
+        className={`bulk-ops-window${hasOpenAccountWindow ? ' is-inactive-window' : ''}${closeRequiredAlert?.active ? ' is-close-required' : ''}`}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          notifyCloseOpenPopupsRequired({
+            openAccountWindows,
+            hasBulkOperations: true,
+          });
+        }}
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
@@ -474,7 +521,7 @@ const BulkOperationsChargesModal = ({
             </button>
             <button
               type="button"
-              className="bulk-ops-title-btn is-close"
+              className={`bulk-ops-title-btn is-close${closeRequiredAlert?.active ? ' is-close-highlight' : ''}`}
               title="Close"
               aria-label="Close"
               disabled={isProcessing}

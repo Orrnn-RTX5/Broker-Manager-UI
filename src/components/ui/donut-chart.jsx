@@ -3,18 +3,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { motion as Motion, AnimatePresence } from "framer-motion";
-
-const buildVisibleSegments = (data, totalValue) => {
-  let offset = 0;
-  return data.reduce((segments, segment, index) => {
-    if (!segment.value) return segments;
-    const percentage = totalValue === 0 ? 0 : (segment.value / totalValue) * 100;
-    segments.push({ segment, index, percentage, offset });
-    offset += percentage;
-    return segments;
-  }, []);
-};
+import { useDonutChartAnimation } from "../../hooks/useDonutChartAnimation";
 
 const DonutChart = React.forwardRef(
   (
@@ -23,12 +12,13 @@ const DonutChart = React.forwardRef(
       totalValue: propTotalValue,
       size = 200,
       strokeWidth = 20,
-      animationDuration = 1,
-      animationDelayPerSegment = 0.05,
+      animationDuration = 0.68,
+      animationDelayPerSegment = 0.08,
       highlightOnHover = true,
       strokeLinecap = "butt",
       centerContent,
       onSegmentHover,
+      animationState: externalAnimationState,
       className,
       ...props
     },
@@ -38,15 +28,46 @@ const DonutChart = React.forwardRef(
 
     const internalTotalValue = React.useMemo(
       () =>
-        propTotalValue || data.reduce((sum, segment) => sum + (segment.value || 0), 0),
+        propTotalValue ??
+        data.reduce((sum, segment) => sum + (Number(segment?.value) || 0), 0),
       [data, propTotalValue]
     );
 
+    const effectiveInitialDurationMs =
+      animationDuration && animationDuration > 0
+        ? Math.round(animationDuration * 1000)
+        : 680;
+    const effectiveStaggerStep =
+      animationDelayPerSegment && animationDelayPerSegment > 0
+        ? animationDelayPerSegment
+        : 0.08;
+
+    const internalAnimationState = useDonutChartAnimation(
+      externalAnimationState ? [] : data,
+      internalTotalValue,
+      {
+        initialDurationMs: effectiveInitialDurationMs,
+        updateDurationMs: 520,
+        staggerStep: effectiveStaggerStep,
+      }
+    );
+
+    const activeAnimation = externalAnimationState || internalAnimationState;
+    const {
+      segments: animatedSegments = [],
+      isStatic = true,
+      isInitialEntrance = false,
+      overallEased = 1,
+      rotationDeg = 0,
+      scale = 1,
+    } = activeAnimation;
+
     const radius = size / 2 - strokeWidth / 2;
     const circumference = 2 * Math.PI * radius;
+
     const visibleSegments = React.useMemo(
-      () => buildVisibleSegments(data, internalTotalValue),
-      [data, internalTotalValue]
+      () => animatedSegments.filter((segment) => Number(segment?.value) > 0),
+      [animatedSegments]
     );
 
     React.useEffect(() => {
@@ -57,12 +78,19 @@ const DonutChart = React.forwardRef(
       setHoveredSegment(null);
     };
 
+    const rotorStateClass = isStatic
+      ? "is-static"
+      : isInitialEntrance
+        ? "is-entering"
+        : "is-updating";
+
     return (
       <div
         ref={ref}
         className={cn("relative flex items-center justify-center", className)}
         style={{ width: size, height: size }}
         onMouseLeave={handleMouseLeave}
+        data-chart-static={isStatic ? "true" : "false"}
         {...props}
       >
         <svg
@@ -70,6 +98,7 @@ const DonutChart = React.forwardRef(
           height={size}
           viewBox={`0 0 ${size} ${size}`}
           className="overflow-visible -rotate-90"
+          data-chart-static={isStatic ? "true" : "false"}
         >
           {/* Base background ring */}
           <circle
@@ -80,18 +109,39 @@ const DonutChart = React.forwardRef(
             stroke="var(--border-2, rgba(255, 255, 255, 0.08))"
             strokeWidth={strokeWidth}
           />
-          
-          {/* Data Segments */}
-          <AnimatePresence>
-            {visibleSegments.map(({ segment, index, percentage, offset }) => {
-              const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
-              const strokeDashoffset = (offset / 100) * circumference;
-              
+
+          {/* Data Segments with subtle rotational/reveal entrance */}
+          <g
+            className={cn("donut-chart-rotor", rotorStateClass)}
+            style={
+              isStatic
+                ? {
+                    transformOrigin: `${size / 2}px ${size / 2}px`,
+                    transformBox: "view-box",
+                  }
+                : {
+                    transformOrigin: `${size / 2}px ${size / 2}px`,
+                    transformBox: "view-box",
+                    transform: `rotate(${rotationDeg}deg) scale(${scale})`,
+                    opacity: Math.max(0.28, overallEased),
+                  }
+            }
+          >
+            {visibleSegments.map((segment) => {
+              const arcLength = Math.max(
+                0,
+                (segment.animatedPercentage / 100) * circumference
+              );
+              const strokeDasharray = `${arcLength} ${circumference}`;
+              const strokeDashoffset = -(
+                (segment.animatedOffset / 100) *
+                circumference
+              );
               const isActive = hoveredSegment?.label === segment.label;
 
               return (
-                <Motion.circle
-                  key={segment.label || index}
+                <circle
+                  key={segment.label || segment.index}
                   cx={size / 2}
                   cy={size / 2}
                   r={radius}
@@ -99,46 +149,39 @@ const DonutChart = React.forwardRef(
                   stroke={segment.color}
                   strokeWidth={strokeWidth}
                   strokeDasharray={strokeDasharray}
-                  strokeDashoffset={-strokeDashoffset}
+                  strokeDashoffset={strokeDashoffset}
                   strokeLinecap={strokeLinecap}
-                  initial={animationDuration === 0 ? false : { opacity: 0, strokeDashoffset: circumference }}
-                  animate={{ 
-                    opacity: 1, 
-                    strokeDashoffset: -strokeDashoffset,
-                  }}
-                  transition={{
-                    opacity: { duration: animationDuration === 0 ? 0 : 0.3, delay: index * animationDelayPerSegment },
-                    strokeDashoffset: {
-                      duration: animationDuration,
-                      delay: index * animationDelayPerSegment,
-                      ease: "easeOut",
-                    },
-                  }}
                   className={cn(
-                    "origin-center transition-transform duration-200",
+                    "donut-chart-segment origin-center transition-transform duration-200",
+                    isStatic ? "is-static" : "is-animating",
                     highlightOnHover && "cursor-pointer"
                   )}
                   style={{
                     filter: isActive
                       ? `drop-shadow(0px 0px 6px ${segment.color}) brightness(1.15)`
-                      : 'none',
-                    transform: isActive ? 'scale(1.03)' : 'scale(1)',
+                      : "none",
+                    transform: isActive ? "scale(1.03)" : "scale(1)",
+                    opacity: isStatic ? 1 : Math.max(0.24, segment.sliceProgress),
                     transition: "filter 0.2s ease-out, transform 0.2s ease-out",
                   }}
                   onMouseEnter={() => setHoveredSegment(segment)}
                 />
               );
             })}
-          </AnimatePresence>
+          </g>
         </svg>
 
         {/* Center Content */}
         {centerContent && (
           <div
-            className="absolute flex flex-col items-center justify-center pointer-events-none"
+            className={cn(
+              "donut-chart-center absolute flex flex-col items-center justify-center pointer-events-none",
+              isStatic ? "is-static" : "is-animating"
+            )}
             style={{
               width: size - strokeWidth * 2.5,
               height: size - strokeWidth * 2.5,
+              opacity: isStatic ? 1 : Math.max(0.25, overallEased),
             }}
           >
             {centerContent}

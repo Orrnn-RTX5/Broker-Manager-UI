@@ -11,6 +11,10 @@ import BulkOperationsChargesModal from '../../components/Popups/BulkOperationsCh
 import CheckBalanceDialog from '../../components/Popups/CheckBalanceDialog';
 import InternalMailModal from '../../components/Popups/InternalMailModal';
 import PushNotificationModal from '../../components/Popups/PushNotificationModal';
+import {
+  getBlockingPopupWindowSummary,
+  notifyCloseOpenPopupsRequired,
+} from '../../components/Popups/popupContextMenuGuard';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useGroupList } from '../../hooks/useGroupList';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -87,10 +91,13 @@ const TradingAccountsPage = () => {
   const { groups, loading: groupsLoading } = useGroupList({ limit: 100, offset: 0, sort_by: 'name', sort_dir: 'asc' });
   const { canAct } = usePermissions();
   const canEditAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
-  const groupOptions = useMemo(
-    () => ['All Groups', ...groups.map((group) => group.name).filter(Boolean)],
-    [groups]
-  );
+  const groupOptions = useMemo(() => {
+    const base = ['All Groups', ...groups.map((group) => group.name).filter(Boolean)];
+    if (groupFilter && !base.includes(groupFilter)) {
+      return [...base, groupFilter];
+    }
+    return base;
+  }, [groups, groupFilter]);
   const countryOptions = useMemo(() => ['All Countries', ...ALL_COUNTRIES], []);
 
   const handleSort = useCallback((col) => {
@@ -102,11 +109,42 @@ const TradingAccountsPage = () => {
     }
   }, [sortCol]);
 
+  const hasOtherBlockingModal = Boolean(
+    summaryAccount ||
+    restrictLogin ||
+    pendingAction ||
+    checkBalanceAccounts ||
+    mailAccounts ||
+    notificationAccounts
+  );
+
+  const blockingPopupSummary = useMemo(
+    () =>
+      getBlockingPopupWindowSummary({
+        openAccountWindows: tradingAccountWindows,
+        hasBulkOperations: Boolean(bulkChargesAccounts),
+        hasOtherModal: hasOtherBlockingModal,
+      }),
+    [tradingAccountWindows, bulkChargesAccounts, hasOtherBlockingModal]
+  );
+
+  const hasOpenBlockingWindows = blockingPopupSummary.isBlocked;
+
+  const handleBlockedContextMenu = useCallback(() => {
+    notifyCloseOpenPopupsRequired({
+      openAccountWindows: tradingAccountWindows,
+      hasBulkOperations: Boolean(bulkChargesAccounts),
+      hasOtherModal: hasOtherBlockingModal,
+    });
+  }, [tradingAccountWindows, bulkChargesAccounts, hasOtherBlockingModal]);
+
   const ctl = useGridPageController({
     columns: ACCOUNT_COLUMNS,
     rowKey: 'login',
     exportName: 'trading-accounts',
     entityLabel: 'account',
+    canOpenContextMenu: () => !hasOpenBlockingWindows,
+    onBlockedContextMenu: handleBlockedContextMenu,
     onClearFilter: () => {
       setSearch('');
       setGroupFilter('All Groups');
@@ -115,6 +153,12 @@ const TradingAccountsPage = () => {
       setSortDir('asc');
     },
   });
+
+  useEffect(() => {
+    if (hasOpenBlockingWindows && ctl.contextMenuProps.isOpen) {
+      ctl.contextMenuProps.onClose();
+    }
+  }, [hasOpenBlockingWindows, ctl.contextMenuProps]);
 
   const resolveTargetAccount = useCallback((row) => {
     if (row) return row;
@@ -405,7 +449,7 @@ const TradingAccountsPage = () => {
         {...ctl.gridProps}
       />
 
-      {ctl.contextMenuProps.isOpen && (
+      {ctl.contextMenuProps.isOpen && !hasOpenBlockingWindows && (
         <TradingAccountsContextMenu
           x={ctl.contextMenuProps.x}
           y={ctl.contextMenuProps.y}
@@ -434,6 +478,7 @@ const TradingAccountsPage = () => {
           onFilterByGroup={setGroupFilter}
           onFilterByCountry={setCountryFilter}
           onClearFilter={ctl.grid.clearFilter}
+          onCustomizeFilter={handleFocusSearch}
           onCopyAs={ctl.contextMenuProps.onCopyAs}
           onCopyLogins={handleCopyLogins}
           onExport={ctl.contextMenuProps.onExport}

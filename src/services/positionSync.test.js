@@ -261,3 +261,49 @@ test('lifecycle-only reconciliation accepts both contracts and does not poll for
   assert.equal(requiresPositionReconciliation({ schema_version: 2, entity: 'state', action: 'changed', data: { entity: 'accounts' } }), true);
   assert.equal(isPositionMutation({ schema_version: 2, entity: 'state', action: 'changed', data: { entity: 'accounts' } }), true);
 });
+
+test('open sockets emit disconnected on close and stalled connections self-recover on poll', async () => {
+  const sockets = [];
+  const events = [];
+  let poll;
+  let ticketCount = 0;
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: `t-${++ticketCount}` }),
+    createSocket: (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    buildUrl: (ticket) => `ws://example.test/OnAccountMetrics?ticket=${ticket}`,
+    setIntervalFn: (callback) => { poll = callback; return 1; },
+    clearIntervalFn: () => {},
+    setTimeoutFn: () => 1,
+    clearTimeoutFn: () => {},
+    connectTimeoutMs: 5,
+  });
+  client.subscribe((event) => events.push(event));
+
+  client.start();
+  await Promise.resolve();
+  sockets[0].readyState = 1;
+  sockets[0].onopen();
+  sockets[0].readyState = 3;
+  sockets[0].onclose();
+
+  assert.deepEqual(events, [
+    { type: 'snapshot', reason: 'connected' },
+    { type: 'connection', reason: 'disconnected' },
+  ]);
+
+  // Simulate a wedged connecting socket that never completes its handshake.
+  client.reconnectTimer = null;
+  await client.connect();
+  client.connectingSince = Date.now() - 20;
+  poll();
+  await Promise.resolve();
+
+  assert.equal(sockets[1].readyState, 3);
+  assert.equal(sockets.length, 3);
+  assert.equal(client.socket, sockets[2]);
+  client.stop();
+});

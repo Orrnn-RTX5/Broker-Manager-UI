@@ -70,6 +70,8 @@ test('live account scope keeps trading accounts and skips manager sessions', asy
   const { liveAccountScope } = await import('./onlineUsers.js');
   const rows = [
     { login: '9001', equity: 0, deviceType: 'manager', isAdmin: true },
+    { login: '9002', equity: 0, type: 'Manager', isAdmin: false },
+    { login: '9003', equity: 0, isAdmin: true },
     { login: '200002', equity: 10, deviceType: 'web' },
     { login: '200001', balance: 5 },
     { login: '200001', equity: 5 },

@@ -15,6 +15,26 @@ const extractAccountLogin = (account) => {
   return String(account).trim();
 };
 
+const mergeAccountSnapshots = (previous, incoming) => {
+  if (!incoming || typeof incoming !== 'object') return previous;
+  if (!previous || typeof previous !== 'object') return incoming;
+  const merged = { ...previous };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value === undefined || value === null) continue;
+    if (
+      typeof value === 'string'
+      && value.trim() === ''
+      && merged[key] !== undefined
+      && merged[key] !== null
+      && String(merged[key]).trim() !== ''
+    ) {
+      continue;
+    }
+    merged[key] = value;
+  }
+  return merged;
+};
+
 const pickLowestFreeSlotIndex = (windows = []) => {
   const used = new Set(windows.map((w) => Number(w.slotIndex)).filter(Number.isInteger));
   for (let slot = 0; slot < MAX_ACCOUNT_DETAIL_WINDOWS; slot += 1) {
@@ -91,7 +111,7 @@ export const useMultiScreenStore = create((set, get) => ({
         if (idx !== existingIndex) return item;
         const nextAccount =
           typeof account === 'object' && account !== null
-            ? (typeof item.account === 'object' && item.account !== null ? { ...item.account, ...account } : account)
+            ? mergeAccountSnapshots(item.account, account)
             : item.account;
         return {
           ...item,

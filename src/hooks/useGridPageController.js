@@ -2,6 +2,7 @@ import { showResult } from '../store/resultDialogStore.js';
 import { useState, useRef, useCallback } from 'react';
 import useGridController from './useGridController';
 import { rowsToCSV, rowsToTSV, rowsToJSON, copyToClipboard, downloadBlob, stampedFilename } from '../utils/gridUtils';
+import { getBlockingPopupWindowSummary, notifyCloseOpenPopupsRequired } from '../components/Popups/popupContextMenuGuard';
 
 /**
  * Bundles everything a grid page needs to wire up the ClientsContextMenu:
@@ -19,6 +20,8 @@ export default function useGridPageController({
   onClearFilter,
   entityLabel = 'row',
   singleSelect = false,
+  canOpenContextMenu,
+  onBlockedContextMenu,
 }) {
   const grid = useGridController({ columns, rowKey, onClearFilter, singleSelect });
   const [contextMenu, setContextMenu] = useState(null);
@@ -31,16 +34,40 @@ export default function useGridPageController({
     // Menu actions read this ref; opening the menu already renders the parent.
   }, []);
 
+  const isContextMenuBlocked = useCallback((e, row) => {
+    if (typeof canOpenContextMenu === 'function' && !canOpenContextMenu(e, row)) {
+      return true;
+    }
+    return getBlockingPopupWindowSummary().isBlocked;
+  }, [canOpenContextMenu]);
+
+  const handleBlockedContext = useCallback((e, row) => {
+    setContextMenu((prev) => (prev ? null : prev));
+    if (typeof onBlockedContextMenu === 'function') {
+      onBlockedContextMenu(e, row);
+    } else {
+      notifyCloseOpenPopupsRequired();
+    }
+  }, [onBlockedContextMenu]);
+
   const handlePageContext = useCallback((e) => {
     e.preventDefault();
+    if (isContextMenuBlocked(e, null)) {
+      handleBlockedContext(e, null);
+      return;
+    }
     setContextMenu({ x: e.clientX, y: e.clientY, row: null, rows: rowsRef.current });
-  }, []);
+  }, [handleBlockedContext, isContextMenuBlocked]);
 
   const handleRowContext = useCallback((e, row) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isContextMenuBlocked(e, row)) {
+      handleBlockedContext(e, row);
+      return;
+    }
     setContextMenu({ x: e.clientX, y: e.clientY, row, rows: rowsRef.current });
-  }, []);
+  }, [handleBlockedContext, isContextMenuBlocked]);
 
   const closeMenu = useCallback(() => setContextMenu(null), []);
 

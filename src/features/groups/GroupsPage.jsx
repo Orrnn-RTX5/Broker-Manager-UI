@@ -34,7 +34,6 @@ import { copyToClipboard, rowsToTSV } from '../../utils/gridUtils';
 import { EDIT_MENU_ACTION_EVENT, isEditableElement, publishEditMenuContext } from '../../utils/editMenuActions';
 import { getGroupsFolderFromSearch, getGroupsFolderPath, getGroupsSelectedFromSearch } from './groupRoutes';
 import {
-  countGroupsUnder,
   getGroupFolderRows,
   getGroupLeafName,
   getGroupParentPath,
@@ -42,6 +41,7 @@ import {
   groupRowNode,
   isGroupBranch,
   listGroupContainerPaths,
+  listLeafGroups,
   nestGroupName,
   pathSeparatorOf,
   separatorForContainer,
@@ -196,7 +196,8 @@ const GroupsPage = () => {
   }, [navigatorGroup, location.state, navIntentGroup, location.pathname, location.search, navigate]);
 
   const folderRows = useMemo(() => getGroupFolderRows(groups, folder), [groups, folder]);
-  const allRows = useMemo(() => groups.map(groupRowNode), [groups]);
+  const leafGroups = useMemo(() => listLeafGroups(groups), [groups]);
+  const allRows = useMemo(() => leafGroups.map(groupRowNode), [leafGroups]);
   const rows = allGroups ? allRows : folderRows;
   const rowIsBranch = useCallback((node) => !allGroups && isGroupBranch(node), [allGroups]);
   const activeFolder = allGroups ? '' : folder;
@@ -209,7 +210,7 @@ const GroupsPage = () => {
     () => visibleRows.find((node) => node.id === selectedId) ?? null,
     [visibleRows, selectedId],
   );
-  const folderCount = countGroupsUnder(groups, folder);
+  const folderCount = folderRows.length;
   const segments = splitGroupPath(folder);
   const containers = useMemo(() => listGroupContainerPaths(groups), [groups]);
 
@@ -326,8 +327,16 @@ const GroupsPage = () => {
   const openAccountWindow = () => { if (openedGroup) setPropertiesGroup(openedGroup); };
   const openAccountDetails = (account, tab = 'Overview') => {
     if (!account) return;
+    const enrichedAccount = typeof account === 'object' && account !== null
+      ? {
+          ...account,
+          group: account.group || account.Group || openedGroup?.name || '',
+          currency: account.currency || account.Currency || openedGroup?.currency || openedGroup?.Currency || 'USD',
+          leverage: account.leverage || account.Leverage || openedGroup?.leverage || openedGroup?.Leverage || 100,
+        }
+      : account;
     setOpenedAccountTab(tab || 'Overview');
-    setOpenedAccount(account);
+    setOpenedAccount(enrichedAccount);
   };
 
   const copyFieldValue = async (key, value) => {
@@ -1107,7 +1116,7 @@ const GroupsPage = () => {
             Groups {folder ? `${folder} ` : ''}({folderCount})
           </button>
           <button type="button" role="tab" aria-selected={allGroups} className={allGroups ? 'is-active' : ''} onClick={() => { setAllGroups(true); setOpenedGroup(null); setSelectedLogin(null); setSelectedId(null); }}>
-            All Groups ({groups.length})
+            All Groups ({allRows.length})
           </button>
         </div>
         <div className="groups-explorer-tip" role="status">
@@ -1406,6 +1415,13 @@ const GroupsPage = () => {
           onFixPersonalData={(acc) => openAccountDetails(acc || accountContextMenu.row, 'Personal')}
           onInternalMail={(acc) => setMailAccounts([acc || accountContextMenu.row])}
           onPushNotification={(acc) => setNotificationAccounts([acc || accountContextMenu.row])}
+          groupFilter={search || 'All Groups'}
+          onFilterByGroup={(grp) => setSearch(grp === 'All Groups' ? '' : grp)}
+          onClearFilter={() => setSearch('')}
+          onCustomizeFilter={() => {
+            setAccountContextMenu(null);
+            searchInputRef.current?.focus();
+          }}
           onFind={() => {
             setAccountContextMenu(null);
             searchInputRef.current?.focus();
