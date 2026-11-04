@@ -9,6 +9,7 @@ import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPosit
 import GridLoadingState from '../../../components/GridLoadingState';
 import { prefetchAccountDetails } from '../../../services/accountDetails';
 import { PERMISSIONS } from '../../../utils/permissions';
+import { getAccountVisualType } from '../../../utils/sidebarAccountRows';
 
 // A pointer resting this long on a row signals intent to open it.
 const ROW_PREFETCH_INTENT_MS = 120;
@@ -24,11 +25,16 @@ const fmt = (n) => {
 
 const TRADING_ACCOUNTS_CACHE_KEY = 'rtx5_trading_accounts_cache_v2';
 
-const AccountTypeIcon = ({ group }) => {
-  const isDemoOrContest = /demo|contest/i.test(String(group ?? ''));
+export const AccountTypeIcon = ({ group, row = null, groupRecord = null }) => {
+  const visualType = getAccountVisualType(row || group, groupRecord);
+  const typeClass = visualType === 'contest'
+    ? 'is-contest'
+    : visualType === 'demo'
+      ? 'is-demo'
+      : 'is-real';
   return (
     <svg
-      className={`trading-accounts-login-icon ${isDemoOrContest ? 'is-demo' : 'is-real'}`}
+      className={`trading-accounts-login-icon ${typeClass}`}
       viewBox="0 0 16 16"
       width="13"
       height="13"
@@ -177,9 +183,13 @@ const TradingAccountsDataGrid = ({
   sortDir: controlledSortDir,
   onSort,
   showGridlines = true,
+  autoArrange = true,
+  autoScroll = false,
   onRowsChange,
   onRowContext,
+  onSelectAccount,
   onEditAccount,
+  checkedBalances = null,
   refreshVersion = 0,
 }) => {
   const queryClient = useQueryClient();
@@ -190,11 +200,21 @@ const TradingAccountsDataGrid = ({
   const sortCol = controlledSortCol ?? internalSortCol;
   const sortDir = controlledSortDir ?? internalSortDir;
   const [selectedRow, setSelectedRow] = useState(null);
+  const scrollAreaRef = useRef(null);
   const lastRefreshVersionRef = useRef(refreshVersion);
   const lastTapRef = useRef({ rowKey: null, time: 0 });
   const prefetchTimerRef = useRef(null);
   const [hasRequestedData, markDataRequested] = useManualGridLoad('trading-accounts');
   const pageSize = 30;
+
+  const groupByNameMap = useMemo(() => {
+    const map = new Map();
+    for (const grp of Array.isArray(groups) ? groups : []) {
+      const grpName = String(grp?.name ?? grp?.Name ?? '').trim();
+      if (grpName) map.set(grpName, grp);
+    }
+    return map;
+  }, [groups]);
 
   const groupCurrencyMap = useMemo(() => {
     const map = new Map();
@@ -302,6 +322,14 @@ const TradingAccountsDataGrid = ({
   }, [sortedRows, onRowsChange]);
 
   useEffect(() => {
+    if (!autoScroll || sortedRows.length === 0) return;
+    const scroller = scrollAreaRef.current;
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, [autoScroll, sortedRows]);
+
+  useEffect(() => {
     if (refreshVersion === lastRefreshVersionRef.current) return;
     lastRefreshVersionRef.current = refreshVersion;
 
@@ -337,6 +365,20 @@ const TradingAccountsDataGrid = ({
 
   const isVisible = (key) => !grid?.hiddenColumns?.has(key);
 
+  const visibleColumnKeys = [
+    'login',
+    'name',
+    'group',
+    'country',
+    'client',
+    'balance',
+    'balanceChecked',
+    'equity',
+    'profit',
+    'currency',
+  ].filter((key) => isVisible(key));
+  const equalColWidth = `${(100 / Math.max(1, visibleColumnKeys.length)).toFixed(4)}%`;
+
   const renderHeader = (col, label, align = 'left') => {
     const isSorted = sortCol === col;
     return (
@@ -359,9 +401,10 @@ const TradingAccountsDataGrid = ({
     );
   };
 
-  const gridlineStyle = showGridlines === false
-    ? { '--row-border': 'transparent' }
-    : {};
+  const gridlineStyle = {
+    ...(showGridlines === false ? { '--row-border': 'transparent' } : {}),
+    ...(autoArrange === false ? { tableLayout: 'auto', width: 'max-content', minWidth: '100%' } : {}),
+  };
   const totalPages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = sortedRows.length === 0 ? 0 : offset + 1;
   const rangeEnd = offset + sortedRows.length;
@@ -408,31 +451,24 @@ const TradingAccountsDataGrid = ({
       {isLoading && sortedRows.length === 0 ? (
         <GridLoadingState label="Loading trading accounts…" />
       ) : (
-      <div className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
-        <table className={`ui-grid trading-accounts-table ${showGridlines === false ? 'no-gridlines' : ''}`} style={gridlineStyle}>
+      <div ref={scrollAreaRef} className="grid-scroll-area w-full flex-1 min-h-0 overflow-auto">
+        <table className={`ui-grid trading-accounts-table ${showGridlines === false ? 'no-gridlines' : ''} ${autoArrange === false ? 'is-manual-arrange' : ''}`.trim()} style={gridlineStyle}>
           <colgroup>
-            {isVisible('login') && <col style={{ width: '9%' }} />}
-            {isVisible('name') && <col style={{ width: '16%' }} />}
-            {isVisible('group') && <col style={{ width: '16%' }} />}
-            {isVisible('country') && <col style={{ width: '10%' }} />}
-            {isVisible('client') && <col style={{ width: '7%' }} />}
-            {isVisible('balance') && <col style={{ width: '9.5%' }} />}
-            {isVisible('balanceChecked') && <col style={{ width: '11%' }} />}
-            {isVisible('equity') && <col style={{ width: '9.5%' }} />}
-            {isVisible('profit') && <col style={{ width: '6.5%' }} />}
-            {isVisible('currency') && <col style={{ width: '5.5%' }} />}
+            {visibleColumnKeys.map((key) => (
+              <col key={key} style={{ width: equalColWidth }} />
+            ))}
           </colgroup>
           <thead className="sticky top-0 z-10" style={{ boxShadow: '0 1px 0 var(--border)' }}>
             <tr>
               {isVisible('login') && renderHeader('login', 'Login', 'left')}
               {isVisible('name') && renderHeader('name', 'Name', 'left')}
-              {isVisible('group') && renderHeader('group', 'Group', 'right')}
-              {isVisible('country') && renderHeader('country', 'Country', 'right')}
-              {isVisible('client') && renderHeader('client', 'Client', 'right')}
-              {isVisible('balance') && renderHeader('balance', 'Balance', 'right')}
-              {isVisible('balanceChecked') && renderHeader('balanceChecked', 'Balance / Checked', 'right')}
-              {isVisible('equity') && renderHeader('equity', 'Equity', 'right')}
-              {isVisible('profit') && renderHeader('profit', 'Profit', 'right')}
+              {isVisible('group') && renderHeader('group', 'Group', 'left')}
+              {isVisible('country') && renderHeader('country', 'Country', 'left')}
+              {isVisible('client') && renderHeader('client', 'Client', 'left')}
+              {isVisible('balance') && renderHeader('balance', 'Balance', 'left')}
+              {isVisible('balanceChecked') && renderHeader('balanceChecked', 'Balance / Checked', 'left')}
+              {isVisible('equity') && renderHeader('equity', 'Equity', 'left')}
+              {isVisible('profit') && renderHeader('profit', 'Profit', 'left')}
               {isVisible('currency') && renderHeader('currency', 'Currency', 'left')}
             </tr>
           </thead>
@@ -473,17 +509,38 @@ const TradingAccountsDataGrid = ({
                     prefetchAccount(row);
                     if (canViewPositions) void preloadAccountPositions(row.login);
                   }}
-                  onClick={() => setSelectedRow(selectedRow === rowKey ? null : rowKey)}
+                  onClick={() => {
+                    const nextKey = selectedRow === rowKey ? null : rowKey;
+                    setSelectedRow(nextKey);
+                    onSelectAccount?.(nextKey ? row : null);
+                  }}
                   onDoubleClick={() => handleEditAccount(row)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault();
                       handleEditAccount(row);
+                    } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                      event.preventDefault();
+                      setSelectedRow(rowKey);
+                      onSelectAccount?.(row);
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      if (onRowContext) {
+                        onRowContext(
+                          {
+                            preventDefault: () => {},
+                            stopPropagation: () => {},
+                            clientX: rect.left + 48,
+                            clientY: rect.bottom,
+                          },
+                          row
+                        );
+                      }
                     }
                   }}
                   onTouchEnd={(event) => handleRowTap(row, rowKey, event.timeStamp)}
                   onContextMenu={(e) => {
                     setSelectedRow(rowKey);
+                    onSelectAccount?.(row);
                     if (onRowContext) onRowContext(e, row);
                   }}
                   className={isSelected ? 'is-selected' : ''}
@@ -492,7 +549,11 @@ const TradingAccountsDataGrid = ({
                   {isVisible('login') && (
                     <td className="trading-accounts-cell-login is-left" title={String(row.login ?? '')}>
                       <span className="trading-accounts-login-wrap">
-                        <AccountTypeIcon group={row.group} />
+                        <AccountTypeIcon
+                          group={row.group}
+                          row={row}
+                          groupRecord={groupByNameMap.get(String(row.group ?? '').trim())}
+                        />
                         <span className="tabular">{row.login}</span>
                       </span>
                     </td>
@@ -501,25 +562,29 @@ const TradingAccountsDataGrid = ({
                     <td className="truncate is-left" title={row.name || ''}>{row.name}</td>
                   )}
                   {isVisible('group') && (
-                    <td className="truncate is-right" title={row.group || ''}>{row.group}</td>
+                    <td className="truncate is-left" title={row.group || ''}>{row.group}</td>
                   )}
                   {isVisible('country') && (
-                    <td className="truncate is-right" title={row.country || ''}>{row.country}</td>
+                    <td className="truncate is-left" title={row.country || ''}>{row.country}</td>
                   )}
                   {isVisible('client') && (
-                    <td className="truncate is-right" title={row.client || ''}>{row.client}</td>
+                    <td className="truncate is-left" title={row.client || ''}>{row.client}</td>
                   )}
                   {isVisible('balance') && (
-                    <td className="tabular is-right">{fmt(row.balance)}</td>
+                    <td className="tabular is-left">{fmt(row.balance)}</td>
                   )}
                   {isVisible('balanceChecked') && (
-                    <td className="tabular is-right">{row.balanceChecked}</td>
+                    <td className="tabular is-left">
+                      {checkedBalances && checkedBalances[String(row.login)] !== undefined
+                        ? fmt(checkedBalances[String(row.login)])
+                        : row.balanceChecked}
+                    </td>
                   )}
                   {isVisible('equity') && (
-                    <td className="tabular is-right">{fmt(row.equity)}</td>
+                    <td className="tabular is-left">{fmt(row.equity)}</td>
                   )}
                   {isVisible('profit') && (
-                    <td className="tabular is-right">{fmt(row.profit)}</td>
+                    <td className="tabular is-left">{fmt(row.profit)}</td>
                   )}
                   {isVisible('currency') && (
                     <td className="is-left">{row.currency}</td>

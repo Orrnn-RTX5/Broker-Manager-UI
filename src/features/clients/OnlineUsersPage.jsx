@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './OnlineUsersPage.css';
 import AccountsOnlineGrid from './components/AccountsOnlineGrid';
-import ClientsContextMenu from './components/ClientsContextMenu';
+import TradingAccountsContextMenu from './components/TradingAccountsContextMenu';
 import useGridPageController from '../../hooks/useGridPageController';
 import { useMultiScreenStore } from '../../store/multiScreenStore';
 
@@ -16,6 +16,7 @@ const ONLINE_COLUMNS = [
 const OnlineUsersPage = () => {
   const [search, setSearch] = useState('');
   const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
+  const openAccountDetailWindow = useMultiScreenStore((state) => state.openAccountDetailWindow);
 
   const ctl = useGridPageController({
     columns: ONLINE_COLUMNS,
@@ -42,9 +43,20 @@ const OnlineUsersPage = () => {
       />
 
       {ctl.contextMenuProps.isOpen && (
-        <ClientsContextMenu
-          {...ctl.contextMenuProps}
-          onNewClient={() => openAccountScreen()}
+        <TradingAccountsContextMenu
+          x={ctl.contextMenuProps.x}
+          y={ctl.contextMenuProps.y}
+          onClose={ctl.contextMenuProps.onClose}
+          selectedRow={ctl.contextMenuProps.selectedRow}
+          rows={ctl.contextMenuProps.rows}
+          grid={ctl.grid}
+          showGrid={ctl.grid.showGridlines}
+          onNewAccount={() => openAccountScreen()}
+          onOpenAccountDetails={(row) => row && openAccountDetailWindow(row, { source: 'trading-accounts', initialTab: 'Overview' })}
+          onCopyAs={ctl.contextMenuProps.onCopyAs}
+          onExport={ctl.contextMenuProps.onExport}
+          onToggleGrid={() => ctl.grid.toggleGridlines()}
+          onToggleColumn={(key) => ctl.grid.toggleColumn(key)}
         />
       )}
     </div>

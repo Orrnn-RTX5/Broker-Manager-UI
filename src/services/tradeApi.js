@@ -204,11 +204,6 @@ export const orderModify = async ({ ticket, login, price, stoploss, takeprofit }
   if (stoploss !== undefined && stoploss !== null) modifyParams.set('stoploss', String(stoploss));
   if (takeprofit !== undefined && takeprofit !== null) modifyParams.set('takeprofit', String(takeprofit));
   return tradeClient.post(`/OrderModify?${modifyParams.toString()}`, {});
-  const params = new URLSearchParams({ ticket: String(ticket) });
-
-
-
-
 };
 
 export const orderDelete = (ticket) =>

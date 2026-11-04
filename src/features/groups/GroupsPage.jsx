@@ -7,6 +7,11 @@ import GroupPropertiesModal from './components/GroupPropertiesModal';
 import GroupPermissionNotice from './components/GroupPermissionNotice';
 import GroupOperationModal from './components/GroupOperationModal';
 import AccountDetailsModal from '../../components/Popups/AccountDetailsModal';
+import BulkOperationsChargesModal from '../../components/Popups/BulkOperationsChargesModal';
+import CheckBalanceDialog from '../../components/Popups/CheckBalanceDialog';
+import InternalMailModal from '../../components/Popups/InternalMailModal';
+import PushNotificationModal from '../../components/Popups/PushNotificationModal';
+import TradingAccountsContextMenu from '../clients/components/TradingAccountsContextMenu';
 import { GROUP_OPERATIONS_DISABLED_MESSAGE, groupOperationsEnabled, readSavedOperation } from './groupOperations.js';
 import {
   extractAccountFields,
@@ -80,7 +85,9 @@ const GroupsPage = () => {
   const queryClient = useQueryClient();
   const { canAct, groupOperationsEnabled: sessionGroupOperationsEnabled, groupOperationsLoading: sessionGroupOperationsLoading } = usePermissions();
   const canManageGroups = canAct(PERMISSIONS.MANAGE_GROUPS);
+  const canManageAccounts = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
   const openGroupScreen = useMultiScreenStore((state) => state.openGroupScreen);
+  const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
   const folder = getGroupsFolderFromSearch(location.search);
   const navigatorGroup = getGroupsSelectedFromSearch(location.search);
   const isRoot = !folder;
@@ -97,6 +104,11 @@ const GroupsPage = () => {
   const [activeRouteIndex, setActiveRouteIndex] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [accountContextMenu, setAccountContextMenu] = useState(null);
+  const [bulkChargesAccounts, setBulkChargesAccounts] = useState(null);
+  const [checkBalanceAccounts, setCheckBalanceAccounts] = useState(null);
+  const [mailAccounts, setMailAccounts] = useState(null);
+  const [notificationAccounts, setNotificationAccounts] = useState(null);
   const [subgroupDraft, setSubgroupDraft] = useState(null);
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
   const [propertiesGroup, setPropertiesGroup] = useState(null);
@@ -974,13 +986,27 @@ const GroupsPage = () => {
                     aria-selected={selected}
                     onClick={() => setSelectedLogin(row.login)}
                     onDoubleClick={() => (row.account ? openAccountDetails(row.account, 'Overview') : openAccountWindow())}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setSelectedLogin(row.login);
+                      setAccountContextMenu({
+                        x: event.clientX,
+                        y: event.clientY,
+                        row: row.account || row,
+                      });
+                    }}
                   >
                     {GROUP_ACCOUNT_COLUMNS.map((column, index) => (
                       <td key={column.key} style={column.numeric ? { textAlign: 'right' } : undefined}>
                         {index === 0 ? (
                           <span className="groups-row-name is-account">
                             <span className="groups-row-glyph" aria-hidden="true">
-                              <AccountMark />
+                              <AccountMark
+                                group={row.group || openedGroup?.name}
+                                account={row.account || row}
+                                groupRecord={openedGroup?.raw || openedGroup}
+                              />
                             </span>
                             <span className="groups-row-label">{row.login}</span>
                           </span>
@@ -1361,6 +1387,64 @@ const GroupsPage = () => {
           account={openedAccount}
           initialTab={openedAccountTab}
           onClose={() => setOpenedAccount(null)}
+        />
+      )}
+
+      {accountContextMenu && (
+        <TradingAccountsContextMenu
+          x={accountContextMenu.x}
+          y={accountContextMenu.y}
+          onClose={() => setAccountContextMenu(null)}
+          selectedRow={accountContextMenu.row}
+          rows={visibleAccounts}
+          canEditAccounts={canManageAccounts}
+          onNewAccount={() => openAccountScreen()}
+          onOpenAccountDetails={(acc) => openAccountDetails(acc || accountContextMenu.row, 'Overview')}
+          onCharges={(acc) => setBulkChargesAccounts([acc || accountContextMenu.row])}
+          onCheckBalance={(acc) => setCheckBalanceAccounts([acc || accountContextMenu.row])}
+          onFixBalance={(acc) => openAccountDetails(acc || accountContextMenu.row, 'Balance')}
+          onFixPersonalData={(acc) => openAccountDetails(acc || accountContextMenu.row, 'Personal')}
+          onInternalMail={(acc) => setMailAccounts([acc || accountContextMenu.row])}
+          onPushNotification={(acc) => setNotificationAccounts([acc || accountContextMenu.row])}
+          onFind={() => {
+            setAccountContextMenu(null);
+            searchInputRef.current?.focus();
+          }}
+        />
+      )}
+
+      {bulkChargesAccounts && (
+        <BulkOperationsChargesModal
+          accounts={bulkChargesAccounts}
+          groups={groups}
+          canEditAccounts={canManageAccounts}
+          onOpenAccountDetails={(acc) => openAccountDetails(acc, 'Overview')}
+          onClose={() => setBulkChargesAccounts(null)}
+          onSuccess={() => {
+            invalidateGroups();
+            queryClient.invalidateQueries({ queryKey: ['sidebar-accounts'] });
+          }}
+        />
+      )}
+
+      {checkBalanceAccounts && (
+        <CheckBalanceDialog
+          accounts={checkBalanceAccounts}
+          onClose={() => setCheckBalanceAccounts(null)}
+        />
+      )}
+
+      {mailAccounts && (
+        <InternalMailModal
+          accounts={mailAccounts}
+          onClose={() => setMailAccounts(null)}
+        />
+      )}
+
+      {notificationAccounts && (
+        <PushNotificationModal
+          accounts={notificationAccounts}
+          onClose={() => setNotificationAccounts(null)}
         />
       )}
     </div>

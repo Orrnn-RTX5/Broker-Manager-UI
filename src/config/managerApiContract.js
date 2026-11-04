@@ -22,6 +22,8 @@ export const MANAGER_API = Object.freeze({
   ibCommissionPay: '/IBCommissionPay',
 });
 
+export const PENDING_ORDERS_ENDPOINT = '/api/v2/orders/pending';
+
 const encodePathSegment = (value, label) => {
   const segment = String(value ?? '').trim();
   if (!segment) throw new TypeError(`${label} is required`);
@@ -36,6 +38,17 @@ export const buildManagerOrderCloseEndpoint = (ticket) =>
 
 export const buildManagerOrderStatusEndpoint = (login, clientOrderId) =>
   `${buildManagerAccountEndpoint(login)}/orders/by-client-id/${encodePathSegment(clientOrderId, 'Client order ID')}`;
+
+export const buildPendingOrderTicketEndpoint = (ticket, accountLogin) => {
+  const base = `${PENDING_ORDERS_ENDPOINT}/${encodePathSegment(ticket, 'Pending order ticket')}`;
+  if (accountLogin !== undefined && accountLogin !== null && String(accountLogin).trim() !== '') {
+    return `${base}?account_login=${encodePathSegment(accountLogin, 'Account login')}`;
+  }
+  return base;
+};
+
+export const buildPendingOrdersListEndpoint = (accountLogin) =>
+  `${PENDING_ORDERS_ENDPOINT}?account_login=${encodePathSegment(accountLogin, 'Account login')}`;
 
 const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

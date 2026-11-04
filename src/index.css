@@ -4230,17 +4230,21 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 
 #root .trading-accounts-grid .trading-accounts-table {
   width: 100%;
-  min-width: 860px;
+  min-width: 960px;
   table-layout: fixed;
   border-collapse: collapse;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 #root .trading-accounts-grid .trading-accounts-table :is(th, td):not(.trading-accounts-grid-empty) {
-  padding: 4px 8px;
+  padding: 4px 10px;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   border-right: 1px solid var(--border-2, var(--border));
 }
 
@@ -4280,14 +4284,16 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   flex-shrink: 0;
 }
 
-#root .trading-accounts-grid .trading-accounts-login-wrap {
+#root .trading-accounts-grid .trading-accounts-login-wrap,
+#root .accounts-sidebar-grid .trading-accounts-login-wrap {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-#root .trading-accounts-grid .trading-accounts-login-icon {
+#root .trading-accounts-grid .trading-accounts-login-icon,
+#root .accounts-sidebar-grid .trading-accounts-login-icon {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
@@ -4298,12 +4304,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   stroke-linejoin: round;
 }
 
-#root .trading-accounts-grid .trading-accounts-login-icon.is-real {
-  color: #d9822b;
+#root .trading-accounts-grid .trading-accounts-login-icon.is-real,
+#root .accounts-sidebar-grid .trading-accounts-login-icon.is-real {
+  color: #facc15;
 }
 
-#root .trading-accounts-grid .trading-accounts-login-icon.is-demo {
+#root .trading-accounts-grid .trading-accounts-login-icon.is-demo,
+#root .accounts-sidebar-grid .trading-accounts-login-icon.is-demo {
   color: #22c55e;
+}
+
+#root .trading-accounts-grid .trading-accounts-login-icon.is-contest,
+#root .accounts-sidebar-grid .trading-accounts-login-icon.is-contest {
+  color: #3b82f6;
 }
 
 #root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected td {
@@ -4311,12 +4324,19 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   color: #ffffff !important;
 }
 
-#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-demo {
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-demo,
+#root .accounts-sidebar-grid tbody tr.is-selected .trading-accounts-login-icon.is-demo {
   color: #4ade80 !important;
 }
 
-#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-real {
-  color: #fbbf24 !important;
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-real,
+#root .accounts-sidebar-grid tbody tr.is-selected .trading-accounts-login-icon.is-real {
+  color: #fde047 !important;
+}
+
+#root .trading-accounts-grid .trading-accounts-table tbody tr.is-selected .trading-accounts-login-icon.is-contest,
+#root .accounts-sidebar-grid tbody tr.is-selected .trading-accounts-login-icon.is-contest {
+  color: #60a5fa !important;
 }
 
 /* Keep the compact desktop header intact until the remaining workspace
@@ -5535,6 +5555,37 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .account-details-window-controls button:hover { background: var(--surface-3); color: var(--text) !important; }
 .account-details-window-controls button.is-close:hover { background: var(--danger-soft); color: var(--danger-text) !important; }
 
+.account-details-window.is-minimized {
+  width: 160px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  border-radius: 5px !important;
+  border: 1px solid #48484d !important;
+  background: #1f1f1f !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55) !important;
+}
+
+.account-details-window.is-minimized .account-details-titlebar {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 4px 0 8px !important;
+  border-bottom: 0 !important;
+  background: #1f1f1f !important;
+  cursor: pointer !important;
+}
+
+.account-details-window.is-minimized .account-details-window-controls {
+  gap: 1px !important;
+}
+
+.account-details-window.is-minimized .account-details-window-controls button {
+  width: 22px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 0 !important;
+  border-radius: 3px !important;
+}
+
 .account-update-notification {
   position: absolute;
   top: 56px;
@@ -5601,9 +5652,9 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
   cursor: pointer;
 }
 .account-details-tab:hover { color: var(--text); background: var(--surface-2); }
-.account-details-window .account-details-tab { border: 1px solid transparent; box-shadow: none; }
+.account-details-window .account-details-tab { border: 0; border-bottom: 2px solid transparent; box-shadow: none; outline: none; }
 .account-details-window .account-details-tab.is-active,
-.account-details-window .account-details-tab:focus-visible { border-color: var(--accent); background: transparent; box-shadow: none; outline: none; }
+.account-details-window .account-details-tab:focus-visible { border: 0; border-bottom: 2px solid #0078d7; background: transparent; box-shadow: none; outline: none; }
 .account-details-tab.is-active { color: var(--text); }
 
 .account-details-content { gap: 20px; padding: 20px; background: var(--bg); }

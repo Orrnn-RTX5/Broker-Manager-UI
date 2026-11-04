@@ -1,0 +1,467 @@
+:is(#root, body) .mt5-mail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10055;
+  background: transparent;
+  pointer-events: none;
+}
+
+:is(#root, body) .mt5-mail-window {
+  position: fixed;
+  z-index: 10056;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: #1f1f1f !important;
+  border: 1px solid #48484d;
+  border-radius: 6px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72);
+  color: #e4e4e7;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  user-select: none;
+  overflow: hidden;
+}
+
+:is(#root, body) .mt5-mail-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  background: #1f1f1f;
+  cursor: move;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-title-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+:is(#root, body) .mt5-mail-title-text {
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+:is(#root, body) .mt5-mail-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:is(#root, body) .mt5-mail-title-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+:is(#root, body) .mt5-mail-title-btn:hover {
+  background: #323236;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-title-btn.is-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 6px 14px;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+:is(#root, body) .mt5-mail-label {
+  width: 68px;
+  text-align: right;
+  color: #e4e4e7;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-label-inline {
+  width: 80px;
+  margin-left: 14px;
+  text-align: right;
+  color: #e4e4e7;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-input {
+  height: 22px;
+  padding: 1px 6px;
+  background: #181818;
+  border: 1px solid #636366;
+  border-radius: 0;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+:is(#root, body) .mt5-mail-input:focus {
+  border-color: #e4e4e7;
+  border-bottom: 2px solid #0078d7;
+}
+
+:is(#root, body) .mt5-mail-input::selection {
+  background: #0078d7;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-to-input {
+  width: 492px;
+  max-width: calc(100% - 104px);
+}
+
+:is(#root, body) .mt5-mail-recipient-count {
+  color: #e4e4e7;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 18px;
+}
+
+:is(#root, body) .mt5-mail-combo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 492px;
+  max-width: calc(100% - 80px);
+  height: 22px;
+  background: #181818;
+  border: 1px solid #636366;
+}
+
+:is(#root, body) .mt5-mail-combo:focus-within {
+  border-color: #e4e4e7;
+}
+
+:is(#root, body) .mt5-mail-combo-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 1px 6px;
+  border: 0;
+  background: transparent;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+:is(#root, body) .mt5-mail-combo-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-left: 1px solid #3f3f46;
+  background: #2b2b2b;
+  color: #d4d4d8;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-combo-toggle:hover {
+  background: #3a3a3e;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-dropdown {
+  position: relative;
+  width: 186px;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 22px;
+  padding: 1px 6px;
+  background: #2b2b2b;
+  border: 1px solid #636366;
+  border-radius: 2px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+:is(#root, body) .mt5-mail-dropdown-trigger:hover:not(:disabled) {
+  background: #38383c;
+  border-color: #8e8e93;
+}
+
+:is(#root, body) .mt5-mail-dropdown-trigger:disabled {
+  background: #262626;
+  border-color: #3f3f42;
+  color: #71717a;
+  cursor: default;
+}
+
+:is(#root, body) .mt5-mail-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: #1f1f1f;
+  border: 1px solid #0078d7;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.65);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+:is(#root, body) .mt5-mail-dropdown-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 19px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:is(#root, body) .mt5-mail-dropdown-option:hover,
+:is(#root, body) .mt5-mail-dropdown-option.is-active {
+  background: #0078d7;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 10px;
+  background: #2b2b2b;
+  border: 1px solid #8e8e93;
+  border-radius: 3px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+:is(#root, body) .mt5-mail-send-btn:hover:not(:disabled) {
+  background: #3a3a3e;
+  border-color: #d4d4d8;
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-send-btn:disabled {
+  background: #252528;
+  border-color: #48484d;
+  color: #71717a;
+  cursor: default;
+}
+
+:is(#root, body) .mt5-mail-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 76px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+  min-height: 18px;
+  color: #e4e4e7;
+  cursor: pointer;
+  width: fit-content;
+}
+
+:is(#root, body) .mt5-mail-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #0078d7;
+  cursor: pointer;
+}
+
+/* Rich Text Formatting Toolbar */
+:is(#root, body) .mt5-mail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  background: #1f1f1f;
+  border-bottom: 1px solid #52525b;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-toolbar-select {
+  height: 22px;
+  padding: 0 4px;
+  background: #2b2b2b;
+  border: 1px solid #71717a;
+  border-radius: 2px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+
+:is(#root, body) .mt5-mail-toolbar-select.is-font {
+  width: 148px;
+}
+
+:is(#root, body) .mt5-mail-toolbar-select.is-size {
+  width: 68px;
+}
+
+:is(#root, body) .mt5-mail-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: #52525b;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #3b82f6;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-tool-btn:hover {
+  background: #2d2d32;
+  border-color: #52525b;
+  color: #60a5fa;
+}
+
+:is(#root, body) .mt5-mail-tool-btn.is-active {
+  background: #1e3a8a;
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+/* Message Editor Surface + Classic Scrollbar */
+:is(#root, body) .mt5-mail-editor-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 160px;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+
+:is(#root, body) .mt5-mail-editor {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 8px 10px;
+  background: #1e1e1e;
+  color: #f4f4f5;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+  outline: none;
+  overflow-y: auto;
+  user-select: text;
+  cursor: text;
+}
+
+:is(#root, body) .mt5-mail-scrollbar-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 15px;
+  height: 100%;
+  padding: 2px 0 14px;
+  background: #202020;
+  border-left: 1px solid #2b2b2b;
+  color: #a1a1aa;
+  flex-shrink: 0;
+}
+
+:is(#root, body) .mt5-mail-scroll-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border: 0;
+  background: transparent;
+  color: #a1a1aa;
+  padding: 0;
+  cursor: pointer;
+}
+
+:is(#root, body) .mt5-mail-scroll-arrow:hover {
+  color: #ffffff;
+}
+
+:is(#root, body) .mt5-mail-scroll-thumb {
+  flex: 1;
+  width: 9px;
+  margin: 2px 0;
+  border-radius: 4px;
+  background: #7a7a7a;
+}
+
+:is(#root, body) .mt5-mail-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  color: #71717a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}

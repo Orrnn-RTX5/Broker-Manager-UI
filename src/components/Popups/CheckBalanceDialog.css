@@ -1,0 +1,141 @@
+#root .mt5-check-balance-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#root .mt5-check-balance-dialog {
+  width: 352px;
+  max-width: calc(100vw - 24px);
+  background: #1f1f1f !important;
+  border: 1px solid #48484d;
+  border-radius: 6px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
+  color: #e4e4e7;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  user-select: none;
+}
+
+#root .mt5-check-balance-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  background: #1f1f1f;
+}
+
+#root .mt5-check-balance-title {
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+#root .mt5-check-balance-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#root .mt5-check-balance-close:hover:not(:disabled) {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+#root .mt5-check-balance-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px 20px;
+  background: #1f1f1f;
+}
+
+#root .mt5-check-balance-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+#root .mt5-check-balance-message {
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  min-width: 0;
+  flex: 1;
+}
+
+#root .mt5-check-balance-line-title {
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#root .mt5-check-balance-line-value {
+  margin-top: 3px;
+  color: #f4f4f5;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#root .mt5-check-balance-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 9px 14px;
+  background: #181818;
+  border-top: 1px solid #2e2e2e;
+}
+
+#root .mt5-check-balance-btn {
+  min-width: 72px;
+  height: 23px;
+  padding: 0 14px;
+  background: #2b2b2b;
+  border: 1px solid #636366;
+  border-radius: 3px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 400;
+  cursor: pointer;
+  outline: none;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+#root .mt5-check-balance-btn:hover:not(:disabled) {
+  background: #383838;
+}
+
+#root .mt5-check-balance-btn.is-focused {
+  border-color: #0078d4 !important;
+  box-shadow: 0 0 0 1px #0078d4 inset;
+}
+
+#root .mt5-check-balance-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

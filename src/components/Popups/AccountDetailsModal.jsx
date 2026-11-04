@@ -1,5 +1,5 @@
 import { showResult } from '../../store/resultDialogStore.js';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Minus, Square, PlusSquare, Loader, Eye, EyeOff, Copy, Check as CheckIcon, Plus, CheckCircle2, Edit3, Play, Trash2, BarChart3, ChevronRight, FileText, Settings, ShieldCheck, CircleAlert, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
 import { completeAccountPositions, getAccountPendingOrders, getAccountPositions, getPositionHistory, hasAccountPositionsContinuation, invalidateAccountPositionsCache, invalidatePositionsCache, peekAccountPositions } from '../../services/api';
@@ -57,6 +57,7 @@ import { useMultiScreenStore } from '../../store/multiScreenStore';
 import { PERMISSIONS } from '../../utils/permissions';
 import { redactSensitive } from '../../utils/redaction';
 import { normalizeResult } from '../../utils/resultMessage';
+import { getAccountVisualType } from '../../utils/sidebarAccountRows';
 import './AccountDetailsModal.css';
 import {
   canCloseAccountTrades,
@@ -135,8 +136,12 @@ const formatSpaceNumber = (val, decimals = 2) => {
 };
 
 const AccountTitleIcon = ({ group }) => {
-  const g = String(group || '').toLowerCase();
-  const isReal = g.includes('real') && !g.includes('demo') && !g.includes('contest');
+  const visualType = getAccountVisualType(group);
+  const typeClass = visualType === 'contest'
+    ? 'is-contest'
+    : visualType === 'demo'
+      ? 'is-demo'
+      : 'is-real';
   return (
     <svg
       width="14"
@@ -144,7 +149,7 @@ const AccountTitleIcon = ({ group }) => {
       viewBox="0 0 16 16"
       fill="none"
       aria-hidden="true"
-      className={`account-details-title-user-icon ${isReal ? 'is-real' : 'is-demo'}`}
+      className={`account-details-title-user-icon ${typeClass}`}
     >
       <circle cx="8" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.4" />
       <path d="M3.2 13.5c0-2.4 2.15-4.1 4.8-4.1s4.8 1.7 4.8 4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -526,9 +531,27 @@ const AccountDetailsModal = ({
   const activeLoginRef = useRef(financeLoginKey);
   activeLoginRef.current = financeLoginKey;
   const openAccountScreen = useMultiScreenStore((state) => state.openAccountScreen);
+  const openAccountWindows = useMultiScreenStore((state) => state.openAccountWindows);
+  const setAccountWindowMinimized = useMultiScreenStore((state) => state.setAccountWindowMinimized);
   const multiScreenCount = useMultiScreenStore(
     (state) => state.accountScreens.length + state.groupScreens.length
   );
+  const storeWindowEntry = useMemo(
+    () => openAccountWindows.find((item) => String(item.login) === String(loginId)) || null,
+    [openAccountWindows, loginId]
+  );
+  const minimizedWindows = useMemo(
+    () => openAccountWindows.filter((item) => Boolean(item.minimized)),
+    [openAccountWindows]
+  );
+  const minimizedSlotIndex = useMemo(() => {
+    const idx = minimizedWindows.findIndex((item) => String(item.login) === String(loginId));
+    return idx >= 0 ? idx : 0;
+  }, [minimizedWindows, loginId]);
+  const nonMinimizedWindowCount = useMemo(() => {
+    if (openAccountWindows.length === 0) return totalWindows;
+    return Math.max(1, openAccountWindows.filter((item) => !item.minimized).length);
+  }, [openAccountWindows, totalWindows]);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [positionsDeniedLogin, setPositionsDeniedLogin] = useState(null);
   const showPositions = canViewPositions && positionsDeniedLogin !== String(loginId);
@@ -658,6 +681,7 @@ const AccountDetailsModal = ({
   useEffect(() => {
     if (String(previousLoginIdRef.current ?? '') === String(loginId ?? '')) return;
     previousLoginIdRef.current = loginId;
+    hasUserMovedRef.current = false;
     setActiveTab(initialTab);
     setFocusedTicket(targetTicket);
     setFormData({});
@@ -727,7 +751,7 @@ const AccountDetailsModal = ({
   const initialHeight = Math.min(545, window.innerHeight - 40);
   const hasUserMovedRef = useRef(false);
 
-  const computeMultiScreenSafeBounds = useCallback((slotIdx = windowIndex, totalCount = totalWindows) => {
+  const computeMultiScreenSafeBounds = useCallback((slotIdx = windowIndex, totalCount = nonMinimizedWindowCount) => {
     const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 720;
     const safeSlot = Math.max(0, Number(slotIdx) || 0) % 4;
@@ -762,6 +786,24 @@ const AccountDetailsModal = ({
     const availWidth = Math.max(420, maxRight - availLeft);
     const availHeight = Math.max(280, maxBottom - availTop);
 
+    if (typeof document !== 'undefined') {
+      const bulkEl = document.querySelector('.bulk-ops-window');
+      const bulkRect = bulkEl?.getBoundingClientRect();
+      if (bulkRect && bulkRect.width > 120 && bulkRect.height > 120) {
+        const cascadeOffsetTop = 38 + safeSlot * 22;
+        const cascadeLeftOutset = 52;
+        const desiredHeight = Math.min(Math.max(Math.round(bulkRect.height + 84), 516), availHeight);
+        const rawTargetY = Math.max(availTop, Math.round(bulkRect.top + cascadeOffsetTop));
+        const targetY = Math.max(availTop, Math.min(rawTargetY, maxBottom - desiredHeight));
+        const width = Math.min(Math.max(Math.round(bulkRect.width + cascadeLeftOutset), 760), availWidth);
+        const maxCascadeHeight = Math.max(380, (vh - 12) - targetY);
+        const height = Math.min(desiredHeight, maxCascadeHeight);
+        const rightAlignedX = Math.round(bulkRect.right - width);
+        const x = Math.max(availLeft, Math.min(maxRight - width, rightAlignedX));
+        return { x, y: targetY, width, height };
+      }
+    }
+
     if (safeTotal === 1) {
       const width = Math.min(initialWidth, availWidth);
       const height = Math.min(initialHeight, availHeight);
@@ -787,32 +829,39 @@ const AccountDetailsModal = ({
     const x = col === 0 ? availLeft : Math.max(availLeft + 28, maxRight - width);
     const y = row === 0 ? availTop : Math.max(availTop + 28, maxBottom - height);
     return { x, y, width, height };
-  }, [initialWidth, initialHeight, windowIndex, totalWindows]);
+  }, [initialWidth, initialHeight, windowIndex, nonMinimizedWindowCount]);
 
   const [position, setPosition] = useState(() => {
-    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    const b = computeMultiScreenSafeBounds(windowIndex, nonMinimizedWindowCount);
     return { x: b.x, y: b.y };
   });
   const [size, setSize] = useState(() => {
-    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    const b = computeMultiScreenSafeBounds(windowIndex, nonMinimizedWindowCount);
     return { width: b.width, height: b.height };
   });
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(() => Boolean(storeWindowEntry?.minimized));
   const [dockZone, setDockZone] = useState(null);
   const [isDraggingWindow, setIsDraggingWindow] = useState(false);
   const [hoveredDockZone, setHoveredDockZone] = useState(null);
   const [dockRects, setDockRects] = useState(() => readPopupDockZones());
   const hoveredDockZoneRef = useRef(null);
   const [preMaxState, setPreMaxState] = useState(() => {
-    const b = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+    const b = computeMultiScreenSafeBounds(windowIndex, nonMinimizedWindowCount);
     return { x: b.x, y: b.y, w: b.width, h: b.height };
   });
 
   useEffect(() => {
-    if (isMaximized || dockZone) return undefined;
+    if (storeWindowEntry && typeof storeWindowEntry.minimized === 'boolean') {
+      setIsMinimized(storeWindowEntry.minimized);
+    }
+  }, [storeWindowEntry]);
+
+  useEffect(() => {
+    if (isMaximized || isMinimized || dockZone) return undefined;
     const rafId = window.requestAnimationFrame(() => {
       if (!hasUserMovedRef.current) {
-        const nextBounds = computeMultiScreenSafeBounds(windowIndex, totalWindows);
+        const nextBounds = computeMultiScreenSafeBounds(windowIndex, nonMinimizedWindowCount);
         setSize({ width: nextBounds.width, height: nextBounds.height });
         setPosition({ x: nextBounds.x, y: nextBounds.y });
         setPreMaxState({ x: nextBounds.x, y: nextBounds.y, w: nextBounds.width, h: nextBounds.height });
@@ -834,7 +883,7 @@ const AccountDetailsModal = ({
       });
     });
     return () => window.cancelAnimationFrame(rafId);
-  }, [multiScreenCount, isMaximized, dockZone, windowIndex, totalWindows, computeMultiScreenSafeBounds]);
+  }, [loginId, multiScreenCount, isMaximized, isMinimized, dockZone, windowIndex, nonMinimizedWindowCount, computeMultiScreenSafeBounds]);
 
   const applyDockZone = (targetZone, options = {}) => {
     const { toggleIfSame = true } = options;
@@ -865,6 +914,7 @@ const AccountDetailsModal = ({
   };
 
   const handleHeaderMouseDown = (e) => {
+    if (isMinimized) return;
     if (e.button !== undefined && e.button !== 0) return;
     if (e.target.closest('button') || e.target.closest('.account-details-window-controls')) return;
     e.preventDefault();
@@ -1003,14 +1053,43 @@ const AccountDetailsModal = ({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleMinimize = () => {
+    if (!isMaximized && !dockZone && !isMinimized) {
+      hasUserMovedRef.current = true;
+      setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
+    }
+    setIsMaximized(false);
+    setIsMinimized(true);
+    setAccountWindowMinimized(loginId, true);
+  };
+
+  const handleRestoreFromMinimize = () => {
+    const restoreW = preMaxState.w || initialWidth;
+    const restoreH = preMaxState.h || initialHeight;
+    const restoreX = preMaxState.w ? preMaxState.x : Math.max(0, (window.innerWidth - restoreW) / 2);
+    const restoreY = preMaxState.h ? preMaxState.y : Math.max(0, (window.innerHeight - restoreH) / 2);
+    hasUserMovedRef.current = true;
+    setIsMinimized(false);
+    setIsMaximized(false);
+    setAccountWindowMinimized(loginId, false);
+    setSize({ width: restoreW, height: restoreH });
+    setPosition(clampPopupPosition({ x: restoreX, y: restoreY }, { width: restoreW, height: restoreH }));
+  };
+
   const toggleMaximize = () => {
+    if (isMinimized) {
+      handleRestoreFromMinimize();
+      return;
+    }
     if (!isMaximized) {
       if (!dockZone) {
+        hasUserMovedRef.current = true;
         setPreMaxState({ x: position.x, y: position.y, w: size.width, h: size.height });
       }
       setDockZone(null);
       setIsMaximized(true);
     } else {
+      hasUserMovedRef.current = true;
       setIsMaximized(false);
       setPosition(clampPopupPosition({ x: preMaxState.x, y: preMaxState.y }, {
         width: preMaxState.w,
@@ -1812,11 +1891,11 @@ const AccountDetailsModal = ({
   const modalNode = (
     <>
     {dockOverlay}
-    <div className="account-details-backdrop" aria-hidden="true" />
+    {!isMinimized && <div className="account-details-backdrop" aria-hidden="true" />}
     <div
       ref={windowRef}
-      onMouseDownCapture={() => onFocusWindow?.()}
-      onFocusCapture={() => onFocusWindow?.()}
+      onMouseDownCapture={() => { if (!isMinimized) onFocusWindow?.(); }}
+      onFocusCapture={() => { if (!isMinimized) onFocusWindow?.(); }}
       onKeyDown={event => {
         if (pendingTradeClose || isDepositing || depositConfirmation || updateFeedback) return;
         if (event.key === 'Escape') {
@@ -1830,23 +1909,36 @@ const AccountDetailsModal = ({
         if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
         else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
       }}
-      style={{
-        position: 'fixed',
-        left: isMaximized ? 0 : position.x,
-        top: isMaximized ? 0 : position.y,
-        width: isMaximized ? '100vw' : size.width,
-        height: isMaximized ? '100vh' : size.height,
-        zIndex: 100000 + (Number(zOrder) || 1)
-      }}
-      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone ? ` is-docked is-docked--${dockZone}` : ''}${isActiveWindow ? ' is-active-window' : ''}`}
+      style={
+        isMinimized
+          ? {
+            position: 'fixed',
+            left: `${4 + minimizedSlotIndex * 164}px`,
+            bottom: '25px',
+            top: 'auto',
+            width: '160px',
+            height: '28px',
+            zIndex: 100000 + (Number(zOrder) || 1),
+          }
+          : {
+            position: 'fixed',
+            left: isMaximized ? 0 : position.x,
+            top: isMaximized ? 0 : position.y,
+            width: isMaximized ? '100vw' : size.width,
+            height: isMaximized ? '100vh' : size.height,
+            zIndex: 100000 + (Number(zOrder) || 1),
+          }
+      }
+      className={`account-details-window legacy-popup flex flex-col font-sans select-none overflow-hidden${dockZone && !isMinimized ? ` is-docked is-docked--${dockZone}` : ''}${isMinimized ? ' is-minimized' : ''}${isActiveWindow && !isMinimized ? ' is-active-window' : ''}`}
       data-maximized={isMaximized}
-      data-dock-zone={dockZone || 'floating'}
+      data-minimized={isMinimized}
+      data-dock-zone={isMinimized ? 'minimized' : (dockZone || 'floating')}
       data-account-window-login={loginId}
       role="dialog"
-      aria-modal="true"
+      aria-modal={!isMinimized}
       aria-label={`Account details for ${loginId}`}
     >
-      {!isMaximized && (
+      {!isMaximized && !isMinimized && (
         <>
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'top')} className="absolute left-0 right-0 top-0 h-1 cursor-ns-resize hover:bg-blue-500/50 z-10" />
           <div onMouseDown={(e) => handleResizeMouseDown(e, 'left')} className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-10 -ml-0.5" />
@@ -1859,55 +1951,97 @@ const AccountDetailsModal = ({
       {/* Title Bar */}
       <div
         onMouseDown={handleHeaderMouseDown}
+        onDoubleClick={isMinimized ? handleRestoreFromMinimize : toggleMaximize}
         className="account-details-titlebar flex items-center justify-between cursor-move flex-shrink-0"
       >
         <div className="flex items-center gap-2 min-w-0">
           <AccountTitleIcon group={groupValue} />
-          <span className="account-details-title truncate">{titleText}</span>
+          <span className="account-details-title truncate" title={titleText}>{titleText}</span>
         </div>
         <div className="account-details-window-controls ml-2 shrink-0">
-          <div className="account-details-dock-controls" role="group" aria-label="Dock account details window">
+          {!isMinimized && (
+            <>
+              <div className="account-details-dock-controls" role="group" aria-label="Dock account details window">
+                <button
+                  type="button"
+                  onClick={() => applyDockZone('left')}
+                  aria-pressed={dockZone === 'left'}
+                  aria-label="Dock account details left"
+                  title={dockZone === 'left' ? 'Undock from left' : 'Set to left'}
+                  className={dockZone === 'left' ? 'is-active' : ''}
+                  data-dock-action="left"
+                >
+                  <PanelLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDockZone('bottom')}
+                  aria-pressed={dockZone === 'bottom'}
+                  aria-label="Dock account details bottom"
+                  title={dockZone === 'bottom' ? 'Undock from bottom' : 'Set to bottom'}
+                  className={dockZone === 'bottom' ? 'is-active' : ''}
+                  data-dock-action="bottom"
+                >
+                  <PanelBottom size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDockZone('right')}
+                  aria-pressed={dockZone === 'right'}
+                  aria-label="Dock account details right"
+                  title={dockZone === 'right' ? 'Undock from right' : 'Set to right'}
+                  className={dockZone === 'right' ? 'is-active' : ''}
+                  data-dock-action="right"
+                >
+                  <PanelRight size={13} />
+                </button>
+              </div>
+              <span className="account-details-controls-sep" aria-hidden="true" />
+            </>
+          )}
+          {isMinimized ? (
             <button
               type="button"
-              onClick={() => applyDockZone('left')}
-              aria-pressed={dockZone === 'left'}
-              aria-label="Dock account details left"
-              title={dockZone === 'left' ? 'Undock from left' : 'Set to left'}
-              className={dockZone === 'left' ? 'is-active' : ''}
-              data-dock-action="left"
+              onClick={handleRestoreFromMinimize}
+              title="Restore"
+              aria-label="Restore account details"
             >
-              <PanelLeft size={13} />
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M4 2.5H9.5V8" stroke="currentColor" strokeWidth="1.1" />
+                <rect x="2.2" y="4.2" width="5.6" height="5.6" stroke="currentColor" strokeWidth="1.1" fill="none" />
+              </svg>
             </button>
+          ) : (
             <button
               type="button"
-              onClick={() => applyDockZone('bottom')}
-              aria-pressed={dockZone === 'bottom'}
-              aria-label="Dock account details bottom"
-              title={dockZone === 'bottom' ? 'Undock from bottom' : 'Set to bottom'}
-              className={dockZone === 'bottom' ? 'is-active' : ''}
-              data-dock-action="bottom"
+              onClick={handleMinimize}
+              title="Minimize"
+              aria-label="Minimize account details"
             >
-              <PanelBottom size={13} />
+              <Minus size={13} />
             </button>
-            <button
-              type="button"
-              onClick={() => applyDockZone('right')}
-              aria-pressed={dockZone === 'right'}
-              aria-label="Dock account details right"
-              title={dockZone === 'right' ? 'Undock from right' : 'Set to right'}
-              className={dockZone === 'right' ? 'is-active' : ''}
-              data-dock-action="right"
-            >
-              <PanelRight size={13} />
-            </button>
-          </div>
-          <span className="account-details-controls-sep" aria-hidden="true" />
-          <button type="button" onClick={onClose} aria-label="Minimize account details"><Minus size={13} /></button>
-          <button type="button" onClick={toggleMaximize} aria-label={isMaximized ? 'Restore account details' : 'Maximize account details'}><Square size={12} /></button>
-          <button type="button" onClick={onClose} aria-label="Close account details" className="is-close"><X size={15} /></button>
+          )}
+          <button
+            type="button"
+            onClick={isMinimized ? handleRestoreFromMinimize : toggleMaximize}
+            title={isMaximized && !isMinimized ? 'Restore' : 'Maximize'}
+            aria-label={isMaximized && !isMinimized ? 'Restore account details' : 'Maximize account details'}
+          >
+            <Square size={isMinimized ? 11 : 12} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close account details"
+            className="is-close"
+          >
+            <X size={isMinimized ? 13 : 15} />
+          </button>
         </div>
       </div>
 
+      {!isMinimized && (
         <>
           {/* Tab Bar */}
           <div className="account-details-tabs flex items-center flex-shrink-0" role="tablist" aria-label="Account detail sections" onKeyDown={event => {
@@ -2791,8 +2925,25 @@ const AccountDetailsModal = ({
                 Help
               </button>
             </div>
+            {!isMaximized && (
+              <span
+                className="account-details-resize-grip"
+                onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
+                aria-hidden="true"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <circle cx="8" cy="8" r="1" fill="currentColor" />
+                  <circle cx="5" cy="8" r="1" fill="currentColor" />
+                  <circle cx="8" cy="5" r="1" fill="currentColor" />
+                  <circle cx="2" cy="8" r="1" fill="currentColor" />
+                  <circle cx="5" cy="5" r="1" fill="currentColor" />
+                  <circle cx="8" cy="2" r="1" fill="currentColor" />
+                </svg>
+              </span>
+            )}
           </div>
         </>
+      )}
 
       {ctxMenu.isOpen && (
         <TradeContextMenu
