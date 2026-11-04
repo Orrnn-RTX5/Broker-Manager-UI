@@ -158,3 +158,89 @@ test('disconnected and mutated accounts fall back to REST while token fence reje
   state.ingest({ type: 'state_changed', data: { entity: 'accounts', account_login: 1001 } });
   assert.equal(state.account(1001), undefined);
 });
+test('connection invalidation re-accepts equal-token snapshot while mutation invalidation requires strictly newer token', () => {
+  const state = new LiveTradingState();
+  const metrics = (token, equity) => ({ type: 'metrics_update', publication_token: token, data: { login: 1001, equity } });
+
+  // Initial ingestion
+  state.ingest(metrics('18000000000000000010', 100));
+  assert.equal(state.account(1001)?.equity, 100);
+
+  // 1. Connection invalidation + equal token -> visible again with new row values
+  state.invalidateMetrics([1001], 'connection');
+  assert.equal(state.account(1001), undefined);
+  state.ingest(metrics('18000000000000000010', 105));
+  assert.equal(state.account(1001)?.equity, 105);
+
+  // 2. Mutation invalidation + equal token -> still undefined
+  state.ingest({ type: 'state_changed', data: { entity: 'accounts', account_login: 1001 } });
+  assert.equal(state.account(1001), undefined);
+  state.ingest(metrics('18000000000000000010', 105));
+  assert.equal(state.account(1001), undefined);
+
+  // 3. Mutation invalidation + newer token -> visible
+  state.ingest(metrics('18000000000000000011', 110));
+  assert.equal(state.account(1001)?.equity, 110);
+
+  // 4. Older token after either kind of invalidation -> dropped
+  state.invalidateMetrics([1001], 'connection');
+  state.ingest(metrics('18000000000000000009', 95));
+  assert.equal(state.account(1001), undefined);
+
+  state.ingest(metrics('18000000000000000011', 110));
+  state.ingest({ type: 'state_changed', data: { entity: 'accounts', account_login: 1001 } });
+  state.ingest(metrics('18000000000000000009', 95));
+  assert.equal(state.account(1001), undefined);
+
+  // Later connection invalidation does NOT relax a mutation invalidation
+  state.invalidateMetrics([1001], 'connection');
+  state.ingest(metrics('18000000000000000011', 110));
+  assert.equal(state.account(1001), undefined);
+
+  // 5. Equal token on an available row -> no notify and row is unchanged
+  state.ingest(metrics('18000000000000000012', 120));
+  assert.equal(state.account(1001)?.equity, 120);
+
+  let notifications = 0;
+  const initialRevision = state.snapshot();
+  state.subscribe(() => { notifications += 1; });
+  state.ingest(metrics('18000000000000000012', 125));
+  assert.equal(notifications, 0, 'equal token on available row must not notify');
+  assert.equal(state.snapshot(), initialRevision, 'equal token on available row must not bump revision');
+  assert.equal(state.account(1001)?.equity, 120, 'equal token on available row must not change stored row');
+});
+test('mutation after connection drop upgrades cause to mutation without notifying and blocks same-token re-accept', () => {
+  const state = new LiveTradingState();
+  const metrics = (token, equity) => ({ type: 'metrics_update', publication_token: token, data: { login: 1001, equity } });
+
+  state.ingest(metrics('18000000000000000010', 100));
+  assert.equal(state.account(1001)?.equity, 100);
+
+  // 1. Drop connection -> cause = 'connection', available = false
+  state.invalidateMetrics([1001], 'connection');
+  assert.equal(state.account(1001), undefined);
+
+  // 2. Mutation while already unavailable -> upgrades cause to 'mutation' WITHOUT notifying
+  let notifications = 0;
+  const revBefore = state.snapshot();
+  state.subscribe(() => { notifications += 1; });
+  state.ingest({ type: 'state_changed', data: { entity: 'accounts', account_login: 1001 } });
+  assert.equal(notifications, 0, 'cause-only upgrade on unavailable row must not notify');
+  assert.equal(state.snapshot(), revBefore, 'cause-only upgrade must not bump revision');
+  assert.equal(state.account(1001), undefined);
+
+  // 3. Same token arriving after mutation must stay undefined
+  state.ingest(metrics('18000000000000000010', 105));
+  assert.equal(state.account(1001), undefined, 'same token after mutation must stay undefined');
+
+  // 4. Newer token restores row
+  state.ingest(metrics('18000000000000000011', 110));
+  assert.equal(state.account(1001)?.equity, 110);
+
+  // 5. Mutation -> drop: connection drop must NOT downgrade cause
+  state.ingest({ type: 'state_changed', data: { entity: 'accounts', account_login: 1001 } });
+  assert.equal(state.account(1001), undefined);
+  state.invalidateMetrics([1001], 'connection');
+  state.ingest(metrics('18000000000000000011', 115));
+  assert.equal(state.account(1001), undefined, 'connection drop must not downgrade mutation cause');
+});

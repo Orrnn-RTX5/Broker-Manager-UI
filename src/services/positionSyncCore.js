@@ -183,6 +183,7 @@ export class PositionSyncClient {
           // Ignore close errors on stalled sockets.
         }
       }
+      this.emit({ type: 'connection', reason: 'disconnected' });
       if (!this.reconnectTimer) {
         this.connect();
       }
@@ -251,18 +252,17 @@ export class PositionSyncClient {
         if (!isCurrentConnection()) return;
         this.connectingSince = 0;
         this.socket = null;
-        if (openedAt > 0) {
-          if (Date.now() - openedAt >= 5_000) {
-            this.reconnectAttempt = 0;
-          }
-          this.emit({ type: 'connection', reason: 'disconnected' });
+        if (openedAt > 0 && Date.now() - openedAt >= 5_000) {
+          this.reconnectAttempt = 0;
         }
+        this.emit({ type: 'connection', reason: 'disconnected' });
         this.scheduleReconnect();
       };
     } catch {
       if (!this.running || connectionId !== this.connectionId) return;
       this.connectingSince = 0;
       this.socket = null;
+      this.emit({ type: 'connection', reason: 'disconnected' });
       this.scheduleReconnect();
     }
   }

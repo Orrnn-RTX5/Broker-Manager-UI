@@ -78,6 +78,8 @@ import {
   TRADE_MUTATION_DENIED_MESSAGE,
 } from './accountTradePermissions';
 import {
+  deriveAccountFinanceSummary,
+  resolveAccountPopupFieldValue,
   DEFAULT_MANAGER_TRANSACTION_TYPE,
   DIRECTION_IN,
   DIRECTION_OUT,
@@ -458,10 +460,6 @@ const ACCOUNT_FIELD_KEYS = {
   LastIP: ['LastIP', 'lastIP', 'last_ip'],
   AccountMode: ['AccountMode', 'accountMode', 'mode'],
   Balance: ['Balance', 'balance'],
-  Equity: ['Equity', 'equity'],
-  Margin: ['Margin', 'margin'],
-  MarginFree: ['MarginFree', 'marginFree'],
-  MarginLevel: ['MarginLevel', 'marginLevel'],
   Credit: ['Credit', 'credit'],
   Profit: ['Profit', 'profit'],
   Swap: ['Swap', 'swap'],
@@ -2162,19 +2160,23 @@ const AccountDetailsModal = ({
     : (storeWindowEntry?.account && typeof storeWindowEntry.account === 'object' ? storeWindowEntry.account : {});
   const fieldSources = [...getAccountDetailSources(accountData), ...getAccountDetailSources(rowData)];
   const getFieldValue = (field, fallback = '') => {
-    const metricField = { Balance: 'balance', Credit: 'credit', Equity: 'equity', Margin: 'used_margin', MarginFree: 'free_margin', FreeMargin: 'free_margin', MarginLevel: 'margin_level', Profit: 'floating_pnl' }[field];
-    if (metricField && liveMetrics?.[metricField] != null) return liveMetrics[metricField];
-    // A saved empty string is intentional; do not revive an older row value.
     if (
       accountData?.__patchedFields
       && Object.prototype.hasOwnProperty.call(accountData.__patchedFields, field)
       && accountData?.[field] !== undefined
       && accountData[field] !== null
+      && !['Equity', 'Margin', 'MarginFree', 'FreeMargin', 'MarginLevel'].includes(field)
     ) {
       return accountData[field];
     }
-    if (hasDisplayValue(accountData?.[field])) return accountData[field];
-    return pickFirstValue(fieldSources, ACCOUNT_FIELD_KEYS[field] || [field], fallback);
+    return resolveAccountPopupFieldValue({
+      field,
+      fallback,
+      liveMetrics,
+      accountData,
+      fieldSources,
+      fieldKeys: ACCOUNT_FIELD_KEYS,
+    });
   };
 
   const getValue = (field, fallback = '') => {
@@ -2477,31 +2479,38 @@ const AccountDetailsModal = ({
   // Balance tab summary: exact decimal text, a dash when unknown (never 0.00, never a computed fallback).
   const summaryBalanceText = formatManagerMoneyText(getFieldValue('Balance', null));
   const summaryCreditText = formatManagerMoneyText(getFieldValue('Credit', null));
-  const summaryEquityText = formatManagerMoneyText(getFieldValue('Equity', null));
-  const summaryFreeMarginText = formatManagerMoneyText(getFieldValue('MarginFree', null));
+  const financeSummary = deriveAccountFinanceSummary({
+    liveMetrics,
+    balance: getFieldValue('Balance', null),
+    credit: getFieldValue('Credit', null),
+    accountData,
+    rowData,
+    fieldSources,
+  });
+  const summaryEquityText = financeSummary.equityText;
+  const summaryFreeMarginText = financeSummary.freeMarginText;
   const hasUnavailableOperations = getManagerTransactionOptions().some((option) => !option.enabled);
 
   const rawBalanceVal = getFieldValue('Balance', 0);
   const rawCreditVal = getFieldValue('Credit', 0);
-  const rawEquityVal = getFieldValue('Equity', rawBalanceVal);
-  const rawMarginVal = getFieldValue('Margin', 0);
-  const rawFreeMarginVal = getFieldValue('MarginFree', Number(rawEquityVal || 0) - Number(rawMarginVal || 0));
+  const rawEquityVal = financeSummary.rawEquity;
+  const rawMarginVal = financeSummary.rawMargin;
+  const rawFreeMarginVal = financeSummary.rawFreeMargin;
+  const rawMarginLevel = financeSummary.rawMarginLevel;
   const balanceVal = formatNumber(rawBalanceVal);
-  const rawMarginLevel = getFieldValue('MarginLevel', null);
-  const hasMarginLevel = rawMarginLevel !== null && rawMarginLevel !== undefined && rawMarginLevel !== '' && Number.isFinite(Number(rawMarginLevel));
-  const computedMarginLevel = hasMarginLevel
-    ? Number(rawMarginLevel)
-    : (Number(rawMarginVal) > 0 ? (Number(rawEquityVal) / Number(rawMarginVal)) * 100 : null);
+  const equityVal = financeSummary.equityText;
+  const marginVal = financeSummary.marginText;
+  const freeMarginVal = financeSummary.freeMarginText;
+  const marginLevelVal = financeSummary.marginLevelText;
   const profitVal = getFieldValue('Profit', 0);
+  const swapVal = formatNumber(getFieldValue('Swap', 0));
   const balanceSpaceVal = formatSpaceNumber(rawBalanceVal);
   const creditSpaceVal = formatSpaceNumber(rawCreditVal);
-  const equitySpaceVal = formatSpaceNumber(rawEquityVal);
-  const marginSpaceVal = formatSpaceNumber(rawMarginVal);
-  const freeMarginSpaceVal = formatSpaceNumber(rawFreeMarginVal);
+  const equitySpaceVal = financeSummary.equitySpaceText;
+  const marginSpaceVal = financeSummary.marginSpaceText;
+  const freeMarginSpaceVal = financeSummary.freeMarginSpaceText;
   const profitSpaceVal = formatSpaceNumber(profitVal);
-  const marginLevelSpaceVal = computedMarginLevel !== null && Number.isFinite(computedMarginLevel)
-    ? formatSpaceNumber(computedMarginLevel)
-    : '0.00';
+  const marginLevelSpaceVal = financeSummary.marginLevelSpaceText;
 
   const formatDate = (value) => {
     if (!hasDisplayValue(value)) return '';
@@ -2881,7 +2890,7 @@ const AccountDetailsModal = ({
                         <div className="account-overview-kpi-card">
                           <span className="account-overview-kpi-label">Equity</span>
                           <span className="account-overview-kpi-val tabular">
-                            {equitySpaceVal} <small>{currencyValue}</small>
+                            {equitySpaceVal !== '—' ? <>{equitySpaceVal} <small>{currencyValue}</small></> : '—'}
                           </span>
                         </div>
                         <div className="account-overview-kpi-card">
@@ -2900,7 +2909,7 @@ const AccountDetailsModal = ({
                         </div>
                         <div className="account-overview-kpi-card">
                           <span className="account-overview-kpi-label">Margin Level</span>
-                          <span className="account-overview-kpi-val tabular">{marginLevelSpaceVal} %</span>
+                          <span className="account-overview-kpi-val tabular">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
                         </div>
                       </div>
                     </section>
@@ -3145,7 +3154,7 @@ const AccountDetailsModal = ({
                                   </span>
                                   <span className="account-overview-metric-item is-last">
                                     <span className="account-overview-metric-label">Margin Level:</span>{' '}
-                                    <span className="account-overview-metric-value">{marginLevelSpaceVal} %</span>
+                                    <span className="account-overview-metric-value">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
                                   </span>
                                 </div>
                                 <div className="is-right tabular account-overview-summary-swap">
@@ -3336,7 +3345,7 @@ const AccountDetailsModal = ({
                                 </span>
                                 <span className="account-overview-metric-item is-last">
                                   <span className="account-overview-metric-label">Margin Level:</span>{' '}
-                                  <span className="account-overview-metric-value">{marginLevelSpaceVal} %</span>
+                                  <span className="account-overview-metric-value">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</span>
                                 </span>
                               </div>
                             </div>
@@ -3514,7 +3523,7 @@ const AccountDetailsModal = ({
                     </div>
                     <div className="account-settings-field is-readonly">
                       <span>Equity</span>
-                      <strong className="tabular">{equitySpaceVal} {currencyValue}</strong>
+                      <strong className="tabular">{equitySpaceVal !== '—' ? `${equitySpaceVal} ${currencyValue}` : '—'}</strong>
                     </div>
                     <div className="account-settings-field is-readonly">
                       <span>Floating P / L</span>
@@ -3532,7 +3541,7 @@ const AccountDetailsModal = ({
                     </div>
                     <div className="account-settings-field is-readonly">
                       <span>Margin level</span>
-                      <strong className="tabular">{marginLevelSpaceVal} %</strong>
+                      <strong className="tabular">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</strong>
                     </div>
                     <div className="account-settings-field is-readonly">
                       <span>Open / Pending</span>
@@ -3556,7 +3565,7 @@ const AccountDetailsModal = ({
                 <section className="account-settings-card account-risk-card">
                   <div className="account-settings-card-title">
                     <h3>Margin call &amp; liquidation levels</h3>
-                    <span className="account-card-meta-tag tabular">Current Margin Level: {marginLevelSpaceVal}%</span>
+                    <span className="account-card-meta-tag tabular">Current Margin Level: {marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal}%` : '—'}</span>
                   </div>
                   <div className="account-risk-grid">
                     <label className="account-settings-field">
@@ -3646,15 +3655,15 @@ const AccountDetailsModal = ({
                     </div>
                     <dl className="account-dossier-list">
                       <div><dt>Current Balance</dt><dd className="tabular">{balanceSpaceVal} {currencyValue}</dd></div>
-                      <div><dt>Current Equity</dt><dd className="tabular">{equitySpaceVal} {currencyValue}</dd></div>
+                      <div><dt>Current Equity</dt><dd className="tabular">{equitySpaceVal !== '—' ? `${equitySpaceVal} ${currencyValue}` : '—'}</dd></div>
                       <div>
                         <dt>Floating P / L</dt>
                         <dd className={`tabular ${Number(profitVal) > 0 ? 'is-positive' : Number(profitVal) < 0 ? 'is-negative' : ''}`}>
                           {Number(profitVal) > 0 ? `+${profitSpaceVal}` : profitSpaceVal} {currencyValue}
                         </dd>
                       </div>
-                      <div><dt>Free Margin</dt><dd className="tabular">{freeMarginSpaceVal} {currencyValue}</dd></div>
-                      <div><dt>Margin Level</dt><dd className="tabular">{marginLevelSpaceVal} %</dd></div>
+                      <div><dt>Free Margin</dt><dd className="tabular">{freeMarginSpaceVal !== '—' ? `${freeMarginSpaceVal} ${currencyValue}` : '—'}</dd></div>
+                      <div><dt>Margin Level</dt><dd className="tabular">{marginLevelSpaceVal !== '—' ? `${marginLevelSpaceVal} %` : '—'}</dd></div>
                       <div><dt>Registered</dt><dd className="tabular">{formatOverviewDate(registrationValue) || '—'}</dd></div>
                       <div><dt>Last Access</dt><dd className="tabular">{formatOverviewDateTime(lastAccessValue) || '—'}</dd></div>
                       <div><dt>Last IP Address</dt><dd className="tabular">{lastIpValue || '—'}</dd></div>
@@ -3779,11 +3788,11 @@ const AccountDetailsModal = ({
                   </div>
                   <div className="account-transaction-metric-tile">
                     <span>Current equity</span>
-                    <strong className="tabular">{equitySpaceVal} {currencyValue}</strong>
+                    <strong className="tabular">{equitySpaceVal !== '—' ? `${equitySpaceVal} ${currencyValue}` : '—'}</strong>
                   </div>
                   <div className="account-transaction-metric-tile">
                     <span>Free margin</span>
-                    <strong className="tabular">{freeMarginSpaceVal} {currencyValue}</strong>
+                    <strong className="tabular">{freeMarginSpaceVal !== '—' ? `${freeMarginSpaceVal} ${currencyValue}` : '—'}</strong>
                   </div>
                 </div>
 

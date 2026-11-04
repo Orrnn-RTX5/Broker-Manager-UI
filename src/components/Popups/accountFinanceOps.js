@@ -470,6 +470,194 @@ export function formatManagerMoneyIfKnown(value) {
   return text === MANAGER_UNKNOWN_MONEY_TEXT ? null : text;
 }
 
+// Live-only account figures: Equity, Margin, Free margin, and Margin level depend on live floating
+// P/L and live engine margin, so they must come exclusively from the verified live metrics row
+// (`equity`, `used_margin`, `free_margin`, `margin_level`) and never fall back to stored account/row
+// fields or client-side arithmetic.
+export const LIVE_ONLY_ACCOUNT_METRIC_FIELDS = Object.freeze({
+  Equity: 'equity',
+  Margin: 'used_margin',
+  MarginFree: 'free_margin',
+  FreeMargin: 'free_margin',
+  MarginLevel: 'margin_level',
+});
+
+const POPUP_METRIC_FIELD_MAP = Object.freeze({
+  Balance: 'balance',
+  Credit: 'credit',
+  Equity: 'equity',
+  Margin: 'used_margin',
+  MarginFree: 'free_margin',
+  FreeMargin: 'free_margin',
+  MarginLevel: 'margin_level',
+  Profit: 'floating_pnl',
+});
+
+const hasPopupDisplayValue = (value) => (
+  value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')
+);
+
+const pickPopupSourceValue = (sources, keys, fallback = '') => {
+  if (!Array.isArray(sources)) return fallback;
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (hasPopupDisplayValue(value)) return value;
+    }
+  }
+  return fallback;
+};
+
+/**
+ * Read an authoritative live metric from a live account metrics row or state entry.
+ *
+ * Returns null when no live row is present, when `available === false` (fenced,
+ * invalidated, or calc-gap accounts), or when the key is missing or not finite
+ * money. Never reads stored account/row fields and never computes a fallback.
+ *
+ * @param {object|null|undefined} liveMetrics Live metrics row from useLiveAccountMetrics / liveTradingState.
+ * @param {string} metricKey Metric property name on the live row (e.g. 'equity', 'free_margin').
+ * @returns {string|number|null} Raw metric value when available and valid, or null.
+ */
+export function getLiveAccountMetricValue(liveMetrics, metricKey) {
+  if (!liveMetrics || typeof liveMetrics !== 'object' || liveMetrics.available === false) {
+    return null;
+  }
+  const row = liveMetrics.row && typeof liveMetrics.row === 'object'
+    ? liveMetrics.row
+    : liveMetrics;
+  if (row.available === false) return null;
+  if (typeof metricKey !== 'string' || !Object.prototype.hasOwnProperty.call(row, metricKey)) {
+    return null;
+  }
+  const value = row[metricKey];
+  if (formatManagerMoneyText(value) === MANAGER_UNKNOWN_MONEY_TEXT) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Resolve an account popup field value.
+ *
+ * `Equity`, `Margin`, `MarginFree`, `FreeMargin`, and `MarginLevel` are read ONLY from
+ * `liveMetrics` (`equity`, `used_margin`, `free_margin`, `margin_level`) and return
+ * `fallback` when the live row is absent, `available: false`, or missing those keys —
+ * never falling back to `accountData` or `fieldSources`.
+ * Static ledger / account fields (`Balance`, `Credit`, etc.) keep their `liveMetrics` ->
+ * `accountData` -> `fieldSources` resolution order, validated as exact finite decimals.
+ *
+ * @param {{ field: string, fallback?: *, liveMetrics?: object|null, accountData?: object|null,
+ *   fieldSources?: Array<object>, fieldKeys?: Record<string, string[]> }} options
+ * @returns {*} Resolved field value or fallback.
+ */
+export function resolveAccountPopupFieldValue({
+  field,
+  fallback = '',
+  liveMetrics = null,
+  accountData = null,
+  fieldSources = [],
+  fieldKeys = {},
+} = {}) {
+  if (Object.prototype.hasOwnProperty.call(LIVE_ONLY_ACCOUNT_METRIC_FIELDS, field)) {
+    const liveOnlyValue = getLiveAccountMetricValue(liveMetrics, LIVE_ONLY_ACCOUNT_METRIC_FIELDS[field]);
+    return liveOnlyValue !== null ? liveOnlyValue : fallback;
+  }
+  const metricField = POPUP_METRIC_FIELD_MAP[field];
+  const liveVal = metricField ? getLiveAccountMetricValue(liveMetrics, metricField) : null;
+  if (liveVal !== null) {
+    return liveVal;
+  }
+  if (
+    hasPopupDisplayValue(accountData?.[field])
+    && (!metricField || formatManagerMoneyText(accountData[field]) !== MANAGER_UNKNOWN_MONEY_TEXT)
+  ) {
+    return accountData[field];
+  }
+  return pickPopupSourceValue(fieldSources, fieldKeys[field] || [field], fallback);
+}
+
+/**
+ * Derive the account popup's finance summary figures (Balance tab summary line and
+ * Overview / Exposure Equity, Margin, Free Margin & Margin Level display texts).
+ *
+ * Equity, Margin, Free margin, and Margin level come ONLY from `liveMetrics`
+ * (`equity`, `used_margin`, `free_margin`, `margin_level`).
+ * When `liveMetrics` is absent, has `available: false`, or omits a key, that figure
+ * is `'—'` (`MANAGER_UNKNOWN_MONEY_TEXT`) and its raw value is `null`, even when
+ * `accountData` or `rowData` contains `Equity`, `Margin`, `MarginFree`, or `MarginLevel`.
+ * Balance and Credit keep their current `liveMetrics` -> `accountData` -> `rowData` source.
+ *
+ * @param {{ liveMetrics?: object|null, balance?: string|number|null, credit?: string|number|null,
+ *   accountData?: object|null, rowData?: object|null, fieldSources?: Array<object> }} [options]
+ * @returns {{ balanceText: string, creditText: string, equityText: string, marginText: string,
+ *   freeMarginText: string, marginLevelText: string, rawEquity: string|number|null,
+ *   rawMargin: string|number|null, rawFreeMargin: string|number|null,
+ *   rawMarginLevel: string|number|null, equitySpaceText: string, marginSpaceText: string,
+ *   freeMarginSpaceText: string, marginLevelSpaceText: string }}
+ */
+export function deriveAccountFinanceSummary({
+  liveMetrics = null,
+  balance = undefined,
+  credit = undefined,
+  accountData = null,
+  rowData = null,
+  fieldSources = [],
+} = {}) {
+  const sources = Array.isArray(fieldSources) && fieldSources.length > 0
+    ? fieldSources
+    : [accountData, rowData].filter((item) => item && typeof item === 'object');
+  const defaultFieldKeys = {
+    Balance: ['Balance', 'balance'],
+    Credit: ['Credit', 'credit'],
+  };
+  const resolvedBalance = balance !== undefined
+    ? balance
+    : resolveAccountPopupFieldValue({
+      field: 'Balance',
+      fallback: null,
+      liveMetrics,
+      accountData,
+      fieldSources: sources,
+      fieldKeys: defaultFieldKeys,
+    });
+  const resolvedCredit = credit !== undefined
+    ? credit
+    : resolveAccountPopupFieldValue({
+      field: 'Credit',
+      fallback: null,
+      liveMetrics,
+      accountData,
+      fieldSources: sources,
+      fieldKeys: defaultFieldKeys,
+    });
+  const rawEquity = getLiveAccountMetricValue(liveMetrics, 'equity');
+  const rawMargin = getLiveAccountMetricValue(liveMetrics, 'used_margin');
+  const rawFreeMargin = getLiveAccountMetricValue(liveMetrics, 'free_margin');
+  const rawMarginLevel = getLiveAccountMetricValue(liveMetrics, 'margin_level');
+  const equityText = formatManagerMoneyText(rawEquity);
+  const marginText = formatManagerMoneyText(rawMargin);
+  const freeMarginText = formatManagerMoneyText(rawFreeMargin);
+  const marginLevelText = formatManagerMoneyText(rawMarginLevel);
+  return {
+    balanceText: formatManagerMoneyText(resolvedBalance),
+    creditText: formatManagerMoneyText(resolvedCredit),
+    equityText,
+    marginText,
+    freeMarginText,
+    marginLevelText,
+    rawEquity,
+    rawMargin,
+    rawFreeMargin,
+    rawMarginLevel,
+    equitySpaceText: equityText.replace(/,/g, ' '),
+    marginSpaceText: marginText.replace(/,/g, ' '),
+    freeMarginSpaceText: freeMarginText.replace(/,/g, ' '),
+    marginLevelSpaceText: marginLevelText.replace(/,/g, ' '),
+  };
+}
+
 const resolveRouteKey = (type, direction) => {
   const key = resolveManagerTransactionType(type);
   const definition = OPERATIONS[key];

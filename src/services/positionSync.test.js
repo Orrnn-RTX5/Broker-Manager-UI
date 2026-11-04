@@ -183,7 +183,10 @@ test('a replaced connection cannot overwrite current positions or schedule anoth
   oldSocket.onclose();
 
   assert.deepEqual(snapshots, [currentRows]);
-  assert.equal(events.length, 1);
+  assert.deepEqual(events, [
+    { type: 'connection', reason: 'disconnected' },
+    { type: 'position', payload: { data: currentRows }, snapshot: true },
+  ]);
   assert.equal(reconnects.length, 1);
   assert.equal(client.socket, sockets[1]);
   client.stop();
@@ -305,5 +308,108 @@ test('open sockets emit disconnected on close and stalled connections self-recov
   assert.equal(sockets[1].readyState, 3);
   assert.equal(sockets.length, 3);
   assert.equal(client.socket, sockets[2]);
+  client.stop();
+});
+
+test('F1: PositionSyncClient emits disconnected on active onclose and connect catch, but never on stale onclose or intentional stop()', async () => {
+  const sockets = [];
+  const reconnects = [];
+  const events = [];
+  let shouldRejectTicket = false;
+
+  class ClosingFakeSocket extends FakeSocket {
+    close() {
+      this.readyState = 3;
+      if (typeof this.onclose === 'function') {
+        this.onclose();
+      }
+    }
+  }
+
+  const client = new PositionSyncClient({
+    requestTicket: async () => {
+      if (shouldRejectTicket) throw new Error('ticket endpoint down');
+      return { ticket: 't-' + (sockets.length + 1) };
+    },
+    createSocket: (url) => {
+      const socket = new ClosingFakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    buildUrl: (ticket) => 'ws://example.test/OnAccountMetrics?ticket=' + ticket,
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+    setTimeoutFn: (callback) => { reconnects.push(callback); return reconnects.length; },
+    clearTimeoutFn: () => {},
+  });
+  client.subscribe((event) => events.push(event));
+
+  // 1. Active socket onclose -> emits { type: 'connection', reason: 'disconnected' }
+  client.start();
+  await Promise.resolve();
+  const firstSocket = sockets[0];
+  firstSocket.readyState = 1;
+  firstSocket.onopen();
+  events.length = 0;
+  firstSocket.onclose();
+  assert.deepEqual(events, [{ type: 'connection', reason: 'disconnected' }]);
+
+  // 2. Stale socket onclose -> no emit
+  events.length = 0;
+  firstSocket.onclose();
+  assert.deepEqual(events, []);
+
+  // 3. connect() catch (ticket failure) -> emits { type: 'connection', reason: 'disconnected' }
+  shouldRejectTicket = true;
+  reconnects[0]();
+  await Promise.resolve();
+  assert.deepEqual(events, [{ type: 'connection', reason: 'disconnected' }]);
+
+  // 4. Reconnect succeeds, then intentional stop() -> no spurious disconnected emit (even when socket.close fires onclose)
+  events.length = 0;
+  shouldRejectTicket = false;
+  reconnects[1]();
+  await Promise.resolve();
+  assert.equal(sockets.length, 2);
+  sockets[1].readyState = 1;
+  sockets[1].onopen();
+  events.length = 0;
+  client.stop();
+  assert.deepEqual(events, []);
+});
+
+test('F1b: recoverStaleConnection emits disconnected when replacing a stalled or closed socket', async () => {
+  const sockets = [];
+  const events = [];
+  let poll;
+  let ticketCount = 0;
+  const client = new PositionSyncClient({
+    requestTicket: async () => ({ ticket: 't-' + (++ticketCount) }),
+    createSocket: (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    buildUrl: (ticket) => 'ws://example.test/OnAccountMetrics?ticket=' + ticket,
+    setIntervalFn: (callback) => { poll = callback; return 1; },
+    clearIntervalFn: () => {},
+    setTimeoutFn: () => 1,
+    clearTimeoutFn: () => {},
+    connectTimeoutMs: 5,
+  });
+  client.subscribe((event) => events.push(event));
+
+  client.start();
+  await Promise.resolve();
+  sockets[0].readyState = 1;
+  sockets[0].onopen();
+  events.length = 0;
+
+  // Socket goes closed silently (readyState = 3) without onclose firing
+  sockets[0].readyState = 3;
+  poll();
+  await Promise.resolve();
+
+  assert.equal(events.some(e => e.type === 'connection' && e.reason === 'disconnected'), true, 'must emit disconnected on stale recovery');
   client.stop();
 });

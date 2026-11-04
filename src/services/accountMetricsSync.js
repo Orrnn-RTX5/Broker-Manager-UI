@@ -36,4 +36,15 @@ export function watchAccountMetrics(login) {
   watchers.set(key, (watchers.get(key) || 0) + 1); reconcile();
   return () => { const count = (watchers.get(key) || 1) - 1; if (count) watchers.set(key, count); else watchers.delete(key); reconcile(); };
 }
-export function stopAccountMetrics() { clearTimeout(timer); clients.forEach((client) => client.stop()); clients.clear(); watchers.clear(); }
+export function stopAccountMetrics() {
+  clearTimeout(timer);
+  for (const [key, client] of clients) {
+    liveTradingState.invalidateMetrics(key.split(','));
+    client.stop();
+  }
+  if (watchers.size > 0) {
+    liveTradingState.invalidateMetrics([...watchers.keys()]);
+  }
+  clients.clear();
+  watchers.clear();
+}

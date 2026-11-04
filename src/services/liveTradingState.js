@@ -25,11 +25,18 @@ export class LiveTradingState {
     });
   }
   reset() { this.positions.clear(); this.metrics.clear(); this.notify(); }
-  invalidateMetrics(logins) {
+  invalidateMetrics(logins, cause = 'connection') {
     let changed = false;
     for (const login of logins) {
       const current = this.metrics.get(String(login));
-      if (current && current.available !== false) { current.available = false; changed = true; }
+      if (!current) continue;
+      if (current.available !== false) {
+        current.available = false;
+        current.cause = cause;
+        changed = true;
+      } else if (cause === 'mutation' && current.cause !== 'mutation') {
+        current.cause = 'mutation';
+      }
     }
     if (changed) this.notify();
   }
@@ -40,11 +47,15 @@ export class LiveTradingState {
       const token = String(payload.publication_token || '');
       if (!row?.login || !/^\d{20}$/.test(token) || BigInt(token) === 0n) return;
       const key = String(row.login), prior = this.metrics.get(key);
-      if (prior && BigInt(token) <= BigInt(prior.token)) return;
+      if (prior) {
+        const cmp = BigInt(token) - BigInt(prior.token);
+        if (cmp < 0n) return;
+        if (cmp === 0n && (prior.available !== false || prior.cause === 'mutation')) return;
+      }
       this.metrics.set(key, { token, row, available: true }); this.notify(); return;
     }
     if (payload?.type === 'state_changed' && payload.data?.entity === 'accounts') {
-      this.invalidateMetrics([payload.data.account_login ?? payload.data.login]);
+      this.invalidateMetrics([payload.data.account_login ?? payload.data.login], 'mutation');
     }
     if (payload?.type === 'state_changed' && !(payload.data?.entity === 'positions' && payload.data?.operation === 'DELETE')) return;
     const records = Array.isArray(payload?.data) ? payload.data : [payload?.data || payload?.position || payload];

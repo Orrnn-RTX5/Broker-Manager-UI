@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { LiveTradingState } from '../../services/liveTradingState.js';
 import { PERMISSIONS, decidePermission } from '../../utils/permissions.js';
 import {
   normalizeSkipMarginReason,
@@ -33,6 +35,11 @@ import {
   KEY_HOLD_PENDING_TEXT,
   KEY_REJECTED_PENDING_TEXT,
   isKeyHoldCode,
+  LIVE_ONLY_ACCOUNT_METRIC_FIELDS,
+  MANAGER_UNKNOWN_MONEY_TEXT,
+  deriveAccountFinanceSummary,
+  getLiveAccountMetricValue,
+  resolveAccountPopupFieldValue,
 } from './accountFinanceOps.js';
 
 // Fake logins only. Never real owner or QA-pool accounts in test data.
@@ -648,4 +655,399 @@ it('R8 (a): the expired text says a same-key retry is safe, and key-hold codes a
   assert.equal(EXPIRED_PENDING_TEXT, 'Status unknown: retry with the same key (recommended) or check history');
   assert.equal(describeManagerTransactionPending('balance', 'expired', null).text, EXPIRED_PENDING_TEXT);
   assert.equal(IDEMPOTENCY_CODE_CLASSES.keyHold.includes('IDEMPOTENCY_KEY_REUSED'), true);
+});
+
+describe('account popup live Equity and Free margin (owner bug 11-04)', () => {
+  it('live row present -> equity and free margin come from liveMetrics', () => {
+    const state = new LiveTradingState();
+    state.ingest({
+      type: 'metrics_update',
+      publication_token: '18000000000000000010',
+      data: {
+        login: LOGIN,
+        balance: 899900,
+        credit: 50,
+        equity: 950030.02,
+        used_margin: 506631.72,
+        free_margin: 443398.3,
+      },
+    });
+    const liveMetrics = state.account(LOGIN);
+    const staleRow = {
+      Balance: 899900,
+      Credit: 50,
+      Equity: 899900,
+      Margin: 506631.72,
+      MarginFree: 393268.28,
+    };
+
+    const summary = deriveAccountFinanceSummary({
+      liveMetrics,
+      accountData: staleRow,
+      rowData: staleRow,
+    });
+    assert.equal(summary.balanceText, '899,900.00');
+    assert.equal(summary.creditText, '50.00');
+    assert.equal(summary.equityText, '950,030.02');
+    assert.equal(summary.freeMarginText, '443,398.30');
+    assert.equal(summary.equitySpaceText, '950 030.02');
+    assert.equal(summary.freeMarginSpaceText, '443 398.30');
+    assert.equal(summary.rawEquity, 950030.02);
+    assert.equal(summary.rawFreeMargin, 443398.3);
+    assert.equal(
+      resolveAccountPopupFieldValue({ field: 'Equity', fallback: null, liveMetrics, accountData: staleRow, fieldSources: [staleRow] }),
+      950030.02,
+    );
+    assert.equal(
+      resolveAccountPopupFieldValue({ field: 'MarginFree', fallback: null, liveMetrics, accountData: staleRow, fieldSources: [staleRow] }),
+      443398.3,
+    );
+  });
+
+  it('live row absent -> "—" for both even when the stored row or accountData has Equity and MarginFree', () => {
+    const state = new LiveTradingState();
+    const liveMetrics = state.account(LOGIN);
+    assert.equal(liveMetrics, undefined);
+
+    for (const stored of [
+      {
+        Balance: 899900,
+        Credit: 50,
+        Equity: 899900,
+        equity: 899900,
+        Margin: 506631.72,
+        MarginFree: 393268.28,
+        marginFree: 393268.28,
+        FreeMargin: 393268.28,
+        free_margin: 393268.28,
+      },
+      {
+        Balance: 3160.49,
+        Credit: 500,
+        Equity: 3160.49,
+        equity: 3160.49,
+        Margin: 231.49,
+        MarginFree: 2929,
+        marginFree: 2929,
+        FreeMargin: 2929,
+      },
+    ]) {
+      const summary = deriveAccountFinanceSummary({
+        liveMetrics,
+        accountData: stored,
+        rowData: stored,
+        fieldSources: [stored],
+      });
+      assert.equal(summary.balanceText, formatManagerMoneyText(stored.Balance));
+      assert.equal(summary.creditText, formatManagerMoneyText(stored.Credit));
+      assert.equal(summary.equityText, MANAGER_UNKNOWN_MONEY_TEXT);
+      assert.equal(summary.freeMarginText, MANAGER_UNKNOWN_MONEY_TEXT);
+      assert.equal(summary.equitySpaceText, MANAGER_UNKNOWN_MONEY_TEXT);
+      assert.equal(summary.freeMarginSpaceText, MANAGER_UNKNOWN_MONEY_TEXT);
+      assert.equal(summary.rawEquity, null);
+      assert.equal(summary.rawFreeMargin, null);
+      for (const field of Object.keys(LIVE_ONLY_ACCOUNT_METRIC_FIELDS)) {
+        assert.equal(
+          resolveAccountPopupFieldValue({
+            field,
+            fallback: null,
+            liveMetrics,
+            accountData: stored,
+            fieldSources: [stored],
+            fieldKeys: { [field]: [field, field.toLowerCase(), 'free_margin', 'marginFree'] },
+          }),
+          null,
+          `${field} must not fall back to stored accountData or rowData`,
+        );
+      }
+    }
+  });
+
+  it('available: false -> "—" for both Equity and Free margin', () => {
+    const state = new LiveTradingState();
+    state.ingest({
+      type: 'metrics_update',
+      publication_token: '18000000000000000010',
+      data: {
+        login: LOGIN,
+        balance: 3160.49,
+        credit: 500,
+        equity: 3661.15,
+        used_margin: 7.73,
+        free_margin: 3653.42,
+      },
+    });
+    state.invalidateMetrics([LOGIN]);
+    const invalidatedEntry = state.metrics.get(String(LOGIN));
+    assert.equal(invalidatedEntry.available, false);
+    assert.equal(state.account(LOGIN), undefined);
+
+    const storedRow = {
+      Balance: 3160.49,
+      Credit: 500,
+      Equity: 3160.49,
+      Margin: 231.49,
+      MarginFree: 2929,
+    };
+
+    for (const unavailableCandidate of [
+      state.account(LOGIN),
+      invalidatedEntry,
+      { available: false, equity: 3661.15, free_margin: 3653.42 },
+      { available: true, row: { available: false, equity: 3661.15, free_margin: 3653.42 } },
+    ]) {
+      assert.equal(getLiveAccountMetricValue(unavailableCandidate, 'equity'), null);
+      assert.equal(getLiveAccountMetricValue(unavailableCandidate, 'free_margin'), null);
+      const summary = deriveAccountFinanceSummary({
+        liveMetrics: unavailableCandidate,
+        accountData: storedRow,
+        rowData: storedRow,
+      });
+      assert.equal(summary.equityText, '—');
+      assert.equal(summary.freeMarginText, '—');
+      assert.equal(summary.equitySpaceText, '—');
+      assert.equal(summary.freeMarginSpaceText, '—');
+    }
+  });
+
+  it('no Balance - Margin fallback anywhere when live keys are missing or in AccountDetailsModal source', () => {
+    const partialLive = {
+      login: LOGIN,
+      balance: 899900,
+      credit: 50,
+      used_margin: 506631.72,
+    };
+    const storedRow = {
+      Balance: 899900,
+      Credit: 50,
+      Equity: 899900,
+      Margin: 506631.72,
+      MarginFree: 393268.28,
+    };
+    const summary = deriveAccountFinanceSummary({
+      liveMetrics: partialLive,
+      accountData: storedRow,
+      rowData: storedRow,
+    });
+    assert.equal(summary.equityText, '—');
+    assert.equal(summary.freeMarginText, '—');
+    assert.notEqual(summary.freeMarginText, '393,268.28');
+    assert.notEqual(summary.equityText, '899,900.00');
+
+    const modalSource = readFileSync(new URL('./AccountDetailsModal.jsx', import.meta.url), 'utf8');
+    assert.doesNotMatch(modalSource, /getFieldValue\(['"]Equity['"],\s*rawBalanceVal\)/);
+    assert.doesNotMatch(modalSource, /Number\(rawEquityVal\s*\|\|\s*0\)\s*-\s*Number\(rawMarginVal\s*\|\|\s*0\)/);
+    assert.doesNotMatch(modalSource, /rawBalanceVal\s*-\s*rawMarginVal/);
+    assert.match(modalSource, /const summaryEquityText = financeSummary\.equityText;/);
+    assert.match(modalSource, /const summaryFreeMarginText = financeSummary\.freeMarginText;/);
+    assert.match(modalSource, /const equityVal = financeSummary\.equityText;/);
+    assert.match(modalSource, /const freeMarginVal = financeSummary\.freeMarginText;/);
+    assert.match(modalSource, /const equitySpaceVal = financeSummary\.equitySpaceText;/);
+    assert.match(modalSource, /const freeMarginSpaceVal = financeSummary\.freeMarginSpaceText;/);
+    assert.match(modalSource, /const marginVal = financeSummary\.marginText;/);
+    assert.match(modalSource, /const marginSpaceVal = financeSummary\.marginSpaceText;/);
+    assert.match(modalSource, /const marginLevelVal = financeSummary\.marginLevelText;/);
+    assert.match(modalSource, /const marginLevelSpaceVal = financeSummary\.marginLevelSpaceText;/);
+    assert.doesNotMatch(modalSource, /computedMarginLevel/);
+    assert.doesNotMatch(modalSource, /rawEquityVal\)\s*\/\s*Number\(rawMarginVal/);
+  });
+
+  it('r2 (c): stored Margin and MarginLevel present + no live (or available: false) -> "—" (never stored values, never "0.00")', () => {
+    const storedRow = {
+      Balance: 899900,
+      Credit: 50,
+      Equity: 899900,
+      Margin: 506631.72,
+      margin: 506631.72,
+      used_margin: 506631.72,
+      MarginFree: 393268.28,
+      MarginLevel: 177.62,
+      marginLevel: 177.62,
+      margin_level: 177.62,
+    };
+
+    for (const candidate of [
+      undefined,
+      null,
+      { available: false, used_margin: 506631.72, margin_level: 187.52 },
+      { available: true, row: { available: false, used_margin: 506631.72, margin_level: 187.52 } },
+    ]) {
+      const summary = deriveAccountFinanceSummary({
+        liveMetrics: candidate,
+        accountData: storedRow,
+        rowData: storedRow,
+        fieldSources: [storedRow],
+      });
+      assert.equal(summary.rawMargin, null);
+      assert.equal(summary.rawMarginLevel, null);
+      assert.equal(summary.marginText, '—');
+      assert.equal(summary.marginSpaceText, '—');
+      assert.equal(summary.marginLevelText, '—');
+      assert.equal(summary.marginLevelSpaceText, '—');
+      assert.notEqual(summary.marginLevelSpaceText, '0.00');
+      assert.equal(
+        resolveAccountPopupFieldValue({
+          field: 'Margin',
+          fallback: null,
+          liveMetrics: candidate,
+          accountData: storedRow,
+          fieldSources: [storedRow],
+          fieldKeys: { Margin: ['Margin', 'margin', 'used_margin'] },
+        }),
+        null,
+      );
+      assert.equal(
+        resolveAccountPopupFieldValue({
+          field: 'MarginLevel',
+          fallback: null,
+          liveMetrics: candidate,
+          accountData: storedRow,
+          fieldSources: [storedRow],
+          fieldKeys: { MarginLevel: ['MarginLevel', 'marginLevel', 'margin_level'] },
+        }),
+        null,
+      );
+    }
+  });
+
+  it('r2 (a) & (b): live equity + no live margin_level -> "—" (never computed from live or stored Margin, never "0.00")', () => {
+    const storedRow = {
+      Balance: 899900,
+      Credit: 50,
+      Margin: 506631.72,
+      MarginLevel: null,
+    };
+
+    // Subcase 1a: live equity + live used_margin, but no live margin_level
+    const liveWithMarginOnly = {
+      login: LOGIN,
+      balance: 899900,
+      credit: 50,
+      equity: 950030.02,
+      used_margin: 506631.72,
+      free_margin: 443398.3,
+    };
+    const summary1a = deriveAccountFinanceSummary({
+      liveMetrics: liveWithMarginOnly,
+      accountData: storedRow,
+      rowData: storedRow,
+    });
+    assert.equal(summary1a.equityText, '950,030.02');
+    assert.equal(summary1a.marginText, '506,631.72');
+    assert.equal(summary1a.marginSpaceText, '506 631.72');
+    assert.equal(summary1a.rawMarginLevel, null);
+    assert.equal(summary1a.marginLevelText, '—');
+    assert.equal(summary1a.marginLevelSpaceText, '—');
+    assert.notEqual(summary1a.marginLevelSpaceText, '187.52');
+    assert.notEqual(summary1a.marginLevelSpaceText, '0.00');
+
+    // Subcase 1b: live equity only + stored Margin > 0 (hybrid live equity / stored Margin must never happen)
+    const liveEquityOnly = {
+      login: LOGIN,
+      balance: 899900,
+      credit: 50,
+      equity: 950030.02,
+      free_margin: 443398.3,
+    };
+    const summary1b = deriveAccountFinanceSummary({
+      liveMetrics: liveEquityOnly,
+      accountData: storedRow,
+      rowData: storedRow,
+    });
+    assert.equal(summary1b.rawMargin, null);
+    assert.equal(summary1b.marginText, '—');
+    assert.equal(summary1b.marginSpaceText, '—');
+    assert.equal(summary1b.rawMarginLevel, null);
+    assert.equal(summary1b.marginLevelText, '—');
+    assert.equal(summary1b.marginLevelSpaceText, '—');
+  });
+
+  it('r2: live used_margin and live margin_level present -> shown in both comma and space formats', () => {
+    const state = new LiveTradingState();
+    state.ingest({
+      type: 'metrics_update',
+      publication_token: '18000000000000000020',
+      data: {
+        login: LOGIN,
+        balance: 899900,
+        credit: 50,
+        equity: 950030.02,
+        used_margin: 506631.72,
+        free_margin: 443398.3,
+        margin_level: 1875.19,
+      },
+    });
+    const liveMetrics = state.account(LOGIN);
+    const staleRow = {
+      Balance: 899900,
+      Credit: 50,
+      Margin: 231.49,
+      MarginLevel: 120.0,
+    };
+    const summary = deriveAccountFinanceSummary({
+      liveMetrics,
+      accountData: staleRow,
+      rowData: staleRow,
+    });
+    assert.equal(summary.rawMargin, 506631.72);
+    assert.equal(summary.marginText, '506,631.72');
+    assert.equal(summary.marginSpaceText, '506 631.72');
+    assert.equal(summary.rawMarginLevel, 1875.19);
+    assert.equal(summary.marginLevelText, '1,875.19');
+    assert.equal(summary.marginLevelSpaceText, '1 875.19');
+    assert.equal(
+      resolveAccountPopupFieldValue({ field: 'Margin', fallback: null, liveMetrics, accountData: staleRow, fieldSources: [staleRow] }),
+      506631.72,
+    );
+    assert.equal(
+      resolveAccountPopupFieldValue({ field: 'MarginLevel', fallback: null, liveMetrics, accountData: staleRow, fieldSources: [staleRow] }),
+      1875.19,
+    );
+  });
+
+  it('r3 (F3): resolveAccountPopupFieldValue and deriveAccountFinanceSummary reject non-decimal live/accountData Balance and Credit ("", "   ", true, false, []) and fall back to accountData/rowData', () => {
+    const validStored = {
+      Balance: 899900,
+      Credit: 50,
+    };
+    for (const bogus of ['', '   ', true, false, [], {}]) {
+      const liveWithBogusBalanceCredit = {
+        login: LOGIN,
+        balance: bogus,
+        credit: bogus,
+        equity: 950030.02,
+        used_margin: 506631.72,
+        free_margin: 443398.3,
+        margin_level: 187.52,
+      };
+      assert.equal(
+        resolveAccountPopupFieldValue({
+          field: 'Balance',
+          fallback: null,
+          liveMetrics: liveWithBogusBalanceCredit,
+          accountData: validStored,
+          fieldSources: [validStored],
+        }),
+        899900,
+      );
+      assert.equal(
+        resolveAccountPopupFieldValue({
+          field: 'Credit',
+          fallback: null,
+          liveMetrics: liveWithBogusBalanceCredit,
+          accountData: validStored,
+          fieldSources: [validStored],
+        }),
+        50,
+      );
+      const summary = deriveAccountFinanceSummary({
+        liveMetrics: liveWithBogusBalanceCredit,
+        accountData: validStored,
+        rowData: validStored,
+      });
+      assert.equal(summary.balanceText, '899,900.00');
+      assert.equal(summary.creditText, '50.00');
+      assert.equal(summary.equityText, '950,030.02');
+    }
+  });
 });
