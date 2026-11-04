@@ -50,12 +50,13 @@ export default defineConfig(({ mode, command }) => {
   const wsHost = env.VITE_WS_HOST || apiHost
   const feedWsUrl = env.VITE_FEED_WS_URL || env.FEED_WS_URL || ''
   const wsFeedPath = env.VITE_WS_FEED_PATH || '/ws/feed'
+  const managerWsProxyOrigin = env.VITE_MANAGER_WS_PROXY_ORIGIN || env.VITE_WS_PROXY_ORIGIN || env.VITE_FEED_WS_PROXY_ORIGIN || 'http://localhost:5173'
   const proxySecure = env.VITE_PROXY_INSECURE !== 'true'
-  const agentOptions = { keepAlive: true, keepAliveMsecs: 30000, maxSockets: 6, maxFreeSockets: 6, timeout: 60000, scheduling: 'lifo' }
+  const agentOptions = { keepAlive: true, keepAliveMsecs: 30000, maxSockets: 32, maxFreeSockets: 12, timeout: 60000, scheduling: 'lifo' }
   const httpAgent = new http.Agent(agentOptions)
   const httpsAgent = new https.Agent({ ...agentOptions, rejectUnauthorized: proxySecure })
   const getProxyAgent = (target = '') => (String(target).startsWith('https:') ? httpsAgent : httpAgent)
-  const attachTlsHandshakeWatchdog = (proxyReq, handshakeTimeoutMs = 2200) => {
+  const attachTlsHandshakeWatchdog = (proxyReq, handshakeTimeoutMs = 8000) => {
     const onSocket = (socket) => {
       if (!socket?.encrypted) {
         proxyReq._tlsEstablished = true
@@ -105,7 +106,7 @@ export default defineConfig(({ mode, command }) => {
     ? path.replace(/^\/manager/i, '') || '/'
     : path
 
-  const configureSafeProxy = (proxy, { isWs = false, stripOrigin = false, customOrigin = '' } = {}) => {
+  const configureSafeProxy = (proxy, { isWs = false, stripOrigin = false, customOrigin = '', wsOrigin = '' } = {}) => {
     const web = proxy.web.bind(proxy)
     proxy.web = (req, res, options, ...args) => {
       const isBodylessRead = ['GET', 'HEAD', 'OPTIONS'].includes(req.method)
@@ -131,21 +132,9 @@ export default defineConfig(({ mode, command }) => {
     }
     if (isWs) {
       const ws = proxy.ws.bind(proxy)
-      proxy.ws = (req, socket, head, options, ...args) => {
-        let retries = 0
-        const maxRetries = 3
-        const onError = (error, ...details) => {
-          if (retries < maxRetries && ignoredWsProxyErrorCodes.has(error?.code)
-            && socket && !socket.destroyed && !socket.writableEnded && !socket._wsUpgraded) {
-            retries += 1
-            return ws(req, socket, head, options, onError)
-          }
-          const callback = args.find((arg) => typeof arg === 'function')
-          if (callback) callback(error, ...details)
-          else proxy.emit('error', error, ...details)
-        }
-        return ws(req, socket, head, options, onError)
-      }
+      proxy.ws = (req, socket, head, options, ...args) => (
+        ws(req, socket, head, { ...options, agent: false }, ...args)
+      )
     }
     proxy.on('error', (_err, _req, res) => {
       if (res && typeof res.writeHead === 'function' && !res.headersSent && !res.writableEnded) {
@@ -185,12 +174,19 @@ export default defineConfig(({ mode, command }) => {
         proxyReq.on('error', () => {})
         socket.on('error', () => {})
         req.socket?.on?.('error', () => {})
-        attachTlsHandshakeWatchdog(proxyReq)
+        attachTlsHandshakeWatchdog(proxyReq, 10000)
         proxyReq.once('upgrade', () => {
           socket._wsUpgraded = true
         })
         if (stripOrigin) {
           proxyReq.removeHeader('origin')
+        } else if (wsOrigin || customOrigin) {
+          try {
+            const origin = new URL(wsOrigin || customOrigin).origin
+            proxyReq.setHeader('origin', origin)
+          } catch {
+            // Keep the incoming origin if wsOrigin/customOrigin is not a valid URL.
+          }
         }
       })
     }
@@ -286,7 +282,6 @@ export default defineConfig(({ mode, command }) => {
           target: discoveryHost,
           changeOrigin: true,
           secure: proxySecure,
-          agent: getProxyAgent(discoveryHost),
           ws: true,
           configure: (proxy) => configureSafeProxy(proxy, { isWs: true, customOrigin: discoveryHost }),
         },
@@ -318,46 +313,15 @@ export default defineConfig(({ mode, command }) => {
           secure: proxySecure,
           agent: getProxyAgent(apiHost),
           ws: true,
-          // Manager session sockets validate the browser Origin. Preserve it;
-          // the optional bridge origin stripping does not apply to this route.
           rewrite: rewriteLegacyManagerPath,
-          configure: (proxy) => configureSafeProxy(proxy, { isWs: true }),
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true, wsOrigin: managerWsProxyOrigin }),
         },
         '^/On(?:Tick|PositionUpdate|AccountMetrics)(?:\\?|$)': {
           target: apiHost,
           changeOrigin: true,
           secure: proxySecure,
-          agent: getProxyAgent(apiHost),
           ws: true,
-          configure: (proxy) => configureSafeProxy(proxy, { isWs: true }),
-        },
-        '^/OnPositionUpdate(?:\\?|$)': {
-          target: apiHost,
-          changeOrigin: true,
-          secure: proxySecure,
-          ws: true,
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-              proxyReq.on('error', () => {})
-              socket.on('error', () => {})
-              req.socket?.on?.('error', () => {})
-            })
-          },
-        },
-        '^/OnAccountMetrics(?:\\?|$)': {
-          target: apiHost,
-          changeOrigin: true,
-          secure: proxySecure,
-          ws: true,
-          configure: (proxy) => {
-            proxy.on('error', () => {})
-            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-              proxyReq.on('error', () => {})
-              socket.on('error', () => {})
-              req.socket?.on?.('error', () => {})
-            })
-          },
+          configure: (proxy) => configureSafeProxy(proxy, { isWs: true, wsOrigin: managerWsProxyOrigin }),
         },
         '^/Manager(?:/|$)': {
           target: apiHost,
@@ -380,7 +344,6 @@ export default defineConfig(({ mode, command }) => {
           target: wsProxyTarget,
           changeOrigin: true,
           secure: proxySecure,
-          agent: getProxyAgent(wsProxyTarget),
           ws: true,
           rewriteWsOrigin: !stripFeedProxyOrigin,
           configure: (proxy) => configureSafeProxy(proxy, { isWs: true, stripOrigin: stripFeedProxyOrigin }),

@@ -925,7 +925,7 @@ function NavigatorPanel() {
           {node('Symbol Management', Settings2, '/symbol-management')}
         </TreeNode>
 
-        <TreeNode label="Groups" icon={Users2} count={loadGroups ? (loading ? '…' : groups.length) : null} path="/groups" activePath={location.search ? currentWorkspacePath : location.pathname} onClickNode={go('/groups')} onExpandedChange={(open) => open && setLoadGroups(true)}>
+        <TreeNode label="Groups" icon={Users2} count={loadGroups ? (loading ? '…' : groupTree.length) : null} path="/groups" activePath={location.search ? currentWorkspacePath : location.pathname} onClickNode={go('/groups')} onExpandedChange={(open) => open && setLoadGroups(true)}>
           {groupTree.map((node) => renderGroupTreeNode(node))}
           <TreeNode label="New Group" icon={Plus} onClickNode={() => { if (canManageGroups) openGroupScreen(); else setGroupPermissionDenied(true); }} />
         </TreeNode>

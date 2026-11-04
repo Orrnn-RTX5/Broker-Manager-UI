@@ -9,6 +9,7 @@ import {
 import { AlertTriangle, ArrowUpRight, RotateCw } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { DonutChart } from '../../components/ui/donut-chart';
+import { useDonutChartAnimation } from '../../hooks/useDonutChartAnimation';
 import DateRangePicker from '../../components/Popups/DateRangePicker';
 import FilterDropdown from '../../components/FilterDropdown';
 import useOwnerConsoleAutoCollapse from '../../hooks/useOwnerConsoleAutoCollapse';
@@ -101,11 +102,12 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
       color: GROUP_COLORS[index % GROUP_COLORS.length],
     }));
   }, [groupSlices]);
+  const donutAnimation = useDonutChartAnimation(donutData, report.total);
   const activeGroupSegment = useMemo(() => {
     if (!hoveredGroup) return null;
     const key = typeof hoveredGroup === 'object' ? hoveredGroup?.label : hoveredGroup;
-    return donutData.find((s) => s.label === key) || null;
-  }, [hoveredGroup, donutData]);
+    return donutAnimation.segments.find((s) => s.label === key) || null;
+  }, [hoveredGroup, donutAnimation.segments]);
   const loading = accountQuery.isLoading && accounts.length === 0;
   const unavailable = accountQuery.isError && accounts.length === 0;
   const empty = !loading && !unavailable && report.total === 0;
@@ -236,31 +238,33 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                         <div className="trading-analytics-group-chart">
                           <DonutChart
                             data={donutData}
+                            totalValue={report.total}
                             size={180}
                             strokeWidth={22}
-                            animationDuration={0}
-                            animationDelayPerSegment={0}
+                            animationState={donutAnimation}
                             highlightOnHover
                             onSegmentHover={setHoveredGroup}
                             centerContent={
                               <AnimatePresence mode="wait">
                                 <Motion.div
                                   key={activeGroupSegment ? activeGroupSegment.label : 'total'}
-                                  initial={{ opacity: 0, scale: 0.92 }}
+                                  initial={donutAnimation.reducedMotion ? false : { opacity: 0, scale: 0.92 }}
                                   animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.92 }}
-                                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                                  exit={donutAnimation.reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.92 }}
+                                  transition={{ duration: donutAnimation.reducedMotion ? 0 : 0.15, ease: 'easeOut' }}
                                   className="flex flex-col items-center justify-center text-center px-1 pointer-events-none select-none"
                                 >
                                   <span className="text-[10px] text-[var(--text-3)] font-medium truncate max-w-[80px] leading-tight">
                                     {activeGroupSegment ? activeGroupSegment.label : 'accounts'}
                                   </span>
-                                  <strong className="text-base font-bold text-[var(--text)] leading-tight my-0.5">
-                                    {activeGroupSegment ? countFormatter.format(activeGroupSegment.value) : compactFormatter.format(report.total)}
+                                  <strong className="text-base font-bold text-[var(--text)] leading-tight my-0.5 tabular">
+                                    {activeGroupSegment
+                                      ? countFormatter.format(activeGroupSegment.animatedValue)
+                                      : compactFormatter.format(donutAnimation.animatedTotal)}
                                   </strong>
                                   {activeGroupSegment && (
-                                    <span className="text-[10px] font-semibold text-[var(--accent)] leading-tight">
-                                      {percentage(activeGroupSegment.value, report.total)}
+                                    <span className="text-[10px] font-semibold text-[var(--accent)] leading-tight tabular">
+                                      {activeGroupSegment.animatedPercentLabel || percentage(activeGroupSegment.value, report.total)}
                                     </span>
                                   )}
                                 </Motion.div>
@@ -269,22 +273,27 @@ export default function TradingAccountsDashboard({ title = 'Trading Accounts' } 
                           />
                         </div>
                         <div className="trading-analytics-group-breakdown">
-                          {donutData.map((segment) => {
+                          {donutAnimation.segments.map((segment) => {
                             const isHovered = activeGroupSegment?.label === segment.label;
                             return (
                               <div
                                 key={segment.label}
                                 onMouseEnter={() => setHoveredGroup(segment)}
                                 onMouseLeave={() => setHoveredGroup(null)}
-                                className={`trading-analytics-group-row ${isHovered ? 'is-active' : ''}`}
+                                className={`trading-analytics-group-row ${isHovered ? 'is-active' : ''} ${donutAnimation.isStatic ? 'is-static' : 'is-animating'}`}
+                                style={
+                                  donutAnimation.isStatic
+                                    ? undefined
+                                    : { opacity: Math.max(0.35, segment.sliceProgress) }
+                                }
                               >
                                 <div className="trading-analytics-group-row-info">
                                   <span className="trading-analytics-group-dot" style={{ backgroundColor: segment.color }} />
                                   <span className="trading-analytics-group-name" title={segment.label}>{segment.label}</span>
                                 </div>
                                 <div className="trading-analytics-group-row-stats">
-                                  <span className="trading-analytics-group-count">{countFormatter.format(segment.value)}</span>
-                                  <span className="trading-analytics-group-pct">{percentage(segment.value, report.total)}</span>
+                                  <span className="trading-analytics-group-count tabular">{countFormatter.format(segment.animatedValue)}</span>
+                                  <span className="trading-analytics-group-pct tabular">{segment.animatedPercentLabel}</span>
                                 </div>
                               </div>
                             );

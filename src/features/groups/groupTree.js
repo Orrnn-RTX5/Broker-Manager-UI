@@ -76,6 +76,18 @@ export const listGroupsUnder = (groups, path = '') => groups.filter((group) => {
 
 export const countGroupsUnder = (groups, path = '') => listGroupsUnder(groups, path).length;
 
+/**
+ * Leaf groups (subgroups inside folders + standalone groups), excluding parent
+ * container names that act as folder branches when subgroups exist beneath them.
+ */
+export const listLeafGroups = (groups) => {
+  const all = Array.isArray(groups) ? groups : [];
+  return all.filter((group) => {
+    const name = nameOf(group);
+    return Boolean(name) && !all.some((other) => isBelowPath(nameOf(other), name));
+  });
+};
+
 /** Row node for one server group shown with its full name (the "All Groups" view). */
 export const groupRowNode = (group) => {
   const name = nameOf(group);

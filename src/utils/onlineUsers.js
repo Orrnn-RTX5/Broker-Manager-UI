@@ -53,8 +53,13 @@ export const buildOnlineUserMetrics = (rows = []) => {
   };
 };
 
+const isManagerSession = (row = {}) => (
+  String(row.deviceType ?? row.DeviceType ?? row.type ?? row.Type ?? '').trim().toLowerCase() === 'manager'
+  || row.isAdmin === true
+);
+
 // Online-user rows also list manager sessions (deviceType "manager"); they are not trading
 // accounts, and asking for their account metrics makes the whole ticket batch fail (403).
 export const liveAccountScope = (rows = []) => [...new Set(rows
-  .filter((row) => row.login && row.deviceType !== 'manager' && ('equity' in row || 'balance' in row))
+  .filter((row) => row?.login && !isManagerSession(row) && ('equity' in row || 'balance' in row))
   .map((row) => String(row.login)))].sort().join(',');

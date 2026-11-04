@@ -2870,14 +2870,39 @@ html[lang="hi"] .cc-metric-card[data-placeholder="true"]::after { content: "เค…เ
 .trading-analytics-group-layout { display:flex; width:100%; height:100%; align-items:center; justify-content:center; gap:16px; padding:4px 10px; }
 .trading-analytics-group-chart { display:flex; flex-shrink:0; align-items:center; justify-content:center; }
 .trading-analytics-group-breakdown { display:flex; flex-direction:column; flex:1; min-width:0; gap:3px; max-height:195px; overflow-y:auto; padding-right:4px; }
-.trading-analytics-group-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 8px; border-radius:4px; transition:background-color 0.15s ease; cursor:pointer; }
+.trading-analytics-group-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 8px; border-radius:4px; transition:background-color 0.15s ease, opacity 0.32s ease-out; cursor:pointer; }
+.trading-analytics-group-row.is-static { opacity:1; }
 .trading-analytics-group-row:hover, .trading-analytics-group-row.is-active { background:var(--surface-2); }
 .trading-analytics-group-row-info { display:flex; align-items:center; gap:6px; min-width:0; }
 .trading-analytics-group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 .trading-analytics-group-name { font-size: 11px; color:var(--text); font-weight: 400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.trading-analytics-group-row-stats { display:flex; align-items:center; gap:8px; flex-shrink:0; font-size: 11px; }
-.trading-analytics-group-count { font-weight: 400; color:var(--text); }
-.trading-analytics-group-pct { color:var(--text-3); min-width:42px; text-align:right; }
+.trading-analytics-group-row-stats { display:flex; align-items:center; gap:8px; flex-shrink:0; font-size: 11px; font-variant-numeric:tabular-nums; }
+.trading-analytics-group-count { font-weight: 400; color:var(--text); font-variant-numeric:tabular-nums; }
+.trading-analytics-group-pct { color:var(--text-3); min-width:42px; text-align:right; font-variant-numeric:tabular-nums; }
+@keyframes donut-chart-rotate-reveal {
+  0% { opacity:0.28; transform:rotate(-18deg) scale(0.96); }
+  100% { opacity:1; transform:rotate(0deg) scale(1); }
+}
+.donut-chart-rotor { transform-box:view-box; }
+.donut-chart-rotor.is-entering { will-change:transform, opacity; }
+.donut-chart-rotor.is-updating { will-change:transform; }
+.donut-chart-rotor.is-static { animation:none; transform:rotate(0deg) scale(1); opacity:1; will-change:auto; }
+.donut-chart-center { transition:opacity 0.36s ease-out; }
+.donut-chart-center.is-static { opacity:1; }
+@media (prefers-reduced-motion: reduce) {
+  .donut-chart-rotor,
+  .donut-chart-rotor.is-entering,
+  .donut-chart-rotor.is-updating,
+  .donut-chart-segment,
+  .donut-chart-center,
+  .trading-analytics-group-row {
+    animation:none !important;
+    transition:none !important;
+    transform:none !important;
+    opacity:1 !important;
+    will-change:auto !important;
+  }
+}
 .trading-analytics-pie-wrap { position:relative; width:100%; height:100%; min-height:220px; overflow:visible; }
 .trading-analytics-pie-total { position:absolute; inset:50% auto auto 50%; display:flex; width:72px; height:72px; align-items:center; justify-content:center; flex-direction:column; transform:translate(-50%,-50%); pointer-events:none; }
 .trading-analytics-pie-total strong { color:var(--text); font-size: 11px; font-weight: 400; }

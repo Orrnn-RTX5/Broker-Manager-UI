@@ -13,8 +13,8 @@ import PushNotificationModal from './Popups/PushNotificationModal';
 import SidebarContextMenu from './menus/SidebarContextMenu';
 import { fetchManagerApi } from '../services/managerFetch';
 import { deleteManagerAccount } from '../services/managerAccountApi';
-import { peekAccountDetailsManyPage, preloadAccountPositions, invalidateRealtimeCaches } from '../services/api';
-import { prefetchAccountDetails, prefetchAccountSummary, seedAccountDetails } from '../services/accountDetails';
+import { normalizeTradingAccountRow, peekAccountDetailsManyPage, preloadAccountPositions, invalidateRealtimeCaches } from '../services/api';
+import { peekAccountDetails, prefetchAccountDetails, prefetchAccountSummary, seedAccountDetails } from '../services/accountDetails';
 import {
   fetchSidebarAccountDetails,
   fetchAllSidebarAccounts,
@@ -217,22 +217,80 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
 
   const accounts = useMemo(() => {
     const detailsByLogin = new Map(balanceDetails.map((account) => [String(account.login), account]));
+    const cachedByLogin = new Map();
+    const registerRows = (rows) => {
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const rowLogin = String(row?.login ?? row?.Login ?? '').trim();
+        if (rowLogin && !cachedByLogin.has(rowLogin)) {
+          cachedByLogin.set(rowLogin, normalizeTradingAccountRow(row));
+        }
+      }
+    };
+    registerRows(cachedTradingAccounts?.rows);
+    for (const [, pageData] of queryClient.getQueriesData({ queryKey: ['trading-accounts'] })) {
+      registerRows(pageData?.rows);
+    }
+    registerRows(peekAccountDetailsManyPage()?.rows);
+
     return baseAccounts.map((account) => {
-      const details = detailsByLogin.get(String(account.login));
-      const merged = details ? { ...account, ...details, login: account.login } : account;
+      const loginKey = String(account?.login ?? account ?? '').trim();
+      const details = detailsByLogin.get(loginKey);
+      const cachedRow = cachedByLogin.get(loginKey);
+      const peeked = loginKey ? peekAccountDetails(loginKey) : undefined;
+      const merged = {
+        ...(cachedRow && typeof cachedRow === 'object' ? cachedRow : {}),
+        ...(account && typeof account === 'object' ? account : { login: loginKey }),
+        ...(details && typeof details === 'object' ? details : {}),
+        ...(peeked && typeof peeked === 'object' && !Array.isArray(peeked) ? peeked : {}),
+        login: loginKey,
+      };
       if (!merged || typeof merged !== 'object') return merged;
-      const grpName = String(merged.group ?? merged.Group ?? '').trim();
+      const grpName = String(
+        merged.group
+        || merged.Group
+        || merged.accountGroup
+        || merged.AccountGroup
+        || cachedRow?.group
+        || ''
+      ).trim();
+      const groupRecord = grpName ? groupRecordByNameMap.get(grpName.toLowerCase()) || null : null;
       const currency = String(
         merged.currency
         || merged.Currency
         || merged.raw?.Currency
         || merged.raw?.currency
+        || cachedRow?.currency
         || (grpName ? groupCurrencyMap.get(grpName) : '')
+        || groupRecord?.currency
+        || groupRecord?.Currency
+        || groupRecord?.depositCurrency
         || 'USD'
       ).trim();
-      return currency && !merged.currency ? { ...merged, currency } : merged;
+      const leverage =
+        merged.leverage
+        || merged.Leverage
+        || merged.raw?.Leverage
+        || merged.raw?.leverage
+        || cachedRow?.leverage
+        || groupRecord?.leverage
+        || groupRecord?.Leverage
+        || 100;
+      const name = String(
+        merged.name
+        || merged.Name
+        || cachedRow?.name
+        || [merged.FirstName || merged.firstName, merged.LastName || merged.lastName].filter(Boolean).join(' ')
+        || ''
+      ).trim();
+      return {
+        ...merged,
+        ...(grpName ? { group: grpName } : {}),
+        ...(name ? { name, Name: name } : {}),
+        ...(currency ? { currency, Currency: currency } : {}),
+        leverage,
+      };
     }).filter((account) => accountType === 'all' || getSidebarAccountType(account) === accountType);
-  }, [balanceDetails, baseAccounts, accountType, groupCurrencyMap]);
+  }, [balanceDetails, baseAccounts, accountType, groupCurrencyMap, groupRecordByNameMap, cachedTradingAccounts, queryClient]);
 
   const urgentLogins = useMemo(() => new Set(
     buildMarginAlerts(accounts, buildGroupMarginLevels(groups)).map((alert) => alert.login),
@@ -268,10 +326,32 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
 
   useEffect(() => () => clearTimeout(prefetchTimerRef.current), []);
 
+  const resolveDetailedSidebarAccount = (acc) => {
+    const login = String(typeof acc === 'object' ? (acc?.login ?? acc?.Login ?? '') : (acc ?? '')).trim();
+    const matched = accounts.find((item) => String(item?.login ?? item) === login);
+    const peeked = login ? peekAccountDetails(login) : undefined;
+    const base = {
+      ...(matched && typeof matched === 'object' ? matched : {}),
+      ...(acc && typeof acc === 'object' ? acc : {}),
+      ...(peeked && typeof peeked === 'object' && !Array.isArray(peeked) ? peeked : {}),
+      ...(login ? { login } : {}),
+    };
+    return Object.keys(base).length > 0 ? base : acc;
+  };
+
   const warmAccount = (acc) => {
     clearTimeout(prefetchTimerRef.current);
-    const login = typeof acc === 'object' ? acc.login : acc;
-    if (typeof acc === 'object' && (hasBalance(acc) || acc.Name || acc.FirstName || acc.Email || acc.currency)) seedAccountDetails(login, acc);
+    const resolved = resolveDetailedSidebarAccount(acc);
+    const login = typeof resolved === 'object' ? resolved.login : resolved;
+    if (typeof resolved === 'object' && (hasBalance(resolved) || resolved.Name || resolved.name || resolved.FirstName || resolved.Email || resolved.email)) {
+      const seedSnapshot = Object.entries(resolved).reduce((target, [key, val]) => {
+        if (val !== undefined && val !== null && !(typeof val === 'string' && val.trim() === '')) {
+          target[key] = val;
+        }
+        return target;
+      }, {});
+      seedAccountDetails(login, seedSnapshot);
+    }
     void prefetchAccountDetails(login);
     if (canViewPositions) void preloadAccountPositions(login);
   };
@@ -282,34 +362,35 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
   };
 
   const handleMenuAction = (action, acc) => {
-    const login = typeof acc === 'object' ? acc?.login : acc;
+    const resolvedAcc = resolveDetailedSidebarAccount(acc);
+    const login = typeof resolvedAcc === 'object' ? resolvedAcc?.login : resolvedAcc;
 
     if (action === 'new-account') {
       openAccountScreen();
     } else if (action === 'summary') {
-      setSummaryAccount({ login, row: typeof acc === 'object' ? acc : undefined });
+      setSummaryAccount({ login, row: typeof resolvedAcc === 'object' ? resolvedAcc : undefined });
     } else if (action === 'details') {
       setSelectedLogin(String(login));
-      warmAccount(acc);
-      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+      warmAccount(resolvedAcc);
+      openAccountDetailWindow(resolvedAcc && typeof resolvedAcc === 'object' ? { ...resolvedAcc } : resolvedAcc, {
         source: 'sidebar',
         initialTab: 'Overview',
       });
     } else if (action === 'charges') {
-      setBulkChargesAccounts(acc ? [acc] : []);
+      setBulkChargesAccounts(resolvedAcc ? [resolvedAcc] : []);
     } else if (action === 'balance') {
-      setCheckBalanceAccounts(acc ? [acc] : []);
+      setCheckBalanceAccounts(resolvedAcc ? [resolvedAcc] : []);
     } else if (action === 'fix-balance') {
       setSelectedLogin(String(login));
-      warmAccount(acc);
-      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+      warmAccount(resolvedAcc);
+      openAccountDetailWindow(resolvedAcc && typeof resolvedAcc === 'object' ? { ...resolvedAcc } : resolvedAcc, {
         source: 'sidebar',
         initialTab: 'Balance',
       });
     } else if (action === 'fix-personal-data') {
       setSelectedLogin(String(login));
-      warmAccount(acc);
-      openAccountDetailWindow(acc && typeof acc === 'object' ? { ...acc } : acc, {
+      warmAccount(resolvedAcc);
+      openAccountDetailWindow(resolvedAcc && typeof resolvedAcc === 'object' ? { ...resolvedAcc } : resolvedAcc, {
         source: 'sidebar',
         initialTab: 'Personal',
       });
@@ -329,14 +410,15 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
         return;
       }
       setPendingAction({ action, account: acc });
-    } else if (action === 'find') {
+    } else if (action === 'find' || action === 'customize-filter') {
       searchInputRef.current?.focus();
     } else if (action === 'clear-filter') {
       setAccountSearch('');
       setDebouncedAccountSearch('');
     } else if (action === 'filter-group' && typeof acc === 'string') {
-      setAccountSearch(acc);
-      setDebouncedAccountSearch(acc);
+      const nextFilter = acc === 'All Groups' ? '' : acc;
+      setAccountSearch(nextFilter);
+      setDebouncedAccountSearch(nextFilter);
     } else if (action === 'copy-logins') {
       const text = login ? String(login) : accounts.map((a) => (typeof a === 'object' ? a.login : a)).join('\n');
       void copyToClipboard(text).then(() => showResult.success('Copied login(s) to clipboard.'));
@@ -484,12 +566,17 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
                       onContextMenu={(e) => handleContextMenu(e, acc)}
                       style={{
                         cursor: 'pointer',
+                        userSelect: 'none',
                         background: isUrgent ? 'var(--danger-soft)' : undefined,
                       }}
                     >
                       <td
                         className="accounts-sidebar-login"
-                        style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)' }}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                          handleMenuAction('details', acc);
+                        }}
+                        style={{ color: isUrgent ? 'var(--danger-text)' : 'var(--text)', userSelect: 'none' }}
                       >
                         <span className="trading-accounts-login-wrap">
                           <AccountTypeIcon
@@ -517,7 +604,11 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
 
       {/* Popups */}
       {sidebarAccountWindows.map((win) => {
-        const selectedAccountDetails = win.account ?? win.login;
+        const matchedAccount = accounts.find((item) => String(item?.login ?? item) === String(win.login));
+        const rawSelected = win.account ?? win.login;
+        const selectedAccountDetails = matchedAccount && typeof rawSelected === 'object'
+          ? { ...matchedAccount, ...rawSelected, login: rawSelected.login ?? matchedAccount.login }
+          : (matchedAccount || rawSelected);
         return (
           <AccountDetailsModal
             key={typeof selectedAccountDetails === 'object' ? selectedAccountDetails.login : selectedAccountDetails}
@@ -591,6 +682,7 @@ const MarginCallsSidebar = ({ isAuthenticated, accountType = 'all' }) => {
           onIntent={handleMenuIntent}
           canManageAccounts={canManageAccounts}
           canManageRestrictions={canOpenRestrictions}
+          groupFilter={accountSearch || 'All Groups'}
           isBlocked={blockedUsers[typeof contextMenu.account === 'object' ? contextMenu.account.login : contextMenu.account]}
           autoScroll={autoScroll}
           autoArrange={autoArrange}

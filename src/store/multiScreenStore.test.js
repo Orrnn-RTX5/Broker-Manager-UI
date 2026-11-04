@@ -291,6 +291,51 @@ test('Double-clicking in Show account panel or Trading Accounts opens up to 4 di
   assert.equal(useMultiScreenStore.getState().openAccountWindows.length, 4);
 });
 
+test('Show account panel double-click on account number preserves enriched account details identical to Trading Accounts', () => {
+  const sidebarSource = readFileSync(new URL('../components/MarginCallsSidebar.jsx', import.meta.url), 'utf8');
+  const modalSource = readFileSync(new URL('../components/Popups/AccountDetailsModal.jsx', import.meta.url), 'utf8');
+
+  assert.match(sidebarSource, /className="accounts-sidebar-login"[\s\S]*?onDoubleClick=\{\(event\)\s*=>\s*\{[\s\S]*?handleMenuAction\('details',\s*acc\)/);
+  assert.match(sidebarSource, /const resolveDetailedSidebarAccount = \(acc\) =>/);
+  assert.match(modalSource, /accountData\?\.__patchedFields/);
+  assert.match(modalSource, /const currencyValue = getFieldValue\('Currency', 'USD'\) \|\| 'USD';/);
+
+  useMultiScreenStore.getState().resetMultiScreens();
+  useMultiScreenStore.getState().openAccountDetailWindow(
+    {
+      login: '200012',
+      name: 'YoPips Tester',
+      Name: 'YoPips Tester',
+      group: 'Yopips/demo',
+      currency: 'USD',
+      leverage: 100,
+      email: 'test_demo_yopips@yopips.com',
+      balance: 10000,
+    },
+    { source: 'trading-accounts' }
+  );
+
+  // Re-opening/focusing from a sparse sidebar row must not wipe out non-empty fields with empty strings
+  useMultiScreenStore.getState().openAccountDetailWindow(
+    {
+      login: '200012',
+      Name: '',
+      Currency: '',
+      balance: 10000,
+    },
+    { source: 'sidebar' }
+  );
+
+  const win = useMultiScreenStore.getState().openAccountWindows.find((item) => item.login === '200012');
+  assert.equal(win.account.Name, 'YoPips Tester');
+  assert.equal(win.account.name, 'YoPips Tester');
+  assert.equal(win.account.group, 'Yopips/demo');
+  assert.equal(win.account.currency, 'USD');
+  assert.equal(win.account.leverage, 100);
+  assert.equal(win.account.email, 'test_demo_yopips@yopips.com');
+});
+
+
 
 
 

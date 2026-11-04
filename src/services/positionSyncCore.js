@@ -1,5 +1,6 @@
 export const POSITION_SYNC_POLL_MS = 30_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 15_000;
 
 // Manager's dual NATS feed deduplicates v1/v2 by event ID. Either envelope
 // may win, so consume their identical domain data with one canonical type.
@@ -107,6 +108,7 @@ export class PositionSyncClient {
     setIntervalFn = (...args) => globalThis.setInterval(...args),
     clearIntervalFn = (...args) => globalThis.clearInterval(...args),
     pollMs = POSITION_SYNC_POLL_MS,
+    connectTimeoutMs = CONNECT_TIMEOUT_MS,
     onSnapshot,
   } = {}) {
     this.requestTicket = requestTicket;
@@ -118,6 +120,7 @@ export class PositionSyncClient {
     this.setIntervalFn = setIntervalFn;
     this.clearIntervalFn = clearIntervalFn;
     this.pollMs = pollMs;
+    this.connectTimeoutMs = connectTimeoutMs;
     this.listeners = new Set();
     this.socket = null;
     this.reconnectTimer = null;
@@ -125,6 +128,7 @@ export class PositionSyncClient {
     this.reconnectAttempt = 0;
     this.running = false;
     this.connectionId = 0;
+    this.connectingSince = 0;
   }
 
   subscribe(listener) {
@@ -139,13 +143,17 @@ export class PositionSyncClient {
   start() {
     if (this.running) return;
     this.running = true;
-    this.pollTimer = this.setIntervalFn(() => this.emit({ type: 'snapshot', reason: 'poll' }), this.pollMs);
+    this.pollTimer = this.setIntervalFn(() => {
+      this.emit({ type: 'snapshot', reason: 'poll' });
+      this.recoverStaleConnection();
+    }, this.pollMs);
     this.connect();
   }
 
   stop() {
     this.running = false;
     this.connectionId += 1;
+    this.connectingSince = 0;
     if (this.reconnectTimer) this.clearTimeoutFn(this.reconnectTimer);
     if (this.pollTimer) this.clearIntervalFn(this.pollTimer);
     this.reconnectTimer = null;
@@ -153,6 +161,37 @@ export class PositionSyncClient {
     const socket = this.socket;
     this.socket = null;
     if (socket && (socket.readyState === 0 || socket.readyState === 1)) socket.close(1000, 'Manager session ended');
+  }
+
+  recoverStaleConnection() {
+    if (!this.running) return;
+    const now = Date.now();
+    const socket = this.socket;
+    const isClosedSocket = Boolean(socket && (socket.readyState === 2 || socket.readyState === 3));
+    const isStuckConnecting = this.connectingSince > 0
+      && (!socket || socket.readyState === 0)
+      && now - this.connectingSince >= this.connectTimeoutMs;
+
+    if (isClosedSocket || isStuckConnecting) {
+      this.connectionId += 1;
+      this.connectingSince = 0;
+      this.socket = null;
+      if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
+        try {
+          socket.close();
+        } catch {
+          // Ignore close errors on stalled sockets.
+        }
+      }
+      if (!this.reconnectTimer) {
+        this.connect();
+      }
+      return;
+    }
+
+    if (!socket && !this.reconnectTimer && this.connectingSince === 0) {
+      this.connect();
+    }
   }
 
   scheduleReconnect() {
@@ -166,8 +205,9 @@ export class PositionSyncClient {
   }
 
   async connect() {
-    if (!this.running || this.socket) return;
+    if (!this.running || this.socket || this.connectingSince > 0) return;
     const connectionId = ++this.connectionId;
+    this.connectingSince = Date.now();
     try {
       const ticket = getWsTicket(await this.requestTicket());
       if (!ticket) throw new Error('Manager websocket ticket was not returned.');
@@ -180,6 +220,7 @@ export class PositionSyncClient {
       let openedAt = 0;
       socket.onopen = () => {
         if (!isCurrentConnection()) return;
+        this.connectingSince = 0;
         openedAt = Date.now();
         this.emit({ type: 'snapshot', reason: 'connected' });
       };
@@ -208,11 +249,19 @@ export class PositionSyncClient {
       };
       socket.onclose = () => {
         if (!isCurrentConnection()) return;
+        this.connectingSince = 0;
         this.socket = null;
+        if (openedAt > 0) {
+          if (Date.now() - openedAt >= 5_000) {
+            this.reconnectAttempt = 0;
+          }
+          this.emit({ type: 'connection', reason: 'disconnected' });
+        }
         this.scheduleReconnect();
       };
     } catch {
       if (!this.running || connectionId !== this.connectionId) return;
+      this.connectingSince = 0;
       this.socket = null;
       this.scheduleReconnect();
     }

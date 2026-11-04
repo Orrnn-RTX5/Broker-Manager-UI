@@ -86,7 +86,14 @@ export const createAccountDetailsStore = ({
     const key = normalizeLogin(login);
     if (!key || !patch || typeof patch !== 'object') return;
     const current = entries.get(key);
-    remember(key, { ...(current?.value || {}), ...patch }, ++sequence, current?.savedAt ?? -Infinity);
+    const nextValue = { ...(current?.value || {}), ...patch };
+    const patchedFields = { ...(current?.value?.__patchedFields || {}), ...patch };
+    Object.defineProperty(nextValue, '__patchedFields', {
+      value: patchedFields,
+      enumerable: false,
+      configurable: true,
+    });
+    remember(key, nextValue, ++sequence, current?.savedAt ?? -Infinity);
   };
 
   const clear = () => {
