@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  accountModeCreateOptions,
   ACCOUNT_MODES,
   ACCOUNT_MODE_CREATE_OPTIONS,
   ACCOUNT_MODE_DEFAULT,
@@ -9,6 +10,8 @@ import {
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
   countrySuggestions,
+  formatAccountModeLabel,
+  groupAccountModeOf,
   groupCurrencyOf,
   groupLeverageOf,
   inheritGroupSettings,
@@ -51,6 +54,27 @@ test('currency follows the selected group the same way leverage does', () => {
   assert.equal(groupCurrencyOf(groups(), 'Fixture\\Gamma'), null);
   assert.equal(groupLeverageOf(groups(), 'Fixture\\Alpha'), 200);
   assert.equal(groupLeverageOf(groups(), 'Fixture\\Beta'), 50);
+});
+
+test('groupAccountModeOf reads marginMode from group records with hedging fallback', () => {
+  const list = [
+    { name: 'Fixture\\Netting', marginMode: 'netting' },
+    { name: 'Fixture\\Hedging', marginMode: 'hedging' },
+    { name: 'Fixture\\Default' },
+    { name: 'Fixture\\MixedCase', MarginMode: 'Netting' },
+  ];
+  assert.equal(groupAccountModeOf(list, 'Fixture\\Netting'), 'netting');
+  assert.equal(groupAccountModeOf(list, 'Fixture\\Hedging'), 'hedging');
+  assert.equal(groupAccountModeOf(list, 'Fixture\\Default'), 'hedging');
+  assert.equal(groupAccountModeOf(list, 'Fixture\\MixedCase'), 'netting');
+  assert.equal(groupAccountModeOf(list, 'Fixture\\Missing'), 'hedging');
+  assert.equal(groupAccountModeOf(list, ''), 'hedging');
+});
+
+test('formatAccountModeLabel formats derived mode as human-readable read-only string', () => {
+  assert.equal(formatAccountModeLabel('netting'), 'Netting (from group)');
+  assert.equal(formatAccountModeLabel('hedging'), 'Hedging (from group)');
+  assert.equal(formatAccountModeLabel(''), 'Hedging (from group)');
 });
 
 test('untouched currency and leverage inherit the newly selected group', () => {
@@ -314,6 +338,19 @@ test('netting option is shown disabled with a not-supported label; hedging is th
   assert.equal(ACCOUNT_MODE_DEFAULT, 'hedging');
   const enabled = ACCOUNT_MODE_CREATE_OPTIONS.filter((option) => !option.disabled);
   assert.deepEqual(enabled.map((option) => option.value), ['hedging']);
+
+  // Netting option is enabled ONLY when the selected group is netting
+  const nettingOptions = accountModeCreateOptions('netting');
+  assert.deepEqual(nettingOptions, [
+    { value: 'netting', label: 'Netting (from group)', disabled: false },
+    { value: 'hedging', label: 'Hedging', disabled: true },
+  ]);
+  const nettingEnabled = nettingOptions.filter((option) => !option.disabled);
+  assert.deepEqual(nettingEnabled.map((option) => option.value), ['netting']);
+
+  // Hedging groups keep netting disabled with not-supported-yet label
+  const hedgingOptions = accountModeCreateOptions('hedging');
+  assert.deepEqual(hedgingOptions, ACCOUNT_MODE_CREATE_OPTIONS);
 });
 
 test('submit path admits hedging and refuses netting before any payload is built', () => {
@@ -323,10 +360,25 @@ test('submit path admits hedging and refuses netting before any payload is built
   assert.equal(isCreatableAccountMode('NETTING'), false);
   assert.equal(isCreatableAccountMode(''), false);
   assert.equal(isCreatableAccountMode('unknown'), false);
+
+  // Group-aware creatability: netting group admits netting and refuses hedging
+  assert.equal(isCreatableAccountMode('netting', 'netting'), true);
+  assert.equal(isCreatableAccountMode('hedging', 'netting'), false);
+  assert.equal(isCreatableAccountMode('hedging', 'hedging'), true);
+  assert.equal(isCreatableAccountMode('netting', 'hedging'), false);
+
   const payload = buildSubmittableAccountPayload(baseForm({ AccountMode: 'hedging' }));
   assert.equal(payload.AccountMode, 'hedging');
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: 'netting' })), /not supported yet/);
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: '' })), /not supported yet/);
+
+  // Netting group admits netting
+  const nettingList = [{ name: 'Fixture\\Alpha', marginMode: 'netting' }];
+  const nettingPayload = buildSubmittableAccountPayload(
+    baseForm({ Group: 'Fixture\\Alpha', AccountMode: 'netting' }),
+    nettingList,
+  );
+  assert.equal(nettingPayload.AccountMode, 'netting');
 });
 
 // Sweep white-label hardcode (no country default is ever invented; real
@@ -657,9 +709,7 @@ test('HOLD-3 type confusion: non-strings rejected, never coerced', () => {
 });
 
 test('HOLD-4 engine constraint: canonical builder refuses netting instead of passing it through', () => {
-  // The RAM engine has no netting (global product decision, already gated in
-  // the submit wrapper + UI). The CANONICAL builder gates it too, so netting
-  // can never reach the wire through either path.
+  // When group is hedging (or default), canonical builder refuses netting
   assert.throws(() => buildNewAccountPayload(baseForm({ AccountMode: 'netting' })), /not supported yet/);
   assert.throws(() => buildNewAccountPayload(baseForm({ AccountMode: 'Netting' })), /not supported yet/);
   assert.throws(() => buildSubmittableAccountPayload(baseForm({ AccountMode: 'netting' })), /not supported yet/);
@@ -667,6 +717,17 @@ test('HOLD-4 engine constraint: canonical builder refuses netting instead of pas
   assert.equal(buildNewAccountPayload(baseForm({ AccountMode: 'hedging' })).AccountMode, 'hedging');
   assert.equal(buildSubmittableAccountPayload(baseForm({ AccountMode: 'hedging' })).AccountMode, 'hedging');
   assert.throws(() => buildNewAccountPayload(baseForm({ AccountMode: 'hedge' })), /hedging or netting/);
+
+  // When group is netting, netting is admitted (not refused)
+  const nettingList = [{ name: 'Fixture\\Netting', marginMode: 'netting' }];
+  const nettingForm = baseForm({ Group: 'Fixture\\Netting', AccountMode: 'netting' });
+  assert.equal(buildNewAccountPayload(nettingForm, nettingList).AccountMode, 'netting');
+  assert.equal(buildSubmittableAccountPayload(nettingForm, nettingList).AccountMode, 'netting');
+
+  // When modal opened with preselected netting group (no change event), AccountMode derives as netting
+  const preselectedForm = baseForm({ Group: 'Fixture\\Netting', AccountMode: ACCOUNT_MODE_DEFAULT });
+  assert.equal(buildNewAccountPayload(preselectedForm, nettingList).AccountMode, 'netting');
+  assert.equal(buildSubmittableAccountPayload(preselectedForm, nettingList).AccountMode, 'netting');
 });
 
 test('HOLD-5/H8 country: free text passes through, suggestions merge, seeded value stays clearable', () => {

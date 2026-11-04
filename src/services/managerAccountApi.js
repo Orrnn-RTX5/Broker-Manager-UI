@@ -16,7 +16,22 @@ const readAccountResponse = async (response) => {
     const nestedError = result?.error && typeof result.error === 'object'
       ? result.error.message
       : result?.error;
-    throw new Error(nestedError || result?.message || (typeof result === 'string' ? result : '') || `HTTP ${response.status}`);
+    const message = nestedError || result?.message || (typeof result === 'string' ? result : '') || `HTTP ${response.status}`;
+    const err = new Error(message);
+    err.status = response.status;
+    if (result && typeof result === 'object') {
+      err.body = result;
+      if (typeof result.code === 'string') {
+        err.code = result.code;
+      }
+      if (typeof result.error_code === 'string') {
+        err.error_code = result.error_code;
+      }
+      if (typeof result.engine_code === 'string') {
+        err.engine_code = result.engine_code;
+      }
+    }
+    throw err;
   }
   return result;
 };

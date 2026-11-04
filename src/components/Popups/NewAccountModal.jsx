@@ -9,10 +9,14 @@ import {
   buildSubmittableAccountPayload,
   countrySuggestions,
   currencyOptions,
+  formatAccountModeLabel,
+  groupAccountModeOf,
   inheritGroupSettings,
+  normalizeGroupName,
   resolveDefaultCountry,
   resolveDefaultCurrency,
 } from './newAccountWizard';
+import { resolveAccountModeRefusal } from './accountModeRefusals';
 import { getBrokerInfo } from '../../services/brokerAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -202,6 +206,8 @@ export const NewAccountModalContent = ({
   onToggleMovable,
   onMoveButtonPointerDown,
   onHeaderPointerDown,
+  initialGroup = '',
+  defaultGroup = '',
 }) => {
   // Sweep W5/W4: NO tenant-meaningful hardcoded defaults reach the wire.
   // Group starts '' (never auto-filled), Leverage starts '' (no 1:100
@@ -317,12 +323,16 @@ export const NewAccountModalContent = ({
     window.addEventListener('pointercancel', onUp);
   };
 
+  const initialGroupChoice = normalizeGroupName(initialGroup || defaultGroup);
   const [form, setForm] = useState({
-    Group: '',
+    Group: initialGroupChoice,
     Leverage: '',
     FirstName: '', LastName: '', Email: '', Phone: '',
-    Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: resolveDefaultCurrency(), AccountMode: ACCOUNT_MODE_DEFAULT,
-    master_pass: '', investor_pass: '',
+    Country: resolveDefaultCountry(getBrokerInfo(), false),
+    Currency: resolveDefaultCurrency(),
+    AccountMode: ACCOUNT_MODE_DEFAULT,
+    master_pass: '',
+    investor_pass: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -337,6 +347,18 @@ export const NewAccountModalContent = ({
   });
   const { canAct } = usePermissions();
   const canCreate = canAct(PERMISSIONS.MANAGE_ACCOUNTS);
+
+  // If the modal opens with a group already selected (preset or defaultGroup,
+  // without a manual change event), ensure AccountMode is derived from that group
+  // as soon as groups data is available.
+  useEffect(() => {
+    if (form.Group && groups && groups.length > 0) {
+      const derived = groupAccountModeOf(groups, form.Group);
+      if (derived && derived !== form.AccountMode) {
+        setForm(prev => ({ ...prev, AccountMode: derived }));
+      }
+    }
+  }, [groups, form.Group, form.AccountMode]);
 
   // UI-4 follow-up: the wizard NEVER auto-fills Group. Opening, list
   // refreshes, and searches leave Group exactly as the operator left it
@@ -355,15 +377,20 @@ export const NewAccountModalContent = ({
     // group value, or '' when the new group has none), so this spread both
     // applies fresh inheritance AND clears previously-inherited stale values
     // on every group switch. Touched (explicit operator) picks are omitted
-    // from the result and therefore never cleared.
+    // from the result and therefore never cleared. AccountMode is derived
+    // from the selected group's marginMode (option a, netting or hedging).
     const inherited = inheritGroupSettings({
       groups,
       groupName,
       leverageTouched: leverageTouched.current,
       currencyTouched: currencyTouched.current,
     });
-    if (Object.keys(inherited).length === 0) return;
-    setForm(prev => ({ ...prev, ...inherited }));
+    const derivedMode = groupAccountModeOf(groups, groupName);
+    setForm(prev => ({
+      ...prev,
+      ...inherited,
+      AccountMode: derivedMode,
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -380,7 +407,7 @@ export const NewAccountModalContent = ({
     // wire even if component state is forced.
     let payload;
     try {
-      payload = buildSubmittableAccountPayload(form);
+      payload = buildSubmittableAccountPayload(form, groups);
     } catch (err) {
       setResult({ success: false, message: err.message || 'Please review the account fields.' });
       return;
@@ -399,7 +426,8 @@ export const NewAccountModalContent = ({
       queryClient.invalidateQueries({ queryKey: ['trading-accounts'] });
       onSuccess?.(data);
     } catch (err) {
-      setResult({ success: false, message: err.message || 'An error occurred.' });
+      const message = resolveAccountModeRefusal(err, err?.message || 'An error occurred.');
+      setResult({ success: false, message });
     } finally {
       setLoading(false);
     }
@@ -420,11 +448,14 @@ export const NewAccountModalContent = ({
     // placeholder returns and nothing is preselected.
     setGroupSearch('');
     setForm({
-      Group: '',
+      Group: initialGroupChoice,
       Leverage: '',
-      FirstName: '', LastName: '', Email: '', Phone: '', Country: resolveDefaultCountry(getBrokerInfo(), false), Currency: resolveDefaultCurrency(),
-      AccountMode: ACCOUNT_MODE_DEFAULT,
-      master_pass: '', investor_pass: '',
+      FirstName: '', LastName: '', Email: '', Phone: '',
+      Country: resolveDefaultCountry(getBrokerInfo(), false),
+      Currency: resolveDefaultCurrency(),
+      AccountMode: initialGroupChoice && groups ? groupAccountModeOf(groups, initialGroupChoice) : ACCOUNT_MODE_DEFAULT,
+      master_pass: '',
+      investor_pass: '',
     });
     if (onClose) onClose();
   };
@@ -547,9 +578,14 @@ export const NewAccountModalContent = ({
                   </select>
                 </Field>
                 <Field id={fid('mode')} label="Account mode" required hint="Cannot be changed after creation">
-                  <select id={fid('mode')} className="ui-select" value={form.AccountMode} required onChange={(event) => set('AccountMode', event.target.value)}>
-                    {ACCOUNT_MODE_CREATE_OPTIONS.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-                  </select>
+                  <input
+                    id={fid('mode')}
+                    type="text"
+                    className="ui-input"
+                    readOnly
+                    aria-readonly="true"
+                    value={formatAccountModeLabel(form.AccountMode)}
+                  />
                 </Field>
                 <Field id={fid('country')} label="Country" hint="Optional">
                   {/*
@@ -666,7 +702,19 @@ export const NewAccountModalContent = ({
   );
 };
 
-const NewAccountModal = ({ isOpen, onClose, onSuccess, embedded = false, screenNumber, isMovable, onToggleMovable, onMoveButtonPointerDown, onHeaderPointerDown }) => {
+const NewAccountModal = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  embedded = false,
+  screenNumber,
+  isMovable,
+  onToggleMovable,
+  onMoveButtonPointerDown,
+  onHeaderPointerDown,
+  initialGroup,
+  defaultGroup,
+}) => {
   if (!isOpen && !embedded) return null;
 
   return (
@@ -679,6 +727,8 @@ const NewAccountModal = ({ isOpen, onClose, onSuccess, embedded = false, screenN
       onToggleMovable={onToggleMovable}
       onMoveButtonPointerDown={onMoveButtonPointerDown}
       onHeaderPointerDown={onHeaderPointerDown}
+      initialGroup={initialGroup}
+      defaultGroup={defaultGroup}
     />
   );
 };

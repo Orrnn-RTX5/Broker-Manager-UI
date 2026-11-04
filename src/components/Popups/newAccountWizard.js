@@ -6,26 +6,51 @@
 // or account values are hardcoded here; every default comes from the selected
 // group record or from generic operator input.
 
+/** Lowercase accounting mode, or '' unless the value is a string exactly hedging/netting.
+ * Strict strings-only: booleans/numbers/objects are rejected, never coerced. */
+export const normalizeAccountMode = (value) => {
+  if (typeof value !== 'string') return '';
+  const mode = value.trim().toLowerCase();
+  return mode === 'hedging' || mode === 'netting' ? mode : '';
+};
+
 export const ACCOUNT_MODES = Object.freeze(['hedging', 'netting']);
 
 export const ACCOUNT_MODE_DEFAULT = 'hedging';
 
 /**
- * The exact options the Account mode control renders. Netting is shown but
- * DISABLED: the RAM engine cannot open netting accounts, so hedging stays the
- * default and netting can never be picked through the UI.
+ * The exact options the Account mode control renders for a given group mode.
+ * The netting disable ("not supported yet") is removed ONLY when the selected group
+ * is netting. For hedging groups (and default/unselected), netting remains disabled.
  */
-export const ACCOUNT_MODE_CREATE_OPTIONS = Object.freeze([
-  { value: 'hedging', label: 'Hedging', disabled: false },
-  { value: 'netting', label: 'Netting — not supported yet', disabled: true },
-]);
+export const accountModeCreateOptions = (groupMode) => {
+  const isNetting = normalizeAccountMode(groupMode) === 'netting';
+  if (isNetting) {
+    return Object.freeze([
+      { value: 'netting', label: 'Netting (from group)', disabled: false },
+      { value: 'hedging', label: 'Hedging', disabled: true },
+    ]);
+  }
+  return Object.freeze([
+    { value: 'hedging', label: 'Hedging', disabled: false },
+    { value: 'netting', label: 'Netting — not supported yet', disabled: true },
+  ]);
+};
+
+export const ACCOUNT_MODE_CREATE_OPTIONS = accountModeCreateOptions(ACCOUNT_MODE_DEFAULT);
 
 /**
- * True only for modes the engine can open today: hedging alone. The submit
- * path checks this AND the control disables every other option, so the submit
- * payload can never carry netting even if component state is forced.
+ * True only for modes creatable for the selected group mode.
+ * When group mode is netting, only netting is creatable.
+ * In every other case (hedging default, unknown, or omitted), hedging is creatable
+ * and netting is refused with the engine constraint notice.
  */
-export const isCreatableAccountMode = (value) => normalizeAccountMode(value) === 'hedging';
+export const isCreatableAccountMode = (value, groupMode) => {
+  const mode = normalizeAccountMode(value);
+  if (!mode) return false;
+  const target = normalizeAccountMode(groupMode) || ACCOUNT_MODE_DEFAULT;
+  return mode === target;
+};
 
 const CURRENCY_CODE_PATTERN = /^[A-Z0-9]{2,8}$/;
 
@@ -41,14 +66,6 @@ export const normalizeCurrencyCode = (value) => {
   const code = value.trim().toUpperCase();
   if (!code) return '';
   return CURRENCY_CODE_PATTERN.test(code) ? code : '';
-};
-
-/** Lowercase accounting mode, or '' unless the value is a string exactly hedging/netting.
- * Strict strings-only: booleans/numbers/objects are rejected, never coerced. */
-export const normalizeAccountMode = (value) => {
-  if (typeof value !== 'string') return '';
-  const mode = value.trim().toLowerCase();
-  return mode === 'hedging' || mode === 'netting' ? mode : '';
 };
 
 /** Trimmed country name, or '' unless the value is a string with a usable name.
@@ -125,6 +142,37 @@ export const groupCurrencyOf = (groups, groupName) => {
   if (!record) return null;
   const code = normalizeCurrencyCode(readFirstString(record, ['currency', 'Currency', 'deposit_currency', 'depositCurrency']));
   return code || null;
+};
+
+/**
+ * Account mode of the selected group ('netting' or 'hedging').
+ * Reads the group's marginMode (from GroupList/GroupGet rows).
+ * Null, empty, missing, or any non-netting value defaults to 'hedging'.
+ */
+export const groupAccountModeOf = (groups, groupName) => {
+  const target = normalizeGroupName(groupName);
+  if (!target) return ACCOUNT_MODE_DEFAULT;
+  const list = Array.isArray(groups) ? groups : (Array.isArray(groups?.groups) ? groups.groups : []);
+  const group = list.find((entry) => entry && (
+    normalizeGroupName(entry.name) === target
+    || normalizeGroupName(entry?.Group) === target
+    || normalizeGroupName(entry?.group) === target
+  ));
+  const record = group || list.find((entry) => entry && entry.name === target);
+  if (!record) return ACCOUNT_MODE_DEFAULT;
+  const raw = readFirstString(record, ['marginMode', 'margin_mode', 'MarginMode', 'accountMode', 'AccountMode']);
+  const normalized = normalizeAccountMode(raw);
+  return normalized || ACCOUNT_MODE_DEFAULT;
+};
+
+/**
+ * Derived read-only label for the wizard's Account mode display.
+ * Emits "Netting (from group)" or "Hedging (from group)".
+ */
+export const formatAccountModeLabel = (mode) => {
+  const normalized = normalizeAccountMode(mode);
+  if (normalized === 'netting') return 'Netting (from group)';
+  return 'Hedging (from group)';
 };
 
 /**
@@ -376,7 +424,13 @@ export const countrySuggestions = ({ presets = [], brokerInfo = null, current = 
  * it — the RAM engine cannot open netting accounts (global product
  * decision), so netting can never reach the wire through this builder.
  */
-export const buildNewAccountPayload = (form = {}) => {
+const resolveTargetGroupMode = (form, groups) => {
+  if (form?.groupMarginMode) return normalizeAccountMode(form.groupMarginMode) || ACCOUNT_MODE_DEFAULT;
+  if (form?.groupMode) return normalizeAccountMode(form.groupMode) || ACCOUNT_MODE_DEFAULT;
+  return groupAccountModeOf(groups, form?.Group);
+};
+
+export const buildNewAccountPayload = (form = {}, groups = []) => {
   const Group = normalizeGroupName(form.Group);
   if (!Group) throw new TypeError('Please select an account group.');
 
@@ -401,13 +455,25 @@ export const buildNewAccountPayload = (form = {}) => {
   const Currency = normalizeCurrencyCode(form.Currency);
   if (!Currency) throw new TypeError('Please select a currency.');
 
-  const AccountMode = normalizeAccountMode(form.AccountMode);
-  if (!AccountMode) throw new TypeError('Please select an accounting mode (hedging or netting).');
-  // Engine constraint (global product decision, already enforced in the
-  // submit wrapper + UI): the RAM engine has no netting, so the CANONICAL
-  // builder refuses netting too instead of passing it through.
-  if (AccountMode === 'netting') {
+  const rawMode = normalizeAccountMode(form.AccountMode);
+  if (!rawMode) throw new TypeError('Please select an accounting mode (hedging or netting).');
+
+  const groupMode = resolveTargetGroupMode(form, groups);
+  // AccountMode derives from the selected group (option a).
+  // If the group is netting and AccountMode was left as the hedging default
+  // (e.g. preselected group with no change event), derive AccountMode from the group.
+  const AccountMode = (groupMode === 'netting' && rawMode === ACCOUNT_MODE_DEFAULT)
+    ? 'netting'
+    : rawMode;
+
+  // Engine constraint: netting accounts are supported ONLY when the selected group is netting.
+  // When group is hedging, netting is refused with the engine constraint notice.
+  // When group is netting, hedging is refused with the mismatch notice.
+  if (AccountMode === 'netting' && groupMode !== 'netting') {
     throw new TypeError('Netting accounts are not supported yet. Select hedging.');
+  }
+  if (AccountMode === 'hedging' && groupMode === 'netting') {
+    throw new TypeError('Account mode must match the group (Netting).');
   }
 
   // Identity/country fields mirror the backend: optional free text, stored
@@ -434,13 +500,22 @@ export const buildNewAccountPayload = (form = {}) => {
 
 /**
  * The exact submit path NewAccountModal.jsx calls: the engine-creatability
- * gate first (fail-closed), then the canonical payload builder — which
- * refuses netting itself (engine constraint), so netting can never reach the
- * wire through this function even if component state is forced.
+ * gate first (fail-closed), then the canonical payload builder.
+ * Netting is creatable ONLY when the selected group is netting.
+ * When the modal opens with a preselected netting group (no change event),
+ * AccountMode is derived from that group.
  */
-export const buildSubmittableAccountPayload = (form = {}) => {
-  if (!isCreatableAccountMode(form?.AccountMode)) {
+export const buildSubmittableAccountPayload = (form = {}, groups = []) => {
+  const groupMode = resolveTargetGroupMode(form, groups);
+  const rawMode = normalizeAccountMode(form?.AccountMode);
+  const effectiveMode = (groupMode === 'netting' && rawMode === ACCOUNT_MODE_DEFAULT)
+    ? 'netting'
+    : form?.AccountMode;
+  if (!isCreatableAccountMode(effectiveMode, groupMode)) {
+    if (groupMode === 'netting') {
+      throw new TypeError('Account mode must match the group (Netting).');
+    }
     throw new TypeError('Netting accounts are not supported yet. Select hedging.');
   }
-  return buildNewAccountPayload(form);
+  return buildNewAccountPayload({ ...form, AccountMode: effectiveMode }, groups);
 };

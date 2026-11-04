@@ -6,6 +6,8 @@ import {
   buildNewAccountPayload,
   buildSubmittableAccountPayload,
   countrySuggestions,
+  formatAccountModeLabel,
+  groupAccountModeOf,
   normalizeAccountMode,
   normalizeCountryName,
   normalizeCurrencyCode,
@@ -98,6 +100,21 @@ test('explicit group pick inherits leverage+currency and builds the exact payloa
     () => buildSubmittableAccountPayload({ ...form, AccountMode: 'netting' }),
     /not supported yet/,
   );
+
+  // Netting is admitted when the selected group is netting
+  const nettingList = [
+    ...groups(),
+    { name: 'Fixture\\Netting', leverage: 100, currency: 'USD', marginMode: 'netting' },
+  ];
+  const nettingForm = {
+    ...form,
+    Group: 'Fixture\\Netting',
+    AccountMode: 'netting',
+    Currency: 'USD',
+    Leverage: 100,
+  };
+  assert.equal(buildNewAccountPayload(nettingForm, nettingList).AccountMode, 'netting');
+  assert.equal(buildSubmittableAccountPayload(nettingForm, nettingList).AccountMode, 'netting');
   // Search-box state is never part of the submitted payload.
   assert.ok(!('groupSearch' in payload));
   assert.ok(!('search' in payload));
@@ -131,6 +148,82 @@ test('default accounting mode is hedging and passes the submit path', () => {
   };
   const payload = buildNewAccountPayload(form);
   assert.equal(payload.AccountMode, 'hedging');
+});
+
+test('Test 4: netting group → the request has AccountMode=netting; the mode is shown read-only', () => {
+  const nettingGroups = [
+    { name: 'Fixture\\NettingGroup', leverage: 100, currency: 'USD', marginMode: 'netting' },
+  ];
+  const picked = 'Fixture\\NettingGroup';
+  const derivedMode = groupAccountModeOf(nettingGroups, picked);
+  assert.equal(derivedMode, 'netting');
+
+  // Derived mode is rendered read-only as "Netting (from group)"
+  assert.equal(formatAccountModeLabel(derivedMode), 'Netting (from group)');
+
+  const form = {
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: nettingGroups, groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+    AccountMode: derivedMode,
+  };
+
+  const payload = buildSubmittableAccountPayload(form, nettingGroups);
+  assert.equal(payload.Group, picked);
+  assert.equal(payload.AccountMode, 'netting');
+});
+
+test('Test 5: hedging group → unchanged (AccountMode=hedging); the mode is shown read-only', () => {
+  const hedgingGroups = [
+    { name: 'Fixture\\HedgingGroup', leverage: 200, currency: 'EUR', marginMode: 'hedging' },
+  ];
+  const picked = 'Fixture\\HedgingGroup';
+  const derivedMode = groupAccountModeOf(hedgingGroups, picked);
+  assert.equal(derivedMode, 'hedging');
+
+  // Derived mode is rendered read-only as "Hedging (from group)"
+  assert.equal(formatAccountModeLabel(derivedMode), 'Hedging (from group)');
+
+  const form = {
+    ...buildInitialForm(),
+    Group: picked,
+    ...inheritGroupSettings({ groups: hedgingGroups, groupName: picked, leverageTouched: false, currencyTouched: false }),
+    ...operatorDetails(),
+    AccountMode: derivedMode,
+  };
+
+  const payload = buildSubmittableAccountPayload(form, hedgingGroups);
+  assert.equal(payload.Group, picked);
+  assert.equal(payload.AccountMode, 'hedging');
+});
+
+test('item 3: preselected netting group without change event submits AccountMode=netting', () => {
+  const nettingGroups = [
+    { name: 'Fixture\\PresetNetting', leverage: 100, currency: 'USD', marginMode: 'netting' },
+  ];
+  const preset = 'Fixture\\PresetNetting';
+
+  // Modal opened with a preselected group: form starts with Group=preset, but
+  // no manual onChange occurred (so AccountMode starts as ACCOUNT_MODE_DEFAULT 'hedging')
+  const initialForm = {
+    ...buildInitialForm(),
+    Group: preset,
+    Leverage: 100,
+    Currency: 'USD',
+    ...operatorDetails(),
+    AccountMode: ACCOUNT_MODE_DEFAULT,
+  };
+
+  // buildSubmittableAccountPayload derives netting from the group
+  const payload = buildSubmittableAccountPayload(initialForm, nettingGroups);
+  assert.equal(payload.Group, preset);
+  assert.equal(payload.AccountMode, 'netting');
+
+  // buildNewAccountPayload derives netting as well
+  const canonicalPayload = buildNewAccountPayload(initialForm, nettingGroups);
+  assert.equal(canonicalPayload.Group, preset);
+  assert.equal(canonicalPayload.AccountMode, 'netting');
 });
 
 test('empty group throws: submit fails closed with no fallback group', () => {
@@ -619,8 +712,8 @@ test('HOLD-3 modal path: confused group/field types never reach the payload', ()
 });
 
 test('HOLD-4 modal path: netting is refused on the exact submit path', () => {
-  // Engine constraint (global product decision): the RAM engine has no
-  // netting, so the canonical builder refuses it exactly like the wrapper.
+  // Engine constraint (global product decision): netting is refused when the group
+  // is not netting.
   const picked = 'Fixture\\Beta';
   const form = {
     ...buildInitialForm(),
@@ -629,9 +722,24 @@ test('HOLD-4 modal path: netting is refused on the exact submit path', () => {
     ...operatorDetails(),
     AccountMode: 'netting',
   };
-  assert.throws(() => buildNewAccountPayload(form), /not supported yet/);
-  assert.throws(() => buildSubmittableAccountPayload(form), /not supported yet/);
-  assert.equal(buildSubmittableAccountPayload({ ...form, AccountMode: 'hedging' }).AccountMode, 'hedging');
+  assert.throws(() => buildNewAccountPayload(form, groups()), /not supported yet/);
+  assert.throws(() => buildSubmittableAccountPayload(form, groups()), /not supported yet/);
+  assert.equal(buildSubmittableAccountPayload({ ...form, AccountMode: 'hedging' }, groups()).AccountMode, 'hedging');
+
+  // When the group IS netting, netting is admitted
+  const nettingGroups = [
+    { name: 'Fixture\\Netting', leverage: 100, currency: 'USD', marginMode: 'netting' },
+  ];
+  const nettingForm = {
+    ...buildInitialForm(),
+    Group: 'Fixture\\Netting',
+    ...operatorDetails(),
+    Currency: 'USD',
+    Leverage: 100,
+    AccountMode: 'netting',
+  };
+  assert.equal(buildNewAccountPayload(nettingForm, nettingGroups).AccountMode, 'netting');
+  assert.equal(buildSubmittableAccountPayload(nettingForm, nettingGroups).AccountMode, 'netting');
 });
 
 test('HOLD-5/H8 modal path: free-text country and clearing a seeded country', () => {
