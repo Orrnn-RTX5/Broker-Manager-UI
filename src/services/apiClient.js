@@ -5,6 +5,7 @@ import { buildExtApiUrl, buildManagerApiUrl } from '../config/endpoints.js';
 import { isAuthExpiredResponse } from './authHttpStatus.js';
 import { sendWithSessionRefresh } from './authRequest.js';
 import { redactHeaders, redactSensitive, redactUrl } from '../utils/redaction.js';
+import { withMetricsNullable } from './metricsNullable.js';
 
 const SESSION_ERROR_MESSAGE = 'Session expired. Please log in again.';
 const RESPONSE_TOO_LARGE_MESSAGE =
@@ -160,7 +161,7 @@ const apiClient = {
     } = options;
     const url = endpoint.startsWith('/ext-api')
       ? buildExtApiUrl(endpoint)
-      : buildManagerApiUrl(endpoint);
+      : buildManagerApiUrl(withMetricsNullable(endpoint, requestOptions.method));
     const finalUrl = withoutQueryToken(url);
 
     const response = await sendWithSessionRefresh((token) => {
@@ -190,7 +191,7 @@ const apiClient = {
     } = options;
     const url = endpoint.startsWith('/ext-api')
       ? buildExtApiUrl(endpoint)
-      : buildManagerApiUrl(endpoint);
+      : buildManagerApiUrl(withMetricsNullable(endpoint, requestOptions.method));
     const finalUrl = withoutQueryToken(url);
 
     try {

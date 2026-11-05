@@ -2502,14 +2502,14 @@ const AccountDetailsModal = ({
   const marginVal = financeSummary.marginText;
   const freeMarginVal = financeSummary.freeMarginText;
   const marginLevelVal = financeSummary.marginLevelText;
-  const profitVal = getFieldValue('Profit', 0);
+  const profitVal = getFieldValue('Profit', null);
   const swapVal = formatNumber(getFieldValue('Swap', 0));
   const balanceSpaceVal = formatSpaceNumber(rawBalanceVal);
   const creditSpaceVal = formatSpaceNumber(rawCreditVal);
   const equitySpaceVal = financeSummary.equitySpaceText;
   const marginSpaceVal = financeSummary.marginSpaceText;
   const freeMarginSpaceVal = financeSummary.freeMarginSpaceText;
-  const profitSpaceVal = formatSpaceNumber(profitVal);
+  const profitSpaceVal = profitVal === null || profitVal === undefined || profitVal === '' ? '—' : formatSpaceNumber(profitVal);
   const marginLevelSpaceVal = financeSummary.marginLevelSpaceText;
 
   const formatDate = (value) => {
@@ -3476,7 +3476,7 @@ const AccountDetailsModal = ({
                     <div className="account-settings-field is-readonly">
                       <span>Floating P / L</span>
                       <strong className={`tabular ${Number(profitVal) > 0 ? 'is-positive' : Number(profitVal) < 0 ? 'is-negative' : ''}`}>
-                        {Number(profitVal) > 0 ? `+${profitSpaceVal}` : profitSpaceVal} {currencyValue}
+                        {profitSpaceVal === '—' ? '—' : `${Number(profitVal) > 0 ? '+' : ''}${profitSpaceVal} ${currencyValue}`}
                       </strong>
                     </div>
                     <div className="account-settings-field is-readonly">
@@ -3607,7 +3607,7 @@ const AccountDetailsModal = ({
                       <div>
                         <dt>Floating P / L</dt>
                         <dd className={`tabular ${Number(profitVal) > 0 ? 'is-positive' : Number(profitVal) < 0 ? 'is-negative' : ''}`}>
-                          {Number(profitVal) > 0 ? `+${profitSpaceVal}` : profitSpaceVal} {currencyValue}
+                          {profitSpaceVal === '—' ? '—' : `${Number(profitVal) > 0 ? '+' : ''}${profitSpaceVal} ${currencyValue}`}
                         </dd>
                       </div>
                       <div><dt>Free Margin</dt><dd className="tabular">{freeMarginSpaceVal !== '—' ? `${freeMarginSpaceVal} ${currencyValue}` : '—'}</dd></div>

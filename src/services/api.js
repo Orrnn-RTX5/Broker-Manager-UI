@@ -19,6 +19,7 @@ import { MANAGER_API } from '../config/managerApiContract.js';
 import { requestReportsSummary } from './reportsSummary.js';
 import { fetchOnlineUsersSnapshot, pageOnlineUsers, clearOnlineUsersSnapshot } from './onlineUsersSnapshot.js';
 import { advanceRealtimeCacheRevision } from './realtimeCacheRevision.js';
+import { accountMetricValue } from './metricsNullable.js';
 
 export { chunkSymbolNames, SYMBOL_PARAMS_BATCH_SIZE } from '../utils/symbolParams';
 
@@ -130,15 +131,17 @@ export const normalizeTradingAccountRow = (p = {}) => ({
   country: p.Country || p.country || '',
   client: p.client || p.Client || '',
   balance: p.balance !== undefined ? p.balance : (p.Balance !== undefined ? p.Balance : 0),
-  equity: p.equity !== undefined ? p.equity : (p.Equity !== undefined ? p.Equity : 0),
-  profit: p.profit !== undefined ? p.profit : (p.Profit !== undefined ? p.Profit : 0),
+  // Live metrics stay null when the server has none (rendered as "—"), never 0.
+  equity: accountMetricValue(p, ['equity', 'Equity']),
+  profit: accountMetricValue(p, ['profit', 'Profit']),
   currency: p.Currency || p.currency || '',
   leverage: p.leverage || p.Leverage || 100,
   credit: p.credit || p.Credit || 0,
   status: p.status || p.Status || 'active',
-  margin: p.margin || p.Margin || 0,
-  marginFree: p.marginFree || p.MarginFree || 0,
-  marginLevel: p.marginLevel || p.MarginLevel || 0,
+  margin: accountMetricValue(p, ['margin', 'Margin']),
+  marginFree: accountMetricValue(p, ['marginFree', 'MarginFree']),
+  marginLevel: accountMetricValue(p, ['marginLevel', 'MarginLevel']),
+  metricsAvailable: p.metricsAvailable ?? p.MetricsAvailable ?? null,
   email: p.email || p.Email || '',
   phone: p.phone || p.Phone || p.PhoneNumber || p.phoneNumber || '',
   company: p.company || p.Company || '',

@@ -2,6 +2,7 @@ import { getDataAccessScope, assertDataAccessScope } from './dataAccessScope.js'
 import { buildManagerApiUrl } from '../config/endpoints.js';
 import { desktopFetch } from './desktopHttp.js';
 import { sendWithSessionRefresh } from './authRequest.js';
+import { withMetricsNullable } from './metricsNullable.js';
 
 const isLoginEndpoint = (endpoint) =>
   endpoint.startsWith('/Connect') || endpoint.includes('/Connect?');
@@ -11,8 +12,8 @@ const browserOrigin = () => {
   return 'http://localhost';
 };
 
-const buildAuthenticatedUrl = (endpoint, token, { legacyQueryToken = false, preserveQueryId = false } = {}) => {
-  const url = new URL(buildManagerApiUrl(endpoint), browserOrigin());
+const buildAuthenticatedUrl = (endpoint, token, { legacyQueryToken = false, preserveQueryId = false, method } = {}) => {
+  const url = new URL(buildManagerApiUrl(withMetricsNullable(endpoint, method)), browserOrigin());
   if (legacyQueryToken && token) {
     url.searchParams.set('id', token);
   } else if (!preserveQueryId) {
@@ -39,7 +40,7 @@ export const fetchManagerApi = async (endpoint, options = {}) => {
   const response = await sendWithSessionRefresh((token) => {
     const headers = { accept: 'application/json', ...optionHeaders };
     if (token) headers.Authorization = `Bearer ${token}`;
-    return desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId }), {
+    return desktopFetch(buildAuthenticatedUrl(endpoint, token, { legacyQueryToken, preserveQueryId, method: fetchOptions.method }), {
       ...fetchOptions,
       headers,
     });

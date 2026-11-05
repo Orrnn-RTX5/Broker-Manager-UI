@@ -23,6 +23,9 @@ const fmt = (n) => {
   }).format(safe).replace(/,/g, ' ');
 };
 
+// Live metrics (equity, profit) the server could not supply arrive as null.
+const fmtMetric = (n) => (n === null || n === undefined || n === '' || !Number.isFinite(Number(n)) ? '—' : fmt(n));
+
 const TRADING_ACCOUNTS_CACHE_KEY = 'rtx5_trading_accounts_cache_v2';
 
 export const AccountTypeIcon = ({ group, row = null, groupRecord = null }) => {
@@ -581,10 +584,10 @@ const TradingAccountsDataGrid = ({
                     </td>
                   )}
                   {isVisible('equity') && (
-                    <td className="tabular is-left">{fmt(row.equity)}</td>
+                    <td className="tabular is-left">{fmtMetric(row.equity)}</td>
                   )}
                   {isVisible('profit') && (
-                    <td className="tabular is-left">{fmt(row.profit)}</td>
+                    <td className="tabular is-left">{fmtMetric(row.profit)}</td>
                   )}
                   {isVisible('currency') && (
                     <td className="is-left">{row.currency}</td>
