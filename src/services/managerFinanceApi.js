@@ -1,13 +1,14 @@
 import { fetchManagerApi } from './managerFetch.js';
 import { MANAGER_API, buildManagerAccountEndpoint } from '../config/managerApiContract.js';
 // The one source of the idempotency code lists lives in accountFinanceOps.js (round 7; no import cycle).
-import { IDEMPOTENCY_CODE_CLASSES } from '../components/Popups/accountFinanceOps.js';
+import { BALANCE_OP_ENABLED_TYPES, IDEMPOTENCY_CODE_CLASSES } from '../components/Popups/accountFinanceOps.js';
 
 export const MANAGER_TRANSACTION_ENDPOINTS = Object.freeze({
   deposit: MANAGER_API.transactionDeposit,
   withdraw: MANAGER_API.transactionWithdraw,
   credit: MANAGER_API.transactionCredit,
   transfer: MANAGER_API.transactionTransfer,
+  balanceOp: MANAGER_API.transactionBalanceOp,
 });
 
 // Exact decimal text, positive, at most two decimals. Money is never a JS Number here.
@@ -19,6 +20,10 @@ const SKIP_MARGIN_REASON_MAX_LENGTH = 500;
 
 // Statuses the contract defines. Any other `status` value is an unrecognised outcome.
 const KNOWN_STATUSES = Object.freeze(['COMPLETED', 'UNRESOLVED', 'PENDING', 'REVERSED']);
+
+// The engine-funding 202 (deposit, withdraw, credit, balance-op) carries the lowercase status "pending"
+// (contract v7b 6.6; writeEngineFundingAccepted, engineFundingPendingStatus = "pending"). It is a pending outcome.
+const ACCEPTED_202_STATUSES = Object.freeze(['UNRESOLVED', 'PENDING', 'pending']);
 
 // Server idempotency codes that mean the operation is already done (PLAN exact-codes table).
 export const ALREADY_APPLIED_IDEMPOTENCY_CODES = new Set(IDEMPOTENCY_CODE_CLASSES.alreadyApplied);
@@ -140,7 +145,7 @@ const readReplayed = (response, result) => {
  *   `unrecognized` true, keeping the raw status or code and the HTTP status.
  * - A 5xx, a network failure or a 2xx refusal throws with definite false.
  *
- * @param {string} type Endpoint key: deposit | withdraw | credit | transfer.
+ * @param {string} type Endpoint key: deposit | withdraw | credit | transfer | balanceOp.
  * @param {object} payload Request body. `amount` must be a decimal string.
  * @returns {Promise<{status: string, httpStatus: number, code: string|null,
  *   message: string, body: object|null, idempotencyKey: string,
@@ -155,12 +160,24 @@ export const submitManagerTransaction = async (type, payload = {}) => {
     throw createPreSendTypeError('Transaction amount must be a positive decimal string.');
   }
 
+  // balance-op (contract v7b 6.6): only the types this release enables, each with direction in or out. Anything else
+  // (the SO types, the dividend types, a missing direction) is refused before any request is made.
+  if (type === 'balanceOp') {
+    if (!BALANCE_OP_ENABLED_TYPES.includes(payload.type)) {
+      throw createPreSendTypeError(`Unsupported balance operation type: ${String(payload.type)}`);
+    }
+    if (payload.direction !== 'in' && payload.direction !== 'out') {
+      throw createPreSendTypeError(`Unsupported balance operation direction: ${String(payload.direction)}`);
+    }
+  }
+
   const body = { ...payload };
-  // The margin-check skip exists on withdraw only. Refuse it anywhere else, and
+  // The margin-check skip exists on a debit only: withdraw, or a balance-op `out`. Refuse it anywhere else, and
   // refuse a skip without a reason of 10 to 500 characters, before any request is made.
   if (Object.prototype.hasOwnProperty.call(payload, 'skip_margin_check')) {
-    if (type !== 'withdraw' || payload.skip_margin_check !== true) {
-      throw createPreSendTypeError(`skip_margin_check is only accepted as true on withdraw, not ${type}.`);
+    const debit = type === 'withdraw' || (type === 'balanceOp' && payload.direction === 'out');
+    if (!debit || payload.skip_margin_check !== true) {
+      throw createPreSendTypeError(`skip_margin_check is only accepted as true on withdraw or a balance-op out, not ${type}.`);
     }
     const reason = typeof payload.skip_margin_reason === 'string' ? payload.skip_margin_reason.trim() : '';
     if (reason.length < SKIP_MARGIN_REASON_MIN_LENGTH || reason.length > SKIP_MARGIN_REASON_MAX_LENGTH) {
@@ -221,7 +238,7 @@ export const submitManagerTransaction = async (type, payload = {}) => {
   }
 
   if (httpStatus === 202) {
-    if (statusText !== null && statusText !== 'UNRESOLVED' && statusText !== 'PENDING') {
+    if (statusText !== null && !ACCEPTED_202_STATUSES.includes(statusText)) {
       throw new ManagerTransactionError(typeof result?.error === 'string' ? result.error : `Unrecognised status: ${statusText}`, {
         code: code ?? statusText,
         httpStatus,

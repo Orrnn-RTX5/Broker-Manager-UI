@@ -10,6 +10,7 @@ export const MANAGER_API = Object.freeze({
   transactionWithdraw: '/api/v1/manager/transactions/withdraw',
   transactionCredit: '/api/v1/manager/transactions/credit',
   transactionTransfer: '/api/v1/manager/transactions/transfer',
+  transactionBalanceOp: '/api/v1/manager/transactions/balance-op',
   reportsSummary: '/reports/v1/summary',
   accountLimits: '/AccountLimitStatus',
   accountDetails: '/AccountDetailsMany',

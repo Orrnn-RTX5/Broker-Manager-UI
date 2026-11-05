@@ -463,6 +463,8 @@ export const buildManagerMarketWsUrl = (ticket) => buildManagerTicketWsUrl('/OnT
 
 export const buildAccountMetricsWsUrl = (ticket) => buildManagerTicketWsUrl('/OnAccountMetrics', ticket);
 
+export const buildAccountUpdatesWsUrl = (ticket) => buildManagerTicketWsUrl('/OnAccountUpdate', ticket);
+
 export const getPositionUpdatesWsPath = () => {
   updateDynamicEndpoints();
   const fallback = getDeploymentRuntimeConfig() || hasPinnedApiHost()

@@ -35,8 +35,10 @@ import {
   formatManagerMoneyIfKnown,
   formatManagerMoneyText,
   KEY_HOLD_PENDING_TEXT,
+  MANAGER_UNKNOWN_MONEY_TEXT,
   getManagerTransactionLabel,
   isKeyHoldCode,
+  isSkipMarginOperation,
   isSupportedManagerTransactionType,
   normalizeManagerAmount,
   normalizeSkipMarginReason,
@@ -135,9 +137,9 @@ export const canUseSkipMargin = ({ resolved = false, permissions = [] } = {}) =>
 );
 
 /**
- * Show the margin-skip checkbox only for a Balance withdrawal (`direction === 'out'`). Deposit
- * (`direction === 'in'`), Credit, and Transfer never show or accept the skip checkbox. The gate is the
- * operation, never the comment text.
+ * Show the margin-skip checkbox only for a debit (`direction === 'out'`) of Balance or of an enabled balance-op type
+ * (Charge, Correction, Bonus, Commission, Tax). Deposit (`direction === 'in'`), Credit, and Transfer never show or
+ * accept the skip checkbox. The gate is the operation, never the comment text.
  */
 export const canShowSkipMargin = ({
   resolved = false,
@@ -146,9 +148,7 @@ export const canShowSkipMargin = ({
   direction = null,
 } = {}) => {
   if (!canUseSkipMargin({ resolved, permissions })) return false;
-  const normalizedType = String(type ?? '').trim().toLowerCase();
-  if (normalizedType !== 'balance') return false;
-  return direction === DIRECTION_OUT;
+  return isSkipMarginOperation(type, direction);
 };
 
 const loginOf = (record) => record?.payload?.login ?? record?.payload?.from_login;
@@ -465,11 +465,103 @@ const originalOf = (record) => ({
 /** UTC, to the second, the same on every browser (as the H1 prompt). */
 export const formatHistoryTime = (ms) => `${new Date(ms).toISOString().replace('T', ' ').slice(0, 19)} UTC`;
 
-/** One history row as a single line of plain text (rendered as React text, never as HTML). */
-export const describeHistoryRow = (row, currency = '') => (
-  `${formatHistoryTime(row.time * 1000)} · ${row.operation_kind} (${row.direction}) · `
-  + `${joinMoneyAmount(formatManagerMoneyText(row.amount), currency)} · ${row.comment}`
+/**
+ * Plain labels for the history `operation_kind` (contract 6.9). The label comes only from this server field, never
+ * from the comment (a "[bonus]" comment prefix can be typed by anyone).
+ */
+export const HISTORY_KIND_LABELS = Object.freeze({
+  deposit: 'Deposit',
+  withdrawal: 'Withdrawal',
+  credit_in: 'Credit in',
+  credit_out: 'Credit out',
+  nbp_reset: 'Negative balance reset',
+  charge: 'Charge',
+  correction: 'Correction',
+  bonus: 'Bonus',
+  commission: 'Commission',
+  tax: 'Tax',
+  so_compensation: 'SO compensation',
+  so_credit_compensation: 'SO credit compensation',
+  transfer_in: 'Transfer in',
+  transfer_out: 'Transfer out',
+  unknown: 'Unknown operation',
+});
+
+/** The plain label of a history row's operation_kind. A kind this UI does not know shows as "Unknown operation". */
+export const historyKindLabel = (row) => (
+  typeof row?.operation_kind === 'string' && Object.prototype.hasOwnProperty.call(HISTORY_KIND_LABELS, row.operation_kind)
+    ? HISTORY_KIND_LABELS[row.operation_kind]
+    : HISTORY_KIND_LABELS.unknown
 );
+
+/** The display parts of one history row: UTC time, plain label, signed amount (+ in, - out) and the raw comment. */
+export const historyRowParts = (row, currency = '') => {
+  const amount = formatManagerMoneyText(row.amount);
+  const sign = amount === MANAGER_UNKNOWN_MONEY_TEXT ? '' : (row.direction === DIRECTION_OUT ? '-' : '+');
+  return {
+    time: formatHistoryTime(row.time * 1000),
+    label: historyKindLabel(row),
+    amountText: joinMoneyAmount(`${sign}${amount}`, currency),
+    comment: row.comment,
+  };
+};
+
+/** One history row as a single line of plain text (rendered as React text, never as HTML). */
+export const describeHistoryRow = (row, currency = '') => {
+  const parts = historyRowParts(row, currency);
+  return `${parts.time} · ${parts.label} · ${parts.amountText} · ${parts.comment}`;
+};
+
+// Phase B: the latest rows of the account history, shown under the Balance form.
+export const RECENT_HISTORY_LIMIT = 20;
+
+/**
+ * The live ledger key that reloads the history list: the account's live balance and credit as sent by metrics_update.
+ * It changes only when money moved (any tab, any manager), not on every equity tick. '' while no live row is known.
+ */
+export const recentHistoryTrigger = (liveMetrics) => {
+  if (!liveMetrics || typeof liveMetrics !== 'object') return '';
+  const row = liveMetrics.row && typeof liveMetrics.row === 'object' ? liveMetrics.row : liveMetrics;
+  const part = (value) => (typeof value === 'number' || typeof value === 'string' ? String(value) : '');
+  return `${part(row.balance)}|${part(row.credit)}`;
+};
+export const RECENT_HISTORY_HEADING_TEXT = 'Recent operations';
+export const RECENT_HISTORY_EMPTY_TEXT = 'No operations in the account history yet.';
+export const RECENT_HISTORY_UNAVAILABLE_TEXT = 'Account history unavailable';
+
+/**
+ * The history panel state while a read for `login` runs. Rows already shown are kept only when they belong to the same
+ * login; another account's rows are never carried over (they would show under the wrong account until the read ends).
+ */
+export const recentHistoryLoadingState = (prev, login) => (
+  prev && prev.login === login && prev.ok === true
+    ? { login, loading: true, ok: true, rows: prev.rows, text: '' }
+    : { login, loading: true, ok: false, rows: [], text: '' }
+);
+
+/** The history panel state to render for `login`: null when the state belongs to another account. */
+export const recentHistoryFor = (state, login) => (state && state.login === login ? state : null);
+
+/**
+ * The latest history rows for the Balance tab (contract 6.9), newest first. One page of `limit` rows. Never throws:
+ * a failure, a timeout or a row of another shape gives `{ ok: false }` with RECENT_HISTORY_UNAVAILABLE_TEXT, never a
+ * partial list. `fetchHistory` defaults to the production reader; tests inject a fake.
+ */
+export const loadRecentBalanceHistory = async ({
+  login, fetchHistory = fetchManagerBalanceHistory, limit = RECENT_HISTORY_LIMIT, timeoutMs = HISTORY_READ_TIMEOUT_MS,
+} = {}) => {
+  const unavailable = { ok: false, text: RECENT_HISTORY_UNAVAILABLE_TEXT, rows: [] };
+  let result;
+  try {
+    result = await readHistoryPage(fetchHistory, login, { limit }, timeoutMs);
+  } catch {
+    return unavailable;
+  }
+  const items = result?.items;
+  if (!Array.isArray(items) || items.length > HISTORY_PAGE_LIMIT || !items.every(isHistoryRowShape)) return unavailable;
+  const rows = [...items].sort((a, b) => (b.time - a.time) || (b.id - a.id)).slice(0, limit);
+  return { ok: true, text: '', rows };
+};
 
 /** Display parts of the pending record, for the acknowledge dialog. Read-only. */
 export const describeOriginalOperation = (original, { currency = '', language = 'en' } = {}) => {
@@ -1123,12 +1215,11 @@ export const prepareBalanceSubmission = ({
     return resetFailure('This account has an invalid login ID. Please reopen the account and try again.');
   }
 
-  // The skip flag is honoured only for a Balance withdrawal. Deposit ignores it.
+  // The skip flag is honoured only for a debit of Balance or of an enabled balance-op type. Deposit ignores it.
   const skipForAttempt = Boolean(
     canSkipMargin
     && skipMarginChecked
-    && direction === DIRECTION_OUT
-    && transactionTypeKey === 'balance',
+    && isSkipMarginOperation(transactionTypeKey, direction),
   );
   if (skipForAttempt) {
     try {

@@ -54,6 +54,15 @@ import {
   normalizeDecimalText,
   H1_PROMPT_TEMPLATE,
   executeBalanceOperation,
+  HISTORY_KIND_LABELS,
+  historyKindLabel,
+  historyRowParts,
+  loadRecentBalanceHistory,
+  recentHistoryFor,
+  recentHistoryLoadingState,
+  recentHistoryTrigger,
+  RECENT_HISTORY_LIMIT,
+  RECENT_HISTORY_UNAVAILABLE_TEXT,
   fillPromptTemplate,
   persistObservedExpiry,
   prepareBalanceSubmission,
@@ -1981,7 +1990,7 @@ test('R8 (b) the history text is plain text: a hostile comment and manager name 
   const hostile = { id: 3, time: 1_700_000_000, operation_kind: 'deposit', direction: 'in', amount: '1', balance_after: '1', comment: '<img src=x onerror=alert(1)> {amount} $& $1' };
   const line = describeHistoryRow(hostile, '');
   assert.ok(line.includes('<img src=x onerror=alert(1)> {amount} $& $1'), 'the comment is kept as typed');
-  assert.ok(line.includes('deposit (in)'));
+  assert.ok(line.includes(' · Deposit · +1.00 · '), line);
   const original = describeOriginalOperation({ type: 'balance', direction: 'out', amount: '2.50', createdAt: 1_700_000_000_000, manager: '<b>mgr</b>' });
   assert.equal(original.manager, '<b>mgr</b>');
   assert.equal(original.time, '2023-11-14 22:13:20 UTC');
@@ -2951,4 +2960,205 @@ test('R10 texts: the too-soon text exists in all 8 locale dictionaries', async (
       `${name} has the too-soon text`,
     );
   }
+});
+
+// ---- Phase B (balance-op types, history labels, recent history). Fake stores and fake history readers only. ----
+
+const PHASE_B_TYPES = ['charge', 'correction', 'bonus', 'commission', 'tax'];
+
+test('Phase B: the skip box shows for a Phase B withdrawal with the grant, never for a deposit, Credit, Transfer or an SO type', () => {
+  const key = PERMISSIONS.MANAGE_FINANCES_SKIP_MARGIN;
+  for (const type of PHASE_B_TYPES) {
+    assert.equal(canShowSkipMargin({ resolved: true, permissions: [key], type, direction: 'out' }), true, type);
+    assert.equal(canShowSkipMargin({ resolved: true, permissions: [key], type, direction: 'in' }), false, type);
+    assert.equal(canShowSkipMargin({ resolved: true, permissions: [PERMISSIONS.MANAGE_FINANCES], type, direction: 'out' }), false, `${type} without the grant`);
+    assert.equal(canShowSkipMargin({ resolved: false, permissions: [key], type, direction: 'out' }), false, `${type} while loading`);
+  }
+  for (const type of ['so_compensation', 'so_credit_compensation']) {
+    assert.equal(canShowSkipMargin({ resolved: true, permissions: [key], type, direction: 'out' }), false, type);
+  }
+});
+
+test('Phase B: prepareBalanceSubmission builds the balance-op request; the skip is honoured on out only', () => {
+  const base = {
+    canManageFinances: true, canSkipMargin: true, skipMarginChecked: true, skipMarginReason: 'Owner-approved correction, ticket 1',
+    depositAmount: '25', loginId: LOGIN, depositComment: '[bonus] spoof', currencyValue: 'USD',
+  };
+  const out = prepareBalanceSubmission({ ...base, transactionType: 'correction', direction: OUT });
+  assert.equal(out.ok, true);
+  assert.equal(out.skipForAttempt, true);
+  assert.equal(out.request.endpointKey, 'balanceOp');
+  assert.deepEqual(out.request.payload, {
+    login: LOGIN, amount: '25.00', comment: '[bonus] spoof', type: 'correction', direction: 'out',
+    skip_margin_check: true, skip_margin_reason: 'Owner-approved correction, ticket 1',
+  });
+  assert.equal(out.confirmationPrompt, `Correction withdrawal 25.00 USD from account #${LOGIN}?`);
+  const deposit = prepareBalanceSubmission({ ...base, transactionType: 'correction', direction: 'in' });
+  assert.equal(deposit.ok, true);
+  assert.equal(deposit.skipForAttempt, false, 'a deposit ignores a checked skip box');
+  assert.deepEqual(deposit.request.payload, { login: LOGIN, amount: '25.00', comment: '[bonus] spoof', type: 'correction', direction: 'in' });
+  const noGrant = prepareBalanceSubmission({ ...base, canSkipMargin: false, transactionType: 'tax', direction: OUT });
+  assert.equal(noGrant.skipForAttempt, false);
+  assert.equal('skip_margin_check' in noGrant.request.payload, false);
+  const so = prepareBalanceSubmission({ ...base, transactionType: 'so_credit_compensation', direction: OUT });
+  assert.equal(so.ok, false, 'an SO type is refused before any request exists');
+  assert.match(so.feedback.text, /not available yet/);
+});
+
+test('Phase B: each enabled type and direction runs through the stored-operation path to balance-op, with the type in the success text', async () => {
+  for (const type of PHASE_B_TYPES) {
+    for (const direction of ['in', OUT]) {
+      const store = makeStore(createFakeStorage(), createClock());
+      const sender = scriptedSubmit(okOutcome({ body: { balance_after: 1010, type, direction } }));
+      const prepared = prepareBalanceSubmission({
+        transactionType: type, direction, canManageFinances: true, depositAmount: '10', loginId: LOGIN, currencyValue: 'USD',
+      });
+      assert.equal(prepared.ok, true, `${type}:${direction}`);
+      const outcome = await executeBalanceOperation({
+        store, scope: SCOPE, loginKey: LOGIN, type, direction, endpointKey: prepared.request.endpointKey,
+        payload: prepared.request.payload, createKey: () => `PB-${type}-${direction}-key`, canManageFinances: true,
+        submit: sender.submit, currency: 'USD', wait: async () => {},
+      });
+      assert.equal(outcome.kind, 'success', `${type}:${direction}`);
+      assert.equal(sender.calls.length, 1);
+      assert.equal(sender.calls[0].endpointKey, 'balanceOp');
+      assert.equal(sender.calls[0].payload.type, type);
+      assert.equal(sender.calls[0].payload.direction, direction);
+      assert.equal(sender.calls[0].payload.idempotency_key, `PB-${type}-${direction}-key`);
+      const label = HISTORY_KIND_LABELS[type];
+      assert.ok(outcome.successText.startsWith(`${label} ${direction === OUT ? 'withdrawal' : 'deposit'} of 10.00 USD`), outcome.successText);
+    }
+  }
+});
+
+test('Phase B: a balance-op 202 pending keeps the record and the same key is resent on retry', async () => {
+  const store = makeStore(createFakeStorage(), createClock());
+  const pendingOutcome = { status: 'pending', httpStatus: 202, code: null, message: '', body: { status: 'pending' }, replayed: false, reversal: null };
+  const sender = scriptedSubmit(pendingOutcome, okOutcome());
+  const prepared = prepareBalanceSubmission({ transactionType: 'bonus', direction: 'in', canManageFinances: true, depositAmount: '5', loginId: LOGIN });
+  const first = await executeBalanceOperation({
+    store, scope: SCOPE, loginKey: LOGIN, type: 'bonus', direction: 'in', endpointKey: 'balanceOp', payload: prepared.request.payload,
+    createKey: () => 'PB-202-key', canManageFinances: true, submit: sender.submit, wait: async () => {},
+  });
+  assert.notEqual(first.kind, 'success');
+  assert.equal(store.list({ scope: SCOPE, loginKey: LOGIN }).length, 1, 'the pending record is kept');
+  const retried = await retryBalanceOperation({
+    store, scope: SCOPE, loginKey: LOGIN, idempotencyKey: 'PB-202-key', submit: sender.submit, canManageFinances: true, wait: async () => {},
+  });
+  assert.equal(retried.kind, 'success');
+  assert.deepEqual(sender.calls.map((call) => [call.endpointKey, call.payload.idempotency_key]), [['balanceOp', 'PB-202-key'], ['balanceOp', 'PB-202-key']]);
+});
+
+test('Phase B: history labels come from operation_kind only; a spoofed "[bonus]" comment on a deposit stays a Deposit', () => {
+  const spoof = { id: 7, time: 1_700_000_000, operation_kind: 'deposit', direction: 'in', amount: '50', balance_after: '50', comment: '[bonus] Q4 promotion', kind_source: 'projection' };
+  assert.equal(historyKindLabel(spoof), 'Deposit');
+  const parts = historyRowParts(spoof, 'USD');
+  assert.deepEqual(parts, { time: '2023-11-14 22:13:20 UTC', label: 'Deposit', amountText: '+50.00 USD', comment: '[bonus] Q4 promotion' });
+  const bonusOut = { ...spoof, id: 8, operation_kind: 'bonus', direction: 'out', comment: 'Deposit' };
+  assert.equal(historyRowParts(bonusOut, 'USD').label, 'Bonus');
+  assert.equal(historyRowParts(bonusOut, 'USD').amountText, '-50.00 USD');
+  const expected = {
+    deposit: 'Deposit', withdrawal: 'Withdrawal', credit_in: 'Credit in', credit_out: 'Credit out', nbp_reset: 'Negative balance reset',
+    charge: 'Charge', correction: 'Correction', bonus: 'Bonus', commission: 'Commission', tax: 'Tax',
+    so_compensation: 'SO compensation', so_credit_compensation: 'SO credit compensation',
+    transfer_in: 'Transfer in', transfer_out: 'Transfer out', unknown: 'Unknown operation',
+  };
+  for (const [kind, label] of Object.entries(expected)) assert.equal(historyKindLabel({ ...spoof, operation_kind: kind }), label, kind);
+  for (const kind of ['bonus_in', 'BONUS', '', 'constructor', '__proto__']) {
+    assert.equal(historyKindLabel({ ...spoof, operation_kind: kind }), 'Unknown operation', `${kind} is never shown raw`);
+  }
+});
+
+test('Phase B: loadRecentBalanceHistory reads one page of RECENT_HISTORY_LIMIT rows, newest first', async () => {
+  const seen = [];
+  const rows = [
+    { id: 1, time: 100, operation_kind: 'deposit', direction: 'in', amount: '10', balance_after: '10', comment: '' },
+    { id: 3, time: 300, operation_kind: 'tax', direction: 'out', amount: '1', balance_after: '9', comment: 'Tax' },
+    { id: 2, time: 300, operation_kind: 'bonus', direction: 'in', amount: '2', balance_after: '11', comment: '' },
+  ];
+  const result = await loadRecentBalanceHistory({
+    login: String(LOGIN),
+    fetchHistory: async (login, query) => { seen.push({ login, query }); return { items: rows, nextCursor: 'more' }; },
+  });
+  assert.deepEqual(seen, [{ login: String(LOGIN), query: { limit: RECENT_HISTORY_LIMIT } }]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.rows.map((row) => row.id), [3, 2, 1]);
+});
+
+test('Phase B: loadRecentBalanceHistory fails closed on an error, a bad row or a timeout (never a partial list)', async () => {
+  const good = { id: 1, time: 100, operation_kind: 'deposit', direction: 'in', amount: '10', balance_after: '10', comment: '' };
+  const cases = [
+    async () => { throw new Error('HTTP 503'); },
+    async () => ({ items: [good, { ...good, id: 2, amount: 10 }] }),
+    async () => ({ items: [good, { ...good, id: 3, direction: 'sideways' }] }),
+    async () => ({ items: 'nope' }),
+    async () => null,
+  ];
+  for (const fetchHistory of cases) {
+    const result = await loadRecentBalanceHistory({ login: '1', fetchHistory });
+    assert.deepEqual(result, { ok: false, text: RECENT_HISTORY_UNAVAILABLE_TEXT, rows: [] });
+  }
+  const slow = await loadRecentBalanceHistory({ login: '1', timeoutMs: 5, fetchHistory: () => new Promise(() => {}) });
+  assert.equal(slow.ok, false);
+});
+
+test('Phase B: the Balance tab renders the recent history from historyRowParts, as text, under the form', () => {
+  const modal = fs.readFileSync(path.join(REPO_POPUPS_DIR, 'AccountDetailsModal.jsx'), 'utf8');
+  assert.match(modal, /loadRecentBalanceHistory\(\{ login: financeLoginKey \}\)/);
+  assert.match(modal, /const parts = historyRowParts\(row, currencyValue\);/);
+  assert.match(modal, /<span className="font-semibold">\{parts\.label\}<\/span>/);
+  assert.doesNotMatch(modal, /dangerouslySetInnerHTML=\{\{ __html: parts/);
+  assert.doesNotMatch(modal, /operation_kind\}/, 'the raw operation_kind is never rendered');
+});
+
+test('Phase B: every new Balance-tab string has a translation in all 8 locales', () => {
+  const strings = [
+    'Recent operations', 'No operations in the account history yet.', 'Account history unavailable',
+    'This operation is available only for engine-owned accounts.',
+    'This operation has no funding mapping on the server. Nothing was booked.',
+    ...Object.values(HISTORY_KIND_LABELS),
+  ];
+  const languages = Object.keys(UI_DICTIONARIES).filter((language) => language !== 'en');
+  assert.deepEqual([...languages].sort(), ['de', 'es', 'fr', 'hi', 'ja', 'ru', 'tr', 'zh']);
+  for (const language of languages) {
+    for (const text of strings) {
+      const translated = UI_DICTIONARIES[language][text];
+      // The same word is a valid translation (French "Correction"); a missing entry is not.
+      assert.equal(typeof translated === 'string' && translated.trim() !== '', true, `${language}: ${text}`);
+    }
+  }
+});
+
+test('Phase B live: the history list reloads when the live balance or credit changes, not on an equity tick', () => {
+  assert.equal(recentHistoryTrigger(null), '');
+  assert.equal(recentHistoryTrigger(undefined), '');
+  const base = { login: 710001, balance: 1000, credit: 50, equity: 1012.5, free_margin: 990 };
+  assert.equal(recentHistoryTrigger(base), '1000|50');
+  assert.equal(recentHistoryTrigger({ ...base, equity: 1013, free_margin: 991 }), '1000|50', 'a P/L tick keeps the key');
+  assert.notEqual(recentHistoryTrigger({ ...base, balance: 1100 }), '1000|50', 'a deposit elsewhere changes the key');
+  assert.notEqual(recentHistoryTrigger({ ...base, credit: 0 }), '1000|50', 'a credit change elsewhere changes the key');
+  assert.equal(recentHistoryTrigger({ row: { balance: '9737.5', credit: '0' } }), '9737.5|0', 'a wrapped live row is read too');
+  assert.equal(recentHistoryTrigger({ balance: null, credit: undefined }), '|');
+  const modal = fs.readFileSync(path.join(REPO_POPUPS_DIR, 'AccountDetailsModal.jsx'), 'utf8');
+  assert.match(modal, /const recentHistoryLedgerKey = recentHistoryTrigger\(liveMetrics\);/);
+  assert.match(modal, /\}, \[activeTab, financeLoginKey, depositSuccess, depositError, recentHistoryLedgerKey\]\);/);
+  assert.ok(modal.indexOf('const liveMetrics = useLiveAccountMetrics(loginId);') < modal.indexOf('const recentHistoryLedgerKey'), 'the key is read after the live hook');
+});
+
+test('Phase B: history rows of one account never show under another account (login change while loading)', () => {
+  const rowsA = [{ id: 1, time: 100, operation_kind: 'deposit', direction: 'in', amount: '10', balance_after: '10', comment: '' }];
+  const loadedA = { login: '710001', loading: false, ok: true, rows: rowsA, text: '' };
+  assert.deepEqual(recentHistoryLoadingState(loadedA, '710001'), { login: '710001', loading: true, ok: true, rows: rowsA, text: '' },
+    'a reload of the same account keeps its rows on screen');
+  assert.deepEqual(recentHistoryLoadingState(loadedA, '710002'), { login: '710002', loading: true, ok: false, rows: [], text: '' },
+    'another account starts empty');
+  assert.deepEqual(recentHistoryLoadingState(null, '710002'), { login: '710002', loading: true, ok: false, rows: [], text: '' });
+  assert.deepEqual(recentHistoryLoadingState({ ...loadedA, ok: false, rows: [] }, '710001').rows, []);
+  assert.equal(recentHistoryFor(loadedA, '710002'), null, 'a late state of another login is not rendered');
+  assert.equal(recentHistoryFor(loadedA, '710001'), loadedA);
+  assert.equal(recentHistoryFor(null, '710001'), null);
+  const modal = fs.readFileSync(path.join(REPO_POPUPS_DIR, 'AccountDetailsModal.jsx'), 'utf8');
+  assert.match(modal, /setRecentHistory\(\(prev\) => recentHistoryLoadingState\(prev, financeLoginKey\)\);/);
+  assert.match(modal, /setRecentHistory\(\{ login: financeLoginKey, loading: false, \.\.\.result \}\);/);
+  assert.match(modal, /const recentHistory = recentHistoryFor\(recentHistoryState, financeLoginKey\);/);
 });

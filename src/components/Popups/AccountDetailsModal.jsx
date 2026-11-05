@@ -37,6 +37,8 @@ import {
   HISTORY_OPEN_TEXT,
   HISTORY_PENDING_LABEL,
   STARTED_BY_MANAGER_PREFIX,
+  RECENT_HISTORY_EMPTY_TEXT,
+  RECENT_HISTORY_HEADING_TEXT,
   SUBMIT_BLOCKED_TEXT,
   UNRESOLVED_OPERATION_TITLE,
   acknowledgeCheckView,
@@ -49,7 +51,12 @@ import {
   describeHistoryRow,
   describeOriginalOperation,
   executeBalanceOperation,
+  historyRowParts,
   loadAcknowledgeHistory,
+  loadRecentBalanceHistory,
+  recentHistoryFor,
+  recentHistoryLoadingState,
+  recentHistoryTrigger,
   persistObservedExpiry,
   prepareBalanceSubmission,
   recentCompletionFor,
@@ -86,7 +93,9 @@ import {
   formatManagerMoneyText,
   getManagerCommentPresets,
   getManagerTransactionOptions,
+  hasUnavailableManagerOperations,
   isManagerTransactionAvailable,
+  isSkipMarginOperation,
   isTransferType,
   resolveManagerTransactionType,
 } from './accountFinanceOps.js';
@@ -1230,6 +1239,9 @@ const AccountDetailsModal = ({
       setHistoryCheck({ token, idempotencyKey: notice.idempotencyKey, version: notice.version, loading: false, ...check });
     });
   };
+  // Phase B: the latest account history under the Balance form, labelled from operation_kind (never the comment).
+  const [recentHistoryState, setRecentHistory] = useState(null);
+  const recentHistoryRequestRef = useRef(0);
   // The store is the source of the notice, the barrier and the running state. Any change, here or in another tab, re-renders.
   const [financeTick, setFinanceTick] = useState(0);
   useEffect(() => pendingFinanceAttempts.subscribe(() => setFinanceTick((tick) => tick + 1)), []);
@@ -1260,6 +1272,25 @@ const AccountDetailsModal = ({
   const [positionsSnapshotRevision, setPositionsSnapshotRevision] = useState(0);
   const positions = useLivePositions(showPositions ? snapshotPositions : [], loginId, showPositions, positionsSnapshotRevision);
   const liveMetrics = useLiveAccountMetrics(loginId);
+  // The history list reloads when the tab opens, the login changes, an operation result arrives here, or the live
+  // balance/credit of this account changes (an operation from another tab or manager, pushed by metrics_update).
+  // A stale answer is ignored.
+  const recentHistoryLedgerKey = recentHistoryTrigger(liveMetrics);
+  useEffect(() => {
+    recentHistoryRequestRef.current += 1;
+    if (activeTab !== 'Balance') {
+      setRecentHistory(null);
+      return;
+    }
+    const token = recentHistoryRequestRef.current;
+    setRecentHistory((prev) => recentHistoryLoadingState(prev, financeLoginKey));
+    void loadRecentBalanceHistory({ login: financeLoginKey }).then((result) => {
+      if (recentHistoryRequestRef.current !== token) return;
+      setRecentHistory({ login: financeLoginKey, loading: false, ...result });
+    });
+  }, [activeTab, financeLoginKey, depositSuccess, depositError, recentHistoryLedgerKey]);
+  // Only the state of the account on screen is rendered (never another login's rows).
+  const recentHistory = recentHistoryFor(recentHistoryState, financeLoginKey);
   const symbolsMap = useSymbolStore((state) => state.symbols);
   const [exposureChartSide, setExposureChartSide] = useState('long');
   const [hoveredExposureAsset, setHoveredExposureAsset] = useState(null);
@@ -2489,7 +2520,7 @@ const AccountDetailsModal = ({
   });
   const summaryEquityText = financeSummary.equityText;
   const summaryFreeMarginText = financeSummary.freeMarginText;
-  const hasUnavailableOperations = getManagerTransactionOptions().some((option) => !option.enabled);
+  const hasUnavailableOperations = hasUnavailableManagerOperations();
 
   const rawBalanceVal = getFieldValue('Balance', 0);
   const rawCreditVal = getFieldValue('Credit', 0);
@@ -3882,7 +3913,7 @@ const AccountDetailsModal = ({
                           const nextType = resolveManagerTransactionType(e.target.value);
                           setTransactionType(nextType);
                           setDepositDestination('');
-                          if (nextType !== 'balance') {
+                          if (!isSkipMarginOperation(nextType, DIRECTION_OUT)) {
                             setSkipMarginChecked(false);
                             setSkipMarginReason('');
                           }
@@ -4051,6 +4082,34 @@ const AccountDetailsModal = ({
                     )}
                     {!canManageFinances && <p role="status">Your role does not have permission to manage account funds.</p>}
                   </form>
+                </div>
+
+                <div className="account-transaction-card" role="region" aria-label={RECENT_HISTORY_HEADING_TEXT}>
+                  <div className="account-transaction-header">
+                    <h2 className="text-[12px] font-bold   tracking-wide uppercase">{RECENT_HISTORY_HEADING_TEXT}</h2>
+                  </div>
+                  {recentHistory?.loading && !recentHistory.ok && <p role="status" className="text-[12px]">{HISTORY_LOADING_TEXT}</p>}
+                  {recentHistory && !recentHistory.loading && !recentHistory.ok && (
+                    <p role="alert" className="text-[12px]">{recentHistory.text}</p>
+                  )}
+                  {recentHistory?.ok && recentHistory.rows.length === 0 && (
+                    <p className="text-[12px] text-gray-500">{RECENT_HISTORY_EMPTY_TEXT}</p>
+                  )}
+                  {recentHistory?.ok && recentHistory.rows.length > 0 && (
+                    <ul className="text-[11px] flex flex-col gap-0.5">
+                      {recentHistory.rows.map((row) => {
+                        const parts = historyRowParts(row, currencyValue);
+                        return (
+                          <li key={row.id} className="flex flex-wrap gap-x-2">
+                            <span className="tabular text-gray-500">{parts.time}</span>
+                            <span className="font-semibold">{parts.label}</span>
+                            <span className="tabular">{parts.amountText}</span>
+                            {parts.comment ? <span className="text-gray-500">{parts.comment}</span> : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               </div>
             ) : activeTab === 'Credentials' ? (

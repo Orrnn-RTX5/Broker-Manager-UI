@@ -40,6 +40,12 @@ import {
   deriveAccountFinanceSummary,
   getLiveAccountMetricValue,
   resolveAccountPopupFieldValue,
+  BALANCE_OP_ENABLED_TYPES,
+  BALANCE_OP_ENGINE_ONLY_TEXT,
+  FUNDING_NOT_MAPPED_TEXT,
+  MANAGER_RELEASE_EXCLUDED_TYPES,
+  hasUnavailableManagerOperations,
+  isSkipMarginOperation,
 } from './accountFinanceOps.js';
 
 // Fake logins only. Never real owner or QA-pool accounts in test data.
@@ -50,7 +56,9 @@ const MT5_ORDER = [
   'balance', 'credit', 'charge', 'correction', 'bonus', 'commission',
   'tax', 'so_compensation', 'so_credit_compensation', 'transfer',
 ];
-const DISABLED = ['charge', 'correction', 'bonus', 'commission', 'tax', 'so_compensation', 'so_credit_compensation'];
+// Phase B: only the two SO types stay disabled (owner scope 2026-11-04).
+const DISABLED = ['so_compensation', 'so_credit_compensation'];
+const ENABLED = ['balance', 'credit', 'charge', 'correction', 'bonus', 'commission', 'tax', 'transfer'];
 
 
 describe('accountFinanceOps operation list', () => {
@@ -59,13 +67,14 @@ describe('accountFinanceOps operation list', () => {
     assert.deepEqual([...MANAGER_TRANSACTION_TYPES], MT5_ORDER);
   });
 
-  it('enables only balance, credit and transfer in Phase A', () => {
+  it('enables balance, credit, the five Phase B types and transfer; the SO types stay disabled', () => {
     const options = getManagerTransactionOptions();
     assert.deepEqual(options.map((option) => option.value), MT5_ORDER);
     assert.deepEqual(
       options.filter((option) => option.enabled).map((option) => option.value),
-      ['balance', 'credit', 'transfer'],
+      ENABLED,
     );
+    assert.deepEqual(options.filter((option) => !option.enabled).map((option) => option.value), DISABLED);
     assert.equal(options.find((option) => option.value === 'so_credit_compensation').label, 'SO credit compensation');
     assert.equal(options.find((option) => option.value === 'balance').label, 'Balance');
   });
@@ -77,7 +86,7 @@ describe('accountFinanceOps operation list', () => {
   });
 
   it('reports availability: enabled only for live routes, false for unknown', () => {
-    for (const type of ['balance', 'credit', 'transfer']) assert.equal(isManagerTransactionAvailable(type), true);
+    for (const type of ENABLED) assert.equal(isManagerTransactionAvailable(type), true);
     for (const type of DISABLED) assert.equal(isManagerTransactionAvailable(type), false);
     assert.equal(isManagerTransactionAvailable('rebate'), false);
     assert.equal(isManagerTransactionAvailable(''), false);
@@ -175,7 +184,7 @@ describe('accountFinanceOps route mapping (existing routes)', () => {
     }), /Enter a destination login/);
   });
 
-  it('refuses every disabled operation in both directions, so no balance-op route is reachable', () => {
+  it('refuses every disabled operation in both directions, so no SO balance-op route is reachable', () => {
     for (const type of DISABLED) {
       for (const direction of ['in', 'out']) {
         assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /not available yet/);
@@ -475,13 +484,112 @@ describe('accountFinanceOps balance-op directions (contract v4)', () => {
     assert.equal(getManagerTransactionOptions().some((option) => /Dividend/.test(option.label)), false);
   });
 
-  it('keeps every balance-op type disabled in Phase A, whatever direction v4 names', () => {
-    for (const type of BALANCE_OP_TYPES) {
+  it('keeps the SO balance-op types disabled in this release, whatever direction the contract names', () => {
+    for (const type of BALANCE_OP_TYPES.filter((item) => DISABLED.includes(item))) {
       assert.equal(isManagerTransactionAvailable(type), false);
       for (const direction of ['in', 'out']) {
         assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /not available yet/);
       }
     }
+  });
+});
+
+describe('accountFinanceOps Phase B balance-op routes (contract v7b 6.6)', () => {
+  const PHASE_B = ['charge', 'correction', 'bonus', 'commission', 'tax'];
+  const LABELS = { charge: 'Charge', correction: 'Correction', bonus: 'Bonus', commission: 'Commission', tax: 'Tax' };
+
+  it('enables exactly the five Phase B types and keeps the SO types out of this release', () => {
+    assert.deepEqual([...BALANCE_OP_ENABLED_TYPES], PHASE_B);
+    assert.deepEqual([...MANAGER_RELEASE_EXCLUDED_TYPES], ['so_compensation', 'so_credit_compensation']);
+    for (const type of PHASE_B) assert.equal(isManagerTransactionAvailable(type), true, type);
+    for (const type of MANAGER_RELEASE_EXCLUDED_TYPES) assert.equal(isManagerTransactionAvailable(type), false, type);
+  });
+
+  it('maps every enabled type and direction to balance-op with the exact body', () => {
+    for (const type of PHASE_B) {
+      for (const direction of ['in', 'out']) {
+        const request = buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '12.5', comment: ' Monthly ' });
+        assert.equal(request.endpointKey, 'balanceOp', `${type}:${direction}`);
+        assert.deepEqual(request.payload, { login: LOGIN, amount: '12.50', comment: 'Monthly', type, direction }, `${type}:${direction}`);
+        assert.equal(typeof request.payload.amount, 'string', 'money stays exact decimal text');
+      }
+    }
+  });
+
+  it('fails closed on a missing or unknown direction for a balance-op type', () => {
+    for (const type of PHASE_B) {
+      for (const direction of [null, undefined, '', 'IN', 'both']) {
+        assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /Unsupported direction/);
+      }
+    }
+  });
+
+  it('keeps the SO types and the dividend types unreachable: every direction throws before a request exists', () => {
+    for (const type of MANAGER_RELEASE_EXCLUDED_TYPES) {
+      for (const direction of ['in', 'out', null]) {
+        assert.throws(() => buildManagerTransactionRequest({ type, direction, login: LOGIN, amount: '1.00' }), /not available yet/);
+      }
+    }
+    for (const type of ['dividend', 'dividend_franked']) {
+      assert.throws(() => buildManagerTransactionRequest({ type, direction: 'in', login: LOGIN, amount: '1.00' }), /Unsupported manager transaction type/);
+    }
+  });
+
+  it('allows the margin-check skip only on a debit: Balance or a Phase B type, direction out', () => {
+    const reason = 'Owner-approved reconciliation, ticket OPS-1';
+    for (const type of PHASE_B) {
+      assert.equal(isSkipMarginOperation(type, 'out'), true, type);
+      assert.equal(isSkipMarginOperation(type, 'in'), false, type);
+      const out = buildManagerTransactionRequest({
+        type, direction: 'out', login: LOGIN, amount: '5.00', skipMarginCheck: true, skipMarginReason: ` ${reason} `,
+      });
+      assert.deepEqual(out.payload, {
+        login: LOGIN, amount: '5.00', comment: '', type, direction: 'out', skip_margin_check: true, skip_margin_reason: reason,
+      });
+      assert.throws(() => buildManagerTransactionRequest({
+        type, direction: 'in', login: LOGIN, amount: '5.00', skipMarginCheck: true, skipMarginReason: reason,
+      }), /only be skipped on a withdrawal/);
+      assert.throws(() => buildManagerTransactionRequest({
+        type, direction: 'out', login: LOGIN, amount: '5.00', skipMarginCheck: true, skipMarginReason: 'short',
+      }), /reason of 10 to 500/);
+      assert.equal('skip_margin_check' in buildManagerTransactionRequest({ type, direction: 'out', login: LOGIN, amount: '5.00' }).payload, false);
+    }
+    assert.equal(isSkipMarginOperation('balance', 'out'), true);
+    for (const [type, direction] of [['balance', 'in'], ['credit', 'out'], ['transfer', null], ['so_credit_compensation', 'out'], ['so_compensation', 'in'], ['rebate', 'out']]) {
+      assert.equal(isSkipMarginOperation(type, direction), false, `${type}:${direction}`);
+    }
+  });
+
+  it('names the type and direction in the confirmation, success and failure text', () => {
+    for (const type of PHASE_B) {
+      const label = LABELS[type];
+      assert.equal(buildManagerTransactionConfirmation(type, '10.00 USD', LOGIN, null, 'in'), `${label} deposit 10.00 USD to account #${LOGIN}?`);
+      assert.equal(buildManagerTransactionConfirmation(type, '10.00 USD', LOGIN, null, 'out'), `${label} withdrawal 10.00 USD from account #${LOGIN}?`);
+      assert.equal(buildManagerTransactionSuccessMessage(type, '10.00 USD', LOGIN, null, 'in'), `${label} deposit of 10.00 USD to account #${LOGIN} completed.`);
+      assert.equal(buildManagerTransactionSuccessMessage(type, '10.00 USD', LOGIN, null, 'out'), `${label} withdrawal of 10.00 USD from account #${LOGIN} completed.`);
+      assert.equal(buildManagerTransactionFailurePrefix(type, LOGIN, 'out'), `${label} withdrawal for account #${LOGIN}`);
+    }
+  });
+
+  it('maps the balance-op refusal codes to plain text and keeps the server message as detail', () => {
+    assert.deepEqual(
+      describeManagerTransactionFailure({ code: 'BALANCE_OP_ENGINE_ONLY', message: 'legacy account' }, 'bonus'),
+      { text: BALANCE_OP_ENGINE_ONLY_TEXT, detail: 'legacy account', code: 'BALANCE_OP_ENGINE_ONLY' },
+    );
+    assert.deepEqual(
+      describeManagerTransactionFailure({ code: 'FUNDING_NOT_MAPPED', message: 'no chart' }, 'tax'),
+      { text: FUNDING_NOT_MAPPED_TEXT, detail: 'no chart', code: 'FUNDING_NOT_MAPPED' },
+    );
+    assert.equal(describeManagerTransactionFailure({ code: 'INSUFFICIENT_FUNDS', message: 'B07' }, 'charge').text, 'Insufficient balance / free margin');
+    assert.equal(IDEMPOTENCY_CODE_CLASSES.definite.includes('FUNDING_NOT_MAPPED'), true);
+    assert.equal(IDEMPOTENCY_CODE_CLASSES.definite.includes('BALANCE_OP_ENGINE_ONLY'), true);
+  });
+
+  it('hides the "not available yet" note when only the excluded SO types are disabled', () => {
+    assert.equal(hasUnavailableManagerOperations(), false);
+    const modalSource = readFileSync(new URL('./AccountDetailsModal.jsx', import.meta.url), 'utf8');
+    assert.match(modalSource, /const hasUnavailableOperations = hasUnavailableManagerOperations\(\);/);
+    assert.match(modalSource, /if \(!isSkipMarginOperation\(nextType, DIRECTION_OUT\)\) \{/);
   });
 });
 

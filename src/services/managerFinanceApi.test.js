@@ -694,3 +694,123 @@ test('R8b balance history: an invalid login is refused before any request', asyn
   await assert.rejects(fetchManagerBalanceHistory(''), TypeError);
   assert.equal(calls.length, 0);
 });
+
+// ---- Phase B: POST /transactions/balance-op (contract v7b 6.6). Fake fetch only. ----
+
+const BALANCE_OP_URL = /\/api\/v1\/manager\/transactions\/balance-op$/;
+
+test('Phase B: balance-op sends one POST with the exact body and the idempotency key', async () => {
+  respondWith(200, {
+    success: true, ticket: 0, balance_after: 9737.5, credit_after: 0, timestamp: 1761999999,
+    message: 'charge (out) of 12.5 processed successfully', type: 'charge', direction: 'out', engine_type: 'charge_out',
+    skip_margin_check: false, replayed: false, command_id: 'cmd-1',
+  });
+  const result = await submitManagerTransaction('balanceOp', {
+    login: FAKE_LOGIN, amount: '12.50', comment: 'Monthly charge', type: 'charge', direction: 'out', idempotency_key: 'chg-0001-key',
+  });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, BALANCE_OP_URL);
+  assert.equal(calls[0].options.method, 'POST');
+  assert.deepEqual(bodyOf(), {
+    login: FAKE_LOGIN, amount: '12.50', comment: 'Monthly charge', type: 'charge', direction: 'out', idempotency_key: 'chg-0001-key',
+  });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.replayed, false);
+  assert.equal(result.body.engine_type, 'charge_out');
+});
+
+test('Phase B: every enabled type and direction reaches balance-op', async () => {
+  for (const type of ['charge', 'correction', 'bonus', 'commission', 'tax']) {
+    for (const direction of ['in', 'out']) {
+      calls = [];
+      respondWith(200, { success: true, ticket: 0, balance_after: 1, type, direction, replayed: false });
+      const result = await submitManagerTransaction('balanceOp', { login: FAKE_LOGIN, amount: '1.00', type, direction });
+      assert.equal(result.status, 'ok', `${type}:${direction}`);
+      assert.match(calls[0].url, BALANCE_OP_URL);
+      assert.equal(bodyOf().type, type);
+      assert.equal(bodyOf().direction, direction);
+    }
+  }
+});
+
+test('Phase B: the SO types, the dividend types and a missing or bad direction are refused before any request', async () => {
+  const refused = [
+    { type: 'so_compensation' },
+    { type: 'so_credit_compensation', direction: 'out' },
+    { type: 'so_compensation', direction: 'in' },
+    { type: 'dividend', direction: 'in' },
+    { type: 'dividend_franked', direction: 'in' },
+    { type: 'nbp_reset', direction: 'in' },
+    { type: 'transfer_out', direction: 'out' },
+    { type: 'bonus' },
+    { type: 'bonus', direction: '' },
+    { type: 'bonus', direction: 'OUT' },
+    { direction: 'in' },
+  ];
+  for (const fields of refused) {
+    const error = await submitManagerTransaction('balanceOp', { login: FAKE_LOGIN, amount: '1.00', ...fields }).catch((e) => e);
+    assert.equal(error instanceof TypeError, true, JSON.stringify(fields));
+    assert.equal(isDefiniteManagerTransactionRefusal(error), true, JSON.stringify(fields));
+  }
+  assert.equal(calls.length, 0, 'no request was sent');
+});
+
+test('Phase B: skip_margin_check is accepted on a balance-op out only, with a 10-500 character reason', async () => {
+  respondWith(200, { success: true, ticket: 0, balance_after: -5, skip_margin_check: true, replayed: false });
+  await submitManagerTransaction('balanceOp', {
+    login: FAKE_LOGIN, amount: '5.00', type: 'tax', direction: 'out', skip_margin_check: true, skip_margin_reason: '  Owner-approved reason  ',
+  });
+  assert.equal(bodyOf().skip_margin_check, true);
+  assert.equal(bodyOf().skip_margin_reason, 'Owner-approved reason');
+  calls = [];
+  await assert.rejects(() => submitManagerTransaction('balanceOp', {
+    login: FAKE_LOGIN, amount: '5.00', type: 'tax', direction: 'in', skip_margin_check: true, skip_margin_reason: 'Owner-approved reason',
+  }), TypeError);
+  await assert.rejects(() => submitManagerTransaction('balanceOp', {
+    login: FAKE_LOGIN, amount: '5.00', type: 'tax', direction: 'out', skip_margin_check: true, skip_margin_reason: 'short',
+  }), TypeError);
+  assert.equal(calls.length, 0);
+});
+
+// The engine-funding 202 body as the server writes it (writeEngineFundingAccepted): success true, status "pending".
+const ENGINE_ACCEPTED_202 = {
+  success: true, accepted: true, status: 'pending', execution_owner: 'engine', command_id: 'cmd-2', idempotency_key: 'k-0000001',
+  message: 'The funding command was accepted; its engine outcome is not confirmed yet. Retry with the same idempotency_key to resolve it.',
+};
+
+test('Phase B: the engine-funding 202 (status "pending") is pending on balance-op and deposit, never unrecognised or a success', async () => {
+  for (const [type, payload] of [
+    ['balanceOp', { login: FAKE_LOGIN, amount: '1.00', type: 'bonus', direction: 'in' }],
+    ['deposit', { login: FAKE_LOGIN, amount: '1.00' }],
+    ['withdraw', { login: FAKE_LOGIN, amount: '1.00' }],
+  ]) {
+    respondWith(202, ENGINE_ACCEPTED_202);
+    const outcome = await submitManagerTransaction(type, payload);
+    assert.equal(outcome.status, 'pending', type);
+    assert.equal(outcome.httpStatus, 202, type);
+  }
+  respondWith(202, { success: true, status: 'Pending' });
+  const odd = await submitManagerTransaction('deposit', { login: FAKE_LOGIN, amount: '1.00' }).catch((e) => e);
+  assert.equal(odd.unrecognized, true, 'any other spelling stays unrecognised');
+});
+
+test('Phase B: a balance-op replay is reported', async () => {
+  respondWith(200, { success: true, ticket: 0, balance_after: 11, replayed: true, type: 'bonus', direction: 'in' });
+  const replay = await submitManagerTransaction('balanceOp', { login: FAKE_LOGIN, amount: '1.00', type: 'bonus', direction: 'in' });
+  assert.equal(replay.status, 'ok');
+  assert.equal(replay.replayed, true);
+});
+
+test('Phase B: balance-op refusals keep their code; BALANCE_OP_ENGINE_ONLY and FUNDING_NOT_MAPPED are definite, a 5xx is not', async () => {
+  for (const [code, status] of [['BALANCE_OP_ENGINE_ONLY', 400], ['FUNDING_NOT_MAPPED', 422], ['INVALID_INPUT', 400], ['OP_NOT_SUPPORTED', 422], ['INSUFFICIENT_FUNDS', 400]]) {
+    respondWith(status, { success: false, code, error: `Refused: ${code}` });
+    const error = await submitManagerTransaction('balanceOp', { login: FAKE_LOGIN, amount: '1.00', type: 'commission', direction: 'out' }).catch((e) => e);
+    assert.equal(error.code, code);
+    assert.equal(error.httpStatus, status);
+    assert.equal(isDefiniteManagerTransactionRefusal(error), true, code);
+  }
+  respondWith(503, { success: false, code: 'NO_FRESH_QUOTE', error: 'No fresh quote' });
+  const unknown = await submitManagerTransaction('balanceOp', { login: FAKE_LOGIN, amount: '1.00', type: 'commission', direction: 'out' }).catch((e) => e);
+  assert.equal(unknown.code, 'NO_FRESH_QUOTE');
+  assert.equal(isDefiniteManagerTransactionRefusal(unknown), false, 'a 5xx keeps the key: retry the same key');
+});

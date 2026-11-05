@@ -3,10 +3,11 @@
  *
  * The Balance tab lists the MT5 operations. Each operation plus a direction
  * (`in` from the Deposit (+) button, `out` from the Withdrawal (-) button)
- * maps onto a manager money route. Phase A wires only routes that already
- * exist: Balance (deposit / withdraw), Credit (credit, and credit out with
- * `credit_out: true`) and Transfer. The other operations are listed but
- * disabled until their balance-op route exists.
+ * maps onto a manager money route: Balance (deposit / withdraw), Credit
+ * (credit, and credit out with `credit_out: true`), Transfer, and (Phase B)
+ * Charge, Correction, Bonus, Commission and Tax on the generic balance-op
+ * route (contract v7b 6.6). SO compensation and SO credit compensation are
+ * listed but stay disabled in this release (owner scope, 2026-11-04).
  *
  * Money stays an exact decimal string: amounts are validated as text and are
  * never converted to a JS Number.
@@ -23,15 +24,15 @@ export const MANAGER_UNKNOWN_MONEY_TEXT = '—';
 const MAX_COMMENT_LENGTH = 500;
 const MAX_AMOUNT_WHOLE = '1000000';
 
-// MT5 order. `enabled` stays false until the operation's route exists.
+// MT5 order. `enabled` is false for an operation this release does not send.
 const OPERATIONS = Object.freeze({
   balance: Object.freeze({ label: 'Balance', enabled: true }),
   credit: Object.freeze({ label: 'Credit', enabled: true }),
-  charge: Object.freeze({ label: 'Charge', enabled: false }),
-  correction: Object.freeze({ label: 'Correction', enabled: false }),
-  bonus: Object.freeze({ label: 'Bonus', enabled: false }),
-  commission: Object.freeze({ label: 'Commission', enabled: false }),
-  tax: Object.freeze({ label: 'Tax', enabled: false }),
+  charge: Object.freeze({ label: 'Charge', enabled: true }),
+  correction: Object.freeze({ label: 'Correction', enabled: true }),
+  bonus: Object.freeze({ label: 'Bonus', enabled: true }),
+  commission: Object.freeze({ label: 'Commission', enabled: true }),
+  tax: Object.freeze({ label: 'Tax', enabled: true }),
   so_compensation: Object.freeze({ label: 'SO compensation', enabled: false }),
   so_credit_compensation: Object.freeze({ label: 'SO credit compensation', enabled: false }),
   transfer: Object.freeze({ label: 'Transfer', enabled: true }),
@@ -41,13 +42,30 @@ export const MANAGER_TRANSACTION_TYPES = Object.freeze(Object.keys(OPERATIONS));
 
 export const DEFAULT_MANAGER_TRANSACTION_TYPE = 'balance';
 
-// Existing routes only. Keys are `${type}:${direction}`; transfer has no direction.
+// The balance-op types this release sends (POST /transactions/balance-op, contract v7b 6.6). Each takes direction
+// `in` or `out` (handlers/secure_balance_op.go engineBalanceOpType). Dividend types are not in the backend table.
+export const BALANCE_OP_ENABLED_TYPES = Object.freeze(['charge', 'correction', 'bonus', 'commission', 'tax']);
+
+// Listed in the MT5 order but left out of this release on purpose (owner scope 2026-11-04). They stay disabled, fail
+// closed if called, and do not count as "not available yet".
+export const MANAGER_RELEASE_EXCLUDED_TYPES = Object.freeze(['so_compensation', 'so_credit_compensation']);
+
+const balanceOpRoute = (type, direction) => Object.freeze({
+  endpointKey: 'balanceOp',
+  extraFields: Object.freeze({ type, direction }),
+});
+
+// Keys are `${type}:${direction}`; transfer has no direction. A pair missing here is never sent.
 const ROUTES = Object.freeze({
   'balance:in': Object.freeze({ endpointKey: 'deposit', extraFields: Object.freeze({}) }),
   'balance:out': Object.freeze({ endpointKey: 'withdraw', extraFields: Object.freeze({}) }),
   'credit:in': Object.freeze({ endpointKey: 'credit', extraFields: Object.freeze({}) }),
   'credit:out': Object.freeze({ endpointKey: 'credit', extraFields: Object.freeze({ credit_out: true }) }),
   'transfer:none': Object.freeze({ endpointKey: 'transfer', extraFields: Object.freeze({}) }),
+  ...Object.fromEntries(BALANCE_OP_ENABLED_TYPES.flatMap((type) => [
+    [`${type}:in`, balanceOpRoute(type, 'in')],
+    [`${type}:out`, balanceOpRoute(type, 'out')],
+  ])),
 });
 
 // Copy per route. `prefix` names the operation in failure text.
@@ -81,6 +99,21 @@ const COPY = Object.freeze({
       ? `Transferred ${amount} from account #${login} to account #${destination} successfully.`
       : `Transferred ${amount} from account #${login} successfully.`),
   }),
+  ...Object.fromEntries(BALANCE_OP_ENABLED_TYPES.flatMap((type) => {
+    const label = OPERATIONS[type].label;
+    return [
+      [`${type}:in`, Object.freeze({
+        prefix: `${label} deposit`,
+        confirm: (amount, login) => `${label} deposit ${amount} to account #${login}?`,
+        success: (amount, login) => `${label} deposit of ${amount} to account #${login} completed.`,
+      })],
+      [`${type}:out`, Object.freeze({
+        prefix: `${label} withdrawal`,
+        confirm: (amount, login) => `${label} withdrawal ${amount} from account #${login}?`,
+        success: (amount, login) => `${label} withdrawal of ${amount} from account #${login} completed.`,
+      })],
+    ];
+  })),
 });
 
 // Comment suggestions shown per operation. The comment stays editable.
@@ -97,8 +130,8 @@ const COMMENT_PRESETS = Object.freeze({
   transfer: Object.freeze(['Transfer']),
 });
 
-// Balance-op directions allowed by contract v4. Phase A keeps every balance-op type
-// disabled (no route yet), so these only describe the Phase B mapping.
+// Balance-op directions allowed by the contract (v7b 6.6). The SO types are listed for the mapping only; they are
+// disabled in this release.
 const BALANCE_OP_DIRECTIONS = Object.freeze({
   charge: Object.freeze([DIRECTION_IN, DIRECTION_OUT]),
   correction: Object.freeze([DIRECTION_IN, DIRECTION_OUT]),
@@ -119,6 +152,21 @@ const BALANCE_OP_DIRECTIONS = Object.freeze({
 export function getManagerBalanceOpDirections(type) {
   const key = resolveManagerTransactionType(type);
   return [...(BALANCE_OP_DIRECTIONS[key] ?? [])];
+}
+
+/**
+ * True when the margin check may be skipped for this operation and direction: a debit (`out`) of Balance
+ * (/withdraw, contract 6.2) or of an enabled balance-op type (contract 6.6). Never Credit, Transfer, a deposit, or a
+ * disabled type. The gate is the operation, never the comment text.
+ *
+ * @param {string} type Operation.
+ * @param {'in'|'out'|null} direction Button direction.
+ * @returns {boolean} True when the skip box applies.
+ */
+export function isSkipMarginOperation(type, direction) {
+  if (direction !== DIRECTION_OUT) return false;
+  const key = String(type ?? '').trim().toLowerCase();
+  return key === 'balance' || BALANCE_OP_ENABLED_TYPES.includes(key);
 }
 
 // ACCOUNT_ENGINE_OWNED is in contract v5 (transfer 409). ACCOUNT_NOT_ENGINE_OWNED is NOT in v5:
@@ -192,6 +240,8 @@ export const IDEMPOTENCY_CODE_CLASSES = Object.freeze({
     'STOP_OUT_IN_PROGRESS',
     'BALANCE_OP_ENGINE_ONLY',
     'OP_NOT_SUPPORTED',
+    // 422: the journal proves the key was never applied; nothing booked (contract v7b 6.6).
+    'FUNDING_NOT_MAPPED',
     'FORBIDDEN',
     'TRANSFER_REVERSED',
   ]),
@@ -229,6 +279,10 @@ const REFUSAL_FALLBACK_TEXT = 'The request was not completed.';
 // Shown when the server answers a repeated key from its cache (`X-Idempotency-Status: cached`
 // or `KEY_ALREADY_APPLIED` / `IDEMPOTENCY_KEY_ALREADY_APPLIED`).
 export const MANAGER_REPLAY_TEXT = 'Already done — balance refreshed';
+
+// Balance-op refusals with a fixed meaning (contract v7b 6.6). Nothing was booked in either case.
+export const BALANCE_OP_ENGINE_ONLY_TEXT = 'This operation is available only for engine-owned accounts.';
+export const FUNDING_NOT_MAPPED_TEXT = 'This operation has no funding mapping on the server. Nothing was booked.';
 
 export const SKIP_MARGIN_REASON_MIN_LENGTH = 10;
 export const SKIP_MARGIN_REASON_MAX_LENGTH = 500;
@@ -364,6 +418,18 @@ export function getManagerTransactionOptions() {
     label: OPERATIONS[value].label,
     enabled: OPERATIONS[value].enabled,
   }));
+}
+
+/**
+ * True when an operation is disabled for a reason other than this release's scope, so the "not available yet" note
+ * still applies. The excluded SO types alone do not count.
+ *
+ * @returns {boolean} True when the note should be shown.
+ */
+export function hasUnavailableManagerOperations() {
+  return MANAGER_TRANSACTION_TYPES.some((value) => (
+    OPERATIONS[value].enabled !== true && !MANAGER_RELEASE_EXCLUDED_TYPES.includes(value)
+  ));
 }
 
 /**
@@ -673,7 +739,12 @@ const resolveRouteKey = (type, direction) => {
   if (direction !== DIRECTION_IN && direction !== DIRECTION_OUT) {
     throw new TypeError(`Unsupported direction for ${definition.label}: ${String(direction)}`);
   }
-  return `${key}:${direction}`;
+  const routeKey = `${key}:${direction}`;
+  // Fail closed: an enabled operation without a route for this direction is never sent.
+  if (!Object.prototype.hasOwnProperty.call(ROUTES, routeKey)) {
+    throw new TypeError(`Unsupported direction for ${definition.label}: ${String(direction)}`);
+  }
+  return routeKey;
 };
 
 const resolvePositiveLogin = (value) => {
@@ -696,6 +767,7 @@ const destinationText = (key, destination) => (
  * - balance in  -> deposit, balance out -> withdraw
  * - credit in   -> credit,  credit out  -> credit with `credit_out: true`
  * - transfer    -> transfer (from_login and to_login, no `login`)
+ * - charge / correction / bonus / commission / tax, in or out -> balance-op with `type` and `direction`
  *
  * Fails closed on disabled or unknown operations, on a missing or wrong
  * direction, and on invalid logins, amounts, or comments. The idempotency key
@@ -737,8 +809,10 @@ export function buildManagerTransactionRequest({
   }
   const payload = { login: parsedLogin, amount: amountText, comment: commentText, ...route.extraFields };
   if (skipMarginCheck === true) {
-    // Only Withdrawal (/withdraw) takes the flag. Deposit, credit, credit out and transfer never send it.
-    if (routeKey !== 'balance:out') {
+    // Only a debit takes the flag: Withdrawal (/withdraw) or a balance-op `out`. Deposit, credit, credit out and
+    // transfer never send it.
+    const [routeType, routeDirection] = routeKey.split(':');
+    if (!isSkipMarginOperation(routeType, routeDirection)) {
       throw new TypeError('The margin check can only be skipped on a withdrawal.');
     }
     payload.skip_margin_check = true;
@@ -823,6 +897,12 @@ export function describeManagerTransactionFailure({ code = null, message = '', b
   }
   if (safeCode === 'INSUFFICIENT_FUNDS') {
     return { text: INSUFFICIENT_FUNDS_TEXT, detail: backend, code: safeCode };
+  }
+  if (safeCode === 'BALANCE_OP_ENGINE_ONLY') {
+    return { text: BALANCE_OP_ENGINE_ONLY_TEXT, detail: backend, code: safeCode };
+  }
+  if (safeCode === 'FUNDING_NOT_MAPPED') {
+    return { text: FUNDING_NOT_MAPPED_TEXT, detail: backend, code: safeCode };
   }
   if (key === 'transfer' && TRANSFER_ENGINE_OWNED_CODES.includes(safeCode)) {
     return { text: TRANSFER_UNAVAILABLE_TEXT, detail: backend, code: safeCode };

@@ -8,6 +8,7 @@ import { usePermissions } from '../../../hooks/usePermissions';
 import { getTradingAccountsPage, normalizeTradingAccountRow, preloadAccountPositions } from '../../../services/api';
 import GridLoadingState from '../../../components/GridLoadingState';
 import { prefetchAccountDetails } from '../../../services/accountDetails';
+import { watchAccountList } from '../../../services/accountListSync';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { getAccountVisualType } from '../../../utils/sidebarAccountRows';
 
@@ -343,6 +344,20 @@ const TradingAccountsDataGrid = ({
 
     refetch();
   }, [refreshVersion, hasRequestedData, markDataRequested, refetch]);
+
+  // Live list: an account this page does not show yet (a new account, e.g. a terminal demo) refetches the page.
+  // Balance, credit, equity and margin of the shown rows update through the live metrics overlay instead.
+  const knownLoginsRef = useRef(new Set());
+  knownLoginsRef.current = new Set(rows.map((row) => String(row?.login ?? '')));
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useEffect(() => {
+    if (!hasRequestedData) return undefined;
+    return watchAccountList({
+      getKnownLogins: () => knownLoginsRef.current,
+      onRefetch: () => refetchRef.current?.(),
+    });
+  }, [hasRequestedData]);
 
   const handleSort = (col) => {
     if (typeof onSort === 'function') {
