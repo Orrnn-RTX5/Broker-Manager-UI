@@ -21,6 +21,7 @@ test('ACCOUNT_MODE_REFUSAL_MESSAGES contains all confirmed backend codes includi
     'GROUP_MARGIN_MODE_ENGINE_OWNED',
     'GROUP_MARGIN_MODE_MISMATCH',
     'GROUP_MODE_WRITER_GRANT_MISSING',
+    'GROUP_MARGIN_MODE_IMMUTABLE',
   ];
   assert.deepEqual(Object.keys(ACCOUNT_MODE_REFUSAL_MESSAGES).sort(), expectedCodes.sort());
 });
@@ -122,6 +123,17 @@ test('Test 6: each 409 code in section 3 maps to its exact readable text', () =>
       message: 'Group writer lacks margin_mode grant',
     }),
     'The server is not set up to change account modes yet (admin action needed).',
+  );
+
+  // GROUP_MARGIN_MODE_IMMUTABLE (POST /GroupUpdate 409, rtx-s1 contract 2026-11-05): the typed group-conflict body.
+  assert.equal(
+    resolveAccountModeRefusal({
+      code: 'GROUP_MARGIN_MODE_IMMUTABLE',
+      error_code: 'GROUP_MARGIN_MODE_IMMUTABLE',
+      error: 'The margin mode of group "G1" is hedging and cannot be changed; hedging or netting is chosen when a group is created',
+      message: 'The margin mode of group "G1" is hedging and cannot be changed; hedging or netting is chosen when a group is created',
+    }),
+    'The account mode is fixed after the group is created. This change would alter it, so nothing was saved.',
   );
 });
 

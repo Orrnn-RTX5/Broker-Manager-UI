@@ -6,6 +6,7 @@ import { PERMISSIONS } from '../../../utils/permissions';
 import { groupSymbolOverridesGet, groupSymbolOverridesSave } from '../../../services/api.js';
 import { GROUP_DEFAULT_PAYLOAD, GROUP_MARGIN_MODE_OPTIONS, NETTING_NEEDS_B_BOOK_HINT, bookTypeForRoutingMode, buildGroupSavePayload, groupMarginModeOf, submitGroup, toSymbolList, validateGroupMarginMode } from '../groupPayload.js';
 import { readLeverageRatio } from '../groupAccountRows.js';
+import { GROUP_MODE_LOCKED_TEXT, withoutGroupMarginMode } from '../groupModeLock.js';
 import { NEW_GROUP_FINANCIAL_DEFAULTS } from '../groupFinancialPresets.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
@@ -95,6 +96,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
   }, [onClose, openAccount]);
 
   const update = (key, value) => {
+    // The account mode is fixed after create (owner rule): an edit never changes it.
+    if (key === 'marginMode' && !isNewGroup) return;
     if (key === 'leverage') setLeverageError(null);
     if (key === 'marginMode' || key === 'routingMode') setMarginModeError(null);
     setForm((prev) => {
@@ -135,9 +138,15 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
     if (tab === 'Symbols' && !overridesView && !overridesLoading && !overridesError) loadSymbolOverrides();
   }, [loadSymbolOverrides, overridesError, overridesLoading, overridesView, tab]);
 
+  // An edit never sends marginMode (the account mode is fixed after create).
+  const savePayloadFor = useCallback((initial, current) => {
+    const built = buildGroupSavePayload(initial, current, { isNew: group?.isNew });
+    return group?.isNew ? built : withoutGroupMarginMode(built);
+  }, [group?.isNew]);
+
   const hasChanges = useMemo(
-    () => Boolean(group?.isNew) || stagedOverrides.size > 0 || Object.keys(buildGroupSavePayload(initialForm, form, { isNew: group?.isNew })).length > 0,
-    [form, group?.isNew, initialForm, stagedOverrides]
+    () => Boolean(group?.isNew) || stagedOverrides.size > 0 || Object.keys(savePayloadFor(initialForm, form)).length > 0,
+    [form, group?.isNew, initialForm, savePayloadFor, stagedOverrides]
   );
 
   const handleSave = async () => {
@@ -167,7 +176,7 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
         setOverridesView(normalizeGroupSymbolOverrides(savedOverrides));
         setStagedOverrides(new Map());
       }
-      const payload = buildGroupSavePayload(initialForm, form, { isNew: group.isNew });
+      const payload = savePayloadFor(initialForm, form);
       const saved = await submitGroup({ originalName: group.isNew ? '' : group.name, payload, queryClient });
       onSaved?.(saved);
       onClose();
@@ -240,6 +249,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                     <select
                       className="ui-input ui-input-sm"
                       value={form.marginMode || 'hedging'}
+                      disabled={!isNewGroup}
+                      title={isNewGroup ? undefined : GROUP_MODE_LOCKED_TEXT}
                       aria-invalid={marginModeError ? 'true' : undefined}
                       onChange={(event) => update('marginMode', event.target.value)}
                     >
@@ -254,7 +265,8 @@ const GroupPropertiesModal = ({ group, onClose, onSaved }) => {
                       ))}
                     </select>
                   </label>
-                  {bookTypeForRoutingMode(form.routingMode || 'b_book') !== 'b' && !marginModeError ? (
+                  {!isNewGroup ? <p className="group-create-note">{GROUP_MODE_LOCKED_TEXT}</p> : null}
+                  {isNewGroup && bookTypeForRoutingMode(form.routingMode || 'b_book') !== 'b' && !marginModeError ? (
                     <p className="group-create-note">{NETTING_NEEDS_B_BOOK_HINT}</p>
                   ) : null}
                   {marginModeError && (

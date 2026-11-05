@@ -11,6 +11,7 @@ import { PERMISSIONS } from '../../../utils/permissions';
 import { useGroupList } from '../../../hooks/useGroupList';
 import { EXECUTION_MODE_OPTIONS, GROUP_MARGIN_MODE_OPTIONS, GROUP_PURPOSE_OPTIONS, NETTING_NEEDS_B_BOOK_HINT, bookTypeForRoutingMode, buildGroupSavePayload, buildNewGroupPayload, resolveNewGroupTradeAllowed, submitGroup, validateGroupMarginMode, validateNewGroupFields } from '../groupPayload.js';
 import { buildNewGroupFormData } from '../newGroupForm.js';
+import { GROUP_MODE_LOCKED_TEXT, withoutGroupMarginMode } from '../groupModeLock.js';
 import { fetchBrokerDefaultLeverage } from '../groupDefaults.js';
 import { GROUP_LEVERAGE_NO_DEFAULT_HINT, isBlankLeverage, resolveCreateLeverage } from '../groupLeverage.js';
 import {
@@ -75,7 +76,7 @@ const CheckField = ({ label, checked, onChange, error = null }) => {
   );
 };
 
-const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', error = null }) => {
+const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', error = null, disabled = false, title = undefined }) => {
   const labelId = useId();
   const fieldErrorId = useId();
   const buttonRef = useRef(null);
@@ -143,7 +144,10 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', 
         aria-labelledby={labelId}
         aria-invalid={error ? 'true' : undefined}
         aria-describedby={error ? fieldErrorId : undefined}
+        disabled={disabled}
+        title={title}
         onClick={() => {
+          if (disabled) return;
           if (open) setOpen(false);
           else { placeMenu(); setOpen(true); }
         }}
@@ -152,7 +156,7 @@ const GroupChoice = ({ label, value, options, onChange, placeholder = 'Select', 
         <ChevronDown size={12} aria-hidden="true" />
       </button>
       {error ? <FieldError id={fieldErrorId} message={error} /> : null}
-      {open && box && createPortal(
+      {open && box && !disabled && createPortal(
         <div
           ref={menuRef}
           role="listbox"
@@ -432,6 +436,8 @@ const NewGroupModal = ({
   }, [isFreshCreate]);
 
   const handleChange = (key, val) => {
+    // The account mode is fixed after create (owner rule): an edit never changes it.
+    if (key === 'marginMode' && isEditing) return;
     if (key === 'tradeAllowed') tradeTouched.current = true;
     if (key === 'leverage') leverageTouched.current = true;
     // Editing a field clears its inline policy error; the visible Book choice
@@ -521,7 +527,7 @@ const NewGroupModal = ({
       // untouched save never re-pushes leverage/margin onto the group's
       // accounts. A changed name is refused by submitGroup (no group rename).
       const payload = isEditing
-        ? buildGroupSavePayload(initialForm, formData)
+        ? withoutGroupMarginMode(buildGroupSavePayload(initialForm, formData))
         : buildNewGroupPayload(formData, { leverageTouched: leverageTouched.current });
       if (typeof payload.symbolsAllowed === 'string') {
         payload.symbolsAllowed = payload.symbolsAllowed.split(',').map(s => s.trim()).filter(Boolean);
@@ -729,6 +735,8 @@ const NewGroupModal = ({
               error={fieldErrors.marginMode}
               options={GROUP_MARGIN_MODE_OPTIONS}
               onChange={(v) => handleChange('marginMode', v)}
+              disabled={isEditing}
+              title={isEditing ? GROUP_MODE_LOCKED_TEXT : undefined}
             />
             <InputGroup label="Commission rate" type="number" value={formData.commissionRate} onChange={(v) => handleChange('commissionRate', v)} />
             <InputGroup label="Commission type" value={formData.commissionType} onChange={(v) => handleChange('commissionType', v)} />
@@ -737,7 +745,8 @@ const NewGroupModal = ({
             <InputGroup label="Lot divisor" type="number" value={formData.lotDivisor} onChange={(v) => handleChange('lotDivisor', v)} />
             <InputGroup label="Swap multiplier" type="number" value={formData.swapMultiplier} onChange={(v) => handleChange('swapMultiplier', v)} />
           </div>
-          {String(formData.routingMode ?? '').trim() !== '' && bookTypeForRoutingMode(formData.routingMode) !== 'b' && !fieldErrors.marginMode ? (
+          {isEditing ? <p className="group-create-note">{GROUP_MODE_LOCKED_TEXT}</p> : null}
+          {!isEditing && String(formData.routingMode ?? '').trim() !== '' && bookTypeForRoutingMode(formData.routingMode) !== 'b' && !fieldErrors.marginMode ? (
             <p className="group-create-note">{NETTING_NEEDS_B_BOOK_HINT}</p>
           ) : null}
         </section>

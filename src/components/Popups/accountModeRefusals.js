@@ -10,6 +10,9 @@
 // - GROUP_MARGIN_MODE_ENGINE_OWNED:  group_contract.go:285, group_contract.go:346-353, groups.go:1211, 1346
 // - GROUP_MARGIN_MODE_MISMATCH:      group_contract.go:281, group_contract.go:346-353, accounts.go:4066, 4070
 // - GROUP_MODE_WRITER_GRANT_MISSING: group_margin_modes.go:70, group_contract.go:346-353
+// - GROUP_MARGIN_MODE_IMMUTABLE:     POST /GroupUpdate 409 when an update would change an existing group's effective
+//                                    mode (explicit marginMode, or a parentGroup/inheritFields change); rtx-s1 contract
+//                                    2026-11-05, owner rule: the mode is chosen at create only. Nothing is written.
 
 /**
  * Human-readable explanations for backend HTTP 409 conflict codes
@@ -25,6 +28,7 @@ export const ACCOUNT_MODE_REFUSAL_MESSAGES = Object.freeze({
   GROUP_MARGIN_MODE_ENGINE_OWNED: 'The trading engine owns these accounts; contact support.',
   GROUP_MARGIN_MODE_MISMATCH: 'An account can only move to a group with the same account mode.',
   GROUP_MODE_WRITER_GRANT_MISSING: 'The server is not set up to change account modes yet (admin action needed).',
+  GROUP_MARGIN_MODE_IMMUTABLE: 'The account mode is fixed after the group is created. This change would alter it, so nothing was saved.',
 });
 
 /**

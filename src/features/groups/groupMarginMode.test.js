@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
+import { GROUP_MODE_LOCKED_TEXT, withoutGroupMarginMode } from './groupModeLock.js';
 
 // Group "Account mode" (hedging | netting): payload keys, B-book rule, form
 // state from a source group, and readable netting refusals on save. Real
@@ -130,4 +131,53 @@ test('both group forms render the Account mode select (source shape)', () => {
   assert.match(wizard, /label="Account mode"/);
   assert.match(wizard, /handleChange\('marginMode', v\)/);
   assert.match(wizard, /validateGroupMarginMode\(/);
+});
+
+// ---- Owner rule 2026-11-05: the account mode is fixed after the group is created. ----
+
+test('withoutGroupMarginMode drops marginMode from an edit payload and keeps every other field', () => {
+  assert.deepEqual(withoutGroupMarginMode({ marginMode: 'netting', leverage: 100, name: 'G1' }), { leverage: 100, name: 'G1' });
+  assert.deepEqual(withoutGroupMarginMode({ leverage: 50 }), { leverage: 50 });
+  assert.deepEqual(withoutGroupMarginMode({}), {});
+  assert.equal(withoutGroupMarginMode(null), null);
+  const input = { marginMode: 'hedging', stopOutLevel: 30 };
+  withoutGroupMarginMode(input);
+  assert.deepEqual(input, { marginMode: 'hedging', stopOutLevel: 30 }, 'the input is not mutated');
+});
+
+test('Group properties: the account mode is read-only on edit, choosable on create, and an edit never sends it', () => {
+  const props = readFileSync(new URL('./components/GroupPropertiesModal.jsx', import.meta.url), 'utf8');
+  assert.match(props, /disabled=\{!isNewGroup\}/);
+  assert.match(props, /title=\{isNewGroup \? undefined : GROUP_MODE_LOCKED_TEXT\}/);
+  assert.match(props, /\{!isNewGroup \? <p className="group-create-note">\{GROUP_MODE_LOCKED_TEXT\}<\/p> : null\}/);
+  assert.match(props, /if \(key === 'marginMode' && !isNewGroup\) return;/);
+  assert.match(props, /return group\?\.isNew \? built : withoutGroupMarginMode\(built\);/);
+  assert.match(props, /const payload = savePayloadFor\(initialForm, form\);/);
+  assert.doesNotMatch(props, /const payload = buildGroupSavePayload\(/, 'the save never bypasses the edit filter');
+  assert.match(props, /Object\.keys\(savePayloadFor\(initialForm, form\)\)\.length > 0/);
+});
+
+test('New group wizard: the account mode is read-only when editing and choosable on create and duplicate', () => {
+  const wizard = readFileSync(new URL('./components/NewGroupModal.jsx', import.meta.url), 'utf8');
+  assert.match(wizard, /label="Account mode"[\s\S]{0,400}disabled=\{isEditing\}/);
+  assert.match(wizard, /title=\{isEditing \? GROUP_MODE_LOCKED_TEXT : undefined\}/);
+  assert.match(wizard, /if \(key === 'marginMode' && isEditing\) return;/);
+  assert.match(wizard, /\? withoutGroupMarginMode\(buildGroupSavePayload\(initialForm, formData\)\)/);
+  // The choice control honours `disabled`: no menu, no change.
+  assert.match(wizard, /const GroupChoice = \(\{[^}]*disabled = false/);
+  assert.match(wizard, /if \(disabled\) return;/);
+  assert.match(wizard, /\{open && box && !disabled && createPortal\(/);
+  assert.match(wizard, /\{isEditing \? <p className="group-create-note">\{GROUP_MODE_LOCKED_TEXT\}<\/p> : null\}/);
+  assert.match(wizard, /\{!isEditing && String\(formData\.routingMode/, 'no netting hint while the mode is locked');
+  assert.equal(GROUP_MODE_LOCKED_TEXT, 'Account mode is fixed after the group is created.');
+});
+
+test('submitGroup: a GroupUpdate refused with 409 GROUP_MARGIN_MODE_IMMUTABLE shows readable text and keeps the code', async () => {
+  const message = 'The margin mode of group "Fixture\\Net" is hedging and cannot be changed; hedging or netting is chosen when a group is created';
+  runtime.response = { status: 409, body: { code: 'GROUP_MARGIN_MODE_IMMUTABLE', error_code: 'GROUP_MARGIN_MODE_IMMUTABLE', error: message, message } };
+  await assert.rejects(
+    submitGroup({ originalName: 'Fixture\\Net', payload: { parentGroup: 'Fixture\\Other' } }),
+    (err) => err.message === 'The account mode is fixed after the group is created. This change would alter it, so nothing was saved.'
+      && err.code === 'GROUP_MARGIN_MODE_IMMUTABLE',
+  );
 });
